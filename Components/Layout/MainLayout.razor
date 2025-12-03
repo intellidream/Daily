@@ -5,15 +5,19 @@
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="py-2" Style="@($"background-color: {(_isDarkMode ? "rgba(18, 18, 18, 0.7)" : "rgba(255, 255, 255, 0.7)")}; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid {(_isDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)")};")">
-        <MudText Typo="Typo.h6">Daily</MudText>
+    <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="pt-14 pb-2" 
+        Style="@($"background-color: {(_isDarkMode ? "rgba(18, 18, 18, 0.7)" : "rgba(255, 255, 255, 0.7)")}; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid {(_isDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)")};")">
+        <MudIconButton Icon="@Icons.Material.Filled.Today"
+                       Color="Color.Inherit"
+                       OnClick="@((e) => _isDarkMode = !_isDarkMode)" />
+        <MudText Class="pl-2" Typo="Typo.h5"><b>Daily</b></MudText>
         <MudSpacer />
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.Brightness7 : Icons.Material.Filled.Brightness4)"
                        Color="Color.Inherit"
                        OnClick="@((e) => _isDarkMode = !_isDarkMode)" />
     </MudAppBar>
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Style="padding-top: 40px; padding-left: 24px; padding-right: 24px;">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-20 pt-2 px-6">
             @Body
         </MudContainer>
     </MudMainContent>
@@ -22,4 +26,12 @@
 @code {
     private bool _isDarkMode = true;
     private MudTheme _theme = new();
+
+    protected override void OnInitialized()
+    {
+        if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android)
+        {
+            // Android specific: just add padding to clear the status bar
+        }
+    }
 }
