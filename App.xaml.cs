@@ -45,7 +45,7 @@ namespace Daily
             window.Created += (s, e) =>
             {
                 #if WINDOWS
-                // ConfigureWindowsWindow(window);
+                ConfigureWindowsWindow(window);
                 #endif
             };
 
@@ -55,9 +55,9 @@ namespace Daily
         #if WINDOWS
         private void ConfigureWindowsWindow(Window window)
         {
-            window.HandlerChanged += (s, e) =>
+            Action<Window> applySettings = (w) =>
             {
-                var nativeWindow = window.Handler?.PlatformView as Microsoft.UI.Xaml.Window;
+                var nativeWindow = w.Handler?.PlatformView as Microsoft.UI.Xaml.Window;
                 if (nativeWindow == null) return;
 
                 var handle = WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow);
@@ -80,7 +80,7 @@ namespace Daily
                     var displayArea = DisplayArea.GetFromWindowId(id, DisplayAreaFallback.Primary);
                     var workArea = displayArea.WorkArea;
                     
-                    int width = 400; // Sidebar width
+                    int width = 800; // Sidebar width
                     int height = workArea.Height;
                     int x = workArea.X + workArea.Width - width;
                     int y = workArea.Y;
@@ -88,6 +88,13 @@ namespace Daily
                     appWindow.MoveAndResize(new RectInt32(x, y, width, height));
                 }
             };
+
+            if (window.Handler?.PlatformView != null)
+            {
+                applySettings(window);
+            }
+
+            window.HandlerChanged += (s, e) => applySettings(window);
         }
         #endif
     }
