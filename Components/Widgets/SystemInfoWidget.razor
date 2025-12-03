@@ -1,0 +1,23 @@
+@using MudBlazor
+
+<MudList T="string" Dense="true">
+    <MudListItem Icon="@Icons.Material.Filled.Memory">
+        <MudText>CPU: @(_cpuUsage)%</MudText>
+        <MudProgressLinear Color="Color.Primary" Value="@_cpuUsage" Class="my-2" />
+    </MudListItem>
+    <MudListItem Icon="@Icons.Material.Filled.Storage">
+        <MudText>RAM: @(_ramUsage)%</MudText>
+        <MudProgressLinear Color="Color.Secondary" Value="@_ramUsage" Class="my-2" />
+    </MudListItem>
+</MudList>
+
+@code {
+    private int _cpuUsage = 15;
+    private int _ramUsage = 45;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Simulate updates
+        // In real app, use a timer and SystemInfoService
+    }
+}

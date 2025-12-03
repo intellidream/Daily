@@ -1,0 +1,93 @@
+@using MudBlazor
+@using System.Xml.Linq
+
+<MudList T="string" Dense="true" Clickable="true">
+    @if (_items == null)
+    {
+        <MudListItem><MudText>Loading...</MudText></MudListItem>
+    }
+    else
+    {
+        @foreach (var item in _items.Take(5))
+        {
+            <MudListItem OnClick="@(() => OpenUrl(item.Link))">
+                <div class="d-flex align-center gap-4">
+                    @if (!string.IsNullOrEmpty(item.ImageUrl))
+                    {
+                        <MudImage Src="@item.ImageUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                    }
+                    <div>
+                        <MudText Typo="Typo.body2">@item.Title</MudText>
+                        <MudText Typo="Typo.caption">@item.PublishDate.ToShortDateString()</MudText>
+                    </div>
+                </div>
+            </MudListItem>
+        }
+    }
+</MudList>
+
+@code {
+    private List<RssItem> _items;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFeedAsync();
+    }
+
+@using System.Text.RegularExpressions
+
+    private async Task LoadFeedAsync()
+    {
+        try
+        {
+            // Example feed: BBC News
+            var url = "http://feeds.bbci.co.uk/news/rss.xml";
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+            var xml = await client.GetStringAsync(url);
+            var doc = XDocument.Parse(xml);
+
+            var channelImage = doc.Descendants("channel").Elements().FirstOrDefault(e => e.Name.LocalName == "image")?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value;
+
+            _items = doc.Descendants("item").Select(x => {
+                var description = x.Element("description")?.Value;
+                var descriptionImage = !string.IsNullOrEmpty(description) 
+                    ? Regex.Match(description, "<img.+?src=[\"'](.+?)[\"']").Groups[1].Value 
+                    : null;
+
+                return new RssItem
+                {
+                    Title = x.Element("title")?.Value,
+                    Link = x.Element("link")?.Value,
+                    PublishDate = DateTime.TryParse(x.Element("pubDate")?.Value, out var d) ? d : DateTime.Now,
+                    ImageUrl = x.Descendants().FirstOrDefault(e => e.Name.LocalName == "thumbnail")?.Attribute("url")?.Value 
+                               ?? x.Descendants().FirstOrDefault(e => e.Name.LocalName == "content" && e.Attribute("type")?.Value?.StartsWith("image/") == true)?.Attribute("url")?.Value
+                               ?? x.Element("enclosure")?.Attribute("url")?.Value
+                               ?? descriptionImage
+                               ?? channelImage
+                };
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading RSS: {ex.Message}");
+            _items = new List<RssItem> { new RssItem { Title = "Error loading feed" } };
+        }
+    }
+
+    private async Task OpenUrl(string url)
+    {
+        if (!string.IsNullOrEmpty(url))
+        {
+            await Browser.OpenAsync(url, BrowserLaunchMode.SystemPreferred);
+        }
+    }
+
+    public class RssItem
+    {
+        public string Title { get; set; }
+        public string Link { get; set; }
+        public DateTime PublishDate { get; set; }
+        public string ImageUrl { get; set; }
+    }
+}

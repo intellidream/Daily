@@ -1,0 +1,48 @@
+@using Daily.Models
+@using Daily.Services
+@inject IWidgetService WidgetService
+
+<div class="masonry-grid">
+    @foreach (var widget in _widgets)
+    {
+        <div class="masonry-item">
+            <MudPaper Class="pa-4" Elevation="3">
+                <MudText Typo="Typo.h6">@widget.Title</MudText>
+                <MudDivider Class="my-2" />
+                @if (widget.ComponentType == "WeatherWidget")
+                {
+                    <Daily.Components.Widgets.WeatherWidget />
+                }
+                else if (widget.ComponentType == "CalendarWidget")
+                {
+                    <Daily.Components.Widgets.CalendarWidget />
+                }
+                else if (widget.ComponentType == "SystemInfoWidget")
+                {
+                    <Daily.Components.Widgets.SystemInfoWidget />
+                }
+                else if (widget.ComponentType == "NotesWidget")
+                {
+                    <Daily.Components.Widgets.NotesWidget />
+                }
+                else if (widget.ComponentType == "RssFeedWidget")
+                {
+                    <Daily.Components.Widgets.RssFeedWidget />
+                }
+                else
+                {
+                    <MudText>Unknown Widget Type: @widget.ComponentType</MudText>
+                }
+            </MudPaper>
+        </div>
+    }
+</div>
+
+@code {
+    private List<WidgetModel> _widgets = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _widgets = await WidgetService.GetWidgetsAsync();
+    }
+}

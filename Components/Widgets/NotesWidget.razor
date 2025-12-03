@@ -1,0 +1,13 @@
+@using MudBlazor
+
+<MudTextField T="string" Label="Notes" Variant="Variant.Outlined" Lines="5" @bind-Value="_notes" DebounceInterval="500" OnDebounceIntervalElapsed="SaveNotes" />
+
+@code {
+    private string _notes = "Remember to buy milk...";
+
+    private void SaveNotes(string value)
+    {
+        // Save to local storage or service
+        _notes = value;
+    }
+}
