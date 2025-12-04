@@ -1,23 +1,64 @@
 @using MudBlazor
+@using Daily.Services
+@inject ISystemMonitorService SystemMonitor
+@implements IDisposable
 
 <MudList T="string" Dense="true">
     <MudListItem Icon="@Icons.Material.Filled.Memory">
-        <MudText>CPU: @(_cpuUsage)%</MudText>
+        <MudText>CPU: @(_cpuUsage.ToString("F0"))%</MudText>
         <MudProgressLinear Color="Color.Primary" Value="@_cpuUsage" Class="my-2" />
     </MudListItem>
     <MudListItem Icon="@Icons.Material.Filled.Storage">
-        <MudText>RAM: @(_ramUsage)%</MudText>
+        <MudText>RAM: @(_ramUsage.ToString("F0"))%</MudText>
         <MudProgressLinear Color="Color.Secondary" Value="@_ramUsage" Class="my-2" />
     </MudListItem>
 </MudList>
 
 @code {
-    private int _cpuUsage = 15;
-    private int _ramUsage = 45;
+    private double _cpuUsage = 0;
+    private double _ramUsage = 0;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        // Simulate updates
-        // In real app, use a timer and SystemInfoService
+        // Start the timer
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        
+        // Fire and forget the update loop
+        _ = UpdateStatsAsync();
+    }
+
+    private async Task UpdateStatsAsync()
+    {
+        try
+        {
+            // Initial fetch
+            FetchStats();
+
+            while (await _timer!.WaitForNextTickAsync(_cts!.Token))
+            {
+                FetchStats();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Timer cancelled
+        }
+    }
+
+    private void FetchStats()
+    {
+        _cpuUsage = SystemMonitor.GetCpuUsage();
+        _ramUsage = SystemMonitor.GetMemoryUsage();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
     }
 }

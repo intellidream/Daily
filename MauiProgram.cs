@@ -49,6 +49,7 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.IWidgetService, Daily.Services.WidgetService>();
             builder.Services.AddSingleton<Daily.Services.IWeatherService, Daily.Services.WeatherService>();
             builder.Services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();
+            builder.Services.AddSingleton<Daily.Services.ISystemMonitorService, Daily.Services.SystemMonitorService>();
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
 
 #if DEBUG
