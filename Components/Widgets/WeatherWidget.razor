@@ -1,8 +1,119 @@
-@using MudBlazor
+@using Daily.Services
+@using Daily.Models
+@inject IWeatherService WeatherService
+@inject IGeolocation Geolocation
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-    <MudText Typo="Typo.h3">22°C</MudText>
-    <MudIcon Icon="@Icons.Material.Filled.WbSunny" Size="Size.Large" Color="Color.Warning" />
+<MudStack Style="height: 180px; width: 100%;" Justify="Justify.SpaceBetween">
+    @if (_isLoading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_errorMessage != null)
+    {
+        <MudText Color="Color.Error">@_errorMessage</MudText>
+        <MudButton OnClick="LoadWeatherData" Variant="Variant.Filled" Color="Color.Primary">Retry</MudButton>
+    }
+    else
+    {
+        @if (_showForecast)
+        {
+            @* Forecast View *@
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Style="width: 100%;" AlignItems="AlignItems.Center">
+                @if (_forecast != null)
+                {
+                    @foreach (var item in _forecast.List.Where(x => x.DtTxt.Contains("12:00:00")).Take(5))
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="height: 130px; min-width: 40px;">
+                            <MudStack AlignItems="AlignItems.Center" Spacing="0">
+                                <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}.png")" Width="50" Height="50" />
+                                <MudText Typo="Typo.body1" Style="font-weight: bold;">@Math.Round(item.Main.Temp)°</MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.caption" Style="text-transform: uppercase; opacity: 0.7;">@DateTime.Parse(item.DtTxt).ToString("ddd")</MudText>
+                        </MudStack>
+                    }
+                }
+            </MudStack>
+            
+            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Style="width: 100%;">
+                 <MudIconButton Icon="@Icons.Material.Rounded.ArrowBack" Size="Size.Small" OnClick="@(() => _showForecast = false)" Color="Color.Primary" />
+            </MudStack>
+        }
+        else
+        {
+            @* Current Weather View *@
+            <MudStack Spacing="0" Style="width: 100%;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.h2" Class="pl-3">@Math.Round(_currentWeather?.Main.Temp ?? 0)°C</MudText>
+                    <MudImage Src="@($"https://openweathermap.org/img/wn/{_currentWeather?.Weather[0].Icon}@4x.png")" Width="100" Height="100" Style="filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.3));" />
+                </MudStack>
+                <MudStack Row="true" AlignItems="AlignItems.End" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.h6" Class="pl-3" Style="text-transform: capitalize; opacity: 0.7;">@_currentWeather?.Weather[0].Description</MudText>
+                    <MudText Typo="Typo.caption" Class="pr-3" Style="opacity: 0.7;">H: @Math.Round(_currentWeather?.Main.TempMax ?? 0)° L: @Math.Round(_currentWeather?.Main.TempMin ?? 0)°</MudText>
+                </MudStack>
+            </MudStack>
+            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Style="width: 100%;">
+                <MudIconButton Icon="@Icons.Material.Rounded.ArrowForward" Size="Size.Small" OnClick="@(() => _showForecast = true)" Color="Color.Primary" />
+            </MudStack>
+        }
+    }
 </MudStack>
-<MudText Typo="Typo.body2">Sunny in Bucharest</MudText>
-<MudText Typo="Typo.caption">H: 24° L: 18°</MudText>
+
+@code {
+    private bool _isLoading = true;
+    private string _errorMessage;
+    private WeatherResponse _currentWeather;
+    private ForecastResponse _forecast;
+    private bool _showForecast = false;
+
+    [Parameter] public EventCallback<string> OnLocationLoaded { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWeatherData();
+    }
+
+    private async Task LoadWeatherData()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var location = await Geolocation.GetLastKnownLocationAsync();
+            if (location == null)
+            {
+                location = await Geolocation.GetLocationAsync(new GeolocationRequest
+                {
+                    DesiredAccuracy = GeolocationAccuracy.Medium,
+                    Timeout = TimeSpan.FromSeconds(30)
+                });
+            }
+
+            if (location != null)
+            {
+                _currentWeather = await WeatherService.GetCurrentWeatherAsync(location.Latitude, location.Longitude);
+                _forecast = await WeatherService.GetForecastAsync(location.Latitude, location.Longitude);
+
+                if (_currentWeather != null)
+                {
+                    var locationName = $"{_currentWeather.Name}, {_currentWeather.Sys.Country}";
+                    await OnLocationLoaded.InvokeAsync(locationName);
+                }
+            }
+            else
+            {
+                _errorMessage = "Unable to get location.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

@@ -6,12 +6,12 @@
     @foreach (var widget in _widgets)
     {
         <div class="masonry-item">
-            <MudPaper Class="pa-4" Elevation="3">
+            <MudPaper Class="pa-4" Elevation="3" Square="false" Style="">
                 <MudText Typo="Typo.h6">@widget.Title</MudText>
                 <MudDivider Class="my-2" />
                 @if (widget.ComponentType == "WeatherWidget")
                 {
-                    <Daily.Components.Widgets.WeatherWidget />
+                    <Daily.Components.Widgets.WeatherWidget OnLocationLoaded="@(title => UpdateWidgetTitle(widget, title))" />
                 }
                 else if (widget.ComponentType == "CalendarWidget")
                 {
@@ -44,5 +44,11 @@
     protected override async Task OnInitializedAsync()
     {
         _widgets = await WidgetService.GetWidgetsAsync();
+    }
+
+    private void UpdateWidgetTitle(WidgetModel widget, string newTitle)
+    {
+        widget.Title = newTitle;
+        StateHasChanged();
     }
 }

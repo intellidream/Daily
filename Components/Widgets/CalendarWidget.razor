@@ -1,5 +1,3 @@
 @using MudBlazor
 
-<MudCalendar ShowPrevNextButtons="false" ShowHeader="false" />
-<!-- MudCalendar might be too big or complex, let's use DatePicker for simple view or just a list of events -->
-<MudDatePicker PickerVariant="PickerVariant.Static" Orientation="Orientation.Portrait" Elevation="0" />
+<MudDatePicker PickerVariant="PickerVariant.Static" Orientation="Orientation.Portrait" Elevation="0" Date="@(DateTime.Today)" />

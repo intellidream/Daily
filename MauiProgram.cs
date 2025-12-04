@@ -24,6 +24,8 @@ namespace Daily
 #endif
 
             builder.Services.AddSingleton<Daily.Services.IWidgetService, Daily.Services.WidgetService>();
+            builder.Services.AddSingleton<Daily.Services.IWeatherService, Daily.Services.WeatherService>();
+            builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();
