@@ -6,7 +6,7 @@
     @foreach (var widget in _widgets)
     {
         <div class="masonry-item">
-            <MudPaper Class="pa-4" Elevation="3" Square="false" Style="">
+            <MudPaper Class="pa-4 glass-panel" Elevation="0" Square="false" Style="">
                 <MudText Typo="Typo.h6">@widget.Title</MudText>
                 <MudDivider Class="my-2" />
                 @if (widget.ComponentType == "WeatherWidget")

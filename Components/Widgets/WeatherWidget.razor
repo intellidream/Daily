@@ -2,6 +2,8 @@
 @using Daily.Models
 @inject IWeatherService WeatherService
 @inject IGeolocation Geolocation
+@inject IRefreshService RefreshService
+@implements IDisposable
 
 <MudStack Style="height: 180px; width: 100%;" Justify="Justify.SpaceBetween">
     @if (_isLoading)
@@ -69,7 +71,13 @@
 
     protected override async Task OnInitializedAsync()
     {
+        RefreshService.RefreshRequested += LoadWeatherData;
         await LoadWeatherData();
+    }
+
+    public void Dispose()
+    {
+        RefreshService.RefreshRequested -= LoadWeatherData;
     }
 
     private async Task LoadWeatherData()

@@ -10,11 +10,13 @@ namespace Daily
     public partial class App : Application
     {
         private readonly ITrayService _trayService;
+        private readonly IRefreshService _refreshService;
 
-        public App(ITrayService trayService)
+        public App(ITrayService trayService, IRefreshService refreshService)
         {
             InitializeComponent();
             _trayService = trayService;
+            _refreshService = refreshService;
             _trayService.Initialize();
             _trayService.ClickHandler = () => 
             {
@@ -40,7 +42,7 @@ namespace Daily
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            var window = new Window(new MainPage()) { Title = "Daily" };
+            var window = new Window(new MainPage(_refreshService)) { Title = "Daily" };
             
             window.Created += (s, e) =>
             {

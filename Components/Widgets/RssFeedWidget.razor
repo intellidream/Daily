@@ -1,5 +1,8 @@
 @using MudBlazor
 @using System.Xml.Linq
+@using Daily.Services
+@inject IRefreshService RefreshService
+@implements IDisposable
 
 <MudList T="string" Dense="true" Clickable="true">
     @if (_items == null)
@@ -31,7 +34,13 @@
 
     protected override async Task OnInitializedAsync()
     {
+        RefreshService.RefreshRequested += LoadFeedAsync;
         await LoadFeedAsync();
+    }
+
+    public void Dispose()
+    {
+        RefreshService.RefreshRequested -= LoadFeedAsync;
     }
 
 @using System.Text.RegularExpressions

@@ -3,14 +3,34 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:Daily"
              xmlns:components="clr-namespace:Daily.Components"
-             xmlns:ios="clr-namespace:Microsoft.Maui.Controls.PlatformConfiguration.iOSSpecific;assembly=Microsoft.Maui.Controls"
-             ios:Page.UseSafeArea="True"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:Class="Daily.MainPage">
 
-    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
-        <BlazorWebView.RootComponents>
-            <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
-        </BlazorWebView.RootComponents>
-    </BlazorWebView>
+    <ContentPage.Behaviors>
+        <toolkit:StatusBarBehavior StatusBarColor="Transparent" StatusBarStyle="LightContent" />
+    </ContentPage.Behaviors>
+
+    <ContentPage.Background>
+        <OnPlatform x:TypeArguments="Brush">
+            <On Platform="Android,iOS">
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#594AE2" Offset="0.0" />
+                    <GradientStop Color="#1b0e33" Offset="0.5" />
+                    <GradientStop Color="#00d2ff" Offset="1.0" />
+                </LinearGradientBrush>
+            </On>
+            <On Platform="WinUI,MacCatalyst">
+                <SolidColorBrush Color="Transparent" />
+            </On>
+        </OnPlatform>
+    </ContentPage.Background>
+
+    <RefreshView Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing}" RefreshColor="#594AE2" BackgroundColor="Transparent">
+        <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" BackgroundColor="Transparent">
+            <BlazorWebView.RootComponents>
+                <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
+            </BlazorWebView.RootComponents>
+        </BlazorWebView>
+    </RefreshView>
 
 </ContentPage>

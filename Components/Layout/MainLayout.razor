@@ -1,15 +1,16 @@
-﻿@inherits LayoutComponentBase
+﻿@using Daily.Services
+@inject IRefreshService RefreshService
+@inherits LayoutComponentBase
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<MudLayout>
-    <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="pt-14 pb-2" 
-        Style="@($"background-color: {(_isDarkMode ? "rgba(18, 18, 18, 0.7)" : "rgba(255, 255, 255, 0.7)")}; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid {(_isDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)")};")">
-        <MudIconButton Icon="@Icons.Material.Filled.Today"
+<MudLayout Style="background-color: transparent;">
+    <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="pt-20 pb-2" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <MudIconButton Icon="@Icons.Material.Filled.Scale"
                        Color="Color.Inherit"
-                       OnClick="@((e) => _isDarkMode = !_isDarkMode)" />
+                       OnClick="@(async () => await RefreshService.TriggerRefreshAsync())" />
         <MudText Class="pl-2" Typo="Typo.h5"><b>Daily</b></MudText>
         <MudSpacer />
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.Brightness7 : Icons.Material.Filled.Brightness4)"
@@ -17,15 +18,51 @@
                        OnClick="@((e) => _isDarkMode = !_isDarkMode)" />
     </MudAppBar>
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-20 pt-2 px-6">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-20 pt-8 px-6">
             @Body
         </MudContainer>
     </MudMainContent>
 </MudLayout>
 
+@inject IJSRuntime JSRuntime
+
 @code {
     private bool _isDarkMode = true;
-    private MudTheme _theme = new();
+    private MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Background = "#00000000",
+            AppbarBackground = "#00000000",
+            DrawerBackground = "#00000000",
+            Surface = "#00000000"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Background = "#00000000",
+            AppbarBackground = "#00000000",
+            DrawerBackground = "#00000000",
+            Surface = "#00000000"
+        }
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
+                Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
+            {
+                // On Mobile, we use the XAML background, so body should be transparent
+                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('transparent-background')");
+            }
+            else
+            {
+                // On Windows/Desktop, we use the CSS background
+                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('mesh-background')");
+            }
+        }
+    }
 
     protected override void OnInitialized()
     {
