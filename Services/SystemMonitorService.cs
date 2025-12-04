@@ -19,6 +19,9 @@ namespace Daily.Services
 #if WINDOWS
         private PerformanceCounter? _cpuCounter;
         private PerformanceCounter? _ramCounter;
+#elif ANDROID
+        private TimeSpan _lastTotalProcessorTime;
+        private DateTime _lastCheckTime;
 #endif
 
         public SystemMonitorService()
@@ -60,9 +63,34 @@ namespace Daily.Services
                 return 0;
             }
 #elif ANDROID
-            // Getting total system CPU on Android is restricted.
-            // We could return App CPU, but for now we'll return 0 or a placeholder.
-            return 0; 
+            try
+            {
+                var currentProcess = Process.GetCurrentProcess();
+                var currentTotalProcessorTime = currentProcess.TotalProcessorTime;
+                var currentTime = DateTime.UtcNow;
+
+                if (_lastCheckTime != DateTime.MinValue)
+                {
+                    var cpuUsedMs = (currentTotalProcessorTime - _lastTotalProcessorTime).TotalMilliseconds;
+                    var totalTimeMs = (currentTime - _lastCheckTime).TotalMilliseconds;
+                    var cpuUsageTotal = cpuUsedMs / (totalTimeMs * Environment.ProcessorCount);
+                    
+                    _lastTotalProcessorTime = currentTotalProcessorTime;
+                    _lastCheckTime = currentTime;
+
+                    return cpuUsageTotal * 100;
+                }
+                else
+                {
+                    _lastTotalProcessorTime = currentTotalProcessorTime;
+                    _lastCheckTime = currentTime;
+                    return 0;
+                }
+            }
+            catch
+            {
+                return 0;
+            }
 #else
             return 0;
 #endif

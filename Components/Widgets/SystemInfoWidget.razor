@@ -1,11 +1,12 @@
 @using MudBlazor
 @using Daily.Services
+@using Microsoft.Maui.Devices
 @inject ISystemMonitorService SystemMonitor
 @implements IDisposable
 
 <MudList T="string" Dense="true">
     <MudListItem Icon="@Icons.Material.Filled.Memory">
-        <MudText>CPU: @(_cpuUsage.ToString("F0"))%</MudText>
+        <MudText>@_cpuLabel: @(_cpuUsage.ToString("F0"))%</MudText>
         <MudProgressLinear Color="Color.Primary" Value="@_cpuUsage" Class="my-2" />
     </MudListItem>
     <MudListItem Icon="@Icons.Material.Filled.Storage">
@@ -17,11 +18,17 @@
 @code {
     private double _cpuUsage = 0;
     private double _ramUsage = 0;
+    private string _cpuLabel = "CPU";
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
 
     protected override void OnInitialized()
     {
+        if (DeviceInfo.Platform == DevicePlatform.Android)
+        {
+            _cpuLabel = "App CPU";
+        }
+
         // Start the timer
         _cts = new CancellationTokenSource();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
