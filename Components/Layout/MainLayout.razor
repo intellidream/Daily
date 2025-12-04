@@ -1,5 +1,6 @@
 ﻿@using Daily.Services
 @inject IRefreshService RefreshService
+@implements IDisposable
 @inherits LayoutComponentBase
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
@@ -15,7 +16,7 @@
         <MudSpacer />
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.Brightness7 : Icons.Material.Filled.Brightness4)"
                        Color="Color.Inherit"
-                       OnClick="@((e) => _isDarkMode = !_isDarkMode)" />
+                       OnClick="@ToggleTheme" />
     </MudAppBar>
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-20 pt-8 px-6">
@@ -46,10 +47,28 @@
         }
     };
 
+    private async Task ToggleTheme()
+    {
+        _isDarkMode = !_isDarkMode;
+        
+        var newTheme = _isDarkMode ? AppTheme.Dark : AppTheme.Light;
+        if (Application.Current != null)
+        {
+            Application.Current.UserAppTheme = newTheme;
+        }
+
+        var themeValue = _isDarkMode ? "dark" : "light";
+        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}')");
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
+            // Set initial theme based on _isDarkMode
+            var initialTheme = _isDarkMode ? "dark" : "light";
+            await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{initialTheme}')");
+
             if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
                 Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
             {
@@ -66,9 +85,36 @@
 
     protected override void OnInitialized()
     {
+        if (Application.Current != null)
+        {
+            // Subscribe to system theme changes
+            Application.Current.RequestedThemeChanged += OnThemeChanged;
+            
+            // Set initial state based on current system theme
+            _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
+        }
+
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android)
         {
             // Android specific: just add padding to clear the status bar
+        }
+    }
+
+    private async void OnThemeChanged(object? sender, AppThemeChangedEventArgs e)
+    {
+        _isDarkMode = e.RequestedTheme == AppTheme.Dark;
+        StateHasChanged();
+
+        // Update CSS
+        var themeValue = _isDarkMode ? "dark" : "light";
+        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}')");
+    }
+
+    public void Dispose()
+    {
+        if (Application.Current != null)
+        {
+            Application.Current.RequestedThemeChanged -= OnThemeChanged;
         }
     }
 }
