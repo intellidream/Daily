@@ -8,7 +8,7 @@
 <MudSnackbarProvider />
 
 <MudLayout Style="background-color: transparent;">
-    <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="pt-20 pb-2" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
+<MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
         <MudIconButton Icon="@Icons.Material.Filled.Scale"
                        Color="Color.Inherit"
                        OnClick="@(async () => await RefreshService.TriggerRefreshAsync())" />
@@ -19,7 +19,7 @@
                        OnClick="@ToggleTheme" />
     </MudAppBar>
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-20 pt-8 px-6">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="@ContainerClass">
             @Body
         </MudContainer>
     </MudMainContent>
@@ -83,6 +83,9 @@
         }
     }
 
+    private string AppBarClass { get; set; } = "";
+    private string ContainerClass { get; set; } = "";
+
     protected override void OnInitialized()
     {
         if (Application.Current != null)
@@ -94,9 +97,18 @@
             _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
         }
 
-        if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android)
+        if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
+            Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
         {
-            // Android specific: just add padding to clear the status bar
+            // Mobile Layout
+            AppBarClass = "pt-20 pb-2";
+            ContainerClass = "mt-20 pt-8 px-6";
+        }
+        else
+        {
+            // Desktop Layout (Windows/Mac)
+            AppBarClass = "pt-12 pb-2";
+            ContainerClass = "mt-12 pt-8 px-6";
         }
     }
 
