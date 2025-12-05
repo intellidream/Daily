@@ -14,9 +14,9 @@
         <OnPlatform x:TypeArguments="Brush">
             <On Platform="Android,iOS">
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Color="{AppThemeBinding Light='#E0DDFD', Dark='#594AE2'}" Offset="0.0" />
-                    <GradientStop Color="{AppThemeBinding Light='#FFFFFF', Dark='#1b0e33'}" Offset="0.5" />
-                    <GradientStop Color="{AppThemeBinding Light='#D6F0FD', Dark='#00d2ff'}" Offset="1.0" />
+                    <GradientStop Color="{AppThemeBinding Light='#CAC7E4', Dark='#594AE2'}" Offset="0.0" />
+                    <GradientStop Color="{AppThemeBinding Light='#E6E6E6', Dark='#1b0e33'}" Offset="0.5" />
+                    <GradientStop Color="{AppThemeBinding Light='#C1D8E4', Dark='#00d2ff'}" Offset="1.0" />
                 </LinearGradientBrush>
             </On>
             <On Platform="WinUI,MacCatalyst">

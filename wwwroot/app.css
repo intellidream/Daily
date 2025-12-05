@@ -12,8 +12,8 @@ body {
 
 /* --- LIGHT MODE (Default) --- */
 .mesh-background {
-    /* Light Mode Gradient: Very Pale Purple -> White -> Very Pale Cyan */
-    background: linear-gradient(135deg, #E0DDFD 0%, #FFFFFF 50%, #D6F0FD 100%);
+    /* Light Mode Gradient: Darker Pastel Purple -> Off-White -> Darker Pastel Cyan */
+    background: linear-gradient(135deg, #CAC7E4 0%, #E6E6E6 50%, #C1D8E4 100%);
     background-attachment: fixed;
     background-size: cover;
 }
