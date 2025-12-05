@@ -6,18 +6,19 @@
 @implements IDisposable
 
 <div class="d-flex align-center px-4 pt-2">
-    <div class="d-flex overflow-x-auto px-2 pb-2 gap-2" style="white-space: nowrap; width: 100%; scrollbar-width: none;">
+    <div class="d-flex flex-grow-1 overflow-x-auto px-0 pb-2 gap-2" style="white-space: nowrap; min-width: 0;">
         @foreach (var feed in _feeds)
         {
-            <MudChip T="FeedSource" 
+            <MudChip T="FeedSource" Size="Size.Large"
                      OnClick="@(() => OnFeedChipClicked(feed))"
-                     Variant="@(_currentFeed == feed ? Variant.Filled : Variant.Outlined)" 
-                     Color="Color.Primary" 
+                     Variant="@(_currentFeed == feed ? Variant.Filled : Variant.Outlined)"
+                     Color="@(_currentFeed == feed ? Color.Primary : Color.Primary)"
                      Selected="@(_currentFeed == feed)"
                      OnClose="@(() => ForceRefreshFeed(feed))"
-                     CloseIcon="@Icons.Material.Filled.Refresh">
+                     CloseIcon="@Icons.Material.Filled.Refresh"
+                     Class="flex-shrink-0">
                 <AvatarContent>
-                    <MudAvatar Size="Size.Small">
+                    <MudAvatar Size="Size.Large">
                         <MudImage Src="@feed.IconUrl" Alt="@feed.Name" />
                     </MudAvatar>
                 </AvatarContent>
@@ -47,6 +48,18 @@
                     @if (!string.IsNullOrEmpty(item.ImageUrl))
                     {
                         <MudImage Src="@item.ImageUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded flex-shrink-0" />
+                    }
+                    else if (!string.IsNullOrEmpty(_currentFeed?.IconUrl))
+                    {
+                         <div class="rounded flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 60px; background-color: var(--mud-palette-action-disabled-background);">
+                            <MudImage Src="@_currentFeed.IconUrl" Width="40" Height="40" ObjectFit="ObjectFit.Contain" />
+                         </div>
+                    }
+                    else
+                    {
+                        <div class="rounded flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 60px; background-color: var(--mud-palette-action-disabled-background);">
+                            <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Medium" />
+                        </div>
                     }
                     <div style="min-width: 0; flex: 1;">
                         <MudText Typo="Typo.body2" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">@item.Title</MudText>
@@ -97,7 +110,9 @@
     private List<FeedSource> _feeds = new()
     {
         new FeedSource { Name = "BBC News", Url = "https://feeds.bbci.co.uk/news/rss.xml", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=bbc.com&sz=64" },
-        new FeedSource { Name = "Zona IT", Url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", Type = FeedType.WpJson, IconUrl = "https://www.google.com/s2/favicons?domain=zonait.ro&sz=64" }
+        new FeedSource { Name = "Zona IT", Url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", Type = FeedType.WpJson, IconUrl = "https://www.google.com/s2/favicons?domain=zonait.ro&sz=64" },
+        new FeedSource { Name = "Google News", Url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=news.google.com&sz=64" },
+        new FeedSource { Name = "Windows Central", Url = "https://www.windowscentral.com/feeds.xml", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=windowscentral.com&sz=64" }
     };
 
     private FeedSource _currentFeed;
@@ -173,38 +188,100 @@
 
     private async Task LoadRssFeedAsync()
     {
-        // Example feed: BBC News
-        using var client = new HttpClient();
-        client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-        var xml = await client.GetStringAsync(_currentFeed.Url);
-        var doc = XDocument.Parse(xml);
-
-        var channelImage = doc.Descendants("channel").Elements().FirstOrDefault(e => e.Name.LocalName == "image")?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value;
-
-        _items = doc.Descendants("item").Select(x => {
-            var description = x.Element("description")?.Value;
-            var descriptionImage = !string.IsNullOrEmpty(description) 
-                ? Regex.Match(description, "<img.+?src=[\"'](.+?)[\"']").Groups[1].Value 
-                : null;
-            
-            var contentEncoded = x.Descendants().FirstOrDefault(e => e.Name.LocalName == "encoded")?.Value;
-            var contentImage = !string.IsNullOrEmpty(contentEncoded)
-                    ? Regex.Match(contentEncoded, "<img.+?src=[\"'](.+?)[\"']").Groups[1].Value
-                    : null;
-
-            return new RssItem
+        try 
+        {
+            // Use a handler to support compression and better mimic a browser
+            using var handler = new HttpClientHandler
             {
-                Title = x.Element("title")?.Value,
-                Link = x.Element("link")?.Value,
-                PublishDate = DateTime.TryParse(x.Element("pubDate")?.Value, out var d) ? d : DateTime.Now,
-                ImageUrl = x.Descendants().FirstOrDefault(e => e.Name.LocalName == "thumbnail")?.Attribute("url")?.Value 
-                           ?? x.Descendants().FirstOrDefault(e => e.Name.LocalName == "content" && e.Attribute("type")?.Value?.StartsWith("image/") == true)?.Attribute("url")?.Value
-                           ?? x.Element("enclosure")?.Attribute("url")?.Value
-                           ?? descriptionImage
-                           ?? contentImage
-                           ?? channelImage
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
             };
-        }).ToList();
+            
+            using var client = new HttpClient(handler);
+            client.Timeout = TimeSpan.FromSeconds(10);
+            
+            // Add standard headers to avoid being blocked (e.g., by Windows Central)
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Add("Accept", "application/rss+xml, application/xml, text/xml, */*");
+
+            var xml = await client.GetStringAsync(_currentFeed.Url);
+            var doc = XDocument.Parse(xml);
+            XNamespace media = "http://search.yahoo.com/mrss/";
+
+            var channelImage = doc.Descendants("channel").Elements().FirstOrDefault(e => e.Name.LocalName == "image")?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value;
+
+            _items = doc.Descendants("item").Select(item =>
+            {
+                var title = item.Element("title")?.Value ?? "No Title";
+                var link = item.Element("link")?.Value;
+                var description = item.Element("description")?.Value;
+                var pubDateStr = item.Element("pubDate")?.Value;
+
+                // Robust image extraction
+                string? imageUrl = null;
+
+                // 1. Try media:content (used by Windows Central)
+                // Note: We need to be careful with namespaces. Descendants might not include the prefix in LocalName.
+                var mediaContent = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "content" && e.Name.Namespace == media);
+                if (mediaContent != null)
+                {
+                    imageUrl = mediaContent.Attribute("url")?.Value;
+                }
+
+                // 2. Try media:thumbnail (used by BBC)
+                if (string.IsNullOrEmpty(imageUrl))
+                {
+                    var mediaThumbnail = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "thumbnail");
+                    imageUrl = mediaThumbnail?.Attribute("url")?.Value;
+                }
+
+                // 3. Try enclosure (standard RSS)
+                if (string.IsNullOrEmpty(imageUrl))
+                {
+                    var enclosure = item.Element("enclosure");
+                    if (enclosure != null && enclosure.Attribute("type")?.Value?.StartsWith("image/") == true)
+                    {
+                        imageUrl = enclosure.Attribute("url")?.Value;
+                    }
+                }
+
+                // 4. Try parsing HTML description (fallback)
+                if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(description))
+                {
+                    var match = Regex.Match(description, @"<img.+?src=[""']([^""']+)[""']");
+                    if (match.Success)
+                    {
+                        imageUrl = match.Groups[1].Value;
+                    }
+                }
+                
+                // 5. Try content:encoded
+                if (string.IsNullOrEmpty(imageUrl))
+                {
+                    var contentEncoded = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "encoded")?.Value;
+                    if (!string.IsNullOrEmpty(contentEncoded))
+                    {
+                         var match = Regex.Match(contentEncoded, @"<img.+?src=[""']([^""']+)[""']");
+                         if (match.Success)
+                         {
+                             imageUrl = match.Groups[1].Value;
+                         }
+                    }
+                }
+
+                return new RssItem
+                {
+                    Title = title,
+                    Link = link,
+                    PublishDate = DateTime.TryParse(pubDateStr, out var date) ? date : DateTime.Now,
+                    ImageUrl = imageUrl ?? channelImage
+                };
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _items = new List<RssItem> { new RssItem { Title = $"Error loading feed: {ex.Message}" } };
+            Console.WriteLine($"RSS Load Error: {ex}");
+        }
     }
 
     private async Task LoadWpJsonFeedAsync()
