@@ -1,13 +1,42 @@
 @using MudBlazor
 @using System.Xml.Linq
+@using System.Text.Json.Nodes
 @using Daily.Services
 @inject IRefreshService RefreshService
 @implements IDisposable
 
+<div class="d-flex align-center px-4 pt-2">
+    <div class="d-flex overflow-x-auto px-2 pb-2 gap-2" style="white-space: nowrap; width: 100%; scrollbar-width: none;">
+        @foreach (var feed in _feeds)
+        {
+            <MudChip T="FeedSource" 
+                     OnClick="@(() => OnFeedChipClicked(feed))"
+                     Variant="@(_currentFeed == feed ? Variant.Filled : Variant.Outlined)" 
+                     Color="Color.Primary" 
+                     Selected="@(_currentFeed == feed)"
+                     OnClose="@(() => ForceRefreshFeed(feed))"
+                     CloseIcon="@Icons.Material.Filled.Refresh">
+                <AvatarContent>
+                    <MudAvatar Size="Size.Small">
+                        <MudImage Src="@feed.IconUrl" Alt="@feed.Name" />
+                    </MudAvatar>
+                </AvatarContent>
+                <ChildContent>
+                    @feed.Name
+                </ChildContent>
+            </MudChip>
+        }
+    </div>
+</div>
+<!-- Removed MudDivider to let the chips sit nicely above the list -->
+
 <MudList T="string" Dense="true" Clickable="true" DisablePadding="true" Style="height: 400px; overflow: hidden">
     @if (_items == null)
     {
-        <MudListItem><MudText>Loading...</MudText></MudListItem>
+        <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+            <MudText Class="ml-2">Loading news...</MudText>
+        </div>
     }
     else
     {
@@ -32,8 +61,8 @@
 @if (_items != null && _items.Count > _pageSize)
 {
     <div class="d-flex justify-center mt-2">
-        <MudPagination BoundaryCount="1" MiddleCount="1" Count="@_pageCount" SelectedChanged="OnPageChanged" Selected="@_currentPage" 
-            Class="pa-2" Variant="Variant.Outlined" Size="Size.Small" ShowFirstButton="true" ShowLastButton="true" />
+         <MudPagination BoundaryCount="1" MiddleCount="1" Count="@_pageCount" SelectedChanged="OnPageChanged" Selected="@_currentPage" 
+                        Class="pa-2" Variant="Variant.Outlined" Size="Size.Small" ShowFirstButton="false" ShowLastButton="false" />
     </div>
 }
 
@@ -42,10 +71,42 @@
     private int _currentPage = 1;
     private const int _pageSize = 5;
 
+    public enum FeedType
+    {
+        Rss,
+        WpJson
+    }
+
+    public class FeedSource
+    {
+        public string Name { get; set; }
+        public string Url { get; set; }
+        public string IconUrl { get; set; }
+        public FeedType Type { get; set; }
+
+        public override bool Equals(object o)
+        {
+            var other = o as FeedSource;
+            return other?.Name == Name;
+        }
+
+        public override int GetHashCode() => Name?.GetHashCode() ?? 0;
+        public override string ToString() => Name;
+    }
+
+    private List<FeedSource> _feeds = new()
+    {
+        new FeedSource { Name = "BBC News", Url = "https://feeds.bbci.co.uk/news/rss.xml", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=bbc.com&sz=64" },
+        new FeedSource { Name = "Zona IT", Url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", Type = FeedType.WpJson, IconUrl = "https://www.google.com/s2/favicons?domain=zonait.ro&sz=64" }
+    };
+
+    private FeedSource _currentFeed;
+
     private int _pageCount => _items != null ? (int)Math.Ceiling((double)_items.Count / _pageSize) : 0;
 
     protected override async Task OnInitializedAsync()
     {
+        _currentFeed = _feeds.First();
         RefreshService.RefreshRequested += LoadFeedAsync;
         await LoadFeedAsync();
     }
@@ -61,48 +122,138 @@
         StateHasChanged();
     }
 
-@using System.Text.RegularExpressions
+    private async Task OnFeedChipClicked(FeedSource feed)
+    {
+        if (_currentFeed != feed)
+        {
+            _currentFeed = feed;
+            _currentPage = 1;
+            await LoadFeedAsync();
+        }
+    }
+
+    private async Task ForceRefreshFeed(FeedSource feed)
+    {
+        // Refresh the feed regardless of whether it's currently selected or not (but logically we probably only care about the current one or the one clicked)
+        // If the user clicks refresh on a non-active chip, should we switch to it? Let's just switch and refresh.
+        _currentFeed = feed;
+        _currentPage = 1; 
+        await LoadFeedAsync();
+    }
 
     private async Task LoadFeedAsync()
     {
+        if (_currentFeed == null) return;
+
+        _items = null;
+        StateHasChanged();
+
         try
         {
-            // Example feed: BBC News
-            var url = "https://feeds.bbci.co.uk/news/rss.xml";
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-            var xml = await client.GetStringAsync(url);
-            var doc = XDocument.Parse(xml);
+            if (_currentFeed.Type == FeedType.Rss)
+            {
+                await LoadRssFeedAsync();
+            }
+            else if (_currentFeed.Type == FeedType.WpJson)
+            {
+                await LoadWpJsonFeedAsync();
+            }
 
-            var channelImage = doc.Descendants("channel").Elements().FirstOrDefault(e => e.Name.LocalName == "image")?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value;
-
-            _items = doc.Descendants("item").Select(x => {
-                var description = x.Element("description")?.Value;
-                var descriptionImage = !string.IsNullOrEmpty(description) 
-                    ? Regex.Match(description, "<img.+?src=[\"'](.+?)[\"']").Groups[1].Value 
-                    : null;
-
-                return new RssItem
-                {
-                    Title = x.Element("title")?.Value,
-                    Link = x.Element("link")?.Value,
-                    PublishDate = DateTime.TryParse(x.Element("pubDate")?.Value, out var d) ? d : DateTime.Now,
-                    ImageUrl = x.Descendants().FirstOrDefault(e => e.Name.LocalName == "thumbnail")?.Attribute("url")?.Value 
-                               ?? x.Descendants().FirstOrDefault(e => e.Name.LocalName == "content" && e.Attribute("type")?.Value?.StartsWith("image/") == true)?.Attribute("url")?.Value
-                               ?? x.Element("enclosure")?.Attribute("url")?.Value
-                               ?? descriptionImage
-                               ?? channelImage
-                };
-            }).ToList();
-            
-            // Reset to page 1 on reload
-            _currentPage = 1;
             StateHasChanged();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading RSS: {ex.Message}");
+            Console.WriteLine($"Error loading feed: {ex.Message}");
             _items = new List<RssItem> { new RssItem { Title = "Error loading feed" } };
+            StateHasChanged();
+        }
+    }
+
+@using System.Text.RegularExpressions
+
+    private async Task LoadRssFeedAsync()
+    {
+        // Example feed: BBC News
+        using var client = new HttpClient();
+        client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        var xml = await client.GetStringAsync(_currentFeed.Url);
+        var doc = XDocument.Parse(xml);
+
+        var channelImage = doc.Descendants("channel").Elements().FirstOrDefault(e => e.Name.LocalName == "image")?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value;
+
+        _items = doc.Descendants("item").Select(x => {
+            var description = x.Element("description")?.Value;
+            var descriptionImage = !string.IsNullOrEmpty(description) 
+                ? Regex.Match(description, "<img.+?src=[\"'](.+?)[\"']").Groups[1].Value 
+                : null;
+            
+            var contentEncoded = x.Descendants().FirstOrDefault(e => e.Name.LocalName == "encoded")?.Value;
+            var contentImage = !string.IsNullOrEmpty(contentEncoded)
+                    ? Regex.Match(contentEncoded, "<img.+?src=[\"'](.+?)[\"']").Groups[1].Value
+                    : null;
+
+            return new RssItem
+            {
+                Title = x.Element("title")?.Value,
+                Link = x.Element("link")?.Value,
+                PublishDate = DateTime.TryParse(x.Element("pubDate")?.Value, out var d) ? d : DateTime.Now,
+                ImageUrl = x.Descendants().FirstOrDefault(e => e.Name.LocalName == "thumbnail")?.Attribute("url")?.Value 
+                           ?? x.Descendants().FirstOrDefault(e => e.Name.LocalName == "content" && e.Attribute("type")?.Value?.StartsWith("image/") == true)?.Attribute("url")?.Value
+                           ?? x.Element("enclosure")?.Attribute("url")?.Value
+                           ?? descriptionImage
+                           ?? contentImage
+                           ?? channelImage
+            };
+        }).ToList();
+    }
+
+    private async Task LoadWpJsonFeedAsync()
+    {
+        using var client = new HttpClient();
+        client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        
+        var json = await client.GetStringAsync(_currentFeed.Url);
+        var node = JsonNode.Parse(json);
+        var posts = node.AsArray();
+
+        _items = new List<RssItem>();
+
+        foreach (var post in posts)
+        {
+            var title = post["title"]?["rendered"]?.ToString();
+            // Decode HTML entities in title
+            if (!string.IsNullOrEmpty(title))
+            {
+                title = System.Net.WebUtility.HtmlDecode(title);
+            }
+            
+            var link = post["link"]?.ToString();
+            var dateStr = post["date"]?.ToString();
+            var date = DateTime.TryParse(dateStr, out var d) ? d : DateTime.Now;
+
+            string imageUrl = null;
+            var embedded = post["_embedded"];
+            if (embedded != null)
+            {
+                var media = embedded["wp:featuredmedia"]?.AsArray()?.FirstOrDefault();
+                if (media != null)
+                {
+                    imageUrl = media["source_url"]?.ToString();
+                    // Try to get a medium size if available to save bandwidth
+                     if (media["media_details"]?["sizes"]?["medium"]?["source_url"] != null)
+                    {
+                        imageUrl = media["media_details"]["sizes"]["medium"]["source_url"].ToString();
+                    }
+                }
+            }
+            
+            _items.Add(new RssItem
+            {
+                 Title = title,
+                 Link = link,
+                 PublishDate = date,
+                 ImageUrl = imageUrl
+            });
         }
     }
 
