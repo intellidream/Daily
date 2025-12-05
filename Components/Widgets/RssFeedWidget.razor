@@ -4,23 +4,23 @@
 @inject IRefreshService RefreshService
 @implements IDisposable
 
-<MudList T="string" Dense="true" Clickable="true">
+<MudList T="string" Dense="true" Clickable="true" DisablePadding="true" Style="height: 400px; overflow: hidden">
     @if (_items == null)
     {
         <MudListItem><MudText>Loading...</MudText></MudListItem>
     }
     else
     {
-        @foreach (var item in _items.Take(5))
+        @foreach (var item in _items.Skip((_currentPage - 1) * _pageSize).Take(_pageSize))
         {
-            <MudListItem OnClick="@(() => OpenUrl(item.Link))">
-                <div class="d-flex align-center gap-4">
+            <MudListItem OnClick="@(() => OpenUrl(item.Link))" Style="height: 80px; overflow: hidden;">
+                <div class="d-flex align-center gap-4" style="height: 100%; width: 100%;">
                     @if (!string.IsNullOrEmpty(item.ImageUrl))
                     {
-                        <MudImage Src="@item.ImageUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        <MudImage Src="@item.ImageUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded flex-shrink-0" />
                     }
-                    <div>
-                        <MudText Typo="Typo.body2">@item.Title</MudText>
+                    <div style="min-width: 0; flex: 1;">
+                        <MudText Typo="Typo.body2" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">@item.Title</MudText>
                         <MudText Typo="Typo.caption">@item.PublishDate.ToShortDateString()</MudText>
                     </div>
                 </div>
@@ -29,8 +29,20 @@
     }
 </MudList>
 
+@if (_items != null && _items.Count > _pageSize)
+{
+    <div class="d-flex justify-center mt-2">
+        <MudPagination BoundaryCount="1" MiddleCount="1" Count="@_pageCount" SelectedChanged="OnPageChanged" Selected="@_currentPage" 
+            Class="pa-2" Variant="Variant.Outlined" Size="Size.Small" ShowFirstButton="true" ShowLastButton="true" />
+    </div>
+}
+
 @code {
     private List<RssItem> _items;
+    private int _currentPage = 1;
+    private const int _pageSize = 5;
+
+    private int _pageCount => _items != null ? (int)Math.Ceiling((double)_items.Count / _pageSize) : 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -41,6 +53,12 @@
     public void Dispose()
     {
         RefreshService.RefreshRequested -= LoadFeedAsync;
+    }
+
+    private void OnPageChanged(int page)
+    {
+        _currentPage = page;
+        StateHasChanged();
     }
 
 @using System.Text.RegularExpressions
@@ -76,6 +94,10 @@
                                ?? channelImage
                 };
             }).ToList();
+            
+            // Reset to page 1 on reload
+            _currentPage = 1;
+            StateHasChanged();
         }
         catch (Exception ex)
         {

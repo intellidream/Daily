@@ -18,7 +18,7 @@ namespace Daily.Services
                 new WidgetModel { Title = "Weather", ComponentType = "WeatherWidget", RowSpan = 2 },
                 new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", RowSpan = 2 },
                 new WidgetModel { Title = "Notes", ComponentType = "NotesWidget" },
-                new WidgetModel { Title = "News", ComponentType = "RssFeedWidget", RowSpan = 2 },
+                new WidgetModel { Title = "Feeds", ComponentType = "RssFeedWidget", RowSpan = 2 },
                 new WidgetModel { Title = "System Info", ComponentType = "SystemInfoWidget" }
             };
         }
