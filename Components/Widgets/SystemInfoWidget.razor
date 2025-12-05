@@ -4,23 +4,183 @@
 @inject ISystemMonitorService SystemMonitor
 @implements IDisposable
 
-<MudList T="string" Dense="true">
-    <MudListItem Icon="@Icons.Material.Filled.Memory">
-        <MudText>@_cpuLabel: @(_cpuUsage.ToString("F0"))%</MudText>
-        <MudProgressLinear Color="Color.Primary" Value="@_cpuUsage" Class="my-2" />
-    </MudListItem>
-    <MudListItem Icon="@Icons.Material.Filled.Storage">
-        <MudText>RAM: @(_ramUsage.ToString("F0"))%</MudText>
-        <MudProgressLinear Color="Color.Secondary" Value="@_ramUsage" Class="my-2" />
-    </MudListItem>
-</MudList>
+<MudPaper Height="100%" MinHeight="320px" Width="100%" Elevation="0" Class="d-flex flex-column relative overflow-hidden" Style="background: transparent;">
+    @if (_selectedMetric == null)
+    {
+        <!-- Dashboard Grid View -->
+        <MudGrid Spacing="2" Class="flex-grow-1 animate-fade-in" Style="height: 100%">
+            <!-- Row 1: CPU & RAM (Big, xs=6) -->
+            <MudItem xs="6">
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-2 cursor-pointer hover-scale tile-glass" 
+                          Height="100%" @onclick="@(() => SelectMetric("CPU"))">
+                    @Speedometer(_cpuUsage, _cpuLabel, Color.Info)
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6">
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-2 cursor-pointer hover-scale tile-glass" 
+                          Height="100%" @onclick="@(() => SelectMetric("RAM"))">
+                     @Speedometer(_ramUsage, "RAM", Color.Secondary)
+                </MudPaper>
+            </MudItem>
+
+            <!-- Row 2: Battery, Storage, Uptime (xs=4) -->
+            <MudItem xs="4">
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                          Height="100%" @onclick="@(() => SelectMetric("Battery"))">
+                    <MudIcon Icon="@(_isCharging ? Icons.Material.Filled.BatteryChargingFull : Icons.Material.Filled.BatteryStd)" 
+                             Color="@(_batteryLevel < 0.2 ? Color.Error : Color.Success)" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Class="mt-1">@(_batteryLevel * 100)%</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="4">
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                          Height="100%" @onclick="@(() => SelectMetric("Storage"))">
+                    <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Warning" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Class="mt-1">@(_storageFree.ToString("F0"))GB</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="4">
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                          Height="100%" @onclick="@(() => SelectMetric("Uptime"))">
+                    <MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Default" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Class="mt-1">@_uptime.Days days</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Row 3: Network, Health, Usage (xs=4) -->
+            <MudItem xs="4">
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                          Height="100%" @onclick="@(() => SelectMetric("Network"))">
+                    <MudIcon Icon="@GetNetworkIcon()" Color="Color.Success" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Class="mt-1" Align="Align.Center" Style="font-size: 0.65rem; line-height: 1;">@_networkProfile</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="4">
+                 <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                           Height="100%" @onclick="@(() => SelectMetric("Health"))">
+                    <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Color="Color.Error" Size="Size.Small" />
+                     @if (DeviceInfo.Platform == DevicePlatform.WinUI)
+                     {
+                        <MudText Typo="Typo.caption" Class="mt-1">@_processCount P</MudText>
+                     }
+                     else
+                     {
+                        <MudText Typo="Typo.caption" Class="mt-1">@(_tempC.ToString("F0"))°C</MudText>
+                     }
+                </MudPaper>
+            </MudItem>
+             <MudItem xs="4">
+                 <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                           Height="100%" @onclick="@(() => SelectMetric("Usage"))">
+                    <MudIcon Icon="@(DeviceInfo.Platform == DevicePlatform.WinUI ? Icons.Material.Filled.Monitor : Icons.Material.Filled.Smartphone)" 
+                             Color="Color.Primary" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Class="mt-1">@(_dailyUsage?.ToString(@"h\h\ m\m") ?? "--")</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+    else
+    {
+        <!-- Detail Overlay View -->
+        <MudPaper Elevation="0" Class="d-flex flex-column flex-grow-1 animate-fade-in pa-2 tile-glass" Height="100%">
+            <div class="d-flex align-center mb-2">
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => _selectedMetric = null)" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle1" Class="ml-2"><b>@_detailTitle</b></MudText>
+            </div>
+            
+            <div class="d-flex flex-column align-center justify-center flex-grow-1">
+                @_detailVisual
+                <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-4 mb-2">@_detailValue</MudText>
+                <MudText Typo="Typo.body2" Align="Align.Center" Style="opacity: 0.8;">@_detailDesc</MudText>
+                
+                @if (_selectedMetric == "Usage" && DeviceInfo.Platform == DevicePlatform.Android && !_usagePermissionGranted)
+                {
+                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="@(() => SystemMonitor.OpenUsageSettings())">Grant Permission</MudButton>
+                }
+            </div>
+        </MudPaper>
+    }
+</MudPaper>
+
+<style>
+    .hover-scale { transition: transform 0.2s, background-color 0.2s; }
+    .hover-scale:hover { transform: scale(1.02); background-color: var(--mud-palette-action-default-hover); }
+    
+    /* Light Mode: White Glass (70% opacity) for "White" look */
+    .tile-glass { background-color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(5px); transition: background-color 0.3s; }
+    
+    /* Dark Mode: Black Glass (10% opacity) for "See-through" look */
+    body[data-theme='dark'] .tile-glass { background-color: rgba(0, 0, 0, 0.1); }
+    
+    /* Dark Mode Hover: Darker (25% opacity) */
+    body[data-theme='dark'] .tile-glass.hover-scale:hover { background-color: rgba(0, 0, 0, 0.25); }
+
+    .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+    @@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    
+    .gauge-needle { transition: transform 0.5s cubic-bezier(0.4, 0.0, 0.2, 1); transform-origin: 50% 90%; }
+</style>
 
 @code {
+    private string? _selectedMetric = null;
+    
+    // Detail View State
+    private string _detailTitle = "";
+    private string _detailValue = "";
+    private string _detailDesc = "";
+    private RenderFragment? _detailVisual = null;
+
     private double _cpuUsage = 0;
     private double _ramUsage = 0;
+    private double _batteryLevel = 0;
+    private bool _isCharging = false;
+    private double _storageFree = 0;
+    private double _storageTotal = 1;
+    private string _networkAccess = "Unknown";
+    private string _networkProfile = "Unknown";
+    private string _rxRateFormatted = "0 B/s";
+    private string _txRateFormatted = "0 B/s";
+    private TimeSpan _uptime;
+
+    // Health & Usage
+    private double _tempC = 0;
+    private double _voltageV = 0;
+    private int _processCount = 0;
+    private TimeSpan? _dailyUsage = null;
+    private bool _usagePermissionGranted = false;
+    
     private string _cpuLabel = "CPU";
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
+
+    // --- Custom Visuals ---
+    private RenderFragment Speedometer(double value, string label, Color color) => builder =>
+    {
+        string colorHex = color == Color.Info ? "var(--mud-palette-info)" : "var(--mud-palette-secondary)";
+        double angle = -90 + (value * 1.8); // 0% = -90deg, 100% = +90deg
+        
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "d-flex flex-column align-center");
+        builder.AddMarkupContent(2, @$"
+            <svg viewBox=""0 0 100 60"" width=""80"" height=""48"">
+                <!-- Background Arc -->
+                <path d=""M 10 50 A 40 40 0 0 1 90 50"" fill=""none"" stroke=""var(--mud-palette-action-disabled)"" stroke-width=""8"" stroke-linecap=""round"" />
+                <!-- Value Arc -->
+                <path d=""M 10 50 A 40 40 0 0 1 90 50"" fill=""none"" stroke=""{colorHex}"" stroke-width=""8"" stroke-linecap=""round"" 
+                      stroke-dasharray=""126"" stroke-dashoffset=""{126 - (126 * value / 100)}"" />
+                <!-- Needle -->
+                <g class=""gauge-needle"" style=""transform: rotate({angle}deg);"">
+                     <path d=""M 50 50 L 50 15"" stroke=""var(--mud-palette-text-primary)"" stroke-width=""2"" />
+                     <circle cx=""50"" cy=""50"" r=""4"" fill=""var(--mud-palette-text-primary)"" />
+                </g>
+                <text x=""50"" y=""40"" text-anchor=""middle"" font-family=""sans-serif"" font-size=""10"" fill=""var(--mud-palette-text-primary)"" font-weight=""bold"">{value:F0}%</text>
+            </svg>");
+        builder.OpenElement(3, "MudText");
+        builder.AddAttribute(4, "Typo", Typo.caption);
+        builder.AddContent(5, label);
+        builder.CloseElement();
+        builder.CloseElement();
+    };
 
     protected override void OnInitialized()
     {
@@ -47,6 +207,12 @@
             while (await _timer!.WaitForNextTickAsync(_cts!.Token))
             {
                 FetchStats();
+                // If in detail view, update the detail state
+                if (_selectedMetric != null)
+                {
+                    UpdateDetailState(_selectedMetric);
+                    InvokeAsync(StateHasChanged);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -59,7 +225,116 @@
     {
         _cpuUsage = SystemMonitor.GetCpuUsage();
         _ramUsage = SystemMonitor.GetMemoryUsage();
+        
+        var battery = SystemMonitor.GetBatteryInfo();
+        _batteryLevel = battery.Level;
+        _isCharging = battery.IsCharging;
+
+        var storage = SystemMonitor.GetMainDriveStorage();
+        _storageFree = storage.FreeGb;
+        _storageTotal = storage.TotalGb > 0 ? storage.TotalGb : 1;
+
+        var net = SystemMonitor.GetNetworkInfo();
+        _networkAccess = net.AccessType;
+        _networkProfile = net.ConnectionProfiles;
+
+        var rates = SystemMonitor.GetNetworkRates();
+        _rxRateFormatted = FormatSpeed(rates.RxRate);
+        _txRateFormatted = FormatSpeed(rates.TxRate);
+
+        // Fetch Health & Usage
+        var health = SystemMonitor.GetSystemHealth();
+        _tempC = health.TempC;
+        _voltageV = health.VoltageV;
+        _processCount = health.ProcessCount;
+        _dailyUsage = health.DailyUsage;
+        _usagePermissionGranted = health.IsUsagePermissionGranted;
+
+        _uptime = SystemMonitor.GetUptime();
+
         InvokeAsync(StateHasChanged);
+    }
+
+    private string FormatSpeed(double bytesPerSec)
+    {
+        if (bytesPerSec < 1024) return $"{bytesPerSec:F0} B/s";
+        if (bytesPerSec < 1024 * 1024) return $"{bytesPerSec / 1024.0:F1} KB/s";
+        return $"{bytesPerSec / (1024.0 * 1024.0):F1} MB/s";
+    }
+
+    private void SelectMetric(string metric)
+    {
+        _selectedMetric = metric;
+        UpdateDetailState(metric);
+    }
+
+    private void UpdateDetailState(string metric)
+    {
+        switch (metric)
+        {
+             case "CPU":
+                _detailTitle = _cpuLabel;
+                _detailValue = $"{_cpuUsage:F1}%";
+                _detailDesc = "Real-time processor utilization.";
+                _detailVisual = Speedometer(_cpuUsage, "", Color.Info);
+                break;
+            case "RAM":
+                _detailTitle = "Memory (RAM)";
+                _detailValue = $"{_ramUsage:F1}%";
+                _detailDesc = "System memory usage.";
+                _detailVisual = Speedometer(_ramUsage, "", Color.Secondary);
+                break;
+            case "Battery":
+                _detailTitle = "Battery";
+                _detailValue = $"{_batteryLevel * 100:F0}%";
+                _detailDesc = _isCharging ? "Charging" : "Discharging";
+                _detailVisual = @<MudIcon Icon="@(_isCharging ? Icons.Material.Filled.BatteryChargingFull : Icons.Material.Filled.BatteryStd)" Color="@(_batteryLevel < 0.2 ? Color.Error : Color.Success)" Style="font-size: 5rem;" />;
+                break;
+            case "Storage":
+                _detailTitle = "Storage";
+                _detailValue = $"{_storageFree:F0} GB Free";
+                _detailDesc = $"Total: {_storageTotal:F0} GB";
+                _detailVisual = @<MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Warning" Style="font-size: 5rem;" />;
+                break;
+             case "Uptime":
+                _detailTitle = "System Uptime";
+                _detailValue = $"{_uptime.Days}d {_uptime.Hours}h";
+                _detailDesc = "Time since reboot.";
+                _detailVisual = @<MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Default" Style="font-size: 5rem;" />;
+                break;
+            case "Network":
+                _detailTitle = _networkProfile;
+                _detailValue = $"↓{_rxRateFormatted} ↑{_txRateFormatted}";
+                _detailDesc = _networkAccess;
+                _detailVisual = @<MudIcon Icon="@GetNetworkIcon()" Color="Color.Success" Style="font-size: 5rem;" />;
+                break;
+            case "Health":
+                 if (DeviceInfo.Platform == DevicePlatform.WinUI)
+                 {
+                    _detailTitle = "System Load";
+                    _detailValue = $"{_processCount} Processes";
+                    _detailDesc = "Active processes.";
+                 }
+                 else
+                 {
+                    _detailTitle = "Device Health";
+                    _detailValue = $"{_tempC:F1}°C";
+                    _detailDesc = $"Voltage: {_voltageV:F1}V";
+                 }
+                 _detailVisual = @<MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Color="Color.Error" Style="font-size: 5rem;" />;
+                break;
+            case "Usage":
+                 _detailTitle = DeviceInfo.Platform == DevicePlatform.WinUI ? "Session Time" : "Daily Usage";
+                 _detailValue = _dailyUsage?.ToString(@"h\h\ m\m") ?? "--";
+                 _detailDesc = "Active time.";
+                 _detailVisual = @<MudIcon Icon="@(DeviceInfo.Platform == DevicePlatform.WinUI ? Icons.Material.Filled.Monitor : Icons.Material.Filled.Smartphone)" Color="Color.Primary" Style="font-size: 5rem;" />;
+                break;
+        }
+    }
+
+    private string GetNetworkIcon()
+    {
+        return _networkProfile.Contains("Ethernet") ? Icons.Material.Filled.InstallDesktop : Icons.Material.Filled.Wifi;
     }
 
     public void Dispose()
