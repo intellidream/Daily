@@ -154,15 +154,17 @@
     private CancellationTokenSource? _cts;
 
     // --- Custom Visuals ---
-    private RenderFragment Speedometer(double value, string label, Color color) => builder =>
+    private RenderFragment Speedometer(double value, string label, Color color, double scale = 1.0) => builder =>
     {
         string colorHex = color == Color.Info ? "var(--mud-palette-info)" : "var(--mud-palette-secondary)";
         double angle = -90 + (value * 1.8); // 0% = -90deg, 100% = +90deg
+        double width = 80 * scale;
+        double height = 48 * scale;
         
         builder.OpenElement(0, "div");
         builder.AddAttribute(1, "class", "d-flex flex-column align-center");
         builder.AddMarkupContent(2, @$"
-            <svg viewBox=""0 0 100 60"" width=""80"" height=""48"">
+            <svg viewBox=""0 0 100 60"" width=""{width}"" height=""{height}"">
                 <!-- Background Arc -->
                 <path d=""M 10 50 A 40 40 0 0 1 90 50"" fill=""none"" stroke=""var(--mud-palette-action-disabled)"" stroke-width=""8"" stroke-linecap=""round"" />
                 <!-- Value Arc -->
@@ -276,13 +278,13 @@
                 _detailTitle = _cpuLabel;
                 _detailValue = $"{_cpuUsage:F1}%";
                 _detailDesc = "Real-time processor utilization.";
-                _detailVisual = Speedometer(_cpuUsage, "", Color.Info);
+                _detailVisual = Speedometer(_cpuUsage, "", Color.Info, 2.0);
                 break;
             case "RAM":
                 _detailTitle = "Memory (RAM)";
                 _detailValue = $"{_ramUsage:F1}%";
                 _detailDesc = "System memory usage.";
-                _detailVisual = Speedometer(_ramUsage, "", Color.Secondary);
+                _detailVisual = Speedometer(_ramUsage, "", Color.Secondary, 2.0);
                 break;
             case "Battery":
                 _detailTitle = "Battery";
