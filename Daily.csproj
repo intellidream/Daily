@@ -23,7 +23,7 @@
         <ApplicationTitle>Daily</ApplicationTitle>
 
         <!-- App Identifier -->
-        <ApplicationId>com.companyname.daily</ApplicationId>
+        <ApplicationId>com.intellidream.daily</ApplicationId>
 
         <!-- Versions -->
         <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>

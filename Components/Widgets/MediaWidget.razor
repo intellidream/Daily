@@ -1,0 +1,138 @@
+@using MudBlazor
+@using Microsoft.Maui.Devices
+@using Daily.Services
+@using Daily.Models 
+@inject ISnackbar Snackbar
+@inject IGoogleAuthService AuthService
+@inject IYouTubeService YouTubeService
+
+<MudPaper Elevation="0" Class="pa-4 mb-4 glass-panel" Style="border-radius: 16px;">
+    <div class="d-flex align-center justify-space-between mb-2">
+        <div class="d-flex align-center">
+            <MudIcon Icon="@Icons.Custom.Brands.YouTube" Color="Color.Error" Class="mr-2" Size="Size.Large" />
+            <MudText Typo="Typo.h6"><b>Recommendations</b></MudText>
+        </div>
+        @if (_isAuthenticated)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Default" OnClick="LogoutAsync" Size="Size.Small" />
+        }
+    </div>
+
+    @if (!_isAuthenticated)
+    {
+        <div class="d-flex flex-column align-center justify-center py-8">
+            <MudText Typo="Typo.body1" Class="mb-4" Align="Align.Center">Sign in to get personalized video recommendations.</MudText>
+            <MudButton Variant="Variant.Filled" 
+                       StartIcon="@Icons.Custom.Brands.Google" 
+                       Color="Color.Surface" 
+                       Style="color: #4285F4; font-weight: bold;"
+                       OnClick="LoginAsync">
+                Sign in with Google
+            </MudButton>
+        </div>
+    }
+    else
+    {
+        <!-- Categories Chips -->
+        <div class="d-flex flex-grow-1 overflow-x-auto px-0 pb-2 gap-2 mb-2" style="white-space: nowrap; min-width: 0;">
+             <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary" Selected="true">All</MudChip>
+             <MudChip T="string" Variant="Variant.Outlined" Color="Color.Default">Music</MudChip>
+             <MudChip T="string" Variant="Variant.Outlined" Color="Color.Default">Tech</MudChip>
+             <MudChip T="string" Variant="Variant.Outlined" Color="Color.Default">Podcasts</MudChip>
+        </div>
+
+        <MudList T="string" Dense="true" Clickable="true" DisablePadding="true" Style="height: 350px; overflow: hidden">
+            @if (_videos == null)
+            {
+                <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+                    <MudText Class="ml-2">Loading videos...</MudText>
+                </div>
+            }
+            else
+            {
+                @foreach (var video in _videos)
+                {
+                    <MudListItem OnClick="@(() => OpenVideo(video.Url))" Class="pa-2">
+                        <div class="d-flex gap-3">
+                            <!-- Thumbnail (16:9 ratio approx) -->
+                            <MudImage Src="@video.ThumbnailUrl" Width="120" Height="68" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                            
+                            <div class="d-flex flex-column" style="min-width: 0; flex: 1;">
+                                <MudText Typo="Typo.subtitle2" Style="line-height: 1.2; max-height: 2.4em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                                    @video.Title
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@video.ChannelTitle</MudText>
+                                <div class="d-flex align-center mt-auto">
+                                   <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" style="font-size: 0.75rem;" Class="mr-1"/> 
+                                   <MudText Typo="Typo.caption">@video.Duration</MudText>
+                                </div>
+                            </div>
+                        </div>
+                    </MudListItem>
+                }
+            }
+        </MudList>
+    }
+</MudPaper>
+
+@code {
+    private bool _isAuthenticated = false;
+    private List<VideoItem>? _videos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if we have a stored token
+        var token = await AuthService.GetAccessTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            _isAuthenticated = true;
+            await LoadVideos(token);
+        }
+    }
+
+    private async Task LoginAsync()
+    {
+        var (token, error) = await AuthService.LoginAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            _isAuthenticated = true;
+            await LoadVideos(token);
+        }
+        else
+        {
+            var msg = !string.IsNullOrEmpty(error) ? error : "Login cancelled or failed";
+            Snackbar.Add(msg, Severity.Error);
+        }
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthService.LogoutAsync();
+        _isAuthenticated = false;
+        _videos = null;
+    }
+
+    private async Task LoadVideos(string token)
+    {
+        _videos = null; // Show loading
+        StateHasChanged();
+        
+        try
+        {
+            _videos = await YouTubeService.GetRecommendationsAsync(token);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading videos: {ex.Message}");
+            Snackbar.Add("Failed to load recommendations", Severity.Error);
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task OpenVideo(string url)
+    {
+        await Browser.OpenAsync(url, BrowserLaunchMode.SystemPreferred);
+    }
+}

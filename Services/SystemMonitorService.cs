@@ -310,6 +310,28 @@ namespace Daily.Services
 
         public (double FreeGb, double TotalGb) GetMainDriveStorage()
         {
+#if ANDROID
+            try
+            {
+                // Use StatFs for internal storage (Data Path)
+                var path = Android.OS.Environment.DataDirectory;
+                var stat = new Android.OS.StatFs(path.Path);
+                
+                long blockSize = stat.BlockSizeLong;
+                long totalBlocks = stat.BlockCountLong;
+                long freeBlocks = stat.AvailableBlocksLong;
+
+                long total = totalBlocks * blockSize;
+                long free = freeBlocks * blockSize;
+
+                double bytesToGb = 1024.0 * 1024.0 * 1024.0;
+                return (free / bytesToGb, total / bytesToGb);
+            }
+            catch
+            {
+                return (0, 0);
+            }
+#else
              try
              {
                  // Find the largest ready drive (usually C: or internal storage)
@@ -329,6 +351,7 @@ namespace Daily.Services
              {
                  return (0, 0);
              }
+#endif
         }
 
         public TimeSpan GetUptime()

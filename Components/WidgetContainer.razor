@@ -32,6 +32,10 @@
                 {
                     <Daily.Components.Widgets.RssFeedWidget />
                 }
+                else if (widget.ComponentType == "MediaWidget")
+                {
+                    <Daily.Components.Widgets.MediaWidget />
+                }
                 else
                 {
                     <MudText>Unknown Widget Type: @widget.ComponentType</MudText>

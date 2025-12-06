@@ -6,7 +6,8 @@ namespace Daily.Services
     public class WeatherService : IWeatherService
     {
         private readonly HttpClient _httpClient;
-        private const string ApiKey = "eebcefca9dbf33a96cb6d583481235d2";
+        // API Key moved to Configuration/Secrets.cs
+        private const string ApiKey = Daily.Configuration.Secrets.OpenWeatherMapApiKey;
         private const string BaseUrl = "https://api.openweathermap.org/data/2.5";
 
         public WeatherService()

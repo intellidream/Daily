@@ -2,6 +2,7 @@
 using MudBlazor.Services;
 using H.NotifyIcon;
 using CommunityToolkit.Maui;
+using Microsoft.Maui.LifecycleEvents;
 
 namespace Daily
 {
@@ -20,6 +21,16 @@ namespace Daily
                 .ConfigureFonts(fonts =>
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+                })
+                .ConfigureLifecycleEvents(events =>
+                {
+#if WINDOWS
+                    events.AddWindows(windows => windows
+                        .OnLaunched((window, args) =>
+                        {
+                            // Placeholder for correct implementation if needed
+                        }));
+#endif
                 });
 
             builder.Services.AddMauiBlazorWebView();
@@ -50,6 +61,8 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.IWeatherService, Daily.Services.WeatherService>();
             builder.Services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();
             builder.Services.AddSingleton<Daily.Services.ISystemMonitorService, Daily.Services.SystemMonitorService>();
+            builder.Services.AddSingleton<Daily.Services.IGoogleAuthService, Daily.Services.GoogleAuthService>();
+            builder.Services.AddSingleton<Daily.Services.IYouTubeService, Daily.Services.YouTubeService>();
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
 
 #if DEBUG
