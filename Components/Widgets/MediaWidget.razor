@@ -41,44 +41,71 @@
              <MudChip T="string" Variant="Variant.Outlined" Color="Color.Default">Podcasts</MudChip>
         </div>
 
-        <MudList T="string" Dense="true" Clickable="true" DisablePadding="true" Style="height: 350px; overflow: hidden">
-            @if (_videos == null)
-            {
-                <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
-                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
-                    <MudText Class="ml-2">Loading videos...</MudText>
-                </div>
-            }
-            else
-            {
-                @foreach (var video in _videos)
+        <div style="height: 350px; overflow-y: auto">
+            <MudList T="string" Dense="true" Clickable="true" DisablePadding="true">
+                @if (_videos == null)
                 {
-                    <MudListItem OnClick="@(() => OpenVideo(video.Url))" Class="pa-2">
-                        <div class="d-flex gap-3">
-                            <!-- Thumbnail (16:9 ratio approx) -->
-                            <MudImage Src="@video.ThumbnailUrl" Width="120" Height="68" ObjectFit="ObjectFit.Cover" Class="rounded" />
-                            
-                            <div class="d-flex flex-column" style="min-width: 0; flex: 1;">
-                                <MudText Typo="Typo.subtitle2" Style="line-height: 1.2; max-height: 2.4em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-                                    @video.Title
-                                </MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@video.ChannelTitle</MudText>
-                                <div class="d-flex align-center mt-auto">
-                                   <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" style="font-size: 0.75rem;" Class="mr-1"/> 
-                                   <MudText Typo="Typo.caption">@video.Duration</MudText>
+                    <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+                        <MudText Class="ml-2">Loading videos...</MudText>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var video in _videos)
+                    {
+                        <MudListItem OnClick="@(() => OpenVideo(video.Url))" Class="pa-2">
+                            <div class="d-flex gap-3">
+                                <!-- Thumbnail (16:9 ratio approx) -->
+                                <MudImage Src="@video.ThumbnailUrl" Width="120" Height="68" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                                
+                                <div class="d-flex flex-column" style="min-width: 0; flex: 1;">
+                                    <div title="@video.Title" style="width: 100%; cursor: help;">
+                                        <MudText Typo="Typo.subtitle2" Style="line-height: 1.2; max-height: 2.4em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                                            @video.Title
+                                        </MudText>
+                                    </div>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@video.ChannelTitle</MudText>
+                                    <div class="d-flex align-center mt-auto">
+                                       <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" style="font-size: 0.75rem;" Class="mr-1"/> 
+                                       <MudText Typo="Typo.caption">@video.Duration</MudText>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </MudListItem>
+                        </MudListItem>
+                    }
                 }
+            </MudList>
+
+            @if (_videos != null && !string.IsNullOrEmpty(_nextPageToken))
+            {
+                <div class="d-flex justify-center pa-2">
+                    <MudButton Variant="Variant.Text" 
+                               Color="Color.Primary" 
+                               OnClick="LoadMore" 
+                               Disabled="@_isLoadingMore"
+                               FullWidth="true">
+                        @if (_isLoadingMore)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/>
+                            <MudText>Loading...</MudText>
+                        }
+                        else
+                        {
+                            <MudText>Load More</MudText>
+                        }
+                    </MudButton>
+                </div>
             }
-        </MudList>
+        </div>
     }
 </MudPaper>
 
 @code {
     private bool _isAuthenticated = false;
     private List<VideoItem>? _videos;
+    private string? _nextPageToken;
+    private bool _isLoadingMore = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -111,24 +138,58 @@
         await AuthService.LogoutAsync();
         _isAuthenticated = false;
         _videos = null;
+        _nextPageToken = null;
     }
 
-    private async Task LoadVideos(string token)
+    private async Task LoadVideos(string token, bool append = false)
     {
-        _videos = null; // Show loading
-        StateHasChanged();
+        if (!append)
+        {
+            _videos = null; // Show full loading
+            _nextPageToken = null;
+            StateHasChanged();
+        }
+        else
+        {
+            _isLoadingMore = true;
+            StateHasChanged();
+        }
         
         try
         {
-            _videos = await YouTubeService.GetRecommendationsAsync(token);
+            // Pass the current page token
+            var result = await YouTubeService.GetRecommendationsAsync(token, _nextPageToken);
+            
+            if (append && _videos != null)
+            {
+                _videos.AddRange(result.Videos);
+            }
+            else
+            {
+                _videos = result.Videos;
+            }
+            
+            _nextPageToken = result.NextPageToken;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading videos: {ex.Message}");
             Snackbar.Add("Failed to load recommendations", Severity.Error);
         }
-        
-        StateHasChanged();
+        finally
+        {
+            _isLoadingMore = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMore()
+    {
+        var token = await AuthService.GetAccessTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            await LoadVideos(token, append: true);
+        }
     }
 
     private async Task OpenVideo(string url)

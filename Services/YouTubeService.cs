@@ -15,16 +15,22 @@ namespace Daily.Services
             _httpClient = new HttpClient();
         }
 
-        public async Task<List<VideoItem>> GetRecommendationsAsync(string accessToken)
+        public async Task<(List<VideoItem> Videos, string NextPageToken)> GetRecommendationsAsync(string accessToken, string? pageToken = null)
         {
             if (string.IsNullOrEmpty(accessToken))
             {
-               return new List<VideoItem>();
+               return (new List<VideoItem>(), null);
             }
 
             try
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, "https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&myRating=like&maxResults=10");
+                var url = "https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&myRating=like&maxResults=10";
+                if (!string.IsNullOrEmpty(pageToken))
+                {
+                    url += $"&pageToken={pageToken}";
+                }
+
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
                 var response = await _httpClient.SendAsync(request);
@@ -32,6 +38,8 @@ namespace Daily.Services
                 {
                     var json = await response.Content.ReadAsStringAsync();
                     var node = System.Text.Json.Nodes.JsonNode.Parse(json);
+                    
+                    var nextPageToken = node?["nextPageToken"]?.ToString();
                     var items = node?["items"]?.AsArray();
 
                     var videos = new List<VideoItem>();
@@ -63,19 +71,19 @@ namespace Daily.Services
                             });
                         }
                     }
-                    return videos;
+                    return (videos, nextPageToken);
                 }
                 else
                 {
                     Console.WriteLine($"YouTube API Error: {response.StatusCode}");
                     // Fallback to mock if API fails (e.g. quota, permissions)
-                    return GetMockData(); 
+                    return (GetMockData(), null); 
                 }
             }
             catch (Exception ex)
             {
                  Console.WriteLine($"YouTube Exception: {ex}");
-                 return GetMockData();
+                 return (GetMockData(), null);
             }
         }
 

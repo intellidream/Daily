@@ -6,6 +6,6 @@ namespace Daily.Services
 {
     public interface IYouTubeService
     {
-        Task<List<VideoItem>> GetRecommendationsAsync(string accessToken);
+        Task<(List<VideoItem> Videos, string NextPageToken)> GetRecommendationsAsync(string accessToken, string? pageToken = null);
     }
 }
