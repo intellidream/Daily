@@ -1,0 +1,56 @@
+@inject Daily.Services.IWindowManagerService WindowManager
+@inject IJSRuntime JSRuntime
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudLayout Style="background-color: transparent;">
+    <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <MudText Typo="Typo.h6"><b>Daily - Detail View</b></MudText>
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" />
+    </MudAppBar>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-16 px-4 animate-slide-in">
+             <MudPaper Class="pa-8 glass-panel" Elevation="0">
+                <MudText Typo="Typo.h4" GutterBottom="true">Reading Pane</MudText>
+                <MudText Typo="Typo.body1">This is the dedicated large format view for reading articles and watching content.</MudText>
+                <MudAlert Severity="Severity.Info" Class="mt-4">Select content from the main window to view it here.</MudAlert>
+             </MudPaper>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<style>
+    .animate-slide-in {
+        animation: slideIn 0.4s ease-out forwards;
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+
+    @@keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(30px); /* Start slightly from right (behind main app) */
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+</style>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Apply Desktop Styling (Mesh Gradient)
+            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('mesh-background')");
+            // Default to Dark Mode for the pane
+            await JSRuntime.InvokeVoidAsync("eval", "document.body.setAttribute('data-theme', 'dark')");
+        }
+    }
+}

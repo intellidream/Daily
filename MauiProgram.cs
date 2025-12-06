@@ -63,6 +63,7 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.ISystemMonitorService, Daily.Services.SystemMonitorService>();
             builder.Services.AddSingleton<Daily.Services.IGoogleAuthService, Daily.Services.GoogleAuthService>();
             builder.Services.AddSingleton<Daily.Services.IYouTubeService, Daily.Services.YouTubeService>();
+            builder.Services.AddSingleton<Daily.Services.IWindowManagerService, Daily.Services.WindowManagerService>();
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
 
 #if DEBUG
