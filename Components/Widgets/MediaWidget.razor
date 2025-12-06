@@ -34,11 +34,12 @@
     else
     {
         <!-- Categories Chips -->
-        <div class="d-flex flex-grow-1 overflow-x-auto px-0 pb-2 gap-2 mb-2" style="white-space: nowrap; min-width: 0;">
-             <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary" Selected="true">All</MudChip>
-             <MudChip T="string" Variant="Variant.Outlined" Color="Color.Default">Music</MudChip>
-             <MudChip T="string" Variant="Variant.Outlined" Color="Color.Default">Tech</MudChip>
-             <MudChip T="string" Variant="Variant.Outlined" Color="Color.Default">Podcasts</MudChip>
+        <div class="d-flex flex-grow-1 overflow-x-auto px-0 pb-2 gap-1 mb-2" style="white-space: nowrap; min-width: 0;">
+            <MudChip T="string" Size="Size.Small" Variant="@(_selectedCategory == null ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == null ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory(null))">All</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="@(_selectedCategory == "Latest" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Latest" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Latest"))">Latest</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="@(_selectedCategory == "Tech" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Tech" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Tech"))">Tech</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="@(_selectedCategory == "Podcasts" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Podcasts" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Podcasts"))">Podcasts</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="@(_selectedCategory == "Music" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Music" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Music"))">Music</MudChip>
         </div>
 
         <div style="height: 350px; overflow-y: auto">
@@ -48,6 +49,12 @@
                     <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
                         <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
                         <MudText Class="ml-2">Loading videos...</MudText>
+                    </div>
+                }
+                else if (_videos.Count == 0)
+                {
+                     <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
+                        <MudText>No videos found.</MudText>
                     </div>
                 }
                 else
@@ -106,6 +113,7 @@
     private List<VideoItem>? _videos;
     private string? _nextPageToken;
     private bool _isLoadingMore = false;
+    private string? _selectedCategory = null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -139,6 +147,23 @@
         _isAuthenticated = false;
         _videos = null;
         _nextPageToken = null;
+        _selectedCategory = null;
+    }
+
+    private async Task SelectCategory(string? category)
+    {
+        if (_selectedCategory == category) return;
+
+        _selectedCategory = category;
+        _videos = null; // Show loading state
+        _nextPageToken = null;
+        StateHasChanged();
+
+        var token = await AuthService.GetAccessTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            await LoadVideos(token, append: false);
+        }
     }
 
     private async Task LoadVideos(string token, bool append = false)
@@ -157,8 +182,8 @@
         
         try
         {
-            // Pass the current page token
-            var result = await YouTubeService.GetRecommendationsAsync(token, _nextPageToken);
+            // Pass the current page token and selected category
+            var result = await YouTubeService.GetRecommendationsAsync(token, _nextPageToken, _selectedCategory);
             
             if (append && _videos != null)
             {

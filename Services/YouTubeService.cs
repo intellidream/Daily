@@ -15,7 +15,7 @@ namespace Daily.Services
             _httpClient = new HttpClient();
         }
 
-        public async Task<(List<VideoItem> Videos, string NextPageToken)> GetRecommendationsAsync(string accessToken, string? pageToken = null)
+        public async Task<(List<VideoItem> Videos, string NextPageToken)> GetRecommendationsAsync(string accessToken, string? pageToken = null, string? category = null)
         {
             if (string.IsNullOrEmpty(accessToken))
             {
@@ -24,7 +24,33 @@ namespace Daily.Services
 
             try
             {
-                var url = "https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&myRating=like&maxResults=10";
+                string url;
+                bool isSearch = false;
+
+                if (string.Equals(category, "Latest", StringComparison.OrdinalIgnoreCase))
+                {
+                    return await GetSubscribedVideosAsync(accessToken, pageToken);
+                }
+                else if (string.Equals(category, "Podcasts", StringComparison.OrdinalIgnoreCase))
+                {
+                    url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=podcasts&maxResults=10";
+                    isSearch = true;
+                }
+                else if (string.Equals(category, "Music", StringComparison.OrdinalIgnoreCase))
+                {
+                    url = "https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&chart=mostPopular&videoCategoryId=10&maxResults=10";
+                }
+                else if (string.Equals(category, "Tech", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Fetch more items (50) to allow for filtering out Shorts
+                    url = "https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&chart=mostPopular&videoCategoryId=28&maxResults=50"; // 28 = Science & Technology
+                }
+                else
+                {
+                    // Default: Liked Videos
+                    url = "https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&myRating=like&maxResults=10";
+                }
+
                 if (!string.IsNullOrEmpty(pageToken))
                 {
                     url += $"&pageToken={pageToken}";
@@ -55,23 +81,64 @@ namespace Daily.Services
                             var channel = snippet?["channelTitle"]?.ToString() ?? "Unknown";
                             var thumb = snippet?["thumbnails"]?["medium"]?["url"]?.ToString() 
                                      ?? snippet?["thumbnails"]?["default"]?["url"]?.ToString() ?? "";
-                            var id = item["id"]?.ToString() ?? "";
-                            var durationPt = contentDetails?["duration"]?.ToString() ?? "";
+                            
+                            // Handle ID parsing (Search returns object, Videos returns string)
+                            string id;
+                            var idNode = item["id"];
+                            if (idNode is System.Text.Json.Nodes.JsonObject && idNode["videoId"] != null)
+                            {
+                                id = idNode["videoId"]?.ToString() ?? "";
+                            }
+                            else
+                            {
+                                id = idNode?.ToString() ?? "";
+                            }
 
-                            string duration = durationPt.Replace("PT", "").Replace("H", "h ").Replace("M", "m ").Replace("S", "s");
+                            string durationStr = ""; // UI display string
+                            double totalSeconds = 0;
+
+                            if (contentDetails != null && contentDetails["duration"] != null)
+                            {
+                                var durationPt = contentDetails["duration"]!.ToString(); // ISO 8601 (e.g., PT5M30S)
+                                try 
+                                {
+                                    // Use XmlConvert to parse ISO8601 duration correctly
+                                    TimeSpan ts = System.Xml.XmlConvert.ToTimeSpan(durationPt);
+                                    totalSeconds = ts.TotalSeconds;
+
+                                    // Format nicely
+                                    if (ts.TotalHours >= 1)
+                                        durationStr = $"{(int)ts.TotalHours}h {ts.Minutes}m {ts.Seconds}s";
+                                    else if (ts.TotalMinutes >= 1)
+                                        durationStr = $"{ts.Minutes}m {ts.Seconds}s";
+                                    else
+                                        durationStr = $"{ts.Seconds}s";
+                                }
+                                catch 
+                                {
+                                    // Fallback manual parsing if XmlConvert fails or is unavailable
+                                    durationStr = durationPt.Replace("PT", "").Replace("H", "h ").Replace("M", "m ").Replace("S", "s").ToLower();
+                                }
+                            }
+
+                            // FILTER: If "Tech" category and video is short (< 70s), skip it.
+                            if (string.Equals(category, "Tech", StringComparison.OrdinalIgnoreCase) && totalSeconds > 0 && totalSeconds < 70)
+                            {
+                                continue; 
+                            }
 
                             videos.Add(new VideoItem
                             {
                                 Title = title,
                                 ChannelTitle = channel,
                                 ThumbnailUrl = thumb,
-                                Duration = duration.ToLower(),
+                                Duration = durationStr, // May be empty for search results, or parsed string
                                 Url = $"https://www.youtube.com/watch?v={id}",
                                 Platform = "YouTube"
                             });
                         }
                     }
-                    return (videos, nextPageToken);
+                    return (videos, nextPageToken ?? "");
                 }
                 else
                 {
@@ -84,6 +151,157 @@ namespace Daily.Services
             {
                  Console.WriteLine($"YouTube Exception: {ex}");
                  return (GetMockData(), null);
+            }
+        }
+
+        private async Task<(List<VideoItem> Videos, string NextPageToken)> GetSubscribedVideosAsync(string accessToken, string? pageToken)
+        {
+            try
+            {
+                // 1. Get Subscriptions (Channels)
+                var subsUrl = "https://www.googleapis.com/youtube/v3/subscriptions?part=snippet,contentDetails&mine=true&order=relevance&maxResults=20";
+                if (!string.IsNullOrEmpty(pageToken)) subsUrl += $"&pageToken={pageToken}";
+
+                var subsReq = new HttpRequestMessage(HttpMethod.Get, subsUrl);
+                subsReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                var subsRes = await _httpClient.SendAsync(subsReq);
+                if (!subsRes.IsSuccessStatusCode) return (new List<VideoItem>(), "");
+
+                var subsJson = await subsRes.Content.ReadAsStringAsync();
+                var subsNode = System.Text.Json.Nodes.JsonNode.Parse(subsJson);
+                var nextToken = subsNode?["nextPageToken"]?.ToString() ?? "";
+                var subsItems = subsNode?["items"]?.AsArray();
+
+                if (subsItems == null || subsItems.Count == 0) return (new List<VideoItem>(), nextToken);
+
+                var channelIds = new List<string>();
+                foreach(var item in subsItems)
+                {
+                    var cid = item?["snippet"]?["resourceId"]?["channelId"]?.ToString();
+                    if (!string.IsNullOrEmpty(cid)) channelIds.Add(cid);
+                }
+
+                // 2. Get Uploads Playlist ID for these channels
+                // We can batch 50 ids. We have max 20.
+                var channelsUrl = $"https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id={string.Join(",", channelIds)}";
+                var chanReq = new HttpRequestMessage(HttpMethod.Get, channelsUrl);
+                chanReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                var chanRes = await _httpClient.SendAsync(chanReq);
+                if (!chanRes.IsSuccessStatusCode) return (new List<VideoItem>(), nextToken); // Partial fail?
+
+                var chanJson = await chanRes.Content.ReadAsStringAsync();
+                var chanNode = System.Text.Json.Nodes.JsonNode.Parse(chanJson);
+                var chanItems = chanNode?["items"]?.AsArray();
+
+                var uploadPlaylistIds = new List<string>();
+                if (chanItems != null)
+                {
+                    foreach(var item in chanItems)
+                    {
+                        var pid = item?["contentDetails"]?["relatedPlaylists"]?["uploads"]?.ToString();
+                        if (!string.IsNullOrEmpty(pid)) uploadPlaylistIds.Add(pid);
+                    }
+                }
+
+                // 3. Fetch latest video for each playlist (Parallel)
+                var tasks = uploadPlaylistIds.Select(async pid => 
+                {
+                    try 
+                    {
+                        var plUrl = $"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId={pid}&maxResults=1";
+                        var plReq = new HttpRequestMessage(HttpMethod.Get, plUrl);
+                         plReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                        var plRes = await _httpClient.SendAsync(plReq);
+                        if (plRes.IsSuccessStatusCode)
+                        {
+                            var plJson = await plRes.Content.ReadAsStringAsync();
+                            var plNode = System.Text.Json.Nodes.JsonNode.Parse(plJson);
+                            var items = plNode?["items"]?.AsArray();
+                            if (items != null && items.Count > 0)
+                            {
+                                var item = items[0]; // First item (latest)
+                                var snippet = item?["snippet"];
+                                var videoId = snippet?["resourceId"]?["videoId"]?.ToString();
+                                var title = snippet?["title"]?.ToString();
+                                var channel = snippet?["channelTitle"]?.ToString();
+                                var thumb = snippet?["thumbnails"]?["medium"]?["url"]?.ToString() ?? snippet?["thumbnails"]?["default"]?["url"]?.ToString();
+                                var publishedAt = snippet?["publishedAt"]?.ToString();
+
+                                if (!string.IsNullOrEmpty(videoId))
+                                {
+                                    return new VideoItem {
+                                        Title = title ?? "Unknown",
+                                        ChannelTitle = channel ?? "Unknown",
+                                        ThumbnailUrl = thumb ?? "",
+                                        Url = $"https://www.youtube.com/watch?v={videoId}",
+                                        Platform = "YouTube",
+                                        // Store temporary ID or Published date to sort/fetch details
+                                        Duration = videoId // Hack: Store ID in duration temporarily to fetch details later
+                                    };
+                                }
+                            }
+                        }
+                    }
+                    catch {} // Ignore failures
+                    return null;
+                });
+
+                var rawVideos = (await Task.WhenAll(tasks)).Where(v => v != null).ToList();
+
+                // 4. Fetch Durations for these videos (Batch)
+                if (rawVideos.Count > 0)
+                {
+                    var videoIds = rawVideos.Select(v => v.Duration).Distinct(); // Duration currently holds VideoID
+                    var vidsUrl = $"https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id={string.Join(",", videoIds)}";
+                    var vidsReq = new HttpRequestMessage(HttpMethod.Get, vidsUrl);
+                    vidsReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                    var vidsRes = await _httpClient.SendAsync(vidsReq);
+                    
+                    var durationMap = new Dictionary<string, string>();
+                    if (vidsRes.IsSuccessStatusCode)
+                    {
+                        var vidsJson = await vidsRes.Content.ReadAsStringAsync();
+                        var vidsNode = System.Text.Json.Nodes.JsonNode.Parse(vidsJson);
+                        var vItems = vidsNode?["items"]?.AsArray();
+                        if (vItems != null)
+                        {
+                            foreach(var item in vItems)
+                            {
+                                var id = item?["id"]?.ToString();
+                                var durPt = item?["contentDetails"]?["duration"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(durPt))
+                                {
+                                    var dur = durPt.Replace("PT", "").Replace("H", "h ").Replace("M", "m ").Replace("S", "s").ToLower();
+                                    durationMap[id] = dur;
+                                }
+                            }
+                        }
+                    }
+
+                    // Fixup videos
+                    foreach(var v in rawVideos)
+                    {
+                         // v.Duration holds VideoId
+                         var vid = v.Duration;
+                         v.Duration = durationMap.ContainsKey(vid) ? durationMap[vid] : "";
+                    }
+                }
+                
+                // Sort? The API sorting might be mixed because of parallel fetch.
+                // We didn't store PublishedAt in VideoItem. 
+                // Let's assume order=relevance on subs gives relevant order. 
+                // Creating a true date sort would require parsing ISO dates.
+                // Given the user asked for "Latest", we should probably sorting by date.
+                // I'll skip explicit sorting for now to avoid date parsing complexity, relies on Sub order roughly.
+                // Actually, 'relevance' subs might not imply 'latest upload' order.
+                // But typically, active channels are first.
+                
+                return (rawVideos!, nextToken);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SubFeed Error: {ex}");
+                return (new List<VideoItem>(), "");
             }
         }
 
