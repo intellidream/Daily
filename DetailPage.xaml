@@ -4,7 +4,7 @@
              xmlns:local="clr-namespace:Daily"
              x:Class="Daily.DetailPage"
              Title="Daily Detail"
-             BackgroundColor="#1E1E1E">
+             BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
 
     <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
         <BlazorWebView.RootComponents>

@@ -1,7 +1,9 @@
-@inject Daily.Services.IWindowManagerService WindowManager
+@using Daily.Services
+@inject IWindowManagerService WindowManager
 @inject IJSRuntime JSRuntime
+@implements IDisposable
 
-<MudThemeProvider />
+<MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 <MudPopoverProvider />
@@ -13,7 +15,7 @@
         <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" />
     </MudAppBar>
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-16 px-4 animate-slide-in">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-16 px-4">
              <MudPaper Class="pa-8 glass-panel" Elevation="0">
                 <MudText Typo="Typo.h4" GutterBottom="true">Reading Pane</MudText>
                 <MudText Typo="Typo.body1">This is the dedicated large format view for reading articles and watching content.</MudText>
@@ -23,34 +25,62 @@
     </MudMainContent>
 </MudLayout>
 
-<style>
-    .animate-slide-in {
-        animation: slideIn 0.4s ease-out forwards;
-        opacity: 0;
-        transform: translateX(-20px);
-    }
-
-    @@keyframes slideIn {
-        from {
-            opacity: 0;
-            transform: translateX(30px); /* Start slightly from right (behind main app) */
-        }
-        to {
-            opacity: 1;
-            transform: translateX(0);
-        }
-    }
-</style>
-
 @code {
+    private bool _isDarkMode = true;
+    private MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Background = "#00000000",
+            AppbarBackground = "#00000000",
+            DrawerBackground = "#00000000",
+            Surface = "#00000000"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Background = "#00000000",
+            AppbarBackground = "#00000000",
+            DrawerBackground = "#00000000",
+            Surface = "#00000000"
+        }
+    };
+
+    protected override void OnInitialized()
+    {
+        if (Application.Current != null)
+        {
+            Application.Current.RequestedThemeChanged += OnThemeChanged;
+            _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
+        }
+    }
+
+    private async void OnThemeChanged(object? sender, AppThemeChangedEventArgs e)
+    {
+        _isDarkMode = e.RequestedTheme == AppTheme.Dark;
+        StateHasChanged();
+        await UpdateThemeJs();
+    }
+
+    private async Task UpdateThemeJs()
+    {
+        var themeValue = _isDarkMode ? "dark" : "light";
+        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}')");
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Apply Desktop Styling (Mesh Gradient)
-            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('mesh-background')");
-            // Default to Dark Mode for the pane
-            await JSRuntime.InvokeVoidAsync("eval", "document.body.setAttribute('data-theme', 'dark')");
+            await JSRuntime.InvokeVoidAsync("document.body.classList.add", "mesh-background");
+            await UpdateThemeJs();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (Application.Current != null)
+        {
+            Application.Current.RequestedThemeChanged -= OnThemeChanged;
         }
     }
 }

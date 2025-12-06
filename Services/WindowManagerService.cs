@@ -21,11 +21,33 @@ namespace Daily.Services
     {
         private Window? _detailWindow;
 
+        public WindowManagerService()
+        {
+            if (Application.Current != null)
+            {
+                Application.Current.RequestedThemeChanged += OnThemeChanged;
+            }
+        }
+
+        private void OnThemeChanged(object? sender, AppThemeChangedEventArgs e)
+        {
+#if WINDOWS
+            if (_detailWindow != null && _detailWindow.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWindow)
+            {
+                ApplyThemeToTitleBar(nativeWindow, e.RequestedTheme);
+            }
+#endif
+        }
+
         public void OpenDetailWindow()
         {
             if (_detailWindow != null) return;
 
-            var detailPage = new DetailPage();
+            var detailPage = new DetailPage
+            {
+                Opacity = 0 // Start invisible/transparent
+            };
+
             _detailWindow = new Window(detailPage)
             {
                 Title = "Daily - Reading Pane"
@@ -67,8 +89,6 @@ namespace Daily.Services
                             double pixelWidth = spaceToLeft * 0.8;
                             
                             // Align to LEFT of app with 10px OVERLAP
-                            // Current: mainRect.X (Left Edge of App)
-                            // Target: Left of that, minus width, PLUS overlap
                             double pixelX = mainRect.X - pixelWidth + 10;
 
                             // 2. Convert to DIPs for MAUI Window Properties
@@ -91,6 +111,8 @@ namespace Daily.Services
 #if WINDOWS
                  ConfigureWindowStyle(_detailWindow);
 #endif
+                 new Animation(v => detailPage.Opacity = v, 0, 0.9, Easing.Linear)
+                    .Commit(detailPage, "FadeIn", length: 1000);
             };
             
             _detailWindow.Destroying += (s, e) => 
@@ -110,18 +132,23 @@ namespace Daily.Services
             }
         }
 
-#if WINDOWS
+#if WINDOWS 
         private async void ConfigureWindowStyle(Window window)
         {
             try 
             {
-                await Task.Delay(50);
                 var nativeWindow = window.Handler?.PlatformView as Microsoft.UI.Xaml.Window;
                 if (nativeWindow == null) return;
 
                 // Borderless Style Only
                 nativeWindow.ExtendsContentIntoTitleBar = true;
                 
+                // Theme Title Bar based on initial request
+                if (Application.Current != null)
+                {
+                    ApplyThemeToTitleBar(nativeWindow, Application.Current.RequestedTheme);
+                }
+
                 var windowId = nativeWindow.AppWindow.Id;
                 var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
                 
@@ -131,11 +158,34 @@ namespace Daily.Services
                     if (presenter != null) 
                     {
                        presenter.SetBorderAndTitleBar(false, false);
-                       presenter.IsResizable = true;
+                       // User Requested: Non-resizable
+                       presenter.IsResizable = false;
                     }
                 }
             }
             catch { }
+        }
+
+        private void ApplyThemeToTitleBar(Microsoft.UI.Xaml.Window nativeWindow, AppTheme theme)
+        {
+            var appWindow = nativeWindow.AppWindow;
+            if (appWindow != null)
+            {
+                var titleBar = appWindow.TitleBar;
+                
+                // If Dark theme, logic is White buttons. If Light theme, logic is Black buttons.
+                // However, user setup: Light=WhiteBG, Dark=DarkBG.
+                // So Light -> Black Buttons needed. Dark -> White Buttons needed.
+                var buttonColor = theme == AppTheme.Dark ? Windows.UI.Color.FromArgb(255, 255, 255, 255) : Windows.UI.Color.FromArgb(255, 0, 0, 0);
+                
+                titleBar.ButtonForegroundColor = buttonColor;
+                titleBar.ButtonHoverForegroundColor = buttonColor;
+                titleBar.ButtonPressedForegroundColor = buttonColor;
+                titleBar.ButtonInactiveForegroundColor = buttonColor;
+
+                titleBar.ButtonBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0); // Transparent
+                titleBar.ButtonInactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            }
         }
 #endif
     }
