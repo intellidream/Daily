@@ -13,7 +13,7 @@
                      OnClick="@(() => OnFeedChipClicked(feed))"
                      Variant="@(_currentFeed == feed ? Variant.Filled : Variant.Outlined)"
                      Color="@(_currentFeed == feed ? Color.Primary : Color.Primary)"
-                     Selected="@(_currentFeed == feed)"
+                     
                      OnClose="@(() => ForceRefreshFeed(feed))"
                      CloseIcon="@Icons.Material.Filled.Refresh"
                      Class="flex-shrink-0">

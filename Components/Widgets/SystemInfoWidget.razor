@@ -2,6 +2,7 @@
 @using Daily.Services
 @using Microsoft.Maui.Devices
 @inject ISystemMonitorService SystemMonitor
+@inject IBackButtonService BackButtonService
 @implements IDisposable
 
 <MudPaper Height="100%" MinHeight="320px" Width="100%" Elevation="0" Class="d-flex flex-column relative overflow-hidden" Style="background: transparent;">
@@ -84,7 +85,7 @@
         <!-- Detail Overlay View -->
         <MudPaper Elevation="0" Class="d-flex flex-column flex-grow-1 animate-fade-in pa-2 tile-glass" Height="100%">
             <div class="d-flex align-center mb-2">
-                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => _selectedMetric = null)" Size="Size.Small" />
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@CloseDetail" Size="Size.Small" />
                 <MudText Typo="Typo.subtitle1" Class="ml-2"><b>@_detailTitle</b></MudText>
             </div>
             
@@ -268,6 +269,24 @@
     {
         _selectedMetric = metric;
         UpdateDetailState(metric);
+        BackButtonService.Register(OnBackNative);
+    }
+    
+    private void CloseDetail()
+    {
+         _selectedMetric = null;
+         BackButtonService.Unregister(OnBackNative);
+         StateHasChanged();
+    }
+
+    private bool OnBackNative()
+    {
+        if (_selectedMetric != null)
+        {
+            CloseDetail();
+            return true;
+        }
+        return false;
     }
 
     private void UpdateDetailState(string metric)
@@ -341,6 +360,7 @@
 
     public void Dispose()
     {
+        BackButtonService.Unregister(OnBackNative);
         _cts?.Cancel();
         _cts?.Dispose();
         _timer?.Dispose();

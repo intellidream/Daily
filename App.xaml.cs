@@ -11,12 +11,14 @@ namespace Daily
     {
         private readonly ITrayService _trayService;
         private readonly IRefreshService _refreshService;
+        private readonly IBackButtonService _backButtonService;
 
-        public App(ITrayService trayService, IRefreshService refreshService)
+        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService)
         {
             InitializeComponent();
             _trayService = trayService;
             _refreshService = refreshService;
+            _backButtonService = backButtonService;
             _trayService.Initialize();
             _trayService.ClickHandler = () => 
             {
@@ -42,7 +44,7 @@ namespace Daily
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            var window = new Window(new MainPage(_refreshService)) { Title = "Daily" };
+            var window = new Window(new MainPage(_refreshService, _backButtonService)) { Title = "Daily" };
             
             window.Created += (s, e) =>
             {

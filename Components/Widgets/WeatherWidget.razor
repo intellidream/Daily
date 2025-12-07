@@ -3,6 +3,7 @@
 @inject IWeatherService WeatherService
 @inject IGeolocation Geolocation
 @inject IRefreshService RefreshService
+@inject IBackButtonService BackButtonService
 @implements IDisposable
 
 <MudStack Style="height: 180px; width: 100%;" Justify="Justify.SpaceBetween">
@@ -40,7 +41,7 @@
             </MudStack>
             
             <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Style="width: 100%;">
-                 <MudIconButton Icon="@Icons.Material.Rounded.ArrowBack" Size="Size.Small" OnClick="@(() => _showForecast = false)" Color="Color.Primary" />
+                 <MudIconButton Icon="@Icons.Material.Rounded.ArrowBack" Size="Size.Small" OnClick="@CloseForecast" Color="Color.Primary" />
             </MudStack>
         }
         else
@@ -57,7 +58,7 @@
                 </MudStack>
             </MudStack>
             <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Style="width: 100%;">
-                <MudIconButton Icon="@Icons.Material.Rounded.ArrowForward" Size="Size.Small" OnClick="@(() => _showForecast = true)" Color="Color.Primary" />
+                <MudIconButton Icon="@Icons.Material.Rounded.ArrowForward" Size="Size.Small" OnClick="@ShowForecast" Color="Color.Primary" />
             </MudStack>
         }
     }
@@ -80,7 +81,31 @@
 
     public void Dispose()
     {
+        BackButtonService.Unregister(OnBackNative);
         RefreshService.RefreshRequested -= LoadWeatherData;
+    }
+
+    private void ShowForecast()
+    {
+        _showForecast = true;
+        BackButtonService.Register(OnBackNative);
+    }
+
+    private void CloseForecast()
+    {
+        _showForecast = false;
+        BackButtonService.Unregister(OnBackNative);
+    }
+
+    private bool OnBackNative()
+    {
+        if (_showForecast)
+        {
+            CloseForecast();
+            StateHasChanged();
+            return true;
+        }
+        return false;
     }
 
     private async Task LoadWeatherData()

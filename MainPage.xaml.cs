@@ -6,14 +6,25 @@ namespace Daily
     public partial class MainPage : ContentPage
     {
         private readonly IRefreshService _refreshService;
+        private readonly IBackButtonService _backButtonService;
         private bool _isRefreshing;
 
-        public MainPage(IRefreshService refreshService)
+        public MainPage(IRefreshService refreshService, IBackButtonService backButtonService)
         {
             InitializeComponent();
             _refreshService = refreshService;
+            _backButtonService = backButtonService;
             BindingContext = this;
             RefreshCommand = new Command(async () => await ExecuteRefreshCommand());
+        }
+
+        protected override bool OnBackButtonPressed()
+        {
+            if (_backButtonService.HandleBack())
+            {
+                return true;
+            }
+            return base.OnBackButtonPressed();
         }
 
         public ICommand RefreshCommand { get; }
