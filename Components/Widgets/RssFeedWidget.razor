@@ -5,12 +5,8 @@
 @inject IRefreshService RefreshService
 @implements IDisposable
 
-<div class="d-flex align-center px-4 pt-2">
-    @if (HeaderPrefix != null)
-    {
-        @HeaderPrefix
-    }
-    <div class="d-flex flex-grow-1 overflow-x-auto px-0 pb-2 gap-2" style="white-space: nowrap; min-width: 0;">
+<div class="d-flex align-start">
+    <div class="d-flex flex-grow-1 overflow-x-auto px-0 py-2 gap-1" style="white-space: nowrap; min-width: 0;">
         @foreach (var feed in _feeds)
         {
             <MudChip T="FeedSource" Size="Size.Large"
@@ -37,6 +33,10 @@
             </MudChip>
         }
     </div>
+    @if (HeaderAction != null)
+    {
+        @HeaderAction
+    }
 </div>
 
 <div style="height: 460px; overflow: hidden; display: flex; flex-direction: column;">
@@ -99,7 +99,7 @@
 </div>
 
 @code {
-    [Parameter] public RenderFragment? HeaderPrefix { get; set; }
+    [Parameter] public RenderFragment? HeaderAction { get; set; }
 
     private List<RssItem> _items;
     private int _currentPage = 1;

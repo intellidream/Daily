@@ -10,9 +10,9 @@
             <MudPaper Class="pa-4 glass-panel" Elevation="0" Square="false" Style="">
                 @if (widget.ComponentType != "RssFeedWidget")
                 {
-                    <div class="d-flex align-center">
-                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => WindowManager.OpenDetailWindow())" Color="Color.Inherit" Class="mr-2" Style="transform: scaleX(-1);" />
+                    <div class="d-flex align-center justify-space-between">
                          <MudText Typo="Typo.h6">@widget.Title</MudText>
+                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => WindowManager.OpenDetailWindow())" Color="Color.Primary" Style="transform: scaleX(-1);" />
                     </div>
                     <MudDivider Class="my-2" />
                 }
@@ -35,9 +35,9 @@
                 else if (widget.ComponentType == "RssFeedWidget")
                 {
                     <Daily.Components.Widgets.RssFeedWidget>
-                        <HeaderPrefix>
-                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => WindowManager.OpenDetailWindow())" Color="Color.Inherit" Class="mr-2" Style="transform: scaleX(-1);" />
-                        </HeaderPrefix>
+                        <HeaderAction>
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => WindowManager.OpenDetailWindow())" Color="Color.Primary" Class="ml-4 mt-2" Style="transform: scaleX(-1);" />
+                        </HeaderAction>
                     </Daily.Components.Widgets.RssFeedWidget>
                 }
                 else if (widget.ComponentType == "MediaWidget")
