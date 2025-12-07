@@ -18,17 +18,21 @@
         <MudText Class="pl-2" Typo="Typo.h5"><b>Daily</b></MudText>
         <MudSpacer />
         
-        @if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.WinUI || Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.MacCatalyst)
-        {
-            <MudIconButton Icon="@Icons.Material.Filled.WebAsset" 
-                           Color="Color.Inherit" 
-                           OnClick="@(() => WindowManagerService.OpenDetailWindow())"
-                           Title="Open Reading Pane" />
-        }
-
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.Brightness7 : Icons.Material.Filled.Brightness4)"
                        Color="Color.Inherit"
                        OnClick="@ToggleTheme" />
+        
+        <MudIconButton Icon="@Icons.Material.Filled.Settings"
+                       Color="Color.Inherit" 
+                       Title="Settings" />
+
+        @if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.WinUI || Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.MacCatalyst)
+        {
+             <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                            Color="Color.Inherit" 
+                            OnClick="@(() => Application.Current?.Quit())"
+                            Title="Close" />
+        }
     </MudAppBar>
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="@ContainerClass">
