@@ -34,7 +34,11 @@
                 }
                 else if (widget.ComponentType == "RssFeedWidget")
                 {
-                    <Daily.Components.Widgets.RssFeedWidget />
+                    <Daily.Components.Widgets.RssFeedWidget>
+                        <HeaderPrefix>
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => WindowManager.OpenDetailWindow())" Color="Color.Inherit" Class="mr-2" Style="transform: scaleX(-1);" />
+                        </HeaderPrefix>
+                    </Daily.Components.Widgets.RssFeedWidget>
                 }
                 else if (widget.ComponentType == "MediaWidget")
                 {

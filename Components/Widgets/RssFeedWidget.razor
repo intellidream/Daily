@@ -3,11 +3,13 @@
 @using System.Text.Json.Nodes
 @using Daily.Services
 @inject IRefreshService RefreshService
-@inject IWindowManagerService WindowManager
 @implements IDisposable
 
 <div class="d-flex align-center px-4 pt-2">
-    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => WindowManager.OpenDetailWindow())" Class="mr-2 flex-shrink-0" Color="Color.Inherit" />
+    @if (HeaderPrefix != null)
+    {
+        @HeaderPrefix
+    }
     <div class="d-flex flex-grow-1 overflow-x-auto px-0 pb-2 gap-2" style="white-space: nowrap; min-width: 0;">
         @foreach (var feed in _feeds)
         {
@@ -21,72 +23,89 @@
                      Class="flex-shrink-0">
                 <AvatarContent>
                     <MudAvatar Size="Size.Large">
-                        <MudImage Src="@feed.IconUrl" Alt="@feed.Name" />
+                        @if (!string.IsNullOrEmpty(feed.IconUrl))
+                        {
+                            <MudImage Src="@feed.IconUrl" Alt="@feed.Name" />
+                        }
+                        else
+                        {
+                            @feed.Name.Substring(0, 1)
+                        }
                     </MudAvatar>
                 </AvatarContent>
-                <ChildContent>
-                    @feed.Name
-                </ChildContent>
+                <ChildContent>@feed.Name</ChildContent>
             </MudChip>
         }
     </div>
 </div>
-<!-- Removed MudDivider to let the chips sit nicely above the list -->
 
-<MudList T="string" Dense="true" Clickable="true" DisablePadding="true" Style="height: 400px; overflow: hidden">
+<div style="height: 460px; overflow: hidden; display: flex; flex-direction: column;">
     @if (_items == null)
     {
-        <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
-            <MudText Class="ml-2">Loading news...</MudText>
-        </div>
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+                <MudText Class="ml-2">Loading news...</MudText>
+            </div>
+        }
+        else if (_error != null)
+        {
+            <MudAlert Severity="Severity.Error" Class="ma-2">@_error</MudAlert>
+        }
     }
     else
     {
-        @foreach (var item in _items.Skip((_currentPage - 1) * _pageSize).Take(_pageSize))
-        {
-            <MudListItem OnClick="@(() => OpenUrl(item.Link))" Style="height: 80px; overflow: hidden;">
-                <div class="d-flex align-center gap-4" style="height: 100%; width: 100%;">
-                    @if (!string.IsNullOrEmpty(item.ImageUrl))
-                    {
-                        <MudImage Src="@item.ImageUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded flex-shrink-0" />
-                    }
-                    else if (!string.IsNullOrEmpty(_currentFeed?.IconUrl))
-                    {
-                         <div class="rounded flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 60px; background-color: var(--mud-palette-action-disabled-background);">
-                            <MudImage Src="@_currentFeed.IconUrl" Width="40" Height="40" ObjectFit="ObjectFit.Contain" />
-                         </div>
-                    }
-                    else
-                    {
-                        <div class="rounded flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 60px; background-color: var(--mud-palette-action-disabled-background);">
-                            <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Medium" />
+        <MudList T="RssItem" Clickable="true" Dense="true" DisablePadding="true" Style="flex-grow: 1; overflow-y: auto;">
+            @foreach (var item in _items.Skip((_currentPage - 1) * _pageSize).Take(_pageSize))
+            {
+                <MudListItem OnClick="@(() => OpenUrl(item.Link))" Style="height: 80px; overflow: hidden;" Class="px-0 py-2">
+                     <div class="d-flex align-center gap-4" style="height: 100%; width: 100%;">
+                        @if (!string.IsNullOrEmpty(item.ImageUrl))
+                        {
+                            <MudImage Src="@item.ImageUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded flex-shrink-0" />
+                        }
+                        else if (!string.IsNullOrEmpty(_currentFeed?.IconUrl))
+                        {
+                             <div class="rounded flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 60px; background-color: var(--mud-palette-action-disabled-background);">
+                                <MudImage Src="@_currentFeed.IconUrl" Width="40" Height="40" ObjectFit="ObjectFit.Contain" />
+                             </div>
+                        }
+                        else
+                        {
+                            <div class="rounded flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 60px; background-color: var(--mud-palette-action-disabled-background);">
+                                <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Medium" />
+                            </div>
+                        }
+                        <div style="min-width: 0; flex: 1;">
+                            <div title="@item.Title" style="width: 100%; cursor: help;">
+                                 <MudText Typo="Typo.body2" Style="line-height: 1.2; max-height: 2.4em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">@item.Title</MudText>
+                            </div>
+                            <MudText Typo="Typo.caption" Style="font-size: 0.7rem; opacity: 0.8;" Class="mt-0">@item.PublishDate.ToShortDateString()</MudText>
                         </div>
-                    }
-                    <div style="min-width: 0; flex: 1;">
-                        <div title="@item.Title" style="width: 100%; cursor: help;">
-                             <MudText Typo="Typo.body2" Style="line-height: 1.2; max-height: 2.4em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">@item.Title</MudText>
-                        </div>
-                        <MudText Typo="Typo.caption" Style="font-size: 0.7rem; opacity: 0.8;" Class="mt-0">@item.PublishDate.ToShortDateString()</MudText>
                     </div>
-                </div>
-            </MudListItem>
+                </MudListItem>
+            }
+        </MudList>
+
+        @if (_items.Count > _pageSize)
+        {
+            <div class="d-flex justify-center mt-2 flex-shrink-0">
+                 <MudPagination BoundaryCount="1" MiddleCount="1" Count="@_pageCount" SelectedChanged="OnPageChanged" Selected="@_currentPage" 
+                                Class="pa-2" Variant="Variant.Outlined" Size="Size.Small" ShowFirstButton="false" ShowLastButton="false" />
+            </div>
         }
     }
-</MudList>
-
-@if (_items != null && _items.Count > _pageSize)
-{
-    <div class="d-flex justify-center mt-2">
-         <MudPagination BoundaryCount="1" MiddleCount="1" Count="@_pageCount" SelectedChanged="OnPageChanged" Selected="@_currentPage" 
-                        Class="pa-2" Variant="Variant.Outlined" Size="Size.Small" ShowFirstButton="false" ShowLastButton="false" />
-    </div>
-}
+</div>
 
 @code {
+    [Parameter] public RenderFragment? HeaderPrefix { get; set; }
+
     private List<RssItem> _items;
     private int _currentPage = 1;
     private const int _pageSize = 5;
+    private bool _isLoading = true;
+    private string? _error;
 
     public enum FeedType
     {
@@ -153,8 +172,6 @@
 
     private async Task ForceRefreshFeed(FeedSource feed)
     {
-        // Refresh the feed regardless of whether it's currently selected or not (but logically we probably only care about the current one or the one clicked)
-        // If the user clicks refresh on a non-active chip, should we switch to it? Let's just switch and refresh.
         _currentFeed = feed;
         _currentPage = 1; 
         await LoadFeedAsync();
@@ -165,6 +182,8 @@
         if (_currentFeed == null) return;
 
         _items = null;
+        _isLoading = true;
+        _error = null;
         StateHasChanged();
 
         try
@@ -177,13 +196,16 @@
             {
                 await LoadWpJsonFeedAsync();
             }
-
-            StateHasChanged();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading feed: {ex.Message}");
-            _items = new List<RssItem> { new RssItem { Title = "Error loading feed" } };
+            _error = $"Error loading feed: {ex.Message}";
+            _items = new List<RssItem>();
+        }
+        finally
+        {
+            _isLoading = false;
             StateHasChanged();
         }
     }
@@ -194,7 +216,6 @@
     {
         try 
         {
-            // Use a handler to support compression and better mimic a browser
             using var handler = new HttpClientHandler
             {
                 AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
@@ -203,7 +224,6 @@
             using var client = new HttpClient(handler);
             client.Timeout = TimeSpan.FromSeconds(10);
             
-            // Add standard headers to avoid being blocked (e.g., by Windows Central)
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             client.DefaultRequestHeaders.Add("Accept", "application/rss+xml, application/xml, text/xml, */*");
 
@@ -220,25 +240,20 @@
                 var description = item.Element("description")?.Value;
                 var pubDateStr = item.Element("pubDate")?.Value;
 
-                // Robust image extraction
                 string? imageUrl = null;
 
-                // 1. Try media:content (used by Windows Central)
-                // Note: We need to be careful with namespaces. Descendants might not include the prefix in LocalName.
                 var mediaContent = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "content" && e.Name.Namespace == media);
                 if (mediaContent != null)
                 {
                     imageUrl = mediaContent.Attribute("url")?.Value;
                 }
 
-                // 2. Try media:thumbnail (used by BBC)
                 if (string.IsNullOrEmpty(imageUrl))
                 {
                     var mediaThumbnail = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "thumbnail");
                     imageUrl = mediaThumbnail?.Attribute("url")?.Value;
                 }
 
-                // 3. Try enclosure (standard RSS)
                 if (string.IsNullOrEmpty(imageUrl))
                 {
                     var enclosure = item.Element("enclosure");
@@ -248,7 +263,6 @@
                     }
                 }
 
-                // 4. Try parsing HTML description (fallback)
                 if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(description))
                 {
                     var match = Regex.Match(description, @"<img.+?src=[""']([^""']+)[""']");
@@ -258,7 +272,6 @@
                     }
                 }
                 
-                // 5. Try content:encoded
                 if (string.IsNullOrEmpty(imageUrl))
                 {
                     var contentEncoded = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "encoded")?.Value;
@@ -283,8 +296,7 @@
         }
         catch (Exception ex)
         {
-            _items = new List<RssItem> { new RssItem { Title = $"Error loading feed: {ex.Message}" } };
-            Console.WriteLine($"RSS Load Error: {ex}");
+             throw; // Let proper error handling catch it
         }
     }
 
@@ -302,7 +314,6 @@
         foreach (var post in posts)
         {
             var title = post["title"]?["rendered"]?.ToString();
-            // Decode HTML entities in title
             if (!string.IsNullOrEmpty(title))
             {
                 title = System.Net.WebUtility.HtmlDecode(title);
@@ -320,7 +331,6 @@
                 if (media != null)
                 {
                     imageUrl = media["source_url"]?.ToString();
-                    // Try to get a medium size if available to save bandwidth
                      if (media["media_details"]?["sizes"]?["medium"]?["source_url"] != null)
                     {
                         imageUrl = media["media_details"]["sizes"]["medium"]["source_url"].ToString();

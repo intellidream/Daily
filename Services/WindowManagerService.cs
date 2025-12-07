@@ -136,6 +136,17 @@ namespace Daily.Services
             }
         }
 
+        private void SetMainWindowEnabled(bool isEnabled)
+        {
+            var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow && w != null);
+            if (mainWindow?.Page is VisualElement content)
+            {
+                content.IsEnabled = isEnabled;
+                // Optional: visual cue for disabled state if not automatic
+                content.Opacity = isEnabled ? 1.0 : 0.8; 
+            }
+        }
+
 #if WINDOWS 
         private async void ConfigureWindowStyle(Window window)
         {
@@ -172,16 +183,7 @@ namespace Daily.Services
             catch { }
         }
 
-        private void SetMainWindowEnabled(bool isEnabled)
-        {
-            var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow && w != null);
-            if (mainWindow?.Page is VisualElement content)
-            {
-                content.IsEnabled = isEnabled;
-                // Optional: visual cue for disabled state if not automatic
-                content.Opacity = isEnabled ? 1.0 : 0.8; 
-            }
-        }
+
 
         private void ApplyThemeToTitleBar(Microsoft.UI.Xaml.Window nativeWindow, AppTheme theme)
         {
