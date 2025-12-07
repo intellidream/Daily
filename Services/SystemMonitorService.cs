@@ -334,11 +334,34 @@ namespace Daily.Services
 #else
              try
              {
-                 // Find the largest ready drive (usually C: or internal storage)
-                 var main = DriveInfo.GetDrives()
-                    .Where(d => d.IsReady)
-                    .OrderByDescending(d => d.TotalSize)
-                    .FirstOrDefault();
+                 DriveInfo? main = null;
+
+                 // 1. Try to identify the System Drive (C:\ on Windows, / on Unix)
+                 var drives = DriveInfo.GetDrives().Where(d => d.IsReady).ToList();
+                 
+                 // Check for Windows System Drive (Usually C:\)
+                 main = drives.FirstOrDefault(d => d.Name.Equals(@"C:\", StringComparison.OrdinalIgnoreCase));
+                 
+                 // Check for Mac/Linux Root (/)
+                 if (main == null)
+                 {
+                     main = drives.FirstOrDefault(d => d.Name == "/");
+                 }
+
+                 // 2. Fallback: Largest Fixed Drive
+                 if (main == null)
+                 {
+                     main = drives
+                        .Where(d => d.DriveType == DriveType.Fixed)
+                        .OrderByDescending(d => d.TotalSize)
+                        .FirstOrDefault();
+                 }
+
+                 // 3. Last Resort: Any Ready Drive
+                 if (main == null)
+                 {
+                     main = drives.OrderByDescending(d => d.TotalSize).FirstOrDefault();
+                 }
 
                  if (main != null)
                  {
