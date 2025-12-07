@@ -21,9 +21,11 @@ namespace Daily.Services
     {
         private Window? _detailWindow;
         private Page? _detailModal;
+        private readonly IRefreshService _refreshService;
 
-        public WindowManagerService()
+        public WindowManagerService(IRefreshService refreshService)
         {
+            _refreshService = refreshService;
             if (Application.Current != null)
             {
                 Application.Current.RequestedThemeChanged += OnThemeChanged;
@@ -44,7 +46,7 @@ namespace Daily.Services
         {
             if (_detailWindow != null || _detailModal != null) return;
 
-            var detailPage = new DetailPage
+            var detailPage = new DetailPage(_refreshService)
             {
                 Opacity = 0 // Start invisible/transparent
             };

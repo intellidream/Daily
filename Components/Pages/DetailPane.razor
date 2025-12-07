@@ -1,6 +1,7 @@
 @using Daily.Services
 @inject IWindowManagerService WindowManager
 @inject IJSRuntime JSRuntime
+@inject IRefreshService RefreshService
 @implements IDisposable
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
@@ -9,13 +10,14 @@
 <MudPopoverProvider />
 
 <MudLayout Style="background-color: transparent;">
-    <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
+    <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Inherit" OnClick="@(async () => await RefreshService.TriggerRefreshAsync())" Class="mr-2" />
         <MudText Typo="Typo.h6"><b>Daily - Detail View</b></MudText>
         <MudSpacer />
         <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" />
     </MudAppBar>
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-16 px-4">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="@ContainerClass">
              <MudPaper Class="pa-8 glass-panel" Elevation="0">
                 <MudText Typo="Typo.h4" GutterBottom="true">Reading Pane</MudText>
                 <MudText Typo="Typo.body1">This is the dedicated large format view for reading articles and watching content.</MudText>
@@ -45,12 +47,29 @@
         }
     };
 
+    private string AppBarClass { get; set; } = "";
+    private string ContainerClass { get; set; } = "";
+
     protected override void OnInitialized()
     {
         if (Application.Current != null)
         {
             Application.Current.RequestedThemeChanged += OnThemeChanged;
             _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
+        }
+
+        if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
+            Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
+        {
+            // Mobile Layout
+            AppBarClass = "pt-20 pb-2";
+            ContainerClass = "mt-20 pt-8 px-6";
+        }
+        else
+        {
+            // Desktop Layout (Windows/Mac)
+            AppBarClass = "pt-20 pb-2";
+            ContainerClass = "mt-20 pt-6 px-6";
         }
     }
 

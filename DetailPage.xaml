@@ -6,10 +6,12 @@
              Title="Daily Detail"
              BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
 
-    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
-        <BlazorWebView.RootComponents>
-            <RootComponent Selector="#app" ComponentType="{x:Type local:Components.Pages.DetailPane}" />
-        </BlazorWebView.RootComponents>
-    </BlazorWebView>
+    <RefreshView Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing}" RefreshColor="#594AE2" BackgroundColor="Transparent">
+        <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
+            <BlazorWebView.RootComponents>
+                <RootComponent Selector="#app" ComponentType="{x:Type local:Components.Pages.DetailPane}" />
+            </BlazorWebView.RootComponents>
+        </BlazorWebView>
+    </RefreshView>
 
 </ContentPage>
