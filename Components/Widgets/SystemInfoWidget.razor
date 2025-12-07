@@ -214,7 +214,7 @@
                 if (_selectedMetric != null)
                 {
                     UpdateDetailState(_selectedMetric);
-                    InvokeAsync(StateHasChanged);
+                    await InvokeAsync(StateHasChanged);
                 }
             }
         }

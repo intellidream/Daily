@@ -57,7 +57,11 @@ namespace Daily.Services
 
             var detailPage = new DetailPage(_refreshService)
             {
-                Opacity = 0 // Start invisible/transparent
+#if ANDROID || IOS
+                Opacity = 1 // Start visible immediately on Mobile
+#else
+                Opacity = 0 // Start invisible for fade-in on Desktop
+#endif
             };
 
 #if ANDROID || IOS
@@ -65,10 +69,8 @@ namespace Daily.Services
             // Handle native back/swipe closing
             detailPage.Disappearing += (s, e) => _detailModal = null;
 
-            // On Mobile, push as a modal page directly (No Animation, rely on Native)
-            detailPage.Opacity = 1;
-            
-            Application.Current?.MainPage?.Navigation.PushModalAsync(detailPage);
+            // Push without animation to avoid "tremble"/clumsiness
+            Application.Current?.MainPage?.Navigation.PushModalAsync(detailPage, false);
 #else
             _detailWindow = new Window(detailPage)
             {
