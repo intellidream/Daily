@@ -79,17 +79,18 @@ namespace Daily.Services
                             var workArea = displayArea.WorkArea;
 
                             // 1. Calculate in RAW PIXELS (AppWindow/DisplayArea coords)
-                            // Vertical: 80% Screen Height
-                            double pixelHeight = workArea.Height * 0.8;
+                            // Vertical: 90% Screen Height
+                            double pixelHeight = workArea.Height * 0.9;
                             double pixelY = workArea.Y + (workArea.Height - pixelHeight) / 2;
 
-                            // Horizontal: 80% Remaining Left Space (Use pixel math)
+                            // Horizontal: 90% Remaining Left Space (Use pixel math)
                             double spaceToLeft = mainRect.X - workArea.X;
                             if (spaceToLeft < 150) spaceToLeft = 150; 
-                            double pixelWidth = spaceToLeft * 0.8;
+                            double pixelWidth = spaceToLeft * 0.9;
                             
-                            // Align to LEFT of app with 10px OVERLAP
-                            double pixelX = mainRect.X - pixelWidth + 10;
+                            // Align to LEFT of app with Strong Overlap (+50px)
+                            // User reported 26px was "half-way there", likely due to shadow/border padding.
+                            double pixelX = mainRect.X - pixelWidth + 50;
 
                             // 2. Convert to DIPs for MAUI Window Properties
                             _detailWindow.Width = pixelWidth / scale;
@@ -117,10 +118,12 @@ namespace Daily.Services
             
             _detailWindow.Destroying += (s, e) => 
             {
+                SetMainWindowEnabled(true); // Re-enable main window
                 _detailWindow = null;
             };
 
             Application.Current?.OpenWindow(_detailWindow);
+            SetMainWindowEnabled(false); // Disable main window interaction
         }
 
         public void CloseDetailWindow()
@@ -129,6 +132,7 @@ namespace Daily.Services
             {
                 Application.Current?.CloseWindow(_detailWindow);
                 _detailWindow = null;
+                SetMainWindowEnabled(true); // Safety re-enable
             }
         }
 
@@ -160,10 +164,23 @@ namespace Daily.Services
                        presenter.SetBorderAndTitleBar(false, false);
                        // User Requested: Non-resizable
                        presenter.IsResizable = false;
+                       // User Requested: Modal behavior (Cannot go under)
+                       presenter.IsAlwaysOnTop = true;
                     }
                 }
             }
             catch { }
+        }
+
+        private void SetMainWindowEnabled(bool isEnabled)
+        {
+            var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow && w != null);
+            if (mainWindow?.Page is VisualElement content)
+            {
+                content.IsEnabled = isEnabled;
+                // Optional: visual cue for disabled state if not automatic
+                content.Opacity = isEnabled ? 1.0 : 0.8; 
+            }
         }
 
         private void ApplyThemeToTitleBar(Microsoft.UI.Xaml.Window nativeWindow, AppTheme theme)

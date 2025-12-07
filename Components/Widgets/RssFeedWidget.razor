@@ -3,9 +3,11 @@
 @using System.Text.Json.Nodes
 @using Daily.Services
 @inject IRefreshService RefreshService
+@inject IWindowManagerService WindowManager
 @implements IDisposable
 
 <div class="d-flex align-center px-4 pt-2">
+    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => WindowManager.OpenDetailWindow())" Class="mr-2 flex-shrink-0" Color="Color.Inherit" />
     <div class="d-flex flex-grow-1 overflow-x-auto px-0 pb-2 gap-2" style="white-space: nowrap; min-width: 0;">
         @foreach (var feed in _feeds)
         {

@@ -1,6 +1,7 @@
 @using Daily.Models
 @using Daily.Services
 @inject IWidgetService WidgetService
+@inject IWindowManagerService WindowManager
 
 <div class="masonry-grid">
     @foreach (var widget in _widgets)
@@ -9,7 +10,10 @@
             <MudPaper Class="pa-4 glass-panel" Elevation="0" Square="false" Style="">
                 @if (widget.ComponentType != "RssFeedWidget")
                 {
-                    <MudText Typo="Typo.h6">@widget.Title</MudText>
+                    <div class="d-flex align-center">
+                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => WindowManager.OpenDetailWindow())" Color="Color.Inherit" Class="mr-2" Style="transform: scaleX(-1);" />
+                         <MudText Typo="Typo.h6">@widget.Title</MudText>
+                    </div>
                     <MudDivider Class="my-2" />
                 }
                 @if (widget.ComponentType == "WeatherWidget")
