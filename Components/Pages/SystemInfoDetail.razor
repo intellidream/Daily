@@ -1,0 +1,210 @@
+@using Daily.Services
+@inject ISystemMonitorService SystemMonitor
+@inject IRefreshService RefreshService
+@implements IDisposable
+
+<MudGrid Class="pa-4">
+    <!-- Hardware Info -->
+    <MudItem xs="12">
+        <MudCard Elevation="3" Class="rounded-lg glass-card">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Device Information</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIcon Icon="@Icons.Material.Filled.Computer" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                     <MudItem xs="6" sm="4">
+                        <MudText Typo="Typo.caption">Model</MudText>
+                        <MudText Typo="Typo.body1">@_sysDetails.Model</MudText>
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudText Typo="Typo.caption">Manufacturer</MudText>
+                        <MudText Typo="Typo.body1">@_sysDetails.Manufacturer</MudText>
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudText Typo="Typo.caption">Device Name</MudText>
+                        <MudText Typo="Typo.body1">@_sysDetails.Name</MudText>
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudText Typo="Typo.caption">OS Version</MudText>
+                        <MudText Typo="Typo.body1">@_sysDetails.Platform @_sysDetails.Version</MudText>
+                    </MudItem>
+                     <MudItem xs="6" sm="4">
+                        <MudText Typo="Typo.caption">Device Type</MudText>
+                        <MudText Typo="Typo.body1">@_sysDetails.DeviceType (@_sysDetails.Idiom)</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <!-- CPU & RAM -->
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="3" Class="rounded-lg h-100 glass-card">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Processor</MudText>
+                </CardHeaderContent>
+                 <CardHeaderActions>
+                    <MudIcon Icon="@Icons.Material.Filled.Memory" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                 <MudText Typo="Typo.h3" Color="Color.Primary">@Math.Round(_cpuUsage)%</MudText>
+                 <MudProgressLinear Color="Color.Primary" Value="@_cpuUsage" Class="my-4" Size="Size.Large" Striped="true" />
+                 <MudText Typo="Typo.body2">Total Processor Utilization</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="3" Class="rounded-lg h-100 glass-card">
+            <MudCardHeader>
+                 <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Memory</MudText>
+                </CardHeaderContent>
+                 <CardHeaderActions>
+                    <MudIcon Icon="@Icons.Material.Filled.Storage" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                 <MudText Typo="Typo.h3" Color="Color.Secondary">@Math.Round(_memUsage)%</MudText>
+                 <MudProgressLinear Color="Color.Secondary" Value="@_memUsage" Class="my-4" Size="Size.Large" Striped="true" />
+                 <MudText Typo="Typo.body2">Committed Bytes In Use</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+   <!-- Disk & Network -->
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="3" Class="rounded-lg h-100 glass-card">
+            <MudCardHeader>
+                 <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Storage (System)</MudText>
+                </CardHeaderContent>
+                 <CardHeaderActions>
+                    <MudIcon Icon="@Icons.Material.Filled.DiscFull" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                 <MudText Typo="Typo.h4">@Math.Round(_diskFree) GB <span style="font-size: 0.5em; opacity: 0.7;">FREE</span></MudText>
+                 <MudProgressLinear Color="@(_diskFree < _diskTotal * 0.1 ? Color.Error : Color.Success)" Value="@(_diskTotal > 0 ? ((_diskTotal - _diskFree) / _diskTotal) * 100 : 0)" Class="my-4" Size="Size.Large" />
+                 <MudText Typo="Typo.caption">Total Capacity: @Math.Round(_diskTotal) GB</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+     <MudItem xs="12" md="6">
+        <MudCard Elevation="3" Class="rounded-lg h-100 glass-card">
+            <MudCardHeader>
+                 <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Network</MudText>
+                </CardHeaderContent>
+                 <CardHeaderActions>
+                    <MudIcon Icon="@Icons.Material.Filled.Wifi" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <div>
+                         <MudText Typo="Typo.h5">Download</MudText>
+                         <MudText Typo="Typo.h4" Color="Color.Info">@FormatSpeed(_rxRate)</MudText>
+                    </div>
+                    <div>
+                         <MudText Typo="Typo.h5" Align="Align.End">Upload</MudText>
+                         <MudText Typo="Typo.h4" Color="Color.Warning" Align="Align.End">@FormatSpeed(_txRate)</MudText>
+                    </div>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <!-- Health & Uptime -->
+    <MudItem xs="12">
+        <MudCard Elevation="3" Class="rounded-lg glass-card">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">System Health</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                     <MudItem xs="6" sm="3">
+                        <MudText Typo="Typo.subtitle2">Uptime</MudText>
+                        <MudText Typo="Typo.h6">@_uptime.ToString(@"dd\.hh\:mm")</MudText>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudText Typo="Typo.subtitle2">Battery</MudText>
+                        <MudText Typo="Typo.h6">@Math.Round(_batteryLevel * 100)% @(_isCharging ? "⚡" : "")</MudText>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                         <MudText Typo="Typo.subtitle2">Processes</MudText>
+                         <MudText Typo="Typo.h6">@_processCount</MudText>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                         <MudText Typo="Typo.subtitle2">Connection</MudText>
+                         <MudText Typo="Typo.h6">@_accessType</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+</MudGrid>
+
+@code {
+    private double _cpuUsage;
+    private double _memUsage;
+    private double _diskFree;
+    private double _diskTotal;
+    private double _rxRate;
+    private double _txRate;
+    private TimeSpan _uptime;
+    private double _batteryLevel;
+    private bool _isCharging;
+    private int _processCount;
+    private string _accessType;
+    private (string Model, string Manufacturer, string Name, string Version, string Platform, string Idiom, string DeviceType) _sysDetails;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _sysDetails = SystemMonitor.GetSystemDetails();
+        RefreshService.DetailRefreshRequested += UpdateStats;
+        await UpdateStats();
+    }
+
+    private async Task UpdateStats()
+    {
+        await Task.Run(() =>
+        {
+            _cpuUsage = SystemMonitor.GetCpuUsage();
+            _memUsage = SystemMonitor.GetMemoryUsage();
+            (_diskFree, _diskTotal) = SystemMonitor.GetMainDriveStorage();
+            (_rxRate, _txRate) = SystemMonitor.GetNetworkRates();
+            _uptime = SystemMonitor.GetUptime();
+            (_batteryLevel, _isCharging) = SystemMonitor.GetBatteryInfo();
+            
+            var health = SystemMonitor.GetSystemHealth();
+            _processCount = health.ProcessCount;
+            
+            var net = SystemMonitor.GetNetworkInfo();
+            _accessType = net.AccessType;
+        });
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string FormatSpeed(double bytesPerSec)
+    {
+        if (bytesPerSec > 1024 * 1024) return $"{Math.Round(bytesPerSec / (1024 * 1024), 1)} MB/s";
+        if (bytesPerSec > 1024) return $"{Math.Round(bytesPerSec / 1024, 0)} KB/s";
+        return $"{Math.Round(bytesPerSec, 0)} B/s";
+    }
+
+    public void Dispose()
+    {
+        RefreshService.DetailRefreshRequested -= UpdateStats;
+    }
+}

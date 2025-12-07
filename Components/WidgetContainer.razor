@@ -12,7 +12,7 @@
                 {
                     <div class="d-flex align-center justify-space-between">
                          <MudText Typo="Typo.h6">@widget.Title</MudText>
-                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => WindowManager.OpenDetailWindow())" Color="Color.Primary" Style="transform: scaleX(-1);" />
+                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => OpenWidgetDetail(widget))" Color="Color.Primary" Style="transform: scaleX(-1);" />
                     </div>
                     <MudDivider Class="my-2" />
                 }
@@ -36,7 +36,7 @@
                 {
                     <Daily.Components.Widgets.RssFeedWidget>
                         <HeaderAction>
-                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => WindowManager.OpenDetailWindow())" Color="Color.Primary" Class="ml-4 mt-2" Style="transform: scaleX(-1);" />
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => OpenWidgetDetail(widget))" Color="Color.Primary" Class="ml-4 mt-2" Style="transform: scaleX(-1);" />
                         </HeaderAction>
                     </Daily.Components.Widgets.RssFeedWidget>
                 }
@@ -65,5 +65,17 @@
     {
         widget.Title = newTitle;
         StateHasChanged();
+    }
+
+    private void OpenWidgetDetail(WidgetModel widget)
+    {
+        if (widget.ComponentType == "SystemInfoWidget")
+        {
+            WindowManager.OpenDetail("SystemInfo");
+        }
+        else
+        {
+            WindowManager.OpenDetailWindow();
+        }
     }
 }

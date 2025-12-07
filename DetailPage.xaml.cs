@@ -35,7 +35,7 @@ public partial class DetailPage : ContentPage
     private async Task ExecuteRefreshCommand()
     {
         IsRefreshing = true;
-        await _refreshService.TriggerRefreshAsync();
+        await _refreshService.TriggerDetailRefreshAsync();
         await Task.Delay(500);
         IsRefreshing = false;
     }

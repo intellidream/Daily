@@ -26,6 +26,7 @@ namespace Daily.Services
         (double FreeGb, double TotalGb) GetMainDriveStorage();
         TimeSpan GetUptime();
         (double TempC, double VoltageV, int ProcessCount, TimeSpan? DailyUsage, bool IsUsagePermissionGranted) GetSystemHealth();
+        (string Model, string Manufacturer, string Name, string Version, string Platform, string Idiom, string DeviceType) GetSystemDetails();
         void OpenUsageSettings();
     }
 
@@ -479,6 +480,26 @@ namespace Daily.Services
 #else
             return (0, 0, 0, null, false);
 #endif
+        }
+
+        public (string Model, string Manufacturer, string Name, string Version, string Platform, string Idiom, string DeviceType) GetSystemDetails()
+        {
+            try
+            {
+                return (
+                    DeviceInfo.Model,
+                    DeviceInfo.Manufacturer,
+                    DeviceInfo.Name,
+                    DeviceInfo.VersionString,
+                    DeviceInfo.Platform.ToString(),
+                    DeviceInfo.Idiom.ToString(),
+                    DeviceInfo.DeviceType.ToString()
+                );
+            }
+            catch
+            {
+                return ("Unknown", "Unknown", "Unknown", "Unknown", "Unknown", "Unknown", "Unknown");
+            }
         }
 
         public void OpenUsageSettings()

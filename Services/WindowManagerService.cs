@@ -14,6 +14,7 @@ namespace Daily.Services
     public interface IWindowManagerService
     {
         void OpenDetailWindow();
+        void OpenDetail(string view);
         void CloseDetailWindow();
     }
 
@@ -22,14 +23,22 @@ namespace Daily.Services
         private Window? _detailWindow;
         private Page? _detailModal;
         private readonly IRefreshService _refreshService;
+        private readonly IDetailNavigationService _navService;
 
-        public WindowManagerService(IRefreshService refreshService)
+        public WindowManagerService(IRefreshService refreshService, IDetailNavigationService navService)
         {
             _refreshService = refreshService;
+            _navService = navService;
             if (Application.Current != null)
             {
                 Application.Current.RequestedThemeChanged += OnThemeChanged;
             }
+        }
+
+        public void OpenDetail(string view)
+        {
+            _navService.NavigateTo(view);
+            OpenDetailWindow();
         }
 
         private void OnThemeChanged(object? sender, AppThemeChangedEventArgs e)
@@ -56,9 +65,8 @@ namespace Daily.Services
             // Handle native back/swipe closing
             detailPage.Disappearing += (s, e) => _detailModal = null;
 
-            // On Mobile, push as a modal page
-             new Animation(v => detailPage.Opacity = v, 0, 1, Easing.Linear)
-                    .Commit(detailPage, "FadeIn", length: 300);
+            // On Mobile, push as a modal page directly (No Animation, rely on Native)
+            detailPage.Opacity = 1;
             
             Application.Current?.MainPage?.Navigation.PushModalAsync(detailPage);
 #else
