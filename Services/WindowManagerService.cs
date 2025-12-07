@@ -20,6 +20,7 @@ namespace Daily.Services
     public class WindowManagerService : IWindowManagerService
     {
         private Window? _detailWindow;
+        private Page? _detailModal;
 
         public WindowManagerService()
         {
@@ -41,13 +42,24 @@ namespace Daily.Services
 
         public void OpenDetailWindow()
         {
-            if (_detailWindow != null) return;
+            if (_detailWindow != null || _detailModal != null) return;
 
             var detailPage = new DetailPage
             {
                 Opacity = 0 // Start invisible/transparent
             };
 
+#if ANDROID || IOS
+            _detailModal = detailPage;
+            // Handle native back/swipe closing
+            detailPage.Disappearing += (s, e) => _detailModal = null;
+
+            // On Mobile, push as a modal page
+             new Animation(v => detailPage.Opacity = v, 0, 1, Easing.Linear)
+                    .Commit(detailPage, "FadeIn", length: 300);
+            
+            Application.Current?.MainPage?.Navigation.PushModalAsync(detailPage);
+#else
             _detailWindow = new Window(detailPage)
             {
                 Title = "Daily - Reading Pane"
@@ -124,20 +136,30 @@ namespace Daily.Services
 
             Application.Current?.OpenWindow(_detailWindow);
             SetMainWindowEnabled(false); // Disable main window interaction
+#endif
         }
 
         public void CloseDetailWindow()
         {
+#if ANDROID || IOS
+            if (_detailModal != null)
+            {
+                Application.Current?.MainPage?.Navigation.PopModalAsync();
+                _detailModal = null;
+            }
+#else
             if (_detailWindow != null)
             {
                 Application.Current?.CloseWindow(_detailWindow);
                 _detailWindow = null;
                 SetMainWindowEnabled(true); // Safety re-enable
             }
+#endif
         }
 
         private void SetMainWindowEnabled(bool isEnabled)
         {
+#if WINDOWS || MACCATALYST
             var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow && w != null);
             if (mainWindow?.Page is VisualElement content)
             {
@@ -145,6 +167,7 @@ namespace Daily.Services
                 // Optional: visual cue for disabled state if not automatic
                 content.Opacity = isEnabled ? 1.0 : 0.8; 
             }
+#endif
         }
 
 #if WINDOWS 
