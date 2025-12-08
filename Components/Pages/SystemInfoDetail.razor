@@ -225,11 +225,9 @@
     // Handler for RefreshService (Func<Task>)
     private async Task OnRefreshRequested()
     {
-        await InvokeAsync(() =>
-        {
-            UpdateStats();
-            StateHasChanged();
-        });
+        await SystemMonitor.ForceRefreshAsync();
+        // No strict need to call UpdateStats() manually if OnStatsUpdated fires, 
+        // but for safety we can keep relying on OnStatsUpdated subscription.
     }
 
     private void UpdateStats()

@@ -12,7 +12,21 @@ namespace Daily.Services
         {
             if (RefreshRequested != null)
             {
-                await RefreshRequested.Invoke();
+                var delegates = RefreshRequested.GetInvocationList();
+                var tasks = new System.Collections.Generic.List<Task>(delegates.Length);
+                foreach (Func<Task> d in delegates)
+                {
+                    try
+                    {
+                        tasks.Add(d());
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Refresh delegate error: {ex}");
+                        // Continue ensuring other delegates run
+                    }
+                }
+                await Task.WhenAll(tasks);
             }
         }
 
@@ -20,7 +34,20 @@ namespace Daily.Services
         {
             if (DetailRefreshRequested != null)
             {
-                await DetailRefreshRequested.Invoke();
+                var delegates = DetailRefreshRequested.GetInvocationList();
+                var tasks = new System.Collections.Generic.List<Task>(delegates.Length);
+                foreach (Func<Task> d in delegates)
+                {
+                    try
+                    {
+                        tasks.Add(d());
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Detail refresh delegate error: {ex}");
+                    }
+                }
+                await Task.WhenAll(tasks);
             }
         }
     }

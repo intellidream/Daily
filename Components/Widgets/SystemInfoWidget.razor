@@ -2,6 +2,7 @@
 @using Daily.Services
 @using Microsoft.Maui.Devices
 @inject ISystemMonitorService SystemMonitor
+@inject IRefreshService RefreshService
 @inject IBackButtonService BackButtonService
 @implements IDisposable
 
@@ -195,6 +196,9 @@
         SystemMonitor.SystemStatsUpdated += OnStatsUpdated;
         SystemMonitor.StartMonitoring();
         
+        // Subscribe to Manual Pull-to-Refresh
+        RefreshService.RefreshRequested += OnRefreshRequested;
+        
         // Initial Fetch
         FetchStats();
     }
@@ -211,6 +215,11 @@
              }
              StateHasChanged();
          });
+    }
+
+    private async Task OnRefreshRequested()
+    {
+        await SystemMonitor.ForceRefreshAsync();
     }
 
     private void FetchStats()
@@ -348,6 +357,7 @@
     public void Dispose()
     {
         SystemMonitor.SystemStatsUpdated -= OnStatsUpdated;
+        RefreshService.RefreshRequested -= OnRefreshRequested;
         BackButtonService.Unregister(OnBackNative);
     }
 }

@@ -41,11 +41,14 @@ namespace Daily
 
         private async Task ExecuteRefreshCommand()
         {
-            IsRefreshing = true;
             await _refreshService.TriggerRefreshAsync();
-            // Add a small delay to ensure the UI updates
-            await Task.Delay(500);
-            IsRefreshing = false;
+            // Wait 1 second to ensure the refresh feels substantial and UI animation settles
+            await Task.Delay(1000);
+            Dispatcher.Dispatch(() => 
+            {
+                IsRefreshing = false;
+                //refreshView.IsRefreshing = false; // Force direct update
+            });
         }
     }
 }

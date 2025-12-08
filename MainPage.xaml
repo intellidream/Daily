@@ -25,12 +25,12 @@
         </OnPlatform>
     </ContentPage.Background>
 
-    <RefreshView Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing}" RefreshColor="#594AE2" BackgroundColor="Transparent">
+    <!--<RefreshView x:Name="refreshView" Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing, Mode=TwoWay}" RefreshColor="#594AE2" BackgroundColor="Transparent">-->
         <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" BackgroundColor="Transparent">
             <BlazorWebView.RootComponents>
                 <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
             </BlazorWebView.RootComponents>
         </BlazorWebView>
-    </RefreshView>
+    <!--</RefreshView>-->
 
 </ContentPage>

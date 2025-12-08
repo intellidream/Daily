@@ -32,6 +32,7 @@ namespace Daily.Services
         (double TempC, double VoltageV, int ProcessCount, TimeSpan? DailyUsage, bool IsUsagePermissionGranted) GetSystemHealth();
         (string Model, string Manufacturer, string Name, string Version, string Platform, string Idiom, string DeviceType) GetSystemDetails();
         void OpenUsageSettings();
+        Task ForceRefreshAsync();
     }
 
     public class SystemMonitorService : ISystemMonitorService
@@ -138,6 +139,22 @@ namespace Daily.Services
             {
                 Console.WriteLine($"Error calculating stats: {ex.Message}");
             }
+        }
+
+        public Task ForceRefreshAsync()
+        {
+            return Task.Run(() =>
+            {
+                lock (_lock)
+                {
+                    if (_isMonitoring && _timer != null)
+                    {
+                        // Reset timer to fire again in 5 seconds from now
+                        _timer.Change(5000, 5000);
+                    }
+                    RefreshAllStats();
+                }
+            });
         }
 
         // --- Getters return cached values ---
