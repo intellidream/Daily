@@ -169,14 +169,14 @@
     private string _accessType;
     private (string Model, string Manufacturer, string Name, string Version, string Platform, string Idiom, string DeviceType) _sysDetails;
     private string _gridClass = "pa-4";
-    private int _gridSpacing = 3;
+    private int _gridSpacing = 6;
 
     protected override async Task OnInitializedAsync()
     {
         if (DeviceInfo.Idiom == DeviceIdiom.Phone)
         {
-            _gridClass = "pa-1";
-            _gridSpacing = 1; 
+            _gridClass = "pa-2";
+            _gridSpacing = 3; 
         }
 
         _sysDetails = SystemMonitor.GetSystemDetails();

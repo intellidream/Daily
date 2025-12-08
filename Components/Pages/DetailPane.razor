@@ -20,7 +20,7 @@
     </MudAppBar>
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="@ContainerClass">
-             <MudPaper Class="pa-8 glass-panel" Elevation="0" Style="min-height: 80vh;">
+             <MudPaper Class="pa-2 glass-panel" Elevation="0" Style="min-height: 80vh;">
                 @if (NavService.CurrentView == "SystemInfo")
                 {
                     <SystemInfoDetail />
@@ -74,13 +74,13 @@
         {
             // Mobile Layout
             AppBarClass = "pt-20 pb-2";
-            ContainerClass = "mt-20 pt-8 px-0";
+            ContainerClass = "mt-20 py-6 px-4";
         }
         else
         {
             // Desktop Layout (Windows/Mac)
             AppBarClass = "pt-20 pb-2";
-            ContainerClass = "mt-20 pt-6 px-6";
+            ContainerClass = "mt-20 py-8 px-6";
         }
     }
 
