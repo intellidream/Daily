@@ -14,24 +14,24 @@
 <MudLayout Style="background-color: transparent;">
     <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
         <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Inherit" OnClick="@(async () => await RefreshService.TriggerDetailRefreshAsync())" Class="mr-2" />
-        <MudText Typo="Typo.h6"><b>Daily - Detail View</b></MudText>
+        <MudText Typo="Typo.h6"><b>@NavService.CurrentTitle</b></MudText>
         <MudSpacer />
         <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" />
     </MudAppBar>
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="@ContainerClass">
-             <MudPaper Class="pa-2 glass-panel" Elevation="0" Style="min-height: 80vh;">
-                @if (NavService.CurrentView == "SystemInfo")
-                {
-                    <SystemInfoDetail />
-                }
-                else
-                {
+            @if (NavService.CurrentView == "SystemInfo")
+            {
+                <SystemInfoDetail />
+            }
+            else
+            {
+                <MudPaper Class="pa-8 glass-panel" Elevation="0" Style="min-height: 80vh;">
                     <MudText Typo="Typo.h4" GutterBottom="true">Reading Pane</MudText>
                     <MudText Typo="Typo.body1">This is the dedicated large format view for reading articles and watching content.</MudText>
                     <MudAlert Severity="Severity.Info" Class="mt-4">Select content from the main window to view it here.</MudAlert>
-                }
-             </MudPaper>
+                </MudPaper>
+            }
         </MudContainer>
     </MudMainContent>
 </MudLayout>

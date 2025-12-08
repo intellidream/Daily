@@ -71,11 +71,12 @@
     {
         if (widget.ComponentType == "SystemInfoWidget")
         {
-            WindowManager.OpenDetail("SystemInfo");
+            WindowManager.OpenDetail("SystemInfo", widget.Title);
         }
         else
         {
-            WindowManager.OpenDetailWindow();
+            // Fallback or specific logic for other widgets
+             WindowManager.OpenDetailWindow();
         }
     }
 }
