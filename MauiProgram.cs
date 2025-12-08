@@ -66,6 +66,7 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.IWindowManagerService, Daily.Services.WindowManagerService>();
             builder.Services.AddSingleton<Daily.Services.IDetailNavigationService, Daily.Services.DetailNavigationService>();
             builder.Services.AddSingleton<Daily.Services.IBackButtonService, Daily.Services.BackButtonService>();
+            builder.Services.AddSingleton<Daily.Services.IRssFeedService, Daily.Services.RssFeedService>();
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
 
 #if DEBUG

@@ -14,7 +14,7 @@ namespace Daily.Services
     public interface IWindowManagerService
     {
         void OpenDetailWindow();
-        void OpenDetail(string view, string title = "Detail View");
+        void OpenDetail(string view, string title = "Detail View", object? data = null);
         void CloseDetailWindow();
     }
 
@@ -39,9 +39,9 @@ namespace Daily.Services
             }
         }
 
-        public void OpenDetail(string view, string title = "Detail View")
+        public void OpenDetail(string view, string title = "Detail View", object? data = null)
         {
-            _detailNavigationService.NavigateTo(view, title);
+            _detailNavigationService.NavigateTo(view, title, data);
             OpenDetailWindow();
         }
 

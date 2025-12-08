@@ -73,6 +73,10 @@
         {
             WindowManager.OpenDetail("SystemInfo", widget.Title);
         }
+        else if (widget.ComponentType == "RssFeedWidget")
+        {
+            WindowManager.OpenDetail("RssFeed", widget.Title);
+        }
         else
         {
             // Ensure we reset the view to default/reading pane so we don't show stale SystemInfo

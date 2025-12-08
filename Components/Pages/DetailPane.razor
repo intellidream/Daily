@@ -24,6 +24,10 @@
             {
                 <SystemInfoDetail />
             }
+            else if (NavService.CurrentView == "RssFeed")
+            {
+                <RssFeedDetail />
+            }
             else
             {
                 <MudPaper Class="pa-8 glass-panel" Elevation="0" Style="min-height: 80vh;">

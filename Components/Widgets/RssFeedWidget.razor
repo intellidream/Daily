@@ -1,35 +1,31 @@
 @using MudBlazor
-@using System.Xml.Linq
-@using System.Text.Json.Nodes
+@using Daily.Models
 @using Daily.Services
+@inject IRssFeedService RssService
 @inject IRefreshService RefreshService
+@inject IWindowManagerService WindowManager
 @implements IDisposable
 
 <div class="d-flex align-start">
     <div class="d-flex flex-grow-1 overflow-x-auto px-0 py-2 gap-1" style="white-space: nowrap; min-width: 0;">
-        @foreach (var feed in _feeds)
+        @foreach (var feed in RssService.Feeds)
         {
-            <MudChip T="FeedSource" Size="Size.Large"
-                     OnClick="@(() => OnFeedChipClicked(feed))"
-                     Variant="@(_currentFeed == feed ? Variant.Filled : Variant.Outlined)"
-                     Color="@(_currentFeed == feed ? Color.Primary : Color.Primary)"
-                     OnClose="@(() => ForceRefreshFeed(feed))"
-                     CloseIcon="@Icons.Material.Filled.Refresh"
-                     Class="flex-shrink-0">
-                <AvatarContent>
-                    <MudAvatar Size="Size.Large">
-                        @if (!string.IsNullOrEmpty(feed.IconUrl))
-                        {
-                            <MudImage Src="@feed.IconUrl" Alt="@feed.Name" />
-                        }
-                        else
-                        {
-                            @feed.Name.Substring(0, 1)
-                        }
-                    </MudAvatar>
-                </AvatarContent>
-                <ChildContent>@feed.Name</ChildContent>
-            </MudChip>
+            <div class="@GetChipClass(feed)" @onclick="@(() => OnFeedChipClicked(feed))">
+                <MudAvatar Size="Size.Medium" Class="mr-2">
+                    @if (!string.IsNullOrEmpty(feed.IconUrl))
+                    {
+                        <MudImage Src="@feed.IconUrl" Alt="@feed.Name" />
+                    }
+                    else
+                    {
+                        @feed.Name.Substring(0, 1)
+                    }
+                </MudAvatar>
+                <MudText Typo="Typo.body2" Class="mr-2">@feed.Name</MudText>
+                <div @onclick="@(async () => await ForceRefreshFeed(feed))" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1">
+                    <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Title="Refresh" />
+                </div>
+            </div>
         }
     </div>
     @if (HeaderAction != null)
@@ -39,35 +35,33 @@
 </div>
 
 <div style="height: 460px; overflow: hidden; display: flex; flex-direction: column;">
-    @if (_items == null)
+    @if (RssService.IsLoading && (RssService.Items == null || !RssService.Items.Any()))
     {
-        @if (_isLoading)
-        {
-            <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
-                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
-                <MudText Class="ml-2">Loading news...</MudText>
-            </div>
-        }
-        else if (_error != null)
-        {
-            <MudAlert Severity="Severity.Error" Class="ma-2">@_error</MudAlert>
-        }
+        <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+            <MudText Class="ml-2">Loading news...</MudText>
+        </div>
     }
-    else
+    else if (RssService.Error != null)
+    {
+        <MudAlert Severity="Severity.Error" Class="ma-2">@RssService.Error</MudAlert>
+    }
+    else if (RssService.Items != null && RssService.Items.Any())
     {
         <MudList T="RssItem" Clickable="true" Dense="true" DisablePadding="true" Style="flex-grow: 1; overflow-y: auto;">
-            @foreach (var item in _items.Skip((_currentPage - 1) * _pageSize).Take(_pageSize))
+            @foreach (var item in RssService.Items.Skip((_currentPage - 1) * _pageSize).Take(_pageSize))
             {
-                <MudListItem OnClick="@(() => OpenUrl(item.Link))" Style="height: 80px; overflow: hidden;" Class="px-0 py-2">
+               // ... (existing list item) ...
+               <MudListItem OnClick="@(() => OpenItem(item))" Style="height: 80px; overflow: hidden;" Class="px-0 py-2">
                      <div class="d-flex align-center gap-4" style="height: 100%; width: 100%;">
                         @if (!string.IsNullOrEmpty(item.ImageUrl))
                         {
                             <MudImage Src="@item.ImageUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded flex-shrink-0" />
                         }
-                        else if (!string.IsNullOrEmpty(_currentFeed?.IconUrl))
+                        else if (!string.IsNullOrEmpty(RssService.CurrentFeed?.IconUrl))
                         {
                              <div class="rounded flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 60px; background-color: var(--mud-palette-action-disabled-background);">
-                                <MudImage Src="@_currentFeed.IconUrl" Width="40" Height="40" ObjectFit="ObjectFit.Contain" />
+                                <MudImage Src="@RssService.CurrentFeed.IconUrl" Width="40" Height="40" ObjectFit="ObjectFit.Contain" />
                              </div>
                         }
                         else
@@ -87,7 +81,7 @@
             }
         </MudList>
 
-        @if (_items.Count > _pageSize)
+        @if (RssService.Items.Count > _pageSize)
         {
             <div class="d-flex justify-center mt-2 flex-shrink-0">
                  <MudPagination BoundaryCount="1" MiddleCount="1" Count="@_pageCount" SelectedChanged="OnPageChanged" Selected="@_currentPage" 
@@ -95,62 +89,46 @@
             </div>
         }
     }
+    else
+    {
+         <div class="d-flex justify-center align-center" style="height: 100%;">
+             <MudText Color="Color.Secondary">No news items found.</MudText>
+         </div>
+    }
 </div>
 
 @code {
     [Parameter] public RenderFragment? HeaderAction { get; set; }
 
-    private List<RssItem> _items;
     private int _currentPage = 1;
     private const int _pageSize = 5;
-    private bool _isLoading = true;
-    private string? _error;
 
-    public enum FeedType
-    {
-        Rss,
-        WpJson
-    }
-
-    public class FeedSource
-    {
-        public string Name { get; set; }
-        public string Url { get; set; }
-        public string IconUrl { get; set; }
-        public FeedType Type { get; set; }
-
-        public override bool Equals(object o)
-        {
-            var other = o as FeedSource;
-            return other?.Name == Name;
-        }
-
-        public override int GetHashCode() => Name?.GetHashCode() ?? 0;
-        public override string ToString() => Name;
-    }
-
-    private List<FeedSource> _feeds = new()
-    {
-        new FeedSource { Name = "BBC News", Url = "https://feeds.bbci.co.uk/news/rss.xml", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=bbc.com&sz=64" },
-        new FeedSource { Name = "Zona IT", Url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", Type = FeedType.WpJson, IconUrl = "https://www.google.com/s2/favicons?domain=zonait.ro&sz=64" },
-        new FeedSource { Name = "Google News", Url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=news.google.com&sz=64" },
-        new FeedSource { Name = "Windows Central", Url = "https://www.windowscentral.com/feeds.xml", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=windowscentral.com&sz=64" }
-    };
-
-    private FeedSource _currentFeed;
-
-    private int _pageCount => _items != null ? (int)Math.Ceiling((double)_items.Count / _pageSize) : 0;
+    private int _pageCount => RssService.Items != null ? (int)Math.Ceiling((double)RssService.Items.Count / _pageSize) : 0;
 
     protected override async Task OnInitializedAsync()
     {
-        _currentFeed = _feeds.First();
-        RefreshService.RefreshRequested += LoadFeedAsync;
-        await LoadFeedAsync();
+        RssService.OnItemsUpdated += async () => await InvokeAsync(StateHasChanged);
+        RssService.OnFeedChanged += OnFeedChanged;
+        RefreshService.RefreshRequested += OnRefreshRequested;
+
+        // If service is empty (first load), trigger load
+        if (RssService.Items.Count == 0 && RssService.CurrentFeed != null)
+        {
+             await RssService.ReloadCurrentFeedAsync();
+        }
     }
 
     public void Dispose()
     {
-        RefreshService.RefreshRequested -= LoadFeedAsync;
+        RssService.OnItemsUpdated -= StateHasChanged;
+        RssService.OnFeedChanged -= OnFeedChanged;
+        RefreshService.RefreshRequested -= OnRefreshRequested;
+    }
+
+    private async void OnFeedChanged()
+    {
+        _currentPage = 1;
+        await InvokeAsync(StateHasChanged);
     }
 
     private void OnPageChanged(int page)
@@ -159,207 +137,37 @@
         StateHasChanged();
     }
 
-    private async Task OnFeedChipClicked(FeedSource feed)
+    private void OnFeedChipClicked(FeedSource feed)
     {
-        if (_currentFeed != feed)
-        {
-            _currentFeed = feed;
-            _currentPage = 1;
-            await LoadFeedAsync();
-        }
+        RssService.SelectFeed(feed);
     }
 
     private async Task ForceRefreshFeed(FeedSource feed)
     {
-        _currentFeed = feed;
-        _currentPage = 1; 
-        await LoadFeedAsync();
+        RssService.SelectFeed(feed);
+        await RssService.LoadFeedAsync(feed, true);
     }
 
-    private async Task LoadFeedAsync()
+    private async Task OnRefreshRequested()
     {
-        if (_currentFeed == null) return;
+        await RssService.ReloadCurrentFeedAsync();
+    }
 
-        _items = null;
-        _isLoading = true;
-        _error = null;
-        StateHasChanged();
-
-        try
+    private string GetChipClass(FeedSource feed)
+    {
+        var baseClass = "d-flex align-center px-2 py-1 rounded-pill cursor-pointer flex-shrink-0 border-solid border-1";
+        if (RssService.CurrentFeed == feed)
         {
-            if (_currentFeed.Type == FeedType.Rss)
-            {
-                await LoadRssFeedAsync();
-            }
-            else if (_currentFeed.Type == FeedType.WpJson)
-            {
-                await LoadWpJsonFeedAsync();
-            }
+            return $"{baseClass} mud-theme-primary";
         }
-        catch (Exception ex)
+        else
         {
-            Console.WriteLine($"Error loading feed: {ex.Message}");
-            _error = $"Error loading feed: {ex.Message}";
-            _items = new List<RssItem>();
-        }
-        finally
-        {
-            _isLoading = false;
-            StateHasChanged();
+             return $"{baseClass} mud-border-primary"; // Use helper class or style
         }
     }
 
-@using System.Text.RegularExpressions
-
-    private async Task LoadRssFeedAsync()
+    private void OpenItem(RssItem item)
     {
-        try 
-        {
-            using var handler = new HttpClientHandler
-            {
-                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
-            };
-            
-            using var client = new HttpClient(handler);
-            client.Timeout = TimeSpan.FromSeconds(10);
-            
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            client.DefaultRequestHeaders.Add("Accept", "application/rss+xml, application/xml, text/xml, */*");
-
-            var xml = await client.GetStringAsync(_currentFeed.Url);
-            var doc = XDocument.Parse(xml);
-            XNamespace media = "http://search.yahoo.com/mrss/";
-
-            var channelImage = doc.Descendants("channel").Elements().FirstOrDefault(e => e.Name.LocalName == "image")?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value;
-
-            _items = doc.Descendants("item").Select(item =>
-            {
-                var title = item.Element("title")?.Value ?? "No Title";
-                var link = item.Element("link")?.Value;
-                var description = item.Element("description")?.Value;
-                var pubDateStr = item.Element("pubDate")?.Value;
-
-                string? imageUrl = null;
-
-                var mediaContent = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "content" && e.Name.Namespace == media);
-                if (mediaContent != null)
-                {
-                    imageUrl = mediaContent.Attribute("url")?.Value;
-                }
-
-                if (string.IsNullOrEmpty(imageUrl))
-                {
-                    var mediaThumbnail = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "thumbnail");
-                    imageUrl = mediaThumbnail?.Attribute("url")?.Value;
-                }
-
-                if (string.IsNullOrEmpty(imageUrl))
-                {
-                    var enclosure = item.Element("enclosure");
-                    if (enclosure != null && enclosure.Attribute("type")?.Value?.StartsWith("image/") == true)
-                    {
-                        imageUrl = enclosure.Attribute("url")?.Value;
-                    }
-                }
-
-                if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(description))
-                {
-                    var match = Regex.Match(description, @"<img.+?src=[""']([^""']+)[""']");
-                    if (match.Success)
-                    {
-                        imageUrl = match.Groups[1].Value;
-                    }
-                }
-                
-                if (string.IsNullOrEmpty(imageUrl))
-                {
-                    var contentEncoded = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "encoded")?.Value;
-                    if (!string.IsNullOrEmpty(contentEncoded))
-                    {
-                         var match = Regex.Match(contentEncoded, @"<img.+?src=[""']([^""']+)[""']");
-                         if (match.Success)
-                         {
-                             imageUrl = match.Groups[1].Value;
-                         }
-                    }
-                }
-
-                return new RssItem
-                {
-                    Title = title,
-                    Link = link,
-                    PublishDate = DateTime.TryParse(pubDateStr, out var date) ? date : DateTime.Now,
-                    ImageUrl = imageUrl ?? channelImage
-                };
-            }).ToList();
-        }
-        catch (Exception ex)
-        {
-             throw; // Let proper error handling catch it
-        }
-    }
-
-    private async Task LoadWpJsonFeedAsync()
-    {
-        using var client = new HttpClient();
-        client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-        
-        var json = await client.GetStringAsync(_currentFeed.Url);
-        var node = JsonNode.Parse(json);
-        var posts = node.AsArray();
-
-        _items = new List<RssItem>();
-
-        foreach (var post in posts)
-        {
-            var title = post["title"]?["rendered"]?.ToString();
-            if (!string.IsNullOrEmpty(title))
-            {
-                title = System.Net.WebUtility.HtmlDecode(title);
-            }
-            
-            var link = post["link"]?.ToString();
-            var dateStr = post["date"]?.ToString();
-            var date = DateTime.TryParse(dateStr, out var d) ? d : DateTime.Now;
-
-            string imageUrl = null;
-            var embedded = post["_embedded"];
-            if (embedded != null)
-            {
-                var media = embedded["wp:featuredmedia"]?.AsArray()?.FirstOrDefault();
-                if (media != null)
-                {
-                    imageUrl = media["source_url"]?.ToString();
-                     if (media["media_details"]?["sizes"]?["medium"]?["source_url"] != null)
-                    {
-                        imageUrl = media["media_details"]["sizes"]["medium"]["source_url"].ToString();
-                    }
-                }
-            }
-            
-            _items.Add(new RssItem
-            {
-                 Title = title,
-                 Link = link,
-                 PublishDate = date,
-                 ImageUrl = imageUrl
-            });
-        }
-    }
-
-    private async Task OpenUrl(string url)
-    {
-        if (!string.IsNullOrEmpty(url))
-        {
-            await Browser.OpenAsync(url, BrowserLaunchMode.SystemPreferred);
-        }
-    }
-
-    public class RssItem
-    {
-        public string Title { get; set; }
-        public string Link { get; set; }
-        public DateTime PublishDate { get; set; }
-        public string ImageUrl { get; set; }
+        WindowManager.OpenDetail("RssFeed", item.Title, item);
     }
 }
