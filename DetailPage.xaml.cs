@@ -15,9 +15,29 @@ public partial class DetailPage : ContentPage
     public DetailPage(IRefreshService refreshService)
     {
         InitializeComponent();
+        
+#if ANDROID || IOS
+        // Set initial color based on current theme
+        UpdateMobileBackgroundColor();
+        // Subscribe to changes
+        if (Application.Current != null)
+        {
+            Application.Current.RequestedThemeChanged += (s, e) => UpdateMobileBackgroundColor();
+        }
+#else
+        BackgroundColor = Colors.Transparent;
+#endif
+
         _refreshService = refreshService;
         BindingContext = this;
         RefreshCommand = new Command(async () => await ExecuteRefreshCommand());
+    }
+
+    private void UpdateMobileBackgroundColor()
+    {
+        if (Application.Current == null) return;
+        var theme = Application.Current.RequestedTheme;
+        BackgroundColor = theme == AppTheme.Dark ? Color.FromArgb("#121212") : Colors.White;
     }
 
     public ICommand RefreshCommand { get; }

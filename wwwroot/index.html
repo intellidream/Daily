@@ -50,6 +50,12 @@
                 height: 48px;
                 fill: currentColor;
                 animation: spin 1.5s linear infinite;
+                margin-bottom: 16px;
+            }
+
+            .loading-text {
+                font-size: 1.5rem;
+                font-weight: 500;
             }
 
             @keyframes spin {
@@ -63,91 +69,27 @@
                 <path
                     d="M14 19v2H6v-2h8zm-2-4v2H6v-2h6zm4-8V9H6V7h10zM18 3v2H6V3h12zm-4 12v2h-2v-2h2zm-4-4V9H6V7h4v4z" />
             </svg>
+            <div class="loading-text">Loading Daily...</div>
         </div>
     </div>
 
     <div id="blazor-error-ui" data-nosnippet>
-        <!DOCTYPE html>
-        <html lang="en">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
 
-        <head>
-            <meta charset="utf-8" />
-            <meta name="viewport"
-                content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-            <title>Daily</title>
-            <base href="/" />
-            <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
-            <link rel="stylesheet" href="app.css" />
-            <link rel="stylesheet" href="Daily.styles.css" />
-            <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
-            <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
-            <link rel="icon" href="data:,">
-        </head>
+    <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script>
+        window.addEventListener('mouseup', function (event) {
+            // Button 3 is the "Back" button on many mice
+            if (event.button === 3) {
+                event.preventDefault();
+                DotNet.invokeMethodAsync('Daily', 'HandleNativeBack');
+            }
+        });
+    </script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+</body>
 
-        <body>
-
-            <div class="status-bar-safe-area"></div>
-
-            <div id="app">
-                <style>
-                    .loading-container {
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        align-items: center;
-                        height: 100vh;
-                        width: 100vw;
-                        font-family: 'Roboto', sans-serif;
-                        color: #594AE2;
-                        background-color: transparent;
-                    }
-
-                    .loading-icon {
-                        width: 64px;
-                        height: 64px;
-                        fill: currentColor;
-                        animation: spin 2s linear infinite;
-                        margin-bottom: 16px;
-                    }
-
-                    .loading-text {
-                        font-size: 1.5rem;
-                        font-weight: 500;
-                    }
-
-                    @keyframes spin {
-                        100% {
-                            transform: rotate(360deg);
-                        }
-                    }
-                </style>
-                <div class="loading-container">
-                    <svg class="loading-icon" viewBox="0 0 24 24">
-                        <path
-                            d="M14 19v2H6v-2h8zm-2-4v2H6v-2h6zm4-8V9H6V7h10zM18 3v2H6V3h12zm-4 12v2h-2v-2h2zm-4-4V9H6V7h4v4z" />
-                    </svg>
-                    <div class="loading-text">Loading Daily...</div>
-                </div>
-            </div>
-
-            <div id="blazor-error-ui" data-nosnippet>
-                An unhandled error has occurred.
-                <a href="." class="reload">Reload</a>
-                <span class="dismiss">🗙</span>
-            </div>
-
-            <script src="_framework/blazor.webview.js" autostart="false"></script>
-            <script>
-                window.addEventListener('mouseup', function (event) {
-                    // Button 3 is the "Back" button on many mice
-                    if (event.button === 3) {
-                        event.preventDefault();
-                        DotNet.invokeMethodAsync('Daily', 'HandleNativeBack');
-                    }
-                });
-            </script>
-            <script src="_content/MudBlazor/MudBlazor.min.js"></script>
-
-        </body>
-
-        </html>
+</html>
