@@ -7,11 +7,35 @@
              BackgroundColor="Transparent">
 
     <!--<RefreshView x:Name="refreshView" Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing, Mode=TwoWay}" RefreshColor="#594AE2" BackgroundColor="Transparent">-->
+    <Grid>
         <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" BackgroundColor="Transparent">
             <BlazorWebView.RootComponents>
                 <RootComponent Selector="#app" ComponentType="{x:Type local:Components.Pages.DetailPane}" />
             </BlazorWebView.RootComponents>
         </BlazorWebView>
+
+        <Grid x:Name="BrowserContainer" IsVisible="False" BackgroundColor="{AppThemeBinding Light=White, Dark=Black}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Browser Header -->
+            <Grid Grid.Row="0" HeightRequest="48" BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#1E1E1E}" Padding="10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <Label x:Name="BrowserTitle" Text="Browser" VerticalOptions="Center" LineBreakMode="TailTruncation" FontAttributes="Bold" TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
+                
+                <Button Grid.Column="1" Text="✕" Clicked="OnBrowserCloseClicked" WidthRequest="40" HeightRequest="40" 
+                        BackgroundColor="Transparent" TextColor="{AppThemeBinding Light=Black, Dark=White}" FontSize="20"/>
+            </Grid>
+
+            <WebView x:Name="InternalBrowser" Grid.Row="1" />
+        </Grid>
+    </Grid>
     <!--</RefreshView>-->
 
 </ContentPage>

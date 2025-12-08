@@ -59,7 +59,7 @@ namespace Daily.Services
         {
             if (_detailWindow != null || _detailModal != null) return;
 
-            var detailPage = new DetailPage(_refreshService)
+            var detailPage = new DetailPage(_refreshService, _detailNavigationService)
             {
 #if ANDROID || IOS
                 Opacity = 1 // Start visible immediately on Mobile
