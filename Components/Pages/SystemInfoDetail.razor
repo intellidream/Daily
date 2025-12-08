@@ -3,10 +3,124 @@
 @inject IRefreshService RefreshService
 @implements IDisposable
 
-<MudGrid Class="@_gridClass" Spacing="@_gridSpacing">
-    <!-- Hardware Info -->
-    <MudItem xs="12">
-        <MudCard Elevation="3" Class="rounded-lg glass-card">
+<div class="d-flex flex-column h-100">
+    <!-- Top Section: Metrics Grid -->
+    <MudGrid Class="@_gridClass" Spacing="@_gridSpacing">
+        <!-- CPU & RAM -->
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="3" Class="rounded-lg h-100 detail-tile">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Processor</MudText>
+                    </CardHeaderContent>
+                     <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.Memory" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                     <MudText Typo="Typo.h3" Color="Color.Primary">@Math.Round(_cpuUsage)%</MudText>
+                     <MudProgressLinear Color="Color.Primary" Value="@_cpuUsage" Class="my-4" Size="Size.Large" Striped="true" />
+                     <MudText Typo="Typo.body2">Total Processor Utilization</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="3" Class="rounded-lg h-100 detail-tile">
+                <MudCardHeader>
+                     <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Memory</MudText>
+                    </CardHeaderContent>
+                     <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.Storage" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                     <MudText Typo="Typo.h3" Color="Color.Secondary">@Math.Round(_memUsage)%</MudText>
+                     <MudProgressLinear Color="Color.Secondary" Value="@_memUsage" Class="my-4" Size="Size.Large" Striped="true" />
+                     <MudText Typo="Typo.body2">Committed Bytes In Use</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+       <!-- Disk & Network -->
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="3" Class="rounded-lg h-100 detail-tile">
+                <MudCardHeader>
+                     <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Storage (System)</MudText>
+                    </CardHeaderContent>
+                     <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.DiscFull" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                     <MudText Typo="Typo.h4">@Math.Round(_diskFree) GB <span style="font-size: 0.5em; opacity: 0.7;">FREE</span></MudText>
+                     <MudProgressLinear Color="@(_diskFree < _diskTotal * 0.1 ? Color.Error : Color.Success)" Value="@(_diskTotal > 0 ? ((_diskTotal - _diskFree) / _diskTotal) * 100 : 0)" Class="my-4" Size="Size.Large" />
+                     <MudText Typo="Typo.caption">Total Capacity: @Math.Round(_diskTotal) GB</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+         <MudItem xs="12" md="6">
+            <MudCard Elevation="3" Class="rounded-lg h-100 detail-tile">
+                <MudCardHeader>
+                     <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Network</MudText>
+                    </CardHeaderContent>
+                     <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.Wifi" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                        <div>
+                             <MudText Typo="Typo.h5">Download</MudText>
+                             <MudText Typo="Typo.h4" Color="Color.Info">@FormatSpeed(_rxRate)</MudText>
+                        </div>
+                        <div>
+                             <MudText Typo="Typo.h5" Align="Align.End">Upload</MudText>
+                             <MudText Typo="Typo.h4" Color="Color.Warning" Align="Align.End">@FormatSpeed(_txRate)</MudText>
+                        </div>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <!-- Health & Uptime -->
+        <MudItem xs="12">
+            <MudCard Elevation="3" Class="rounded-lg detail-tile">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">System Health</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid>
+                         <MudItem xs="6" sm="3">
+                            <MudText Typo="Typo.subtitle2">Uptime</MudText>
+                            <MudText Typo="Typo.h6">@_uptime.ToString(@"dd\.hh\:mm")</MudText>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudText Typo="Typo.subtitle2">Battery</MudText>
+                            <MudText Typo="Typo.h6">@Math.Round(_batteryLevel * 100)% @(_isCharging ? "⚡" : "")</MudText>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                             <MudText Typo="Typo.subtitle2">Processes</MudText>
+                             <MudText Typo="Typo.h6">@_processCount</MudText>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                             <MudText Typo="Typo.subtitle2">Connection</MudText>
+                             <MudText Typo="Typo.h6">@_accessType</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Bottom Section: Device Info (Fills Remaining) -->
+    <div class="@_bottomWrapperClass">
+        <MudCard Elevation="3" Class="rounded-lg flex-grow-1 detail-tile">
             <MudCardHeader>
                 <CardHeaderContent>
                     <MudText Typo="Typo.h6">Device Information</MudText>
@@ -40,120 +154,24 @@
                 </MudGrid>
             </MudCardContent>
         </MudCard>
-    </MudItem>
+    </div>
+</div>
 
-    <!-- CPU & RAM -->
-    <MudItem xs="12" md="6">
-        <MudCard Elevation="3" Class="rounded-lg h-100 glass-card">
-            <MudCardHeader>
-                <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Processor</MudText>
-                </CardHeaderContent>
-                 <CardHeaderActions>
-                    <MudIcon Icon="@Icons.Material.Filled.Memory" />
-                </CardHeaderActions>
-            </MudCardHeader>
-            <MudCardContent>
-                 <MudText Typo="Typo.h3" Color="Color.Primary">@Math.Round(_cpuUsage)%</MudText>
-                 <MudProgressLinear Color="Color.Primary" Value="@_cpuUsage" Class="my-4" Size="Size.Large" Striped="true" />
-                 <MudText Typo="Typo.body2">Total Processor Utilization</MudText>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
+<style>
+    /* Tinted Tiles for Detail Pane */
+    .detail-tile {
+        transition: background-color 0.3s ease;
+        /* Light Mode Tint: White with slight opacity */
+        background-color: rgba(255, 255, 255, 0.2) !important;
+        backdrop-filter: blur(10px);
+    }
 
-    <MudItem xs="12" md="6">
-        <MudCard Elevation="3" Class="rounded-lg h-100 glass-card">
-            <MudCardHeader>
-                 <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Memory</MudText>
-                </CardHeaderContent>
-                 <CardHeaderActions>
-                    <MudIcon Icon="@Icons.Material.Filled.Storage" />
-                </CardHeaderActions>
-            </MudCardHeader>
-            <MudCardContent>
-                 <MudText Typo="Typo.h3" Color="Color.Secondary">@Math.Round(_memUsage)%</MudText>
-                 <MudProgressLinear Color="Color.Secondary" Value="@_memUsage" Class="my-4" Size="Size.Large" Striped="true" />
-                 <MudText Typo="Typo.body2">Committed Bytes In Use</MudText>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-
-   <!-- Disk & Network -->
-    <MudItem xs="12" md="6">
-        <MudCard Elevation="3" Class="rounded-lg h-100 glass-card">
-            <MudCardHeader>
-                 <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Storage (System)</MudText>
-                </CardHeaderContent>
-                 <CardHeaderActions>
-                    <MudIcon Icon="@Icons.Material.Filled.DiscFull" />
-                </CardHeaderActions>
-            </MudCardHeader>
-            <MudCardContent>
-                 <MudText Typo="Typo.h4">@Math.Round(_diskFree) GB <span style="font-size: 0.5em; opacity: 0.7;">FREE</span></MudText>
-                 <MudProgressLinear Color="@(_diskFree < _diskTotal * 0.1 ? Color.Error : Color.Success)" Value="@(_diskTotal > 0 ? ((_diskTotal - _diskFree) / _diskTotal) * 100 : 0)" Class="my-4" Size="Size.Large" />
-                 <MudText Typo="Typo.caption">Total Capacity: @Math.Round(_diskTotal) GB</MudText>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-     <MudItem xs="12" md="6">
-        <MudCard Elevation="3" Class="rounded-lg h-100 glass-card">
-            <MudCardHeader>
-                 <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Network</MudText>
-                </CardHeaderContent>
-                 <CardHeaderActions>
-                    <MudIcon Icon="@Icons.Material.Filled.Wifi" />
-                </CardHeaderActions>
-            </MudCardHeader>
-            <MudCardContent>
-                <MudStack Row="true" Justify="Justify.SpaceBetween">
-                    <div>
-                         <MudText Typo="Typo.h5">Download</MudText>
-                         <MudText Typo="Typo.h4" Color="Color.Info">@FormatSpeed(_rxRate)</MudText>
-                    </div>
-                    <div>
-                         <MudText Typo="Typo.h5" Align="Align.End">Upload</MudText>
-                         <MudText Typo="Typo.h4" Color="Color.Warning" Align="Align.End">@FormatSpeed(_txRate)</MudText>
-                    </div>
-                </MudStack>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-
-    <!-- Health & Uptime -->
-    <MudItem xs="12">
-        <MudCard Elevation="3" Class="rounded-lg glass-card">
-            <MudCardHeader>
-                <CardHeaderContent>
-                    <MudText Typo="Typo.h6">System Health</MudText>
-                </CardHeaderContent>
-            </MudCardHeader>
-            <MudCardContent>
-                <MudGrid>
-                     <MudItem xs="6" sm="3">
-                        <MudText Typo="Typo.subtitle2">Uptime</MudText>
-                        <MudText Typo="Typo.h6">@_uptime.ToString(@"dd\.hh\:mm")</MudText>
-                    </MudItem>
-                    <MudItem xs="6" sm="3">
-                        <MudText Typo="Typo.subtitle2">Battery</MudText>
-                        <MudText Typo="Typo.h6">@Math.Round(_batteryLevel * 100)% @(_isCharging ? "⚡" : "")</MudText>
-                    </MudItem>
-                    <MudItem xs="6" sm="3">
-                         <MudText Typo="Typo.subtitle2">Processes</MudText>
-                         <MudText Typo="Typo.h6">@_processCount</MudText>
-                    </MudItem>
-                    <MudItem xs="6" sm="3">
-                         <MudText Typo="Typo.subtitle2">Connection</MudText>
-                         <MudText Typo="Typo.h6">@_accessType</MudText>
-                    </MudItem>
-                </MudGrid>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-
-</MudGrid>
+    body[data-theme='dark'] .detail-tile {
+        /* Dark Mode Tint: Dark grey with opacity */
+        background-color: rgba(30, 30, 30, 0.6) !important;
+        border: 1px solid rgba(255,255,255,0.05);
+    }
+</style>
 
 @code {
     private double _cpuUsage;
@@ -169,6 +187,7 @@
     private string _accessType;
     private (string Model, string Manufacturer, string Name, string Version, string Platform, string Idiom, string DeviceType) _sysDetails;
     private string _gridClass = "pa-4";
+    private string _bottomWrapperClass = "flex-grow-1 d-flex flex-column px-4 pb-4 pt-2"; // Desktop Default
     private int _gridSpacing = 6;
 
     protected override async Task OnInitializedAsync()
@@ -177,6 +196,7 @@
         {
             _gridClass = "pa-2";
             _gridSpacing = 3; 
+            _bottomWrapperClass = "flex-grow-1 d-flex flex-column px-2 pb-2 pt-1"; // Mobile Compact
         }
 
         _sysDetails = SystemMonitor.GetSystemDetails();
