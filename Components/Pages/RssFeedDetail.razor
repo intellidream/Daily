@@ -62,6 +62,11 @@
             <MudPaper Class="pa-6 tile-glass" Style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
                 <MudText Typo="Typo.h4" GutterBottom="true" Style="font-weight: 800;">@_selectedItem.Title</MudText>
                 
+                @if (_isArticleLoading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+                }
+                
                 <div class="d-flex align-center mb-6 gap-2">
                      @if (!string.IsNullOrEmpty(RssService.CurrentFeed?.IconUrl))
                      {
@@ -113,6 +118,7 @@
 
 @code {
     private RssItem? _selectedItem = null;
+    private bool _isArticleLoading = false;
 
     protected override void OnInitialized()
     {
@@ -121,7 +127,7 @@
         // Check if we were navigated to with a specific item
         if (NavService.CurrentData is RssItem item)
         {
-            OpenItem(item);
+            _ = OpenItem(item);
         }
     }
 
@@ -131,16 +137,33 @@
         BackButtonService.Unregister(OnBackNative);
     }
 
-    private void OpenItem(RssItem item)
+    private async Task OpenItem(RssItem item)
     {
         _selectedItem = item;
+        _isArticleLoading = true;
         BackButtonService.Register(OnBackNative);
+        StateHasChanged();
+
+        // Fetch full content in background
+        var fullArticle = await RssService.FetchFullArticleAsync(item.Link);
+        if (fullArticle != null && !string.IsNullOrEmpty(fullArticle.Content))
+        {
+            // Update the selected item with full content
+            // We create a new object to avoid modifying the original list item incorrectly if needed,
+            // or we just update the local view state. 
+            // Since RssItem is a class, let's just update the properties we care about for display
+            // OR effectively switch to the fullArticle object for display.
+            _selectedItem = fullArticle;
+        }
+
+        _isArticleLoading = false;
         StateHasChanged();
     }
 
     private void CloseItem()
     {
         _selectedItem = null;
+        _isArticleLoading = false;
         BackButtonService.Unregister(OnBackNative);
         StateHasChanged();
     }

@@ -19,5 +19,6 @@ namespace Daily.Services
         Task LoadFeedAsync(FeedSource feed, bool forceRefresh = false);
         Task ReloadCurrentFeedAsync();
         void SelectFeed(FeedSource feed);
+        Task<RssItem> FetchFullArticleAsync(string url);
     }
 }

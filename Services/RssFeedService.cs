@@ -231,5 +231,35 @@ namespace Daily.Services
                 });
             }
         }
+        public async Task<RssItem> FetchFullArticleAsync(string url)
+        {
+            try
+            {
+                var reader = new SmartReader.Reader(url);
+                var article = await reader.GetArticleAsync();
+
+                if (article.IsReadable)
+                {
+                    return new RssItem
+                    {
+                        Title = article.Title,
+                        Link = url,
+                        Content = article.Content, // Full HTML
+                        Description = article.Excerpt,
+                        ImageUrl = article.FeaturedImage,
+                        PublishDate = article.PublicationDate ?? DateTime.Now
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error fetching article: {ex.Message}");
+            }
+
+            // Fallback: Return empty item or throw, but here we'll return null-like
+            // to indicate fetching failed, caller should handle it.
+            // Actually, let's return a basic item
+            return new RssItem { Link = url, Title = "Error fetching article" };
+        }
     }
 }
