@@ -27,10 +27,15 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
-                <Label x:Name="BrowserTitle" Text="Browser" VerticalOptions="Center" LineBreakMode="TailTruncation" FontAttributes="Bold" TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
+                <Label x:Name="BrowserTitle" Text="Browser" VerticalOptions="Center" LineBreakMode="TailTruncation" FontAttributes="Bold" TextColor="{AppThemeBinding Light=Black, Dark=White}" Grid.Column="0"/>
                 
-                <Button Grid.Column="1" Text="✕" Clicked="OnBrowserCloseClicked" WidthRequest="40" HeightRequest="40" 
-                        BackgroundColor="Transparent" TextColor="{AppThemeBinding Light=Black, Dark=White}" FontSize="20"/>
+                <StackLayout Orientation="Horizontal" Grid.Column="1" Spacing="0">
+                     <Button x:Name="ReaderButton" Text="📖" Clicked="OnReaderModeClicked" WidthRequest="40" HeightRequest="40" 
+                            BackgroundColor="Transparent" TextColor="{AppThemeBinding Light=Black, Dark=White}" FontSize="20" ToolTipProperties.Text="Toggle Reader View"/>
+
+                     <Button Text="✕" Clicked="OnBrowserCloseClicked" WidthRequest="40" HeightRequest="40" 
+                            BackgroundColor="Transparent" TextColor="{AppThemeBinding Light=Black, Dark=White}" FontSize="20"/>
+                </StackLayout>
             </Grid>
 
             <WebView x:Name="InternalBrowser" Grid.Row="1" />

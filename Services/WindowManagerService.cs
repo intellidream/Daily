@@ -22,6 +22,7 @@ namespace Daily.Services
     {
         private readonly IRefreshService _refreshService;
         private readonly IDetailNavigationService _detailNavigationService;
+        private readonly IRssFeedService _rssFeedService;
 
         // Desktop Window Reference
         private Window? _detailWindow;
@@ -29,10 +30,11 @@ namespace Daily.Services
         // Mobile Modal Reference
         private Page? _detailModal;
 
-        public WindowManagerService(IRefreshService refreshService, IDetailNavigationService detailNavigationService)
+        public WindowManagerService(IRefreshService refreshService, IDetailNavigationService detailNavigationService, IRssFeedService rssFeedService)
         {
             _refreshService = refreshService;
             _detailNavigationService = detailNavigationService;
+            _rssFeedService = rssFeedService;
             if (Application.Current != null)
             {
                 Application.Current.RequestedThemeChanged += OnThemeChanged;
@@ -59,7 +61,7 @@ namespace Daily.Services
         {
             if (_detailWindow != null || _detailModal != null) return;
 
-            var detailPage = new DetailPage(_refreshService, _detailNavigationService)
+            var detailPage = new DetailPage(_refreshService, _detailNavigationService, _rssFeedService)
             {
 #if ANDROID || IOS
                 Opacity = 1 // Start visible immediately on Mobile
