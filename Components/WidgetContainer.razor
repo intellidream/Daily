@@ -75,8 +75,8 @@
         }
         else
         {
-            // Fallback or specific logic for other widgets
-             WindowManager.OpenDetailWindow();
+            // Ensure we reset the view to default/reading pane so we don't show stale SystemInfo
+             WindowManager.OpenDetail("ReadingPane", "Reading Pane");
         }
     }
 }
