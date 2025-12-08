@@ -31,7 +31,7 @@
                           Height="100%" @onclick="@(() => SelectMetric("Battery"))">
                     <MudIcon Icon="@(_isCharging ? Icons.Material.Filled.BatteryChargingFull : Icons.Material.Filled.BatteryStd)" 
                              Color="@(_batteryLevel < 0.2 ? Color.Error : Color.Success)" Size="Size.Small" />
-                    <MudText Typo="Typo.caption" Class="mt-1">@(_batteryLevel * 100)%</MudText>
+                    <MudText Typo="Typo.caption" Class="mt-1">@((_batteryLevel * 100).ToString("F0"))%</MudText>
                 </MudPaper>
             </MudItem>
             <MudItem xs="4">
@@ -60,7 +60,7 @@
             <MudItem xs="4">
                  <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
                            Height="100%" @onclick="@(() => SelectMetric("Health"))">
-                    <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Color="Color.Error" Size="Size.Small" />
+                    <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Error" Size="Size.Small" />
                      @if (DeviceInfo.Platform == DevicePlatform.WinUI)
                      {
                         <MudText Typo="Typo.caption" Class="mt-1">@_processCount P</MudText>
@@ -338,7 +338,7 @@
                     _detailValue = $"{_tempC:F1}°C";
                     _detailDesc = $"Voltage: {_voltageV:F1}V";
                  }
-                 _detailVisual = @<MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Color="Color.Error" Style="font-size: 5rem;" />;
+                 _detailVisual = @<MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Error" Style="font-size: 5rem;" />;
                 break;
             case "Usage":
                  _detailTitle = DeviceInfo.Platform == DevicePlatform.WinUI ? "Session Time" : "Daily Usage";

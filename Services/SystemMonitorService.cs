@@ -262,7 +262,16 @@ namespace Daily.Services
             try
             {
                 var battery = Battery.Default;
-                return (battery.ChargeLevel, battery.State == BatteryState.Charging || battery.State == BatteryState.Full);
+                double level = battery.ChargeLevel;
+                
+                // Normalize: If > 1.0 (e.g. 100 max), treat as percentage
+                if (level > 1.0 && level <= 100.0) level /= 100.0;
+                
+                // Clamp: Strictly force 0.0 - 1.0 range to avoid "large number" bug
+                // This covers cases where raw capacity might be returned
+                level = Math.Min(1.0, Math.Max(0.0, level));
+                
+                return (level, battery.State == BatteryState.Charging || battery.State == BatteryState.Full);
             }
             catch { return (0, false); }
         }
