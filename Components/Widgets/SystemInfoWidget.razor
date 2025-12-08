@@ -192,40 +192,30 @@
             _cpuLabel = "App CPU";
         }
 
-        // Start the timer
-        _cts = new CancellationTokenSource();
-        _timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        SystemMonitor.SystemStatsUpdated += OnStatsUpdated;
+        SystemMonitor.StartMonitoring();
         
-        // Fire and forget the update loop
-        _ = UpdateStatsAsync();
+        // Initial Fetch
+        FetchStats();
     }
 
-    private async Task UpdateStatsAsync()
+    private void OnStatsUpdated()
     {
-        try
-        {
-            // Initial fetch
-            FetchStats();
-
-            while (await _timer!.WaitForNextTickAsync(_cts!.Token))
-            {
-                FetchStats();
-                // If in detail view, update the detail state
-                if (_selectedMetric != null)
-                {
-                    UpdateDetailState(_selectedMetric);
-                    await InvokeAsync(StateHasChanged);
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Timer cancelled
-        }
+         InvokeAsync(() =>
+         {
+             FetchStats();
+             // If in detail view, update the detail state
+             if (_selectedMetric != null)
+             {
+                 UpdateDetailState(_selectedMetric);
+             }
+             StateHasChanged();
+         });
     }
 
     private void FetchStats()
     {
+        // ... (Logic remains same, but calls now return cached values immediately)
         _cpuUsage = SystemMonitor.GetCpuUsage();
         _ramUsage = SystemMonitor.GetMemoryUsage();
         
@@ -245,7 +235,6 @@
         _rxRateFormatted = FormatSpeed(rates.RxRate);
         _txRateFormatted = FormatSpeed(rates.TxRate);
 
-        // Fetch Health & Usage
         var health = SystemMonitor.GetSystemHealth();
         _tempC = health.TempC;
         _voltageV = health.VoltageV;
@@ -254,8 +243,6 @@
         _usagePermissionGranted = health.IsUsagePermissionGranted;
 
         _uptime = SystemMonitor.GetUptime();
-
-        InvokeAsync(StateHasChanged);
     }
 
     private string FormatSpeed(double bytesPerSec)
@@ -360,9 +347,7 @@
 
     public void Dispose()
     {
+        SystemMonitor.SystemStatsUpdated -= OnStatsUpdated;
         BackButtonService.Unregister(OnBackNative);
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _timer?.Dispose();
     }
 }

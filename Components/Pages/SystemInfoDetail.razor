@@ -180,28 +180,53 @@
         }
 
         _sysDetails = SystemMonitor.GetSystemDetails();
-        RefreshService.DetailRefreshRequested += UpdateStats;
-        await UpdateStats();
+        
+        // Subscribe to Centralized Refresh (Action)
+        SystemMonitor.SystemStatsUpdated += OnStatsUpdated;
+        SystemMonitor.StartMonitoring();
+        
+        // Subscribe to Manual Pull-to-Refresh (Func<Task>)
+        RefreshService.DetailRefreshRequested += OnRefreshRequested;
+        
+        // Initial Fetch
+        UpdateStats();
     }
 
-    private async Task UpdateStats()
+    // Handler for SystemMonitor (Action)
+    private void OnStatsUpdated()
     {
-        await Task.Run(() =>
+        InvokeAsync(() =>
         {
-            _cpuUsage = SystemMonitor.GetCpuUsage();
-            _memUsage = SystemMonitor.GetMemoryUsage();
-            (_diskFree, _diskTotal) = SystemMonitor.GetMainDriveStorage();
-            (_rxRate, _txRate) = SystemMonitor.GetNetworkRates();
-            _uptime = SystemMonitor.GetUptime();
-            (_batteryLevel, _isCharging) = SystemMonitor.GetBatteryInfo();
-            
-            var health = SystemMonitor.GetSystemHealth();
-            _processCount = health.ProcessCount;
-            
-            var net = SystemMonitor.GetNetworkInfo();
-            _accessType = net.AccessType;
+            UpdateStats();
+            StateHasChanged();
         });
-        await InvokeAsync(StateHasChanged);
+    }
+
+    // Handler for RefreshService (Func<Task>)
+    private async Task OnRefreshRequested()
+    {
+        await InvokeAsync(() =>
+        {
+            UpdateStats();
+            StateHasChanged();
+        });
+    }
+
+    private void UpdateStats()
+    {
+        // Fetch cached values immediately
+        _cpuUsage = SystemMonitor.GetCpuUsage();
+        _memUsage = SystemMonitor.GetMemoryUsage();
+        (_diskFree, _diskTotal) = SystemMonitor.GetMainDriveStorage();
+        (_rxRate, _txRate) = SystemMonitor.GetNetworkRates();
+        _uptime = SystemMonitor.GetUptime();
+        (_batteryLevel, _isCharging) = SystemMonitor.GetBatteryInfo();
+        
+        var health = SystemMonitor.GetSystemHealth();
+        _processCount = health.ProcessCount;
+        
+        var net = SystemMonitor.GetNetworkInfo();
+        _accessType = net.AccessType;
     }
 
     private string FormatSpeed(double bytesPerSec)
@@ -213,6 +238,7 @@
 
     public void Dispose()
     {
-        RefreshService.DetailRefreshRequested -= UpdateStats;
+        SystemMonitor.SystemStatsUpdated -= OnStatsUpdated;
+        RefreshService.DetailRefreshRequested -= OnRefreshRequested;
     }
 }
