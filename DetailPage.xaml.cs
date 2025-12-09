@@ -90,23 +90,25 @@ public partial class DetailPage : ContentPage
 
                 if (article != null && !string.IsNullOrEmpty(article.Content))
                 {
-                    // Basic styling for reader view
+                    // Check if Desktop for styling
+                    bool isDesktop = DeviceInfo.Platform == DevicePlatform.WinUI || DeviceInfo.Platform == DevicePlatform.MacCatalyst;
+                    string css = Configuration.ReadabilitySettings.GetCss(isDesktop);
+                    
+                    // Fallback basic CSS if mobile (or just complementary)
+                    if (!isDesktop)
+                    {
+                         css += "body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; padding: 16px; color: #333; } img { max-width: 100%; height: auto; }";
+                    }
+
                     string html = $@"
                         <html>
                         <head>
                             <meta name='viewport' content='width=device-width, initial-scale=1.0'>
                             <style>
-                                body {{ font-family: 'Segoe UI', sans-serif; line-height: 1.6; padding: 20px; color: #333; }}
-                                img {{ max-width: 100%; height: auto; border-radius: 8px; }}
-                                h1 {{ font-size: 24px; }}
-                                p {{ font-size: 18px; }}
-                                @media (prefers-color-scheme: dark) {{
-                                    body {{ background-color: #1E1E1E; color: #EEE; }}
-                                    a {{ color: #4CC9F0; }}
-                                }}
+                                {css}
                             </style>
                         </head>
-                        <body>
+                        <body class='reader-content'>
                             <h1>{article.Title}</h1>
                             {article.Content}
                         </body>
