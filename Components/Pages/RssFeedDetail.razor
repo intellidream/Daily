@@ -11,14 +11,6 @@
     @if (_selectedItem == null)
     {
         <!-- List View -->
-        <div class="d-flex align-center mb-2 px-2">
-             <MudText Typo="Typo.h5"><b>@RssService.CurrentFeed?.Name</b></MudText>
-             <MudSpacer />
-             <MudPaper Class="d-flex align-center px-3 py-1 rounded-pill border-solid border-1 mud-border-primary" Elevation="0">
-                 <MudText Typo="Typo.caption" Color="Color.Primary">@RssService.Items.Count items</MudText>
-             </MudPaper>
-        </div>
-
         <div style="flex-grow: 1; overflow-y: auto;" class="px-2">
             <MudGrid Spacing="2">
                 @foreach (var item in RssService.Items)

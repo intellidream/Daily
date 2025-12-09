@@ -5,6 +5,7 @@
 @inject IRefreshService RefreshService
 @inject IDetailNavigationService NavService
 @inject ISnackbar Snackbar
+@inject IRssFeedService RssService
 @implements IDisposable
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
@@ -23,7 +24,20 @@
             <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Inherit" OnClick="@(async () => await RefreshService.TriggerDetailRefreshAsync())" Class="mr-2" />
         }
 
-        <MudText Typo="Typo.h6"><b>@NavService.CurrentTitle</b></MudText>
+        @if (NavService.CurrentView == "RssFeed" && RssService.CurrentFeed != null)
+        {
+             <div class="d-flex align-center">
+                 <MudText Typo="Typo.h6" Class="mr-3"><b>@RssService.CurrentFeed.Name</b></MudText>
+                 <MudPaper Class="d-flex align-center px-2 py-0 rounded-pill border-solid border-1 mud-border-primary" Elevation="0" Style="background-color: transparent;">
+                     <MudText Typo="Typo.caption" Color="Color.Primary">@RssService.Items.Count items</MudText>
+                 </MudPaper>
+             </div>
+        }
+        else
+        {
+            <MudText Typo="Typo.h6"><b>@NavService.CurrentTitle</b></MudText>
+        }
+
         <MudSpacer />
         
         @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
@@ -96,6 +110,7 @@
 
         NavService.OnViewChanged += StateHasChanged;
         NavService.OnArticleLinkChanged += OnArticleLinkChanged;
+        RssService.OnItemsUpdated += StateHasChanged; // Subscribe for item count updates
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
             Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
@@ -138,6 +153,7 @@
     {
         NavService.OnViewChanged -= StateHasChanged;
         NavService.OnArticleLinkChanged -= StateHasChanged;
+        RssService.OnItemsUpdated -= StateHasChanged;
         if (Application.Current != null)
         {
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
