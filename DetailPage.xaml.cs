@@ -61,6 +61,9 @@ public partial class DetailPage : ContentPage
             BrowserTitle.Text = url;
             InternalBrowser.Source = url;
             BrowserContainer.IsVisible = true;
+#if WINDOWS || MACCATALYST
+            this.Opacity = 1.0;
+#endif
         });
     }
 
@@ -140,6 +143,9 @@ public partial class DetailPage : ContentPage
     {
         BrowserContainer.IsVisible = false;
         InternalBrowser.Source = "about:blank"; // Reset
+#if WINDOWS || MACCATALYST
+        this.Opacity = 0.9;
+#endif
     }
 
     protected override void OnDisappearing()
