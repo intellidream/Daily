@@ -4,6 +4,7 @@
 @inject IJSRuntime JSRuntime
 @inject IRefreshService RefreshService
 @inject IDetailNavigationService NavService
+@inject ISnackbar Snackbar
 @implements IDisposable
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
@@ -13,9 +14,31 @@
 
 <MudLayout Style="background-color: transparent; min-height: 100vh; display: flex; flex-direction: column;">
     <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
-        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Inherit" OnClick="@(async () => await RefreshService.TriggerDetailRefreshAsync())" Class="mr-2" />
+        @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="@(() => NavService.SetCurrentArticleLink(null))" Class="mr-2" />
+        }
+        else
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Inherit" OnClick="@(async () => await RefreshService.TriggerDetailRefreshAsync())" Class="mr-2" />
+        }
+
         <MudText Typo="Typo.h6"><b>@NavService.CurrentTitle</b></MudText>
         <MudSpacer />
+        
+        @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
+        {
+            <MudTooltip Text="Read full article">
+                <MudIconButton Icon="@Icons.Material.Filled.Web" Color="Color.Inherit" OnClick="OpenInternalBrowser" Class="mr-2" />
+            </MudTooltip>
+            <MudTooltip Text="Copy Link">
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Inherit" OnClick="CopyToClipboard" />
+            </MudTooltip>
+            <MudTooltip Text="Open in System Browser">
+                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Inherit" OnClick="OpenSystemBrowser" />
+            </MudTooltip>
+        }
+
         <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" />
     </MudAppBar>
     <MudMainContent Class="d-flex flex-column" Style="flex-grow: 1;">
@@ -72,6 +95,7 @@
         }
 
         NavService.OnViewChanged += StateHasChanged;
+        NavService.OnArticleLinkChanged += OnArticleLinkChanged;
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
             Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
@@ -113,9 +137,50 @@
     public void Dispose()
     {
         NavService.OnViewChanged -= StateHasChanged;
+        NavService.OnArticleLinkChanged -= StateHasChanged;
         if (Application.Current != null)
         {
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
+        }
+    }
+
+    private void OnArticleLinkChanged()
+    {
+        StateHasChanged();
+    }
+
+    private async Task CopyToClipboard()
+    {
+        var url = NavService.CurrentArticleLink;
+        if (!string.IsNullOrEmpty(url))
+        {
+            await Clipboard.Default.SetTextAsync(url);
+            Snackbar.Add("Link copied to clipboard", Severity.Success);
+        }
+    }
+
+    private void OpenInternalBrowser()
+    {
+        var url = NavService.CurrentArticleLink;
+        if (!string.IsNullOrEmpty(url))
+        {
+            NavService.RequestOpenUrl(url);
+        }
+    }
+
+    private async Task OpenSystemBrowser()
+    {
+        var url = NavService.CurrentArticleLink;
+        if (!string.IsNullOrEmpty(url))
+        {
+            try
+            {
+                await Launcher.Default.OpenAsync(new Uri(url));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error opening system browser: {ex.Message}");
+            }
         }
     }
 }
