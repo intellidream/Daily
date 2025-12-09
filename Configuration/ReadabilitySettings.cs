@@ -17,7 +17,7 @@ namespace Daily.Configuration
                     line-height: 1.75;       /* Generous Leading */
                     padding: 2rem 1rem;      /* Sufficient Breathing Room */
                     font-family: 'Segoe UI', SYSTEM-UI, sans-serif; /* Clean Sans-Serif */
-                    background-color: transparent; /* Ensure transparency for Glass effects */
+                    /* background-color: transparent; Removed global transparency to allow theme overrides */
                 }
                 
                 .reader-content img {
@@ -47,23 +47,29 @@ namespace Daily.Configuration
                 
                 /* Dark Mode handling for WebView (Blazor handles its own) */
                 @media (prefers-color-scheme: dark) {
-                    .reader-content { color: #E0E0E0; }
+                    .reader-content { color: #E0E0E0; background-color: transparent; }
                     .reader-content a { color: #8ab4f8; }
                 }
                 @media (prefers-color-scheme: light) {
-                    .reader-content { color: #202124; }
+                    .reader-content { color: #202124; background-color: #F2FFFFFF; }
                     .reader-content a { color: #1a73e8; }
                 }
 
                 /* App-driven Theme Overrides (Higher Specificity) */
                 body[data-theme='dark'] .reader-content,
-                body.reader-content[data-theme='dark'] { color: #E0E0E0; }
+                body.reader-content[data-theme='dark'] { 
+                    color: #E0E0E0; 
+                    background-color: transparent; 
+                }
                 
                 body[data-theme='dark'] .reader-content a,
                 body.reader-content[data-theme='dark'] a { color: #8ab4f8; }
 
                 body[data-theme='light'] .reader-content,
-                body.reader-content[data-theme='light'] { color: #202124; }
+                body.reader-content[data-theme='light'] { 
+                    color: #202124; 
+                    background-color: #F2FFFFFF; 
+                }
                 
                 body[data-theme='light'] .reader-content a,
                 body.reader-content[data-theme='light'] a { color: #1a73e8; }
