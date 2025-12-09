@@ -3,7 +3,8 @@
 @using MudBlazor
 @inject IRssFeedService RssService
 @inject IDetailNavigationService NavService
-@inject IBackButtonService BackButtonService
+@inject IBackButtonService _backButtonService
+@inject ISnackbar Snackbar
 @implements IDisposable
 
 <div class="d-flex flex-column" style="height: 100%; position: relative;">
@@ -51,11 +52,16 @@
         <!-- Reading Mode -->
         <div class="d-flex flex-column animate-fade-in" style="height: 100%; overflow: hidden;">
             <div class="d-flex align-center mb-2 px-2 flex-shrink-0">
+                <MudTooltip Text="Copy Link">
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyToClipboard(_selectedItem.Link))" Class="mr-2" />
+                </MudTooltip>
+                
                 <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@CloseItem" />
                 <MudText Typo="Typo.h6" Class="ml-2" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Reading Mode</MudText>
                 <MudSpacer />
+                
                 <MudTooltip Text="Read full article">
-                    <MudIconButton Icon="@Icons.Material.Filled.Web" OnClick="@(() => OpenInInternalBrowser(_selectedItem.Link))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Web" OnClick="@(() => OpenInInternalBrowser(_selectedItem.Link))" Class="mr-2" />
                 </MudTooltip>
                 <MudTooltip Text="Open in System Browser">
                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" OnClick="@(() => OpenInSystemBrowser(_selectedItem.Link))" />
@@ -70,7 +76,7 @@
                 </style>
             }
 
-            <MudPaper Class="pa-6 tile-glass" Style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
+            <MudPaper Class="pa-6 tile-glass mx-2" Style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
                 <div class="reader-content">
                     <MudText Typo="Typo.h4" GutterBottom="true" Style="font-weight: 800;">@_selectedItem.Title</MudText>
                     
@@ -149,14 +155,14 @@
     public void Dispose()
     {
         RssService.OnItemsUpdated -= StateHasChanged;
-        BackButtonService.Unregister(OnBackNative);
+        _backButtonService.Unregister(OnBackNative);
     }
 
     private async Task OpenItem(RssItem item)
     {
         _selectedItem = item;
         _isArticleLoading = true;
-        BackButtonService.Register(OnBackNative);
+        _backButtonService.Register(OnBackNative);
         StateHasChanged();
 
         // Fetch full content in background
@@ -179,7 +185,7 @@
     {
         _selectedItem = null;
         _isArticleLoading = false;
-        BackButtonService.Unregister(OnBackNative);
+        _backButtonService.Unregister(OnBackNative);
         StateHasChanged();
     }
 
@@ -213,6 +219,15 @@
             {
                 Console.WriteLine($"Error opening system browser: {ex.Message}");
             }
+        }
+    }
+
+    private async Task CopyToClipboard(string url)
+    {
+        if (!string.IsNullOrEmpty(url))
+        {
+            await Clipboard.Default.SetTextAsync(url);
+            Snackbar.Add("Link copied to clipboard", Severity.Success);
         }
     }
 
