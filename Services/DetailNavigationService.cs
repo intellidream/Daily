@@ -8,12 +8,13 @@ namespace Daily.Services
         string CurrentTitle { get; }
         object? CurrentData { get; }
         string? CurrentArticleLink { get; }
+        string? CurrentArticleTitle { get; }
         event Action OnViewChanged;
         event Action<string> OnOpenUrlRequest;
         event Action OnArticleLinkChanged;
         void NavigateTo(string view, string title = "Detail View", object? data = null);
         void RequestOpenUrl(string url);
-        void SetCurrentArticleLink(string? link);
+        void SetCurrentArticle(string? link, string? title = null);
     }
 
     public class DetailNavigationService : IDetailNavigationService
@@ -22,6 +23,7 @@ namespace Daily.Services
         public string CurrentTitle { get; private set; } = "Detail View";
         public object? CurrentData { get; private set; }
         public string? CurrentArticleLink { get; private set; }
+        public string? CurrentArticleTitle { get; private set; }
         public event Action OnViewChanged;
         public event Action<string> OnOpenUrlRequest;
         public event Action OnArticleLinkChanged;
@@ -34,7 +36,11 @@ namespace Daily.Services
             // Reset article link on navigation change unless intended otherwise? 
             // Better to let the component clear it or keep it if it's the same view context.
             // For safety, let's NOT clear it here automatically unless we change View Type.
-            if (view != "RssFeed") CurrentArticleLink = null; 
+            if (view != "RssFeed") 
+            {
+                CurrentArticleLink = null;
+                CurrentArticleTitle = null;
+            }
             
             OnViewChanged?.Invoke();
         }
@@ -44,10 +50,11 @@ namespace Daily.Services
             OnOpenUrlRequest?.Invoke(url);
         }
 
-        public void SetCurrentArticleLink(string? link)
+        public void SetCurrentArticle(string? link, string? title = null)
         {
             if (CurrentArticleLink == link) return;
             CurrentArticleLink = link;
+            CurrentArticleTitle = title;
             OnArticleLinkChanged?.Invoke();
         }
     }

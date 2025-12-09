@@ -17,14 +17,22 @@
     <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
         @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
         {
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="@(() => NavService.SetCurrentArticleLink(null))" Class="mr-2" />
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="@(() => NavService.SetCurrentArticle(null))" Class="mr-2" />
         }
         else
         {
             <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Inherit" OnClick="@(async () => await RefreshService.TriggerDetailRefreshAsync())" Class="mr-2" />
         }
 
-        @if (NavService.CurrentView == "RssFeed" && RssService.CurrentFeed != null)
+        @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
+        {
+             <div style="flex: 1; min-width: 0;">
+                 <MudText Typo="Typo.h6" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700;">
+                     @NavService.CurrentArticleTitle
+                 </MudText>
+             </div>
+        }
+        else if (NavService.CurrentView == "RssFeed" && RssService.CurrentFeed != null)
         {
              <div class="d-flex align-center">
                  <MudText Typo="Typo.h6" Class="mr-3"><b>@RssService.CurrentFeed.Name</b></MudText>

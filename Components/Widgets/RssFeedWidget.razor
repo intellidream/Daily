@@ -35,7 +35,8 @@
 </div>
 
 <div style="height: 460px; overflow: hidden; display: flex; flex-direction: column;">
-    @if (RssService.IsLoading && (RssService.Items == null || !RssService.Items.Any()))
+
+    @if (RssService.IsLoading)
     {
         <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
