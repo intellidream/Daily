@@ -77,7 +77,10 @@ public partial class DetailPage : ContentPage
             
             if (_isReaderMode)
             {
-                ReaderButton.TextColor = Colors.DeepSkyBlue; // Active indicator
+                // Better active color for Light Mode
+                var isDark = Application.Current?.RequestedTheme == AppTheme.Dark;
+                ReaderButton.TextColor = isDark ? Colors.DeepSkyBlue : Colors.Blue; // Active indicator
+
                 InternalBrowser.Source = new HtmlWebViewSource { Html = "<html><body style='background-color: transparent;'><h3>Loading Reader View...</h3></body></html>" };
 
                 // Use a cancellation token if possible, or just check state after await
@@ -100,6 +103,9 @@ public partial class DetailPage : ContentPage
                          css += "body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; padding: 16px; color: #333; } img { max-width: 100%; height: auto; }";
                     }
 
+                    // Determine App Theme for HTML injection
+                    string appTheme = Application.Current?.RequestedTheme == AppTheme.Dark ? "dark" : "light";
+
                     string html = $@"
                         <html>
                         <head>
@@ -108,7 +114,7 @@ public partial class DetailPage : ContentPage
                                 {css}
                             </style>
                         </head>
-                        <body class='reader-content'>
+                        <body class='reader-content' data-theme='{appTheme}'>
                             <h1>{article.Title}</h1>
                             {article.Content}
                         </body>

@@ -17,6 +17,7 @@ namespace Daily.Configuration
                     line-height: 1.75;       /* Generous Leading */
                     padding: 2rem 1rem;      /* Sufficient Breathing Room */
                     font-family: 'Segoe UI', SYSTEM-UI, sans-serif; /* Clean Sans-Serif */
+                    background-color: transparent; /* Ensure transparency for Glass effects */
                 }
                 
                 .reader-content img {
@@ -46,13 +47,26 @@ namespace Daily.Configuration
                 
                 /* Dark Mode handling for WebView (Blazor handles its own) */
                 @media (prefers-color-scheme: dark) {
-                    body { background-color: #121212; color: #E0E0E0; }
-                    a { color: #8ab4f8; }
+                    .reader-content { color: #E0E0E0; }
+                    .reader-content a { color: #8ab4f8; }
                 }
                 @media (prefers-color-scheme: light) {
-                    body { background-color: #ffffff; color: #202124; }
-                    a { color: #1a73e8; }
+                    .reader-content { color: #202124; }
+                    .reader-content a { color: #1a73e8; }
                 }
+
+                /* App-driven Theme Overrides (Higher Specificity) */
+                body[data-theme='dark'] .reader-content,
+                body.reader-content[data-theme='dark'] { color: #E0E0E0; }
+                
+                body[data-theme='dark'] .reader-content a,
+                body.reader-content[data-theme='dark'] a { color: #8ab4f8; }
+
+                body[data-theme='light'] .reader-content,
+                body.reader-content[data-theme='light'] { color: #202124; }
+                
+                body[data-theme='light'] .reader-content a,
+                body.reader-content[data-theme='light'] a { color: #1a73e8; }
             ";
         }
     }
