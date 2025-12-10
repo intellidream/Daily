@@ -51,7 +51,8 @@ namespace Daily.Configuration
                     .reader-content a { color: #8ab4f8; }
                 }
                 @media (prefers-color-scheme: light) {
-                    .reader-content { color: #202124; background-color: #F2FFFFFF; }
+                    .reader-content { color: #202124; background-color: transparent; }
+                    body.reader-content { background-color: #FAF9F6; }
                     .reader-content a { color: #1a73e8; }
                 }
 
@@ -65,10 +66,14 @@ namespace Daily.Configuration
                 body[data-theme='dark'] .reader-content a,
                 body.reader-content[data-theme='dark'] a { color: #8ab4f8; }
 
-                body[data-theme='light'] .reader-content,
-                body.reader-content[data-theme='light'] { 
+                body[data-theme='light'] .reader-content { 
                     color: #202124; 
-                    background-color: #F2FFFFFF; 
+                    background-color: transparent; 
+                }
+
+                body.reader-content[data-theme='light'] {
+                    color: #202124;
+                    background-color: #FAF9F6;
                 }
                 
                 body[data-theme='light'] .reader-content a,

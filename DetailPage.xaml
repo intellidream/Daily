@@ -14,7 +14,7 @@
             </BlazorWebView.RootComponents>
         </BlazorWebView>
 
-        <Grid x:Name="BrowserContainer" IsVisible="False" BackgroundColor="{AppThemeBinding Light=#F2FFFFFF, Dark=Black}">
+        <Grid x:Name="BrowserContainer" IsVisible="False" BackgroundColor="{AppThemeBinding Light=#FAF9F6, Dark=Black}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
