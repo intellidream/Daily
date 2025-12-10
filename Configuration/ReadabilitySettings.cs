@@ -51,7 +51,7 @@ namespace Daily.Configuration
                     .reader-content a { color: #8ab4f8; }
                 }
                 @media (prefers-color-scheme: light) {
-                    .reader-content { color: #202124; background-color: transparent; }
+                    .reader-content { color: #202124; background-color: transparent !important; }
                     body.reader-content { background-color: #FAF9F6; }
                     .reader-content a { color: #1a73e8; }
                 }
