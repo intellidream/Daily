@@ -103,7 +103,10 @@ namespace Daily.Services
                      MONITORINFO targetMi = new MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
                      GetMonitorInfo(targetMonitor, ref targetMi);
 
-                     // 5. Get Target DPI
+                     // 5. Get Target Monitor Info directly (Pixels)
+                     // Reverting to DPI Conversion strategy as requested (User confirmed previous version worked better for Main Window)
+                     
+                     // Get Target DPI
                      // MDT_EFFECTIVE_DPI = 0
                      uint dpiX = 96;
                      uint dpiY = 96;
@@ -137,28 +140,154 @@ namespace Daily.Services
                      int targetX_Px = targetMi.rcWork.right - targetW_Px;
                      int targetY_Px = targetMi.rcWork.top;
 
-                     // 7. Convert to DIPs for MAUI
+                     // ---------------------------------------------------------
+                     // ATOMIC MOVE STRATEGY (Eliminates Disjointedness)
+                     // ---------------------------------------------------------
+                     // We use DeferWindowPos to move BOTH windows in a single OS transaction.
+                     // This guarantees they travel together within the same display refresh frame.
+                     
+                     IntPtr mainHandle = WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow);
+                     IntPtr detailHandle = IntPtr.Zero;
+                     
+                     if (_detailWindow != null && _detailWindow.Handler?.PlatformView is Microsoft.UI.Xaml.Window detailNative)
+                     {
+                         detailHandle = WinRT.Interop.WindowNative.GetWindowHandle(detailNative);
+                     }
+
+                     // Calculate Detail Target Pixels (if applicable)
+                     int dX = 0, dY = 0, dW = 0, dH = 0;
+                     bool moveDetail = (detailHandle != IntPtr.Zero);
+                     
+                     if (moveDetail)
+                     {
+                         // Use unified logic to get pixel targets
+                         // Work Area Pixels
+                         int workH = targetMi.rcWork.bottom - targetMi.rcWork.top;
+                         
+                         // Detail Height (90%)
+                         dH = (int)(workH * 0.9);
+                         dY = targetMi.rcWork.top + (workH - dH) / 2;
+                         
+                         // Detail Width (90% of space to left)
+                         int spaceLeft = targetX_Px - targetMi.rcWork.left;
+                         if (spaceLeft < 150) spaceLeft = 150;
+                         dW = (int)(spaceLeft * 0.9);
+                         
+                         // Detail X (Overlap 50px)
+                         dX = targetX_Px - dW + 50;
+                     }
+
+                     // Execute Atomic Move
+                     int numWindows = moveDetail ? 2 : 1;
+                     IntPtr hDefer = BeginDeferWindowPos(numWindows);
+                     
+                     const uint SWP_NOZORDER = 0x0004;
+                     const uint SWP_NOACTIVATE = 0x0010;
+                     
+                     // 1. Queue Main Window
+                     hDefer = DeferWindowPos(hDefer, mainHandle, IntPtr.Zero, targetX_Px, targetY_Px, targetW_Px, targetH_Px, SWP_NOZORDER | SWP_NOACTIVATE);
+                     
+                     // 2. Queue Detail Window
+                     if (moveDetail)
+                     {
+                         hDefer = DeferWindowPos(hDefer, detailHandle, IntPtr.Zero, dX, dY, dW, dH, SWP_NOZORDER | SWP_NOACTIVATE);
+                     }
+                     
+                     // 3. Commit Transaction
+                     EndDeferWindowPos(hDefer);
+
+                     // 4. Sync MAUI Properties (Post-Move) to keep framework happy
                      double targetX_Dip = targetX_Px / scale;
                      double targetY_Dip = targetY_Px / scale;
                      double targetW_Dip = targetW_Px / scale;
                      double targetH_Dip = targetH_Px / scale;
 
-                     System.Diagnostics.Debug.WriteLine($"[WindowMove] TargetMonitor: {nextIndex} | DPI: {dpiX} (x{scale:F2}) | Px: {targetX_Px},{targetY_Px} {targetW_Px}x{targetH_Px} => Dip: {targetX_Dip:F0},{targetY_Dip:F0} {targetW_Dip:F0}x{targetH_Dip:F0}");
-
-                     // 8. Apply Properties on UI Thread
                      mainWindow.Dispatcher.Dispatch(() => 
                      {
                          mainWindow.X = targetX_Dip;
                          mainWindow.Y = targetY_Dip;
+                         // W/H might need update too, but usually X/Y is enough for tracking
                          mainWindow.Width = targetW_Dip;
                          mainWindow.Height = targetH_Dip;
                      });
+                     
+                     if (moveDetail && _detailWindow != null)
+                     {
+                         _detailWindow.Dispatcher.Dispatch(() =>
+                         {
+                             // Reverse calculate DIPs for property sync
+                             _detailWindow.X = dX / scale;
+                             _detailWindow.Y = dY / scale;
+                             _detailWindow.Width = dW / scale;
+                             _detailWindow.Height = dH / scale;
+                         });
+                     }
                  }
             }
 #endif
         }
 
 #if WINDOWS
+        // P/Invoke Definitions for Atomic Move
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr BeginDeferWindowPos(int nNumWindows);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr DeferWindowPos(IntPtr hWinPosInfo, IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        static extern bool EndDeferWindowPos(IntPtr hWinPosInfo);
+
+        // Helper to Calculate Layout (Pure Logic, No Side Effects)
+        // Returns the desired layout in DIPs
+        private Rect GetDetailWindowDesiredLayout(Window detailWindow)
+        {
+             try
+             {
+                 var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow && w != null);
+                 if (mainWindow == null) return Rect.Zero;
+
+                 IntPtr mainHandle = IntPtr.Zero;
+                 if (mainWindow.Handler?.PlatformView is Microsoft.UI.Xaml.Window mainNative)
+                 {
+                     mainHandle = WinRT.Interop.WindowNative.GetWindowHandle(mainNative);
+                 }
+                 if (mainHandle == IntPtr.Zero) return Rect.Zero;
+
+                 // 1. Monitor & DPI
+                 IntPtr monitor = MonitorFromWindow(mainHandle, MONITOR_DEFAULTTONEAREST);
+                 uint dpiX = 96, dpiY = 96;
+                 try { GetDpiForMonitor(monitor, 0, out dpiX, out dpiY); } catch {}
+                 double scale = dpiX / 96.0;
+                 if (scale <= 0) scale = 1.0;
+
+                 // 2. Physical Metrics
+                 MONITORINFO mi = new MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
+                 GetMonitorInfo(monitor, ref mi);
+                 
+                 RECT mainRect = new RECT();
+                 GetWindowRect(mainHandle, ref mainRect);
+
+                 // 3. Calculate (Pixels)
+                 int workH = mi.rcWork.bottom - mi.rcWork.top;
+                 int hPx = (int)(workH * 0.9);
+                 int yPx = mi.rcWork.top + (workH - hPx) / 2;
+                 
+                 int spaceLeft = mainRect.left - mi.rcWork.left;
+                 if (spaceLeft < 150) spaceLeft = 150;
+                 int wPx = (int)(spaceLeft * 0.9);
+                 
+                 int xPx = mainRect.left - wPx + 50; // Overlap
+
+                 // 4. Return DIPs
+                 return new Rect(xPx / scale, yPx / scale, wPx / scale, hPx / scale);
+             }
+             catch
+             {
+                 return Rect.Zero;
+             }
+        }
+
         // P/Invoke Definitions
         private delegate bool MonitorEnumDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
 
@@ -230,62 +359,11 @@ namespace Daily.Services
                 Title = "Daily - Reading Pane"
             };
 
-            // Pre-Calculate Position & Size (Windows Only Logic for now)
-#if WINDOWS
-            try 
-            {
-                // Get Main Window context
-                var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow && w != null);
-                if (mainWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window mainNative)
-                {
-                    var mainAppWindow = mainNative.AppWindow;
-                    if (mainAppWindow != null)
-                    {
-                        // Get Display Scale Factor
-                        double scale = 1.0;
-                        if (mainNative.Content != null && mainNative.Content.XamlRoot != null)
-                        {
-                            scale = mainNative.Content.XamlRoot.RasterizationScale;
-                        }
-
-                        var displayArea = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(mainAppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Nearest);
-                        var mainRect = mainAppWindow.Position;
-
-                        if (displayArea != null)
-                        {
-                            var workArea = displayArea.WorkArea;
-
-                            // 1. Calculate in RAW PIXELS (AppWindow/DisplayArea coords)
-                            // Vertical: 90% Screen Height
-                            double pixelHeight = workArea.Height * 0.9;
-                            double pixelY = workArea.Y + (workArea.Height - pixelHeight) / 2;
-
-                            // Horizontal: 90% Remaining Left Space (Use pixel math)
-                            double spaceToLeft = mainRect.X - workArea.X;
-                            if (spaceToLeft < 150) spaceToLeft = 150; 
-                            double pixelWidth = spaceToLeft * 0.9;
-                            
-                            // Align to LEFT of app with Strong Overlap (+50px)
-                            double pixelX = mainRect.X - pixelWidth + 50;
-
-                            // 2. Convert to DIPs for MAUI Window Properties
-                            _detailWindow.Width = pixelWidth / scale;
-                            _detailWindow.Height = pixelHeight / scale;
-                            _detailWindow.X = pixelX / scale;
-                            _detailWindow.Y = pixelY / scale;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                 System.Diagnostics.Debug.WriteLine($"Pre-Layout usage error: {ex}");
-            }
-#endif
-
+            // 1. Subscribe to Events (Before Open)
             _detailWindow.Created += (s, e) =>
             {
 #if WINDOWS
+                 // Must apply style here because Handler is valid now
                  ConfigureWindowStyle(_detailWindow);
 #endif
                  new Animation(v => detailPage.Opacity = v, 0, 0.9, Easing.Linear)
@@ -298,7 +376,21 @@ namespace Daily.Services
                 _detailWindow = null;
             };
 
-            Application.Current?.OpenWindow(_detailWindow);
+#if WINDOWS
+             // 2. Pre-Positioning (Eliminates Flash)
+             // We apply layout to the MAUI Window object BEFORE asking the framework to open it.
+             var layout = GetDetailWindowDesiredLayout(_detailWindow);
+             if (layout != Rect.Zero)
+             {
+                 _detailWindow.X = layout.X;
+                 _detailWindow.Y = layout.Y;
+                 _detailWindow.Width = layout.Width;
+                 _detailWindow.Height = layout.Height;
+             }
+#endif
+
+            // 3. Open Window (Once)
+            Application.Current.OpenWindow(_detailWindow);
             SetMainWindowEnabled(false); // Disable main window interaction
 #endif
         }
