@@ -238,53 +238,74 @@ namespace Daily.Services
         [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
         static extern bool EndDeferWindowPos(IntPtr hWinPosInfo);
 
-        // Helper to Calculate Layout (Pure Logic, No Side Effects)
-        // Returns the desired layout in DIPs
-        private Rect GetDetailWindowDesiredLayout(Window detailWindow)
+        // Helper to Calculate Layout (Pure Logic)
+        // Returns Desired Layout in DIPs and Pixels
+        private (Rect dips, Rect pixels, double scale) GetDetailWindowDesiredLayout(Window detailWindow)
         {
              try
              {
                  var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow && w != null);
-                 if (mainWindow == null) return Rect.Zero;
+                 if (mainWindow == null) return (Rect.Zero, Rect.Zero, 1.0);
 
                  IntPtr mainHandle = IntPtr.Zero;
                  if (mainWindow.Handler?.PlatformView is Microsoft.UI.Xaml.Window mainNative)
                  {
                      mainHandle = WinRT.Interop.WindowNative.GetWindowHandle(mainNative);
                  }
-                 if (mainHandle == IntPtr.Zero) return Rect.Zero;
+                 if (mainHandle == IntPtr.Zero) return (Rect.Zero, Rect.Zero, 1.0);
 
-                 // 1. Monitor & DPI
+                 // 1. Monitor & Scale
+                 // Prefer RasterizationScale if available (Source of Truth)
+                 double scale = 1.0;
+                 if (mainWindow.Handler?.PlatformView is Microsoft.UI.Xaml.Window mn && 
+                     mn.Content != null && mn.Content.XamlRoot != null)
+                 {
+                     scale = mn.Content.XamlRoot.RasterizationScale;
+                 }
+                 
                  IntPtr monitor = MonitorFromWindow(mainHandle, MONITOR_DEFAULTTONEAREST);
-                 uint dpiX = 96, dpiY = 96;
-                 try { GetDpiForMonitor(monitor, 0, out dpiX, out dpiY); } catch {}
-                 double scale = dpiX / 96.0;
+                 
+                 // Fallback to OS API if needed (shouldn't happen often if Main is visible)
+                 if (scale <= 0)
+                 {
+                      uint dpiX = 96, dpiY = 96;
+                      try { GetDpiForMonitor(monitor, 0, out dpiX, out dpiY); } catch {}
+                      scale = dpiX / 96.0;
+                 }
                  if (scale <= 0) scale = 1.0;
 
-                 // 2. Physical Metrics
+                 // 2. Physical Metrics (Pixels)
                  MONITORINFO mi = new MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
                  GetMonitorInfo(monitor, ref mi);
                  
                  RECT mainRect = new RECT();
                  GetWindowRect(mainHandle, ref mainRect);
 
-                 // 3. Calculate (Pixels)
+                 // 3. Calculate Target (Pixels)
+                 // Work Area
                  int workH = mi.rcWork.bottom - mi.rcWork.top;
+                 
+                 // Detail Height (90%)
                  int hPx = (int)(workH * 0.9);
                  int yPx = mi.rcWork.top + (workH - hPx) / 2;
                  
+                 // Detail Width (90% of space to left)
                  int spaceLeft = mainRect.left - mi.rcWork.left;
                  if (spaceLeft < 150) spaceLeft = 150;
                  int wPx = (int)(spaceLeft * 0.9);
                  
-                 int xPx = mainRect.left - wPx + 50; // Overlap
+                 // Detail X (Overlap 50px)
+                 int xPx = mainRect.left - wPx + 50; 
 
-                 // 4. Return DIPs
-                 return new Rect(xPx / scale, yPx / scale, wPx / scale, hPx / scale);
+                 // 4. Calculate DIPs
+                 Rect dips = new Rect(xPx / scale, yPx / scale, wPx / scale, hPx / scale);
+                 Rect pixels = new Rect(xPx, yPx, wPx, hPx);
+
+                 return (dips, pixels, scale);
              }
              catch
              {
-                 return Rect.Zero;
+                 return (Rect.Zero, Rect.Zero, 1.0);
              }
         }
 
@@ -365,6 +386,25 @@ namespace Daily.Services
 #if WINDOWS
                  // Must apply style here because Handler is valid now
                  ConfigureWindowStyle(_detailWindow);
+
+                 // FORCE NATIVE SNAP (Fixes Initial Open on Secondary Displays)
+                 // MAUI Properties (DIPs) can be ambiguous during creation on mixed DPI.
+                 // We enforce the position using explicit PHYSICAL PIXELS via Win32.
+                 try
+                 {
+                     var layout = GetDetailWindowDesiredLayout(_detailWindow);
+                     if (layout.pixels != Rect.Zero && _detailWindow.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWin)
+                     {
+                         IntPtr handle = WinRT.Interop.WindowNative.GetWindowHandle(nativeWin);
+                         int x = (int)layout.pixels.X;
+                         int y = (int)layout.pixels.Y;
+                         int w = (int)layout.pixels.Width;
+                         int h = (int)layout.pixels.Height;
+                         
+                         SetWindowPos(handle, IntPtr.Zero, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+                     }
+                 }
+                 catch { }
 #endif
                  new Animation(v => detailPage.Opacity = v, 0, 0.9, Easing.Linear)
                     .Commit(detailPage, "FadeIn", length: 1000);
@@ -377,15 +417,14 @@ namespace Daily.Services
             };
 
 #if WINDOWS
-             // 2. Pre-Positioning (Eliminates Flash)
-             // We apply layout to the MAUI Window object BEFORE asking the framework to open it.
-             var layout = GetDetailWindowDesiredLayout(_detailWindow);
-             if (layout != Rect.Zero)
+             // 2. Pre-Positioning (Eliminates Flash - Best Effort)
+             var desired = GetDetailWindowDesiredLayout(_detailWindow);
+             if (desired.dips != Rect.Zero)
              {
-                 _detailWindow.X = layout.X;
-                 _detailWindow.Y = layout.Y;
-                 _detailWindow.Width = layout.Width;
-                 _detailWindow.Height = layout.Height;
+                 _detailWindow.X = desired.dips.X;
+                 _detailWindow.Y = desired.dips.Y;
+                 _detailWindow.Width = desired.dips.Width;
+                 _detailWindow.Height = desired.dips.Height;
              }
 #endif
 
