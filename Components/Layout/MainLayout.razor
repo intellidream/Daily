@@ -28,6 +28,11 @@
 
         @if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.WinUI || Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.MacCatalyst)
         {
+             <MudIconButton Icon="@Icons.Material.Filled.Monitor" 
+                            Color="Color.Inherit" 
+                            OnClick="@(() => WindowManagerService.MoveMainWindowToNextDisplay())"
+                            Title="Move to Next Display" />
+
              <MudIconButton Icon="@Icons.Material.Filled.Close" 
                             Color="Color.Inherit" 
                             OnClick="@(() => Application.Current?.Quit())"
