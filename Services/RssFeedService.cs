@@ -241,13 +241,79 @@ namespace Daily.Services
 
                 if (article.IsReadable)
                 {
+                    var content = article.Content;
+                    var featImg = article.FeaturedImage;
+
+                    // Deduplicate Featured Image from Content Body (Aggressive)
+                    if (!string.IsNullOrEmpty(content) && !string.IsNullOrEmpty(featImg))
+                    {
+                        try 
+                        {
+                            // 1. Find the FIRST image tag (simple, robust regex)
+                            var imgMatch = Regex.Match(content, @"<img[^>]+src\s*=\s*[""']([^""']+)[""'][^>]*>", RegexOptions.IgnoreCase);
+                            
+                            if (imgMatch.Success)
+                            {
+                                var foundSrc = imgMatch.Groups[1].Value;
+                                
+                                // 2. Normalize URLs for Loose Comparison
+                                // (Handle query params, encoded entities, http/s differences)
+                                string s1 = System.Net.WebUtility.HtmlDecode(foundSrc ?? "").Split('?')[0].Trim();
+                                string s2 = System.Net.WebUtility.HtmlDecode(featImg ?? "").Split('?')[0].Trim();
+                                
+                                bool shouldRemove = false;
+                                
+                                if (!string.IsNullOrEmpty(s1) && !string.IsNullOrEmpty(s2))
+                                {
+                                    // A. Check for exact containment (one is substring of other)
+                                    // Helps if one is relative or CDN resized
+                                    if (s1.IndexOf(s2, StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                        s2.IndexOf(s1, StringComparison.OrdinalIgnoreCase) >= 0)
+                                    {
+                                        shouldRemove = true;
+                                    }
+                                    // B. Check Filename match (if long enough to avoid "image.jpg" false positives)
+                                    else if (s1.Length > 15 && s2.Length > 15)
+                                    {
+                                        var f1 = s1.TrimEnd('/').Split('/').Last();
+                                        var f2 = s2.TrimEnd('/').Split('/').Last();
+                                        if (string.Equals(f1, f2, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            shouldRemove = true;
+                                        }
+                                    }
+                                }
+
+                                // 3. Execute Removal
+                                if (shouldRemove)
+                                {
+                                    // Remove the <img> tag
+                                    content = content.Remove(imgMatch.Index, imgMatch.Length);
+                                    
+                                    // 4. Cleanup Empty Wrappers (Figure/Div/P) surrounding that spot
+                                    // We look at the text around the removal point to see if we left an empty wrapper
+                                    // This regex finds empty tags <tag></tag> or <tag>  </tag>
+                                    string cleanPattern = @"<((figure|div|p))[^>]*>\s*</\1>";
+                                    content = Regex.Replace(content, cleanPattern, "", RegexOptions.IgnoreCase);
+                                    
+                                    // Final trim
+                                    content = content.Trim();
+                                }
+                            }
+                        }
+                        catch 
+                        { 
+                             // Safety net
+                        }
+                    }
+
                     return new RssItem
                     {
                         Title = article.Title,
                         Link = url,
-                        Content = article.Content, // Full HTML
+                        Content = content, // Aggressively De-duplicated
                         Description = article.Excerpt,
-                        ImageUrl = article.FeaturedImage,
+                        ImageUrl = featImg,
                         PublishDate = article.PublicationDate ?? DateTime.Now
                     };
                 }
