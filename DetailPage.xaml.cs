@@ -95,12 +95,13 @@ public partial class DetailPage : ContentPage
                 {
                     // Check if Desktop for styling
                     bool isDesktop = DeviceInfo.Platform == DevicePlatform.WinUI || DeviceInfo.Platform == DevicePlatform.MacCatalyst;
-                    string css = Configuration.ReadabilitySettings.GetCss(isDesktop);
+                    // ALWAYS use the full CSS now, as we enabled it for mobile too
+                    string css = Configuration.ReadabilitySettings.GetCss(true); // true to force return CSS
                     
-                    // Fallback basic CSS if mobile (or just complementary)
+                    // Fallback basic padding if mobile (or just complementary)
                     if (!isDesktop)
                     {
-                         css += "body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; padding: 16px; color: #333; } img { max-width: 100%; height: auto; }";
+                         css += " body { padding: 16px; } "; 
                     }
 
                     // Determine App Theme for HTML injection

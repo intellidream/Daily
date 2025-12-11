@@ -45,39 +45,44 @@ namespace Daily.Configuration
                 .reader-content h3 { font-size: 1.75rem; margin-top: 2rem; margin-bottom: 1rem; }
                 .reader-content p { margin-bottom: 1.5rem; }
                 
-                /* Dark Mode handling for WebView (Blazor handles its own) */
+                /* Dark Mode (High Contrast Text) */
                 @media (prefers-color-scheme: dark) {
                     .reader-content { color: #E0E0E0; background-color: transparent; }
                     .reader-content a { color: #8ab4f8; }
                 }
-                @media (prefers-color-scheme: light) {
-                    .reader-content { color: #202124; background-color: transparent !important; }
-                    body.reader-content { background-color: #FAF9F6; }
-                    .reader-content a { color: #1a73e8; }
-                }
-
-                /* App-driven Theme Overrides (Higher Specificity) */
+                
                 body[data-theme='dark'] .reader-content,
-                body.reader-content[data-theme='dark'] { 
-                    color: #E0E0E0; 
-                    background-color: transparent; 
+                .reader-content[data-theme='dark'] { 
+                    color: #E0E0E0 !important; 
+                    background-color: transparent !important; 
                 }
                 
                 body[data-theme='dark'] .reader-content a,
-                body.reader-content[data-theme='dark'] a { color: #8ab4f8; }
-
-                body[data-theme='light'] .reader-content { 
-                    color: #202124; 
-                    background-color: transparent; 
+                .reader-content[data-theme='dark'] a { 
+                    color: #8ab4f8 !important; 
                 }
 
-                body.reader-content[data-theme='light'] {
-                    color: #202124;
-                    background-color: #FAF9F6;
+                /* Light Mode (Dark Text) */
+                @media (prefers-color-scheme: light) {
+                    .reader-content { color: #202124; background-color: transparent; }
+                    .reader-content a { color: #1a73e8; }
+                    body.reader-content { background-color: #FAF9F6; }
+                }
+
+                body[data-theme='light'] .reader-content, 
+                .reader-content[data-theme='light'] { 
+                    color: #202124 !important; 
+                    background-color: transparent !important; 
                 }
                 
                 body[data-theme='light'] .reader-content a,
-                body.reader-content[data-theme='light'] a { color: #1a73e8; }
+                .reader-content[data-theme='light'] a { 
+                    color: #1a73e8 !important; 
+                }
+                
+                body.reader-content[data-theme='light'] {
+                    background-color: #FAF9F6 !important;
+                }
             ";
         }
     }
