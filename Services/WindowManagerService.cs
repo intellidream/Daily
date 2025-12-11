@@ -62,106 +62,98 @@ namespace Daily.Services
         {
 #if WINDOWS
             var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow && w != null);
-            if (mainWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWindow)
+            if (mainWindow == null) return;
+            
+            // Need native window for P/Invoke
+            if (mainWindow.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWindow)
             {
-                nativeWindow.DispatcherQueue.TryEnqueue(() =>
-                {
-                    try
-                    {
-                        // Use robust HWND retrieval
-                        var handle = WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow);
+                 // Handle can be retrieved on any thread, but generally safe to do here
+                 var handle = WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow);
 
-                        // --- Native Win32 Strategy ---
-                        // We use pure P/Invoke to bypass any WinUI/AppWindow quirks regarding coordinates/resizing.
-                        
-                        // 1. Enumerate Monitors via Win32
-                        var monitors = new System.Collections.Generic.List<IntPtr>();
-                        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, 
-                            (IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData) => 
-                            {
-                                monitors.Add(hMonitor);
-                                return true;
-                            }, IntPtr.Zero);
-                        
-                        // 2. Sort Monitors by X position
-                        monitors.Sort((a, b) => 
-                        {
-                            MONITORINFO miA = new MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
-                            GetMonitorInfo(a, ref miA);
-                            MONITORINFO miB = new MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
-                            GetMonitorInfo(b, ref miB);
-                            return miA.rcWork.left.CompareTo(miB.rcWork.left);
-                        });
+                 // 1. Enumerate Monitors via Win32
+                 var monitors = new System.Collections.Generic.List<IntPtr>();
+                 EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, 
+                     (IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData) => 
+                     {
+                         monitors.Add(hMonitor);
+                         return true;
+                     }, IntPtr.Zero);
+                 
+                 // 2. Sort Monitors by X position
+                 monitors.Sort((a, b) => 
+                 {
+                     MONITORINFO miA = new MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
+                     GetMonitorInfo(a, ref miA);
+                     MONITORINFO miB = new MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
+                     GetMonitorInfo(b, ref miB);
+                     return miA.rcWork.left.CompareTo(miB.rcWork.left);
+                 });
 
-                        if (monitors.Count > 1)
-                        {
-                            // 3. Find Current Monitor
-                            IntPtr currentMonitor = MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST);
-                            int currentIndex = monitors.IndexOf(currentMonitor);
-                            if (currentIndex == -1) currentIndex = 0;
-                            
-                            // 4. Cycle to Next
-                            int nextIndex = (currentIndex + 1) % monitors.Count;
-                            IntPtr targetMonitor = monitors[nextIndex];
-                            
-                            MONITORINFO targetMi = new MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
-                            GetMonitorInfo(targetMonitor, ref targetMi);
-                                                        // Load OverlappedPresenter to toggle Resizable
-                                // This is crucial because if IsResizable=false, SetWindowPos might be blocked or ignored by the framework.
-                                var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(handle);
-                                var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-                                var presenter = appWindow?.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
-                                bool wasResizable = false;
-                                if (presenter != null)
-                                {
-                                    wasResizable = presenter.IsResizable;
-                                    presenter.IsResizable = true; // Force unlock
-                                }
+                 if (monitors.Count > 1)
+                 {
+                     // 3. Find Current Monitor
+                     IntPtr currentMonitor = MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST);
+                     int currentIndex = monitors.IndexOf(currentMonitor);
+                     if (currentIndex == -1) currentIndex = 0;
+                     
+                     // 4. Cycle to Next
+                     int nextIndex = (currentIndex + 1) % monitors.Count;
+                     IntPtr targetMonitor = monitors[nextIndex];
+                     
+                     MONITORINFO targetMi = new MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO)) };
+                     GetMonitorInfo(targetMonitor, ref targetMi);
 
-                                // 5. Calculate Layout
-                                // Strategy: PRESERVE ASPECT RATIO (Width / Height)
-                                // This ensures widgets don't reflow unpleasantly.
-                                
-                                // A. Get Current Physical Dimensions
-                                RECT currentRect = new RECT();
-                                GetWindowRect(handle, ref currentRect);
-                                int currentWidth = currentRect.right - currentRect.left;
-                                int currentHeight = currentRect.bottom - currentRect.top;
-                                
-                                // Avoid divide by zero
-                                if (currentHeight < 1) currentHeight = 1;
-                                
-                                // B. Calculate Aspect Ratio
-                                double aspectRatio = (double)currentWidth / currentHeight;
-                                
-                                // C. Determine Target Dimensions
-                                // We always want to fill the vertical work area.
-                                int newHeight = targetMi.rcWork.bottom - targetMi.rcWork.top;
-                                int newWidth = (int)(newHeight * aspectRatio);
-                                
-                                // Safety Clamps
-                                if (newWidth < 320) newWidth = 320; 
+                     // 5. Get Target DPI
+                     // MDT_EFFECTIVE_DPI = 0
+                     uint dpiX = 96;
+                     uint dpiY = 96;
+                     try 
+                     {
+                         GetDpiForMonitor(targetMonitor, 0, out dpiX, out dpiY);
+                     }
+                     catch { } // Fallback to 96 if fails
+                     
+                     double scale = dpiX / 96.0;
+                     if (scale <= 0) scale = 1.0;
 
-                                int x = targetMi.rcWork.right - newWidth;
-                                int y = targetMi.rcWork.top;
-                                
-                                System.Diagnostics.Debug.WriteLine($"[WindowMove_Win32] AspectRatio: {aspectRatio:F3} ({currentWidth}/{currentHeight}) | TargetH: {newHeight} | SetWindowPos: {x},{y} {newWidth}x{newHeight}");
-                                
-                                // 6. Execute Move
-                                SetWindowPos(handle, IntPtr.Zero, x, y, newWidth, newHeight, SWP_NOZORDER | SWP_NOACTIVATE);
-                                
-                                // Restore Resizable State
-                                if (presenter != null)
-                                {
-                                    presenter.IsResizable = wasResizable;
-                                }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Error moving window inner loop: {ex}");
-                    }
-                });
+                     // 6. Calculate Layout in PIXELS (Physical)
+                     // A. Get Current Physical Dimensions to preserve aspect ratio
+                     RECT currentRect = new RECT();
+                     GetWindowRect(handle, ref currentRect);
+                     int currentW = currentRect.right - currentRect.left;
+                     int currentH = currentRect.bottom - currentRect.top;
+                     
+                     double aspectRatio = 1.0;
+                     if (currentH > 0)
+                     {
+                         aspectRatio = (double)currentW / currentH;
+                     }
+
+                     // B. Target Dimensions (Right Dock, Full Height)
+                     int targetH_Px = targetMi.rcWork.bottom - targetMi.rcWork.top;
+                     int targetW_Px = (int)(targetH_Px * aspectRatio);
+                     if (targetW_Px < 320) targetW_Px = 320; // Safety min width
+
+                     int targetX_Px = targetMi.rcWork.right - targetW_Px;
+                     int targetY_Px = targetMi.rcWork.top;
+
+                     // 7. Convert to DIPs for MAUI
+                     double targetX_Dip = targetX_Px / scale;
+                     double targetY_Dip = targetY_Px / scale;
+                     double targetW_Dip = targetW_Px / scale;
+                     double targetH_Dip = targetH_Px / scale;
+
+                     System.Diagnostics.Debug.WriteLine($"[WindowMove] TargetMonitor: {nextIndex} | DPI: {dpiX} (x{scale:F2}) | Px: {targetX_Px},{targetY_Px} {targetW_Px}x{targetH_Px} => Dip: {targetX_Dip:F0},{targetY_Dip:F0} {targetW_Dip:F0}x{targetH_Dip:F0}");
+
+                     // 8. Apply Properties on UI Thread
+                     mainWindow.Dispatcher.Dispatch(() => 
+                     {
+                         mainWindow.X = targetX_Dip;
+                         mainWindow.Y = targetY_Dip;
+                         mainWindow.Width = targetW_Dip;
+                         mainWindow.Height = targetH_Dip;
+                     });
+                 }
             }
 #endif
         }
