@@ -50,15 +50,34 @@
         
         @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
         {
-            <MudTooltip Text="Read full article">
-                <MudIconButton Icon="@Icons.Material.Filled.Web" Color="Color.Inherit" OnClick="OpenInternalBrowser" Class="mr-2" />
-            </MudTooltip>
-            <MudTooltip Text="Copy Link">
-                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Inherit" OnClick="CopyToClipboard" />
-            </MudTooltip>
-            <MudTooltip Text="Open in System Browser">
-                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Inherit" OnClick="OpenSystemBrowser" />
-            </MudTooltip>
+            @if (NavService.IsBrowserOpen)
+            {
+                <!-- Browser Controls -->
+                 <MudTooltip Text="Toggle Reader View">
+                    <MudIconButton Icon="@Icons.Material.Filled.MenuBook" Color="@(NavService.IsReaderMode ? Color.Primary : Color.Inherit)" OnClick="OnReaderModeClicked" Class="mr-2" />
+                </MudTooltip>
+                
+                 <MudTooltip Text="Close Browser">
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="OnBrowserCloseClicked" Class="mr-2" />
+                </MudTooltip>
+                 
+                <MudTooltip Text="Open in System Browser">
+                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Inherit" OnClick="OpenSystemBrowser" />
+                </MudTooltip>
+            }
+            else
+            {
+                <!-- Standard RSS Controls -->
+                <MudTooltip Text="Read full article">
+                    <MudIconButton Icon="@Icons.Material.Filled.Web" Color="Color.Inherit" OnClick="OpenInternalBrowser" Class="mr-2" />
+                </MudTooltip>
+                <MudTooltip Text="Copy Link">
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Inherit" OnClick="CopyToClipboard" />
+                </MudTooltip>
+                <MudTooltip Text="Open in System Browser">
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Inherit" OnClick="OpenSystemBrowser" />
+                </MudTooltip>
+            }
         }
 
         <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" />
@@ -118,6 +137,8 @@
 
         NavService.OnViewChanged += StateHasChanged;
         NavService.OnArticleLinkChanged += OnArticleLinkChanged;
+        NavService.OnBrowserStateChanged += OnBrowserStateChanged;
+        NavService.OnReaderModeChanged += OnReaderModeChanged;
         RssService.OnItemsUpdated += StateHasChanged; // Subscribe for item count updates
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
@@ -155,12 +176,30 @@
             await JSRuntime.InvokeVoidAsync("document.body.classList.add", "mesh-background");
             await UpdateThemeJs();
         }
+        
+        // Measure Toolbar Height whenever we render, to ensure we have the latest
+        await UpdateToolbarHeight();
+    }
+    
+    private async Task UpdateToolbarHeight()
+    {
+        try
+        {
+            var height = await JSRuntime.InvokeAsync<double>("eval", "document.querySelector('.mud-appbar')?.offsetHeight || 0");
+            if (height > 0)
+            {
+                NavService.SetToolbarHeight(height);
+            }
+        }
+        catch { }
     }
 
     public void Dispose()
     {
         NavService.OnViewChanged -= StateHasChanged;
         NavService.OnArticleLinkChanged -= StateHasChanged;
+        NavService.OnBrowserStateChanged -= OnBrowserStateChanged;
+        NavService.OnReaderModeChanged -= OnReaderModeChanged;
         RssService.OnItemsUpdated -= StateHasChanged;
         if (Application.Current != null)
         {
@@ -171,6 +210,18 @@
     private void OnArticleLinkChanged()
     {
         StateHasChanged();
+        _ = UpdateToolbarHeight();
+    }
+    
+    private void OnReaderModeChanged(bool isEnabled)
+    {
+        StateHasChanged();
+    }
+    
+    private void OnBrowserStateChanged(bool isOpen)
+    {
+        StateHasChanged();
+        _ = UpdateToolbarHeight();
     }
 
     private async Task CopyToClipboard()
@@ -190,6 +241,16 @@
         {
             NavService.RequestOpenUrl(url);
         }
+    }
+    
+    private void OnReaderModeClicked()
+    {
+         NavService.ToggleReaderMode();
+    }
+    
+    private void OnBrowserCloseClicked()
+    {
+         NavService.SetBrowserState(false);
     }
 
     private async Task OpenSystemBrowser()

@@ -52,55 +52,68 @@
     {
         <!-- Reading Mode -->
         <div class="d-flex flex-column animate-fade-in" style="height: 100%; overflow: hidden;">
-            <!-- Toolbar removed, moved to DetailPane -->
+            @if (NavService.IsBrowserOpen && !NavService.IsReaderMode)
+            {
+                 // Native WebView Overlay is handling this
+                 <div class="d-flex align-center justify-center" style="height: 100%;">
+                     <MudText Typo="Typo.h5" Style="opacity: 0.5;">Viewing Web Content...</MudText>
+                 </div>
+            }
+            else
+            {
+                <!-- Inject Shared Readability CSS (Universal) -->
+                <style>
+                    @((MarkupString)Configuration.ReadabilitySettings.GetCss(true))
+                </style>
 
-            <!-- Inject Shared Readability CSS if Desktop -->
-            <!-- Inject Shared Readability CSS (Universal) -->
-            <style>
-                @((MarkupString)Configuration.ReadabilitySettings.GetCss(true))
-            </style>
-
-            <MudPaper Class="pa-6 reader-paper mx-2" Style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
-                <div class="reader-content" data-theme="@(_isDarkMode ? "dark" : "light")">
-                    <MudText Typo="Typo.h4" GutterBottom="true" Style="font-weight: 800;">@_selectedItem.Title</MudText>
-                    
-                    @if (_isArticleLoading)
-                    {
-                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
-                    }
-                    
-                    <div class="d-flex align-center mb-6 gap-2">
-                         @if (!string.IsNullOrEmpty(RssService.CurrentFeed?.IconUrl))
-                         {
-                             <MudImage Src="@RssService.CurrentFeed.IconUrl" Width="24" Height="24" />
-                         }
-                         <MudText Typo="Typo.caption">@RssService.CurrentFeed?.Name • @_selectedItem.PublishDate.ToString("f")</MudText>
-                    </div>
-
-                    @if (!string.IsNullOrEmpty(_selectedItem.ImageUrl))
-                    {
-                        <MudImage Src="@_selectedItem.ImageUrl" Class="rounded-lg mb-6" Style="max-width: 100%; height: auto; object-fit: contain; display: block; margin: 0 auto;" />
-                    }
-
-                    <div class="article-content">
-                        @if (!string.IsNullOrEmpty(_selectedItem.Content))
+                <MudPaper Class="pa-6 reader-paper mx-2" Style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
+                    <div class="reader-content" data-theme="@(_isDarkMode ? "dark" : "light")">
+                        <MudText Typo="Typo.h4" GutterBottom="true" Style="font-weight: 800;">@_selectedItem.Title</MudText>
+                        
+                        @if (_isArticleLoading)
                         {
-                            @((MarkupString)_selectedItem.Content)
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
                         }
-                        else if (!string.IsNullOrEmpty(_selectedItem.Description))
+                        else
                         {
-                             @((MarkupString)_selectedItem.Description)
-                             <MudAlert Severity="Severity.Info" Class="mt-4">Full content not available in feed.</MudAlert>
+                             <div class="d-flex align-center mb-6 gap-2">
+                                 @if (!string.IsNullOrEmpty(RssService.CurrentFeed?.IconUrl))
+                                 {
+                                     <MudImage Src="@RssService.CurrentFeed.IconUrl" Width="24" Height="24" />
+                                 }
+                                 <MudText Typo="Typo.caption">@RssService.CurrentFeed?.Name • @_selectedItem.PublishDate.ToString("f")</MudText>
+                            </div>
+    
+                            <!-- Featured Image (Only if NOT in Reader Mode or if desired) -->
+                            @if (!string.IsNullOrEmpty(_selectedItem.ImageUrl))
+                            {
+                                <MudImage Src="@_selectedItem.ImageUrl" Class="rounded-lg mb-6" Style="max-width: 100%; height: auto; object-fit: contain; display: block; margin: 0 auto;" />
+                            }
+    
+                            <div class="article-content" style="@(NavService.IsReaderMode ? "font-size: 1.2rem; line-height: 1.8;" : "")">
+                                @if (!string.IsNullOrEmpty(_selectedItem.Content))
+                                {
+                                    @((MarkupString)_selectedItem.Content)
+                                }
+                                else if (!string.IsNullOrEmpty(_selectedItem.Description))
+                                {
+                                     @((MarkupString)_selectedItem.Description)
+                                     <MudAlert Severity="Severity.Info" Class="mt-4">Full content not available in feed.</MudAlert>
+                                }
+                            </div>
+                        }
+
+                        @if (!NavService.IsReaderMode)
+                        {
+                            <div class="d-flex justify-center mt-8 mb-4">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => NavService.RequestOpenUrl(_selectedItem.Link))" StartIcon="@Icons.Material.Filled.Web">
+                                    Read Full Article
+                                </MudButton>
+                            </div>
                         }
                     </div>
-
-                    <div class="d-flex justify-center mt-8 mb-4">
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => NavService.RequestOpenUrl(_selectedItem.Link))" StartIcon="@Icons.Material.Filled.Web">
-                            Read Full Article
-                        </MudButton>
-                    </div>
-                </div>
-            </MudPaper>
+                </MudPaper>
+            }
         </div>
     }
 </div>
@@ -143,6 +156,8 @@
 
         RssService.OnItemsUpdated += StateHasChanged;
         NavService.OnArticleLinkChanged += OnArticleLinkChanged;
+        NavService.OnBrowserStateChanged += OnBrowserStateChanged;
+        NavService.OnReaderModeChanged += OnReaderModeChanged;
         RefreshService.DetailRefreshRequested += OnDetailRefresh;
         
         // Check if we were navigated to with a specific item
@@ -175,8 +190,20 @@
         }
         RssService.OnItemsUpdated -= StateHasChanged;
         NavService.OnArticleLinkChanged -= OnArticleLinkChanged;
+        NavService.OnBrowserStateChanged -= OnBrowserStateChanged;
+        NavService.OnReaderModeChanged -= OnReaderModeChanged;
         RefreshService.DetailRefreshRequested -= OnDetailRefresh;
         _backButtonService.Unregister(OnBackNative);
+    }
+    
+    private void OnBrowserStateChanged(bool isOpen)
+    {
+        StateHasChanged();
+    }
+
+    private void OnReaderModeChanged(bool isEnabled)
+    {
+        StateHasChanged();
     }
 
     private async Task OnDetailRefresh()

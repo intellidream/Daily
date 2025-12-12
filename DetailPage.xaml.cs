@@ -44,6 +44,9 @@ public partial class DetailPage : ContentPage
         _rssFeedService = rssFeedService;
         
         _detailNavigationService.OnOpenUrlRequest += OnOpenUrlRequest;
+        _detailNavigationService.OnBrowserStateChanged += OnBrowserStateChanged;
+        _detailNavigationService.OnReaderModeChanged += OnReaderModeChanged;
+        _detailNavigationService.OnToolbarHeightChanged += OnToolbarHeightChanged;
 
         BindingContext = this;
         RefreshCommand = new Command(async () => await ExecuteRefreshCommand());
@@ -54,113 +57,64 @@ public partial class DetailPage : ContentPage
         Dispatcher.Dispatch(() =>
         {
             _currentBrowserUrl = url;
-            // Reset Reader Mode on new URL
-            _isReaderMode = false;
-            ReaderButton.Text = "📖"; // or icon code
-            
-            BrowserTitle.Text = url;
             InternalBrowser.Source = url;
-            BrowserContainer.IsVisible = true;
-#if WINDOWS || MACCATALYST
-            this.Opacity = 1.0;
-#endif
+            
+            // Ensure Reader Mode is OFF when opening a fresh URL
+            if (_isReaderMode)
+            {
+                _isReaderMode = false;
+                _detailNavigationService.SetReaderMode(false);
+            }
         });
     }
 
-    private async void OnReaderModeClicked(object sender, EventArgs e)
+    private void OnBrowserStateChanged(bool isOpen)
     {
-        if (string.IsNullOrEmpty(_currentBrowserUrl)) return;
-
-        try
+        Dispatcher.Dispatch(() =>
         {
-            _isReaderMode = !_isReaderMode;
+            // Only show WebView if Browser is Open AND NOT in Reader Mode
+            InternalBrowser.IsVisible = isOpen && !_isReaderMode;
             
-            if (_isReaderMode)
+            if (!isOpen)
             {
-                // Better active color for Light Mode
-                var isDark = Application.Current?.RequestedTheme == AppTheme.Dark;
-                ReaderButton.TextColor = isDark ? Colors.DeepSkyBlue : Colors.Blue; // Active indicator
-
-                InternalBrowser.Source = new HtmlWebViewSource { Html = "<html><body style='background-color: transparent;'><h3>Loading Reader View...</h3></body></html>" };
-
-                // Use a cancellation token if possible, or just check state after await
-                var article = await _rssFeedService.FetchFullArticleAsync(_currentBrowserUrl);
-                
-                // Safety Check: If window closed during await, `InternalBrowser` might be invalid or we shouldn't update.
-                // In MAUI, checking IsLoaded or similar is tricky across platforms, but Dispatcher.Dispatch usually handles thread safety.
-                // However, accessing WebView properties after disposal is fatal.
-                if (!this.IsLoaded) return; 
-
-                if (article != null && !string.IsNullOrEmpty(article.Content))
-                {
-                    // Check if Desktop for styling
-                    bool isDesktop = DeviceInfo.Platform == DevicePlatform.WinUI || DeviceInfo.Platform == DevicePlatform.MacCatalyst;
-                    // ALWAYS use the full CSS now, as we enabled it for mobile too
-                    string css = Configuration.ReadabilitySettings.GetCss(true); // true to force return CSS
-                    
-                    // Fallback basic padding if mobile (or just complementary)
-                    if (!isDesktop)
-                    {
-                         css += " body { padding: 16px; } "; 
-                    }
-
-                    // Determine App Theme for HTML injection
-                    string appTheme = Application.Current?.RequestedTheme == AppTheme.Dark ? "dark" : "light";
-
-                    string html = $@"
-                        <html>
-                        <head>
-                            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-                            <style>
-                                {css}
-                            </style>
-                        </head>
-                        <body class='reader-content' data-theme='{appTheme}'>
-                            <h1>{article.Title}</h1>
-                            {article.Content}
-                        </body>
-                        </html>";
-                    
-                    Dispatcher.Dispatch(() =>
-                    {
-                        try { InternalBrowser.Source = new HtmlWebViewSource { Html = html }; } catch { }
-                    });
-                }
-                else
-                {
-                    // Fallback if failed
-                    Dispatcher.Dispatch(() =>
-                    {
-                        try { InternalBrowser.Source = new HtmlWebViewSource { Html = "<html><body><h3>Reader view unavailable.</h3></body></html>" }; } catch { }
-                    });
-                }
+                 InternalBrowser.Source = "about:blank"; // Reset
+                 _isReaderMode = false; 
             }
-            else
-            {
-                 ReaderButton.TextColor = Application.Current?.RequestedTheme == AppTheme.Dark ? Colors.White : Colors.Black;
-                 InternalBrowser.Source = _currentBrowserUrl;
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error in Reader Mode toggle: {ex.Message}");
-            // Swallow crash if UI is disposing
-        }
+        });
     }
 
-    private void OnBrowserCloseClicked(object sender, EventArgs e)
+    private void OnReaderModeChanged(bool isEnabled)
     {
-        BrowserContainer.IsVisible = false;
-        InternalBrowser.Source = "about:blank"; // Reset
-#if WINDOWS || MACCATALYST
-        this.Opacity = 0.9;
-#endif
+        Dispatcher.Dispatch(() =>
+        {
+            _isReaderMode = isEnabled;
+            // Hide WebView if Reader Mode is ON (Blazor handles it)
+            // Show WebView if Reader Mode is OFF (but Browser is Open)
+            InternalBrowser.IsVisible = _detailNavigationService.IsBrowserOpen && !isEnabled;
+        });
     }
+
+    private void OnToolbarHeightChanged(double height)
+    {
+        Dispatcher.Dispatch(() =>
+        {
+            // Adjust top margin to avoid covering the toolbar
+            // We preserve the existing side/bottom margins (0)
+            InternalBrowser.Margin = new Thickness(0, height, 0, 0);
+        });
+    }
+    
+    // Reader Mode logic moved to Blazor (RssFeedDetail.razor)
+    // We kept the field _isReaderMode just for local state tracking if needed, 
+    // but the heavy lifting is gone.
 
     protected override void OnDisappearing()
     {
         base.OnDisappearing();
         _detailNavigationService.OnOpenUrlRequest -= OnOpenUrlRequest;
+        _detailNavigationService.OnBrowserStateChanged -= OnBrowserStateChanged;
+        _detailNavigationService.OnReaderModeChanged -= OnReaderModeChanged;
+        _detailNavigationService.OnToolbarHeightChanged -= OnToolbarHeightChanged;
     }
 
     private void UpdateMobileBackgroundColor()
