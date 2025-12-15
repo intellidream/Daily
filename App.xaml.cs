@@ -24,7 +24,9 @@ namespace Daily
         {
             InitializeComponent();
             _trayService = trayService;
+#if MACCATALYST
             Daily.Platforms.MacCatalyst.MacTrayService.Log("App Constructor Called");
+#endif
             _refreshService = refreshService;
             _backButtonService = backButtonService;
             _trayService.Initialize();
