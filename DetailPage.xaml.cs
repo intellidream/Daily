@@ -128,14 +128,22 @@ public partial class DetailPage : ContentPage, IDisposable
     private void UpdateBackgroundColor()
     {
         if (Application.Current == null) return;
-        var theme = Application.Current.RequestedTheme;
         
-        // Explicitly set background on Windows to match App Theme (fixing Light Mode spinner)
-        // Mac uses Overlay, so it stays Transparent (Overlay handles background).
-        // Mobile uses XAML background too.
+        // Ensure we are on UI thread
+        Dispatcher.Dispatch(() =>
+        {
+             var theme = Application.Current.RequestedTheme;
+             var color = theme == AppTheme.Dark ? Color.FromArgb("#121212") : Colors.White;
+
+             // Explicitly set background on Windows to match App Theme (fixing Light Mode spinner)
 #if WINDOWS || ANDROID || IOS
-        BackgroundColor = theme == AppTheme.Dark ? Color.FromArgb("#121212") : Colors.White;
+             BackgroundColor = color;
+             if (blazorWebView != null)
+             {
+                 blazorWebView.BackgroundColor = color;
+             }
 #endif
+        });
     }
 
 
