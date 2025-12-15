@@ -117,11 +117,26 @@ public partial class DetailPage : ContentPage, IDisposable
         _detailNavigationService.OnToolbarHeightChanged -= OnToolbarHeightChanged;
     }
 
-    protected override void OnAppearing()
+    protected override async void OnAppearing()
     {
         base.OnAppearing();
 #if WINDOWS
         UpdateBackgroundColor();
+        
+        // Diagnostic: Report detected state
+        await Task.Delay(500); // Wait for UI to settle
+        var userTheme = Application.Current?.UserAppTheme;
+        var reqTheme = Application.Current?.RequestedTheme;
+        var resultColor = BackgroundColor;
+        var webColor = blazorWebView?.BackgroundColor;
+        
+        await DisplayAlert("Background Debug", 
+            $"UserTheme: {userTheme}\n" +
+            $"ReqTheme: {reqTheme}\n" +
+            $"Page BG: {resultColor}\n" +
+            $"WebView BG: {webColor}\n" +
+            $"IsWindows: {true}", 
+            "OK");
 #endif
     }
 
