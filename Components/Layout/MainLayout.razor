@@ -84,16 +84,38 @@
         }
 
         var themeValue = _isDarkMode ? "dark" : "light";
-        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}')");
+        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}'); localStorage.setItem('theme', '{themeValue}');");
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Set initial theme based on _isDarkMode
+            // Load saved theme from LocalStorage to ensure persistence
+            var savedTheme = await JSRuntime.InvokeAsync<string>("eval", "localStorage.getItem('theme')");
+            
+            if (!string.IsNullOrEmpty(savedTheme))
+            {
+                _isDarkMode = savedTheme == "dark";
+                if (Application.Current != null)
+                {
+                    Application.Current.UserAppTheme = _isDarkMode ? AppTheme.Dark : AppTheme.Light;
+                }
+            }
+            else
+            {
+                // Fallback to system if nothing saved
+                 if (Application.Current != null)
+                {
+                    _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
+                }
+            }
+
+            // Apply theme to DOM
             var initialTheme = _isDarkMode ? "dark" : "light";
             await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{initialTheme}')");
+            
+            // ... (rest of the mobile/desktop class logic)
 
             if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
                 Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
