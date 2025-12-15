@@ -18,25 +18,30 @@
         <MudText Class="pl-2" Typo="Typo.h5"><b>Daily</b></MudText>
         <MudSpacer />
         
-        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.Brightness7 : Icons.Material.Filled.Brightness4)"
-                       Color="Color.Inherit"
-                       OnClick="@ToggleTheme" />
+        <MudTooltip Text="@(_isDarkMode ? "Switch to Light Theme" : "Switch to Dark Theme")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.Brightness7 : Icons.Material.Filled.Brightness4)"
+                           Color="Color.Inherit"
+                           OnClick="@ToggleTheme" />
+        </MudTooltip>
         
-        <MudIconButton Icon="@Icons.Material.Filled.Settings"
-                       Color="Color.Inherit" 
-                       Title="Settings" />
+        <MudTooltip Text="Settings">
+            <MudIconButton Icon="@Icons.Material.Filled.Settings"
+                           Color="Color.Inherit" />
+        </MudTooltip>
 
         @if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.WinUI || Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.MacCatalyst)
         {
-             <MudIconButton Icon="@Icons.Material.Filled.Monitor" 
-                            Color="Color.Inherit" 
-                            OnClick="@(() => WindowManagerService.MoveMainWindowToNextDisplay())"
-                            Title="Move to Next Display" />
+             <MudTooltip Text="Move to Next Display">
+                 <MudIconButton Icon="@Icons.Material.Filled.Monitor" 
+                                Color="Color.Inherit" 
+                                OnClick="@(() => WindowManagerService.MoveMainWindowToNextDisplay())" />
+             </MudTooltip>
 
-             <MudIconButton Icon="@Icons.Material.Filled.Close" 
-                            Color="Color.Inherit" 
-                            OnClick="@(() => Application.Current?.Quit())"
-                            Title="Close" />
+             <MudTooltip Text="Exit Daily">
+                 <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                                Color="Color.Inherit" 
+                                OnClick="@(() => Application.Current?.Quit())" />
+             </MudTooltip>
         }
     </MudAppBar>
     <MudMainContent>

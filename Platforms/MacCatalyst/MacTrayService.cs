@@ -63,6 +63,12 @@ namespace Daily.Platforms.MacCatalyst
                      }
 
                      Log("Step 2: Status Item created");
+                     
+                     // Enable Position Persistence (AutoSaveName)
+                     // [_statusItem setAutosaveName:@"DailyAppStatusItem"]
+                     var setAutosaveNameSelector = new Selector("setAutosaveName:");
+                     void_objc_msgSend_IntPtr(_statusItem.Handle, setAutosaveNameSelector.Handle, new NSString("DailyAppStatusItem").Handle);
+                     Log("Set AutosaveName to 'DailyAppStatusItem'");
 
                      // Set Image
                      var buttonSelector = new Selector("button");
