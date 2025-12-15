@@ -16,6 +16,8 @@ namespace Daily.WinUI
         /// </summary>
         public App()
         {
+            // Force WebView2 to be transparent (Critical for Light Mode spinner fix)
+            System.Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0");
             this.InitializeComponent();
         }
 

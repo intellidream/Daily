@@ -10,10 +10,7 @@ namespace Daily
     {
         public static MauiApp CreateMauiApp()
         {
-#if WINDOWS
-            // Force WebView2 to be transparent
-            Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0");
-#endif
+
             var builder = MauiApp.CreateBuilder();
             builder
                 .UseMauiApp<App>()
