@@ -132,7 +132,13 @@ public partial class DetailPage : ContentPage, IDisposable
         // Ensure we are on UI thread
         Dispatcher.Dispatch(() =>
         {
-             var theme = Application.Current.RequestedTheme;
+             // Prioritize UserAppTheme if set, otherwise fallback to system RequestedTheme
+             var theme = Application.Current.UserAppTheme;
+             if (theme == AppTheme.Unspecified)
+             {
+                 theme = Application.Current.RequestedTheme;
+             }
+             
              var color = theme == AppTheme.Dark ? Color.FromArgb("#121212") : Colors.White;
 
              // Explicitly set background on Windows to match App Theme (fixing Light Mode spinner)
