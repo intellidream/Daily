@@ -184,7 +184,7 @@ namespace Daily
                             // 2. Calculate Frame
                             var trayFrame = MacTrayService.LastTrayFrame;
                             
-                            double width = 800; 
+                            double width = 450; // Sidebar width (Single Column)
                             double widthToUse = width;
                             double height = visibleFrame.Height; 
                             double y = visibleFrame.Y; // Bottom of Safe Area
