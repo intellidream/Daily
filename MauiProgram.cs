@@ -55,6 +55,18 @@ namespace Daily
                     };
                 }
             });
+#elif MACCATALYST
+            // Configure Mac Catalyst BlazorWebView to be transparent/opaque-aware
+            Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebViewHandler.BlazorWebViewMapper.AppendToMapping("BlazorWebViewMacTransparent", (handler, view) =>
+            {
+                 if (view is Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebView)
+                 {
+                     handler.PlatformView.Opaque = false;
+                     handler.PlatformView.BackgroundColor = UIKit.UIColor.Clear;
+                     // Also ensure the scroll view behind it is clear
+                     handler.PlatformView.ScrollView.BackgroundColor = UIKit.UIColor.Clear;
+                 }
+            });
 #endif
 
 
