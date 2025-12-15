@@ -27,13 +27,13 @@ public partial class DetailPage : ContentPage, IDisposable
     {
         InitializeComponent();
         
-#if ANDROID || IOS
+#if ANDROID || IOS || WINDOWS
         // Set initial color based on current theme
-        UpdateMobileBackgroundColor();
+        UpdateBackgroundColor();
         // Subscribe to changes
         if (Application.Current != null)
         {
-            Application.Current.RequestedThemeChanged += (s, e) => UpdateMobileBackgroundColor();
+            Application.Current.RequestedThemeChanged += (s, e) => UpdateBackgroundColor();
         }
 #else
         BackgroundColor = Colors.Transparent;
@@ -117,7 +117,7 @@ public partial class DetailPage : ContentPage, IDisposable
         _detailNavigationService.OnToolbarHeightChanged -= OnToolbarHeightChanged;
     }
 
-    private void UpdateMobileBackgroundColor()
+    private void UpdateBackgroundColor()
     {
         if (Application.Current == null) return;
         var theme = Application.Current.RequestedTheme;
