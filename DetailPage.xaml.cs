@@ -28,13 +28,9 @@ public partial class DetailPage : ContentPage, IDisposable
         InitializeComponent();
         
 #if ANDROID || IOS || WINDOWS
-        // Set initial color based on current theme
-        UpdateBackgroundColor();
-        // Subscribe to changes
-        if (Application.Current != null)
-        {
-            Application.Current.RequestedThemeChanged += (s, e) => UpdateBackgroundColor();
-        }
+        // Subscribe to changes if needed, but AppThemeBinding handles BackgroundColor now.
+        // We might want to keep the subscription if we need to do other theme updates, 
+        // but for BackgroundColor it is redundant.
 #else
         BackgroundColor = Colors.Transparent;
 #endif
@@ -117,12 +113,7 @@ public partial class DetailPage : ContentPage, IDisposable
         _detailNavigationService.OnToolbarHeightChanged -= OnToolbarHeightChanged;
     }
 
-    private void UpdateBackgroundColor()
-    {
-        if (Application.Current == null) return;
-        var theme = Application.Current.RequestedTheme;
-        BackgroundColor = theme == AppTheme.Dark ? Color.FromArgb("#121212") : Colors.White;
-    }
+
 
     public ICommand RefreshCommand { get; }
 
