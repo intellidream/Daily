@@ -28,9 +28,13 @@ public partial class DetailPage : ContentPage, IDisposable
         InitializeComponent();
         
 #if ANDROID || IOS || WINDOWS
-        // Subscribe to changes if needed, but AppThemeBinding handles BackgroundColor now.
-        // We might want to keep the subscription if we need to do other theme updates, 
-        // but for BackgroundColor it is redundant.
+        // Set initial color based on current theme, but verify in OnAppearing too
+        UpdateBackgroundColor();
+        
+        if (Application.Current != null)
+        {
+            Application.Current.RequestedThemeChanged += (s, e) => UpdateBackgroundColor();
+        }
 #else
         BackgroundColor = Colors.Transparent;
 #endif
@@ -111,6 +115,27 @@ public partial class DetailPage : ContentPage, IDisposable
         _detailNavigationService.OnBrowserStateChanged -= OnBrowserStateChanged;
         _detailNavigationService.OnReaderModeChanged -= OnReaderModeChanged;
         _detailNavigationService.OnToolbarHeightChanged -= OnToolbarHeightChanged;
+    }
+
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+#if WINDOWS
+        UpdateBackgroundColor();
+#endif
+    }
+
+    private void UpdateBackgroundColor()
+    {
+        if (Application.Current == null) return;
+        var theme = Application.Current.RequestedTheme;
+        
+        // Explicitly set background on Windows to match App Theme (fixing Light Mode spinner)
+        // Mac uses Overlay, so it stays Transparent (Overlay handles background).
+        // Mobile uses XAML background too.
+#if WINDOWS || ANDROID || IOS
+        BackgroundColor = theme == AppTheme.Dark ? Color.FromArgb("#121212") : Colors.White;
+#endif
     }
 
 

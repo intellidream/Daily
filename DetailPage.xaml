@@ -4,7 +4,7 @@
              xmlns:local="clr-namespace:Daily"
              x:Class="Daily.DetailPage"
              Title="Daily Detail"
-             BackgroundColor="{AppThemeBinding Light=White, Dark='#121212'}">
+             BackgroundColor="Transparent">
 
     <!--<RefreshView x:Name="refreshView" Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing, Mode=TwoWay}" RefreshColor="#594AE2" BackgroundColor="Transparent">-->
     <Grid>
