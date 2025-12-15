@@ -8,6 +8,13 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Windows.Graphics;
 #endif
+#if MACCATALYST
+using Foundation;
+using UIKit;
+using ObjCRuntime;
+using System.Runtime.InteropServices;
+using CoreGraphics;
+#endif
 
 namespace Daily.Services
 {
@@ -26,7 +33,14 @@ namespace Daily.Services
         private readonly IRssFeedService _rssFeedService;
 
         // Desktop Window Reference
+        // Desktop Window Reference
         private Window? _detailWindow;
+        
+#if MACCATALYST
+        // Mac State Saving
+        private Page? _previousMacPage;
+        private CoreGraphics.CGRect _previousMacFrame;
+#endif
 
         // Mobile Modal Reference
         private Page? _detailModal;
@@ -358,23 +372,34 @@ namespace Daily.Services
         {
             if (_detailWindow != null || _detailModal != null) return;
 
-            var detailPage = new DetailPage(_refreshService, _detailNavigationService, _rssFeedService)
-            {
-#if ANDROID || IOS
-                Opacity = 1 // Start visible immediately on Mobile
-#else
-                Opacity = 0 // Start invisible for fade-in on Desktop
-#endif
-            };
+            var detailPage = new DetailPage(_refreshService, _detailNavigationService, _rssFeedService);
 
 #if ANDROID || IOS
+            detailPage.Opacity = 1;
             _detailModal = detailPage;
             // Handle native back/swipe closing
             detailPage.Disappearing += (s, e) => _detailModal = null;
 
             // Push without animation to avoid "tremble"/clumsiness
             Application.Current?.MainPage?.Navigation.PushModalAsync(detailPage, false);
+#elif MACCATALYST
+            detailPage.Opacity = 1;
+            // SINGLE WINDOW STRATEGY (Mac Agent)
+            // Swap Content + Resize Window
+            var mainWindow = Application.Current?.Windows.FirstOrDefault();
+            if (mainWindow != null)
+            {
+                 _previousMacPage = mainWindow.Page;
+                 
+                 // Capture Frame logic is handled by restoration mainly
+                 
+                 // Swap Page
+                 mainWindow.Page = detailPage;
+                 
+                 // No Resizing as per user request (Stick to Sidebar)
+            }
 #else
+            detailPage.Opacity = 0; // Start invisible for fade-in
             _detailWindow = new Window(detailPage)
             {
                 Title = "Daily - Reading Pane"
@@ -386,7 +411,10 @@ namespace Daily.Services
 #if WINDOWS
                  // Must apply style here because Handler is valid now
                  ConfigureWindowStyle(_detailWindow);
+#endif
 
+
+#if WINDOWS
                  // FORCE NATIVE SNAP (Fixes Initial Open on Secondary Displays)
                  // MAUI Properties (DIPs) can be ambiguous during creation on mixed DPI.
                  // We enforce the position using explicit PHYSICAL PIXELS via Win32.
@@ -441,6 +469,18 @@ namespace Daily.Services
             {
                 Application.Current?.MainPage?.Navigation.PopModalAsync();
                 _detailModal = null;
+            }
+#elif MACCATALYST
+            // Restore Mac Main Window
+            var mainWindow = Application.Current?.Windows.FirstOrDefault();
+            if (mainWindow != null && _previousMacPage != null)
+            {
+                mainWindow.Page = _previousMacPage;
+                _previousMacPage = null;
+                
+                // Restore Sidebar Position (Sidebar Logic from App.xaml.cs)
+                // Since we aren't resizing, we don't need to toggle/reposition.
+                // app.ToggleWindow(); // This was causing the window to HIDE.
             }
 #else
             if (_detailWindow != null)
@@ -520,6 +560,11 @@ namespace Daily.Services
                 titleBar.ButtonInactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
             }
         }
+#endif
+
+#if MACCATALYST
+        [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+        static extern IntPtr IntPtr_objc_msgSend(IntPtr receiver, IntPtr selector);
 #endif
     }
 }

@@ -21,14 +21,14 @@ namespace Daily.Platforms.MacCatalyst
              {
                  try 
                  {
-                     Log("Attempting to load AppKit...");
+                     // Log("Attempting to load AppKit...");
                      var handle = dlopen("/System/Library/Frameworks/AppKit.framework/AppKit", 0x2); // RTLD_NOW = 2
-                     Log($"dlopen result: {handle}");
+                     // Log($"dlopen result: {handle}");
                      
                      // Deep Interop to access NSStatusBar
                      
                      // Deep Interop to access NSStatusBar
-                     Log("Step 1: Init at " + DateTime.Now);
+                     // Log("Step 1: Init at " + DateTime.Now);
                      
                      // Get NSStatusBar.systemStatusBar
                      var statusBarClass = new Class("NSStatusBar");
@@ -61,14 +61,14 @@ namespace Daily.Platforms.MacCatalyst
                          Log("Error: _statusItem is null");
                          return;
                      }
-
-                     Log("Step 2: Status Item created");
+                     
+                     // Log("Step 2: Status Item created");
                      
                      // Enable Position Persistence (AutoSaveName)
                      // [_statusItem setAutosaveName:@"DailyAppStatusItem"]
                      var setAutosaveNameSelector = new Selector("setAutosaveName:");
                      void_objc_msgSend_IntPtr(_statusItem.Handle, setAutosaveNameSelector.Handle, new NSString("DailyAppStatusItem").Handle);
-                     Log("Set AutosaveName to 'DailyAppStatusItem'");
+                     // Log("Set AutosaveName to 'DailyAppStatusItem'");
 
                      // Set Image
                      var buttonSelector = new Selector("button");
@@ -78,7 +78,7 @@ namespace Daily.Platforms.MacCatalyst
                      
                      if (button != null)
                      {
-                         Log("Step 3: Button found");
+                         // Log("Step 3: Button found");
                          
                          // Set Image (Use Real App Icon)
                          var nsAppClass = new Class("NSApplication");
@@ -122,7 +122,7 @@ namespace Daily.Platforms.MacCatalyst
                              // Clear Title
                              button.SetValueForKey(new NSString(""), new NSString("title"));
                              
-                             Log("Set Button Image (AppIcon or Star)");
+                             // Log("Set Button Image (AppIcon or Star)");
                          }
                          else
                          {
@@ -147,7 +147,7 @@ namespace Daily.Platforms.MacCatalyst
                          
                          // [button sendActionOn: LeftMouseDown] (Default is usually correct, but we can ensure it)
                          
-                         Log("Wired Button Action to toggleWindow:");
+                         // Log("Wired Button Action to toggleWindow:");
 
                          // Create NSMenu (Optional, keep for reference or RightClick future)
                          var nsMenuClass = new Class("NSMenu");
@@ -164,7 +164,7 @@ namespace Daily.Platforms.MacCatalyst
 
                          if (menu != null)
                          {
-                             Log("Step 4: NSMenu created (but not attached for primary click/action)");
+                             // Log("Step 4: NSMenu created (but not attached for primary click/action)");
 
                              // Create MenuItem "Quit"
                              var quitAction = new Selector("terminate:");
@@ -228,7 +228,7 @@ namespace Daily.Platforms.MacCatalyst
                                 }
                             }
                         }
-                    } catch(Exception e) { MacTrayService.Log("Failed to capture tray frame: " + e); }
+                    } catch(Exception e) { /* MacTrayService.Log("Failed to capture tray frame: " + e); */ }
 
                     service.ClickHandler?.Invoke();
                     var app = Microsoft.Maui.Controls.Application.Current as App;

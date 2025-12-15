@@ -25,7 +25,7 @@ namespace Daily
             InitializeComponent();
             _trayService = trayService;
 #if MACCATALYST
-            Daily.Platforms.MacCatalyst.MacTrayService.Log("App Constructor Called");
+            // Daily.Platforms.MacCatalyst.MacTrayService.Log("App Constructor Called");
 #endif
             _refreshService = refreshService;
             _backButtonService = backButtonService;
@@ -131,7 +131,7 @@ namespace Daily
         {
             MainThread.BeginInvokeOnMainThread(() =>
             {
-                MacTrayService.Log("ToggleWindow called on MainThread");
+                // MacTrayService.Log("ToggleWindow called on MainThread");
 
                 try
                 {
@@ -160,7 +160,7 @@ namespace Daily
                             // Hide
                             var selector = new ObjCRuntime.Selector("orderOut:");
                             nsWindow.PerformSelector(selector, null, 0);
-                            MacTrayService.Log("Window Hidden");
+                            // MacTrayService.Log("Window Hidden");
                         }
                         else
                         {
@@ -184,28 +184,26 @@ namespace Daily
                             // 2. Calculate Frame
                             var trayFrame = MacTrayService.LastTrayFrame;
                             
-                            double width = 450; // Sidebar width (Single Column)
+                            // Always use Sidebar metrics (User Request: Stability over Dynamic Sizing)
+                            double width = 450; 
                             double widthToUse = width;
                             double height = visibleFrame.Height; 
-                            double y = visibleFrame.Y; // Bottom of Safe Area
+                            double y = visibleFrame.Y; 
                             double x = 0;
 
                             if (trayFrame.Width > 0 && trayFrame.Height > 0)
                             {
-                                // Center under tray
                                 var trayCenterX = trayFrame.X + (trayFrame.Width / 2);
                                 x = trayCenterX - (widthToUse / 2);
-                                
-                                // Clamp
+                                                                
                                 if (x < visibleFrame.X) x = visibleFrame.X;
                                 if (x + widthToUse > visibleFrame.X + visibleFrame.Width) x = visibleFrame.X + visibleFrame.Width - widthToUse;
                             }
                             else
                             {
-                                // Fallback Right
                                 x = visibleFrame.X + visibleFrame.Width - widthToUse;
                             }
-
+                            
                             var rect = new CoreGraphics.CGRect(x, y, widthToUse, height);
                             
                             // 3. Apply Frame
@@ -229,13 +227,13 @@ namespace Daily
                             // 7. Show
                             var selector = new ObjCRuntime.Selector("makeKeyAndOrderFront:");
                             nsWindow.PerformSelector(selector, null, 0);
-                            MacTrayService.Log($"Window Shown at {rect}");
+                            // MacTrayService.Log($"Window Shown at {rect}");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    MacTrayService.Log($"Error in Toggle: {ex}");
+                    // MacTrayService.Log($"Error in Toggle: {ex}");
                 }
             });
         }
