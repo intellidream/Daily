@@ -84,34 +84,14 @@
         }
 
         var themeValue = _isDarkMode ? "dark" : "light";
-        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}'); localStorage.setItem('theme', '{themeValue}');");
+        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}')");
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Load saved theme from LocalStorage to ensure persistence
-            var savedTheme = await JSRuntime.InvokeAsync<string>("eval", "localStorage.getItem('theme')");
-            
-            if (!string.IsNullOrEmpty(savedTheme))
-            {
-                _isDarkMode = savedTheme == "dark";
-                if (Application.Current != null)
-                {
-                    Application.Current.UserAppTheme = _isDarkMode ? AppTheme.Dark : AppTheme.Light;
-                }
-            }
-            else
-            {
-                // Fallback to system if nothing saved
-                 if (Application.Current != null)
-                {
-                    _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
-                }
-            }
-
-            // Apply theme to DOM
+            // Set initial theme based on _isDarkMode
             var initialTheme = _isDarkMode ? "dark" : "light";
             await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{initialTheme}')");
             

@@ -39,28 +39,22 @@ namespace Daily
             {
                 if (view is Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebView)
                 {
-                    // Set the WinUI WebView2 background to transparent
-                    handler.PlatformView.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
+                    // Detect current App Theme preference
+                    var appTheme = Application.Current?.UserAppTheme ?? AppTheme.Unspecified;
+                    if (appTheme == AppTheme.Unspecified) appTheme = Application.Current?.RequestedTheme ?? AppTheme.Light;
+                    
+                    var backgroundColor = appTheme == AppTheme.Dark ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White;
+                    
+                    // Set the WinUI WebView2 background to App Theme Color
+                    // This ensures that even if index.html is transparent, we see the correct background
+                    handler.PlatformView.DefaultBackgroundColor = backgroundColor;
 
                     // Ensure it persists after CoreWebView2 initialization
-                    handler.PlatformView.CoreWebView2Initialized += async (sender, args) =>
+                    handler.PlatformView.CoreWebView2Initialized += (sender, args) =>
                     {
                         if (sender is Microsoft.UI.Xaml.Controls.WebView2 webView2)
                         {
-                            webView2.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
-                            
-                            // Inject Initial Theme State to force correct background color immediately
-                            // This solves the issue where Transparency fails and reveals the System Dark theme instead of App Light theme.
-                            var appTheme = Application.Current?.UserAppTheme ?? AppTheme.Unspecified;
-                            if (appTheme == AppTheme.Unspecified) appTheme = Application.Current?.RequestedTheme ?? AppTheme.Light;
-                            
-                            var themeStr = appTheme == AppTheme.Dark ? "dark" : "light";
-                            var script = $"document.documentElement.setAttribute('data-theme', '{themeStr}');";
-                            
-                            if (webView2.CoreWebView2 != null)
-                            {
-                                await webView2.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
-                            }
+                            webView2.DefaultBackgroundColor = backgroundColor;
                         }
                     };
                 }

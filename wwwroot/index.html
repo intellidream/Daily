@@ -15,39 +15,13 @@
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link rel="icon" href="data:,">
     <script>
-        // Critical: Instant Theme Application via LocalStorage
-        // This ensures the WebView paints the correct User Theme immediately, avoiding "System Dark" flash on "App Light".
-        (function () {
-            try {
-                var storedTheme = localStorage.getItem('theme');
-                if (storedTheme) {
-                    document.documentElement.setAttribute('data-theme', storedTheme);
-                } else {
-                    // If no stored theme, check system preference
-                    var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                    document.documentElement.setAttribute('data-theme', systemDark ? 'dark' : 'light');
-                }
-
-                // Mac Catalyst Detection for CSS override if needed (though data-theme should handle it now)
-                if (navigator.userAgent.indexOf('Mac') !== -1 || navigator.userAgent.indexOf('iPhone') !== -1 || navigator.userAgent.indexOf('iPad') !== -1) {
-                    document.documentElement.classList.add('platform-mac');
-                }
-            } catch (e) {
-                console.error("Theme init error", e);
-            }
-        })();
-    </script>
-    <script>
         // Critical: OS Detection for Background Strategy
         // Mac Catalyst: Needs Opaque Background to prevent White Flash.
         // Windows WebView2: Needs Transparent Background to respect App Theme (showing XAML Window Color).
         var isMac = navigator.userAgent.indexOf('Mac') !== -1 || navigator.userAgent.indexOf('iPhone') !== -1 || navigator.userAgent.indexOf('iPad') !== -1;
-        var rootStyle = document.documentElement.style;
 
         if (isMac) {
-            // Mac: Use --loading-bg (Opaque)
-            // We can't access VAR here easily in JS before CSS, but we can set the property.
-            // Actually, best to set a class on body or just use CSS variables logic in style.
+            document.documentElement.classList.add('platform-mac');
         }
     </script>
     <style>
@@ -65,27 +39,19 @@
             }
         }
 
-        /* User Theme Overrides (Applied via Script) */
-        html[data-theme='light'] {
-            --loading-bg: #f5f5f5 !important;
-            --loading-color: #594AE2 !important;
-        }
-
-        html[data-theme='dark'] {
-            --loading-bg: #121212 !important;
-            --loading-color: #7e6fff !important;
-        }
-
         html,
         body {
-            /* Force Opaque Background on ALL platforms.
-               This covers Mac Flash AND Windows Default Black issues.
-               Since we now inject the correct theme instantly via LocalStorage, 
-               this will always match the User's choice. */
-            background-color: var(--loading-bg) !important;
+            /* Default: Transparent (Windows/Platform Default) */
+            /* This resolves to transparent, letting the underlying XAML Window color show */
+            background-color: transparent;
             margin: 0;
             padding: 0;
             min-height: 100vh;
+        }
+
+        /* Mac Specific Override: Force Opaque to prevent Flash */
+        .platform-mac body {
+            background-color: var(--loading-bg) !important;
         }
 
         .loading-container {
