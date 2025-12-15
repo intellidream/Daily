@@ -13,8 +13,6 @@
 html,
 body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    /* Set specific background color to prevent white flash on Mac/WebView load */
-    background-color: var(--loading-bg); 
     min-height: 100vh;
 }
 
