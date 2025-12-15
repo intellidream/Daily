@@ -40,6 +40,17 @@
             }
         }
 
+        /* Theme Overrides (Injected via Script on Windows/Desktop) */
+        html[data-theme='light'] {
+            --loading-bg: #f5f5f5 !important;
+            --loading-color: #594AE2 !important;
+        }
+
+        html[data-theme='dark'] {
+            --loading-bg: #121212 !important;
+            --loading-color: #7e6fff !important;
+        }
+
         html,
         body {
             /* Default: Transparent (Windows/Platform Default) */
@@ -50,18 +61,13 @@
             min-height: 100vh;
         }
 
-        /* Mac Specific Override via @supports hack or similar? 
-           Actually, we can use the script above to add a class to documentElement */
-    </style>
-    <script>
-        // Apply class 'platform-mac' if Mac
-        if (navigator.userAgent.indexOf('Mac') !== -1 || navigator.userAgent.indexOf('iPhone') !== -1 || navigator.userAgent.indexOf('iPad') !== -1) {
-            document.documentElement.classList.add('platform-mac');
-        }
-    </script>
-    <style>
-        /* Mac Override: Force Opaque to prevent Flash */
+        /* Mac Specific Override via script logic above */
         .platform-mac body {
+            background-color: var(--loading-bg) !important;
+        }
+
+        /* Windows Override: If data-theme is present (injected), force Opaque background using that theme */
+        html[data-theme] body {
             background-color: var(--loading-bg) !important;
         }
 
