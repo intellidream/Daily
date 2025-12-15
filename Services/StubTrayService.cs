@@ -5,11 +5,7 @@ namespace Daily.Services
 {
     public class StubTrayService : ITrayService
     {
-        public Action ClickHandler { get; set; }
-
-        public void Initialize()
-        {
-            // No-op for platforms without tray support yet
-        }
+        public Action? ClickHandler { get; set; }
+        public void Initialize() { }
     }
 }

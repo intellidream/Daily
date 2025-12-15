@@ -5,6 +5,6 @@ namespace Daily.Services
     public interface ITrayService
     {
         void Initialize();
-        Action ClickHandler { get; set; }
+        Action? ClickHandler { get; set; }
     }
 }

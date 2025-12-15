@@ -37,6 +37,7 @@ namespace Daily
             builder.Services.AddMudServices();
 
 #if WINDOWS
+            builder.UseNotifyIcon();
             Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebViewHandler.BlazorWebViewMapper.AppendToMapping("BlazorWebViewTransparent", (handler, view) =>
             {
                 if (view is Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebView)
@@ -54,8 +55,8 @@ namespace Daily
                     };
                 }
             });
-            builder.UseNotifyIcon();
 #endif
+
 
             builder.Services.AddSingleton<Daily.Services.IWidgetService, Daily.Services.WidgetService>();
             builder.Services.AddSingleton<Daily.Services.IWeatherService, Daily.Services.WeatherService>();
@@ -76,6 +77,8 @@ namespace Daily
 
 #if WINDOWS
             builder.Services.AddSingleton<Daily.Services.ITrayService, Daily.Platforms.Windows.WindowsTrayService>();
+#elif MACCATALYST
+            builder.Services.AddSingleton<Daily.Services.ITrayService, Daily.Platforms.MacCatalyst.MacTrayService>();
 #else
             builder.Services.AddSingleton<Daily.Services.ITrayService, Daily.Services.StubTrayService>();
 #endif
