@@ -217,7 +217,16 @@ namespace Daily
                             // 4. Set Level (Status Window)
                             nsWindow.SetValueForKey(Foundation.NSNumber.FromInt32(25), new Foundation.NSString("level"));
 
-                            // 5. Show
+                            // 5. Apply Style (Borderless = 0)
+                            // This removes Chrome and Resizability
+                            var setStyleMaskSelector = new ObjCRuntime.Selector("setStyleMask:");
+                            void_objc_msgSend_UInt(nsWindow.Handle, setStyleMaskSelector.Handle, 0); // NSWindowStyleMaskBorderless = 0
+
+                            // 6. Ensure Shadow
+                            var setHasShadowSelector = new ObjCRuntime.Selector("setHasShadow:");
+                            void_objc_msgSend_Bool(nsWindow.Handle, setHasShadowSelector.Handle, true);
+
+                            // 7. Show
                             var selector = new ObjCRuntime.Selector("makeKeyAndOrderFront:");
                             nsWindow.PerformSelector(selector, null, 0);
                             MacTrayService.Log($"Window Shown at {rect}");
@@ -237,6 +246,9 @@ namespace Daily
 
         [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
         static extern void void_objc_msgSend_Bool(IntPtr receiver, IntPtr selector, bool arg1);
+
+        [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+        static extern void void_objc_msgSend_UInt(IntPtr receiver, IntPtr selector, uint arg1);
 #endif
 
         #if WINDOWS
