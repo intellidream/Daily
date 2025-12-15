@@ -9,48 +9,52 @@
 @implements IDisposable
 
 <div class="d-flex flex-column" style="height: 100%; position: relative;">
-    @if (_selectedItem == null)
-    {
-        <!-- List View -->
+    
+    <!-- List View (Always rendered, hidden via CSS when reading) -->
+    <div class="@(_selectedItem == null ? "d-flex flex-column" : "d-none")" style="height: 100%; overflow: hidden;">
         @if (RssService.IsLoading)
         {
-            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2 flex-shrink-0" />
         }
         <div style="flex-grow: 1; overflow-y: auto;" class="px-2">
             <MudGrid Spacing="2">
-                @foreach (var item in RssService.Items)
+                @if (RssService.Items != null)
                 {
-                    <MudItem xs="12">
-                        <MudPaper Class="pa-3 cursor-pointer hover-scale tile-glass" @onclick="@(() => OpenItem(item))">
-                            <div class="d-flex gap-4">
-                                @if (!string.IsNullOrEmpty(item.ImageUrl))
-                                {
-                                    <div style="flex-shrink: 0;">
-                                        <MudImage Src="@item.ImageUrl" Width="@(_isMobile ? 80 : 200)" Height="@(_isMobile ? 54 : 135)" ObjectFit="ObjectFit.Cover" Class="rounded-lg elevation-2" />
-                                    </div>
-                                }
-                                <div class="d-flex flex-column flex-grow-1" style="min-width: 0;">
-                                    <MudTooltip Text="@item.Title" Arrow="true" Placement="Placement.Top">
-                                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600; line-height: 1.2;">@item.Title</MudText>
-                                    </MudTooltip>
-                                    <MudText Typo="Typo.caption" Class="mt-1" Style="opacity: 0.7;">@item.PublishDate.ToString("g")</MudText>
-                                    @if (!string.IsNullOrEmpty(item.Description))
+                    @foreach (var item in RssService.Items)
+                    {
+                        <MudItem xs="12">
+                            <MudPaper Class="pa-3 cursor-pointer hover-scale tile-glass" @onclick="@(() => OpenItem(item))">
+                                <div class="d-flex gap-4">
+                                    @if (!string.IsNullOrEmpty(item.ImageUrl))
                                     {
-                                         <MudText Typo="Typo.body2" Class="mt-2" Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; opacity: 0.9;">
-                                             @((MarkupString)StripHtml(item.Description))
-                                         </MudText>
+                                        <div style="flex-shrink: 0;">
+                                            <MudImage Src="@item.ImageUrl" Width="@(_isMobile ? 80 : 200)" Height="@(_isMobile ? 54 : 135)" ObjectFit="ObjectFit.Cover" Class="rounded-lg elevation-2" />
+                                        </div>
                                     }
+                                    <div class="d-flex flex-column flex-grow-1" style="min-width: 0;">
+                                        <MudTooltip Text="@item.Title" Arrow="true" Placement="Placement.Top">
+                                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600; line-height: 1.2;">@item.Title</MudText>
+                                        </MudTooltip>
+                                        <MudText Typo="Typo.caption" Class="mt-1" Style="opacity: 0.7;">@item.PublishDate.ToString("g")</MudText>
+                                        @if (!string.IsNullOrEmpty(item.Description))
+                                        {
+                                             <MudText Typo="Typo.body2" Class="mt-2" Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; opacity: 0.9;">
+                                                 @((MarkupString)StripHtml(item.Description))
+                                             </MudText>
+                                        }
+                                    </div>
                                 </div>
-                            </div>
-                        </MudPaper>
-                    </MudItem>
+                            </MudPaper>
+                        </MudItem>
+                    }
                 }
             </MudGrid>
         </div>
-    }
-    else
+    </div>
+
+    <!-- Reading Mode (Only rendered when selected) -->
+    @if (_selectedItem != null)
     {
-        <!-- Reading Mode -->
         <div class="d-flex flex-column animate-fade-in" style="height: 100%; overflow: hidden;">
             @if (NavService.IsBrowserOpen && !NavService.IsReaderMode)
             {
