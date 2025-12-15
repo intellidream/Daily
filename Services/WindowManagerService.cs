@@ -40,6 +40,7 @@ namespace Daily.Services
         // Mac State Saving
         private Page? _previousMacPage;
         private CoreGraphics.CGRect _previousMacFrame;
+        private DetailPage? _activeMacDetailPage;
 #endif
 
         // Mobile Modal Reference
@@ -384,19 +385,26 @@ namespace Daily.Services
             Application.Current?.MainPage?.Navigation.PushModalAsync(detailPage, false);
 #elif MACCATALYST
             detailPage.Opacity = 1;
+            _activeMacDetailPage = detailPage; // Track for disposal
+            
             // SINGLE WINDOW STRATEGY (Mac Agent)
-            // Swap Content + Resize Window
-            var mainWindow = Application.Current?.Windows.FirstOrDefault();
-            if (mainWindow != null)
+            // Use Overlay on MainPage to prevent Main WebView reload (Caching)
+            var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow);
+            if (mainWindow?.Page is MainPage mainPage)
             {
+                 // 1. Inject content into Overlay
+                 mainPage.MacDetailOverlay.Content = detailPage.Content;
+                 
+                 // 2. Show Overlay
+                 mainPage.MacDetailOverlay.IsVisible = true;
+                 
+                 // 3. Keep sidebar size (Implicit)
+            }
+            else if (mainWindow != null)
+            {
+                 // Fallback if Page is not MainPage (Shouldn't happen in this architecture)
                  _previousMacPage = mainWindow.Page;
-                 
-                 // Capture Frame logic is handled by restoration mainly
-                 
-                 // Swap Page
                  mainWindow.Page = detailPage;
-                 
-                 // No Resizing as per user request (Stick to Sidebar)
             }
 #else
             detailPage.Opacity = 0; // Start invisible for fade-in
@@ -471,16 +479,31 @@ namespace Daily.Services
                 _detailModal = null;
             }
 #elif MACCATALYST
-            // Restore Mac Main Window
-            var mainWindow = Application.Current?.Windows.FirstOrDefault();
-            if (mainWindow != null && _previousMacPage != null)
+            // Restore Mac Main Window (Hide Overlay)
+            var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow);
+            
+            if (mainWindow?.Page is MainPage mainPage && mainPage.MacDetailOverlay.IsVisible)
             {
+                mainPage.MacDetailOverlay.IsVisible = false;
+                mainPage.MacDetailOverlay.Content = null; // Clean up Visual Tree
+                
+                // CRITICAL: Dispose the DetailPage to kill background Blazor/WebView processes
+                if (_activeMacDetailPage != null)
+                {
+                    _activeMacDetailPage.Dispose();
+                    _activeMacDetailPage = null;
+                }
+            }
+            else if (mainWindow != null && _previousMacPage != null)
+            {
+                // Fallback for Page Swap
                 mainWindow.Page = _previousMacPage;
                 _previousMacPage = null;
-                
-                // Restore Sidebar Position (Sidebar Logic from App.xaml.cs)
-                // Since we aren't resizing, we don't need to toggle/reposition.
-                // app.ToggleWindow(); // This was causing the window to HIDE.
+                 if (_activeMacDetailPage != null)
+                {
+                    _activeMacDetailPage.Dispose();
+                    _activeMacDetailPage = null;
+                }
             }
 #else
             if (_detailWindow != null)

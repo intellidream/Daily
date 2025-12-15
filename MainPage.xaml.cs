@@ -50,5 +50,8 @@ namespace Daily
                 //refreshView.IsRefreshing = false; // Force direct update
             });
         }
+
+        // Expose Overlay for Mac Catalyst WindowManager
+        public ContentView MacDetailOverlay => DetailOverlay;
     }
 }

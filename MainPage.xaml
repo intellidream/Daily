@@ -26,11 +26,16 @@
     </ContentPage.Background>
 
     <!--<RefreshView x:Name="refreshView" Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing, Mode=TwoWay}" RefreshColor="#594AE2" BackgroundColor="Transparent">-->
+    <Grid>
         <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" BackgroundColor="Transparent">
             <BlazorWebView.RootComponents>
                 <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
             </BlazorWebView.RootComponents>
         </BlazorWebView>
+
+        <!-- Mac Catalyst Detail Overlay -->
+        <ContentView x:Name="DetailOverlay" IsVisible="False" BackgroundColor="{AppThemeBinding Light='#f5f5f5', Dark='#121212'}" InputTransparent="False" />
+    </Grid>
     <!--</RefreshView>-->
 
 </ContentPage>

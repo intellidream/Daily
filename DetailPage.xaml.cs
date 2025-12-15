@@ -3,7 +3,7 @@ using System.Windows.Input;
 
 namespace Daily;
 
-public partial class DetailPage : ContentPage
+public partial class DetailPage : ContentPage, IDisposable
 {
     private readonly IDetailNavigationService _detailNavigationService;
     private readonly IRefreshService _refreshService;
@@ -146,5 +146,20 @@ public partial class DetailPage : ContentPage
             IsRefreshing = false;
             //refreshView.IsRefreshing = false; // Force direct update
         });
+    }
+    public void Dispose()
+    {
+        // Cleanup Native WebView
+        if (InternalBrowser != null)
+        {
+            InternalBrowser.Source = "about:blank";
+            InternalBrowser.Handler?.DisconnectHandler();
+        }
+
+        // Cleanup Blazor WebView
+        if (blazorWebView != null)
+        {
+            blazorWebView.Handler?.DisconnectHandler();
+        }
     }
 }
