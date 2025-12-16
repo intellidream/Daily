@@ -44,15 +44,16 @@ body {
 /* --- DARK MODE (System Preference OR Explicit Override) --- */
 @media (prefers-color-scheme: dark) {
 
-    /* Remove space: target body that has BOTH the class and NOT the light attribute */
-    body:not([data-theme="light"]).mesh-background {
+    /* Remove space: target element that has BOTH the class and NOT the light attribute */
+    .mesh-background:not([data-theme="light"]) {
         background: linear-gradient(135deg, #594AE2 0%, #1b0e33 50%, #00d2ff 100%) !important;
         background-attachment: fixed;
         background-size: cover;
     }
 
-    /* Keep space: glass-panel is a child of body */
-    body:not([data-theme="light"]) .glass-panel {
+    /* Keep space: glass-panel is a child */
+    [data-theme="dark"] .glass-panel,
+    .mesh-background:not([data-theme="light"]) .glass-panel {
         background-color: rgba(30, 30, 30, 0.45) !important;
         border: 1px solid rgba(255, 255, 255, 0.2) !important;
         color: #e0e0e0 !important;
