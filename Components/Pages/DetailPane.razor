@@ -32,15 +32,36 @@
                  </MudText>
              </div>
         }
-        else if (NavService.CurrentView == "RssFeed" && RssService.CurrentFeed != null)
-        {
-             <div class="d-flex align-center">
-                 <MudText Typo="Typo.h6" Class="mr-3"><b>@RssService.CurrentFeed.Name</b></MudText>
-                 <MudPaper Class="d-flex align-center px-2 py-0 rounded-pill border-solid border-1 mud-border-primary" Elevation="0" Style="background-color: transparent;">
-                     <MudText Typo="Typo.caption" Color="Color.Primary">@RssService.Items.Count items</MudText>
-                 </MudPaper>
-             </div>
-        }
+         else if (NavService.CurrentView == "RssFeed" && RssService.CurrentFeed != null)
+         {
+              <div class="d-flex align-center flex-grow-1 overflow-x-auto gap-2 no-scrollbar px-2" style="mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);">
+                  @foreach (var feed in RssService.Feeds)
+                  {
+                      var isSelected = RssService.CurrentFeed == feed;
+                      <MudPaper Elevation="0" 
+                                Class="@($"d-flex align-center px-2 py-1 rounded-pill cursor-pointer flex-shrink-0 transition-all {(isSelected ? "mud-theme-primary" : "surface-glass")}")"
+                                @onclick="@(() => RssService.SelectFeed(feed))"
+                                Style="@(isSelected ? "" : "background-color: rgba(128,128,128,0.1); border: 1px solid rgba(255,255,255,0.1);")">
+                          
+                          @if (!string.IsNullOrEmpty(feed.IconUrl))
+                          {
+                              <MudImage Src="@feed.IconUrl" Width="16" Height="16" Class="mr-2" ObjectFit="ObjectFit.Contain" />
+                          }
+                          
+                          <MudText Typo="Typo.caption" Style="@(isSelected ? "font-weight: 700; color: white;" : "opacity: 0.8;")">
+                              @feed.Name
+                          </MudText>
+                          
+                          @if (isSelected && RssService.Items != null)
+                          {
+                              <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" Class="ml-2 my-0 py-0" style="height: 16px; font-size: 0.7em; color: white !important;">
+                                  @RssService.Items.Count
+                              </MudChip>
+                          }
+                      </MudPaper>
+                  }
+              </div>
+         }
         else
         {
             <MudText Typo="Typo.h6"><b>@NavService.CurrentTitle</b></MudText>
@@ -104,6 +125,19 @@
     </MudMainContent>
 </MudLayout>
 
+<style>
+    /* .reader-container moved to shared Configuration */
+    
+    /* Pagination Arrow Fix for Dark Mode */
+    [data-theme='dark'] .mud-pagination .mud-button-root {
+        color: inherit !important;
+    }
+    [data-theme='dark'] .mud-pagination .mud-button-root .mud-icon-root {
+        color: inherit !important;
+        fill: currentColor !important;
+    }
+</style>
+
 @code {
     private bool _isDarkMode = true;
     private MudTheme _theme = new()
@@ -140,6 +174,7 @@
         NavService.OnBrowserStateChanged += OnBrowserStateChanged;
         NavService.OnReaderModeChanged += OnReaderModeChanged;
         RssService.OnItemsUpdated += StateHasChanged; // Subscribe for item count updates
+        RssService.OnFeedChanged += OnFeedChangedHandler; // Subscribe for active feed changes
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
             Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
@@ -202,6 +237,7 @@
         NavService.OnBrowserStateChanged -= OnBrowserStateChanged;
         NavService.OnReaderModeChanged -= OnReaderModeChanged;
         RssService.OnItemsUpdated -= StateHasChanged;
+        RssService.OnFeedChanged -= OnFeedChangedHandler;
         if (Application.Current != null)
         {
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
@@ -268,5 +304,11 @@
                 Console.WriteLine($"Error opening system browser: {ex.Message}");
             }
         }
+    }
+
+
+    private async void OnFeedChangedHandler()
+    {
+        await InvokeAsync(StateHasChanged);
     }
 }

@@ -20,7 +20,7 @@
             <MudGrid Spacing="2">
                 @if (RssService.Items != null)
                 {
-                    @foreach (var item in RssService.Items)
+                    @foreach (var item in RssService.Items.Skip((_currentPage - 1) * _pageSize).Take(_pageSize))
                     {
                         <MudItem xs="12">
                             <MudPaper Class="pa-3 cursor-pointer hover-scale tile-glass" @onclick="@(() => OpenItem(item))">
@@ -50,6 +50,13 @@
                 }
             </MudGrid>
         </div>
+        @if (RssService.Items != null && RssService.Items.Count > _pageSize)
+        {
+            <div class="d-flex justify-center py-2 flex-shrink-0">
+                 <MudPagination BoundaryCount="1" MiddleCount="1" Count="@_pageCount" SelectedChanged="OnPageChanged" Selected="@_currentPage" 
+                                Class="pa-2" Variant="Variant.Outlined" Size="Size.Small" ShowFirstButton="false" ShowLastButton="false" />
+            </div>
+        }
     </div>
 
     <!-- Reading Mode (Only rendered when selected) -->
@@ -151,9 +158,12 @@
 @code {
     private RssItem? _selectedItem = null;
     private bool _isArticleLoading = false;
-
     private bool _isMobile;
     private bool _isDarkMode;
+
+    private int _currentPage = 1;
+    private const int _pageSize = 10;
+    private int _pageCount => RssService.Items != null ? (int)Math.Ceiling((double)RssService.Items.Count / _pageSize) : 0;
 
     protected override void OnInitialized()
     {
@@ -166,6 +176,7 @@
         }
 
         RssService.OnItemsUpdated += StateHasChanged;
+        RssService.OnFeedChanged += OnFeedChanged;
         NavService.OnArticleLinkChanged += OnArticleLinkChanged;
         NavService.OnBrowserStateChanged += OnBrowserStateChanged;
         NavService.OnReaderModeChanged += OnReaderModeChanged;
@@ -200,11 +211,24 @@
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
         }
         RssService.OnItemsUpdated -= StateHasChanged;
+        RssService.OnFeedChanged -= OnFeedChanged;
         NavService.OnArticleLinkChanged -= OnArticleLinkChanged;
         NavService.OnBrowserStateChanged -= OnBrowserStateChanged;
         NavService.OnReaderModeChanged -= OnReaderModeChanged;
         RefreshService.DetailRefreshRequested -= OnDetailRefresh;
         _backButtonService.Unregister(OnBackNative);
+    }
+    
+    private void OnFeedChanged()
+    {
+        _currentPage = 1;
+        StateHasChanged();
+    }
+    
+    private void OnPageChanged(int page)
+    {
+        _currentPage = page;
+        StateHasChanged();
     }
     
     private void OnBrowserStateChanged(bool isOpen)
