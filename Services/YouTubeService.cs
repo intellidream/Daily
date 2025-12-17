@@ -79,7 +79,10 @@ namespace Daily.Services
 
                             var title = snippet?["title"]?.ToString() ?? "Unknown";
                             var channel = snippet?["channelTitle"]?.ToString() ?? "Unknown";
-                            var thumb = snippet?["thumbnails"]?["medium"]?["url"]?.ToString() 
+                            var thumb = snippet?["thumbnails"]?["maxres"]?["url"]?.ToString()
+                                     ?? snippet?["thumbnails"]?["standard"]?["url"]?.ToString()
+                                     ?? snippet?["thumbnails"]?["high"]?["url"]?.ToString()
+                                     ?? snippet?["thumbnails"]?["medium"]?["url"]?.ToString() 
                                      ?? snippet?["thumbnails"]?["default"]?["url"]?.ToString() ?? "";
                             
                             // Handle ID parsing (Search returns object, Videos returns string)
@@ -228,7 +231,11 @@ namespace Daily.Services
                                 var videoId = snippet?["resourceId"]?["videoId"]?.ToString();
                                 var title = snippet?["title"]?.ToString();
                                 var channel = snippet?["channelTitle"]?.ToString();
-                                var thumb = snippet?["thumbnails"]?["medium"]?["url"]?.ToString() ?? snippet?["thumbnails"]?["default"]?["url"]?.ToString();
+                                var thumb = snippet?["thumbnails"]?["maxres"]?["url"]?.ToString()
+                                         ?? snippet?["thumbnails"]?["standard"]?["url"]?.ToString()
+                                         ?? snippet?["thumbnails"]?["high"]?["url"]?.ToString()
+                                         ?? snippet?["thumbnails"]?["medium"]?["url"]?.ToString() 
+                                         ?? snippet?["thumbnails"]?["default"]?["url"]?.ToString();
                                 var publishedAt = snippet?["publishedAt"]?.ToString();
 
                                 if (!string.IsNullOrEmpty(videoId))

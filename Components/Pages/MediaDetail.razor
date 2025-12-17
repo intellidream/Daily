@@ -75,7 +75,12 @@
                     @if (!string.IsNullOrEmpty(_nextPageToken))
                     {
                         <MudItem xs="12" Class="d-flex justify-center py-4">
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadMore" Disabled="@_isLoadingMore" Class="rounded-pill px-6">
+                            <MudButton Variant="Variant.Outlined" 
+                                       Color="@(_isDarkMode ? Color.Inherit : Color.Primary)" 
+                                       Style="@(_isDarkMode ? "color: rgba(255,255,255,0.9); border-color: rgba(255,255,255,0.5);" : "")"
+                                       OnClick="LoadMore" 
+                                       Disabled="@_isLoadingMore" 
+                                       Class="rounded-pill px-6">
                                 @if (_isLoadingMore)
                                 {
                                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/>
@@ -110,6 +115,20 @@
     private string? _nextPageToken;
     private bool _isLoadingMore = false;
     private string? _selectedCategory = null;
+    private bool _isDarkMode = false;
+
+    protected override void OnInitialized()
+    {
+        if (Application.Current != null)
+        {
+            _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
+            Application.Current.RequestedThemeChanged += (s, e) => 
+            {
+                _isDarkMode = e.RequestedTheme == AppTheme.Dark;
+                StateHasChanged();
+            };
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
