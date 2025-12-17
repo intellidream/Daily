@@ -34,12 +34,12 @@
         }
          else if (NavService.CurrentView == "RssFeed" && RssService.CurrentFeed != null)
          {
-              <div class="d-flex align-center flex-grow-1 overflow-x-auto gap-2 no-scrollbar px-2" style="mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);">
+              <div class="d-flex align-center flex-grow-1 overflow-x-auto gap-2 no-scrollbar px-2 py-1" style="mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);">
                   @foreach (var feed in RssService.Feeds)
                   {
                       var isSelected = RssService.CurrentFeed == feed;
                       <MudPaper Elevation="0" 
-                                Class="@($"d-flex align-center px-2 py-1 rounded-pill cursor-pointer flex-shrink-0 transition-all {(isSelected ? "mud-theme-primary" : "surface-glass")}")"
+                                Class="@($"d-flex align-center px-3 py-2 rounded-pill cursor-pointer flex-shrink-0 transition-all {(isSelected ? "mud-theme-primary" : "surface-glass")}")"
                                 @onclick="@(() => RssService.SelectFeed(feed))"
                                 Style="@(isSelected ? "" : "background-color: rgba(128,128,128,0.1); border: 1px solid rgba(255,255,255,0.1);")">
                           
