@@ -77,6 +77,10 @@
         {
             WindowManager.OpenDetail("RssFeed", widget.Title);
         }
+        else if (widget.ComponentType == "MediaWidget")
+        {
+            WindowManager.OpenDetail("Media", "Recommendations");
+        }
         else
         {
             // Ensure we reset the view to default/reading pane so we don't show stale SystemInfo

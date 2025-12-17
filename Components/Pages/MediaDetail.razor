@@ -1,0 +1,210 @@
+@using Daily.Services
+@using Daily.Models
+@using MudBlazor
+@inject IGoogleAuthService AuthService
+@inject IYouTubeService YouTubeService
+@inject ISnackbar Snackbar
+
+<div class="d-flex flex-column" style="height: 100%; position: relative;">
+    @if (!_isAuthenticated)
+    {
+        <div class="d-flex flex-column align-center justify-center" style="height: 100%;">
+            <MudIcon Icon="@Icons.Custom.Brands.YouTube" Color="Color.Error" Style="width: 64px; height: 64px;" Class="mb-4" />
+            <MudText Typo="Typo.h5" Class="mb-2" Align="Align.Center"><b>Personalized Recommendations</b></MudText>
+            <MudText Typo="Typo.body1" Class="mb-6" Align="Align.Center" Style="opacity: 0.7;">Sign in to see videos from your subscriptions and recommendations.</MudText>
+            <MudButton Variant="Variant.Filled" 
+                       StartIcon="@Icons.Custom.Brands.Google" 
+                       Color="Color.Surface" 
+                       Class="px-6 py-3"
+                       Style="color: #4285F4; font-weight: bold; border-radius: 24px;"
+                       OnClick="LoginAsync">
+                Sign in with Google
+            </MudButton>
+        </div>
+    }
+    else
+    {
+        <!-- Categories Chips -->
+        <div class="d-flex flex-shrink-0 align-center px-2 pb-4 gap-2 overflow-x-auto hide-scrollbar">
+            <MudChip T="string" Variant="@(_selectedCategory == null ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == null ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory(null))">All</MudChip>
+            <MudChip T="string" Variant="@(_selectedCategory == "Latest" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Latest" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Latest"))">Latest</MudChip>
+            <MudChip T="string" Variant="@(_selectedCategory == "Tech" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Tech" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Tech"))">Tech</MudChip>
+            <MudChip T="string" Variant="@(_selectedCategory == "Podcasts" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Podcasts" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Podcasts"))">Podcasts</MudChip>
+            <MudChip T="string" Variant="@(_selectedCategory == "Music" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Music" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Music"))">Music</MudChip>
+            <MudSpacer />
+            <MudButton StartIcon="@Icons.Material.Filled.Logout" Variant="Variant.Text" Color="Color.Inherit" OnClick="LogoutAsync" Size="Size.Small">Sign Out</MudButton>
+        </div>
+
+        <!-- Video Grid -->
+        <div style="flex-grow: 1; overflow-y: auto;" class="px-2">
+            @if (_videos == null)
+            {
+                <div class="d-flex justify-center align-center pt-10">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                </div>
+            }
+            else if (_videos.Count == 0)
+            {
+                <div class="d-flex justify-center align-center pt-10">
+                    <MudText>No videos found.</MudText>
+                </div>
+            }
+            else
+            {
+                <MudGrid Spacing="3">
+                    @foreach (var video in _videos)
+                    {
+                        <MudItem xs="12" sm="6" md="4" lg="3">
+                            <MudPaper Class="cursor-pointer hover-scale tile-glass d-flex flex-column h-100" Elevation="0" Style="border-radius: 12px; overflow: hidden;" @onclick="@(() => OpenVideo(video.Url))">
+                                <div style="position: relative; width: 100%; padding-top: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                    <MudImage Src="@video.ThumbnailUrl" Style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;" />
+                                    <div style="position: absolute; bottom: 8px; right: 8px; background-color: rgba(0,0,0,0.8); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
+                                        @video.Duration
+                                    </div>
+                                </div>
+                                <div class="pa-3 d-flex flex-column flex-grow-1">
+                                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" Title="@video.Title">
+                                        @video.Title
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Class="mt-1" Color="Color.Secondary">@video.ChannelTitle</MudText>
+                                </div>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(_nextPageToken))
+                    {
+                        <MudItem xs="12" Class="d-flex justify-center py-4">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadMore" Disabled="@_isLoadingMore" Class="rounded-pill px-6">
+                                @if (_isLoadingMore)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/>
+                                    <span>Loading...</span>
+                                }
+                                else
+                                {
+                                    <span>Load More</span>
+                                }
+                            </MudButton>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .tile-glass { background-color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(5px); transition: transform 0.2s, box-shadow 0.2s; }
+    [data-theme='dark'] .tile-glass { background-color: rgba(30, 30, 30, 0.6); }
+
+    .hover-scale:hover { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+</style>
+
+@code {
+    private bool _isAuthenticated = false;
+    private List<VideoItem>? _videos;
+    private string? _nextPageToken;
+    private bool _isLoadingMore = false;
+    private string? _selectedCategory = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var token = await AuthService.GetAccessTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            _isAuthenticated = true;
+            await LoadVideos(token);
+        }
+    }
+
+    private async Task LoginAsync()
+    {
+        var (token, error) = await AuthService.LoginAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            _isAuthenticated = true;
+            await LoadVideos(token);
+        }
+        else
+        {
+            Snackbar.Add(!string.IsNullOrEmpty(error) ? error : "Login failed", Severity.Error);
+        }
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthService.LogoutAsync();
+        _isAuthenticated = false;
+        _videos = null;
+        _nextPageToken = null;
+        _selectedCategory = null;
+    }
+
+    private async Task SelectCategory(string? category)
+    {
+        if (_selectedCategory == category) return;
+
+        _selectedCategory = category;
+        _videos = null;
+        _nextPageToken = null;
+        StateHasChanged();
+
+        var token = await AuthService.GetAccessTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            await LoadVideos(token);
+        }
+    }
+
+    private async Task LoadVideos(string token, bool append = false)
+    {
+        if (append)
+        {
+            _isLoadingMore = true;
+            StateHasChanged();
+        }
+
+        try
+        {
+            var result = await YouTubeService.GetRecommendationsAsync(token, _nextPageToken, _selectedCategory);
+            
+            if (append && _videos != null)
+            {
+                _videos.AddRange(result.Videos);
+            }
+            else
+            {
+                _videos = result.Videos;
+            }
+            
+            _nextPageToken = result.NextPageToken;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            _isLoadingMore = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMore()
+    {
+        var token = await AuthService.GetAccessTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            await LoadVideos(token, append: true);
+        }
+    }
+
+    private async Task OpenVideo(string url)
+    {
+        await Browser.OpenAsync(url, BrowserLaunchMode.SystemPreferred);
+    }
+}
