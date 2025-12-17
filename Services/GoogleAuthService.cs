@@ -153,7 +153,19 @@ namespace Daily.Services
                 
                 if (!string.IsNullOrEmpty(_accessToken))
                 {
-                    await SecureStorage.SetAsync("google_access_token", _accessToken);
+                    try
+                    {
+                        await SecureStorage.SetAsync("google_access_token", _accessToken);
+                    }
+                    catch
+                    {
+#if DEBUG
+                        // Fallback for Mac/Dev where entitlements are missing (INSECURE - DEBUG ONLY)
+                        Preferences.Set("google_access_token", _accessToken);
+#else
+                        throw; // In Release, we must fail if SecureStorage is not working
+#endif
+                    }
                     return (_accessToken, null);
                 }
                 return (null, "Parsed token was empty.");
@@ -195,6 +207,9 @@ namespace Daily.Services
         {
             _accessToken = null;
             SecureStorage.Remove("google_access_token");
+#if DEBUG
+            Preferences.Remove("google_access_token");
+#endif
         }
 
         public async Task<string?> GetAccessTokenAsync()
@@ -202,7 +217,19 @@ namespace Daily.Services
             if (_accessToken != null) return _accessToken;
 
             // Try to restore
-            _accessToken = await SecureStorage.GetAsync("google_access_token");
+            try
+            {
+                _accessToken = await SecureStorage.GetAsync("google_access_token");
+            }
+            catch
+            {
+#if DEBUG
+                // Fallback (INSECURE - DEBUG ONLY)
+                _accessToken = Preferences.Get("google_access_token", null);
+#else
+                throw;
+#endif
+            }
             return _accessToken;
         }
     }
