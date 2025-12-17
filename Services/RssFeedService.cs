@@ -164,6 +164,14 @@ namespace Daily.Services
                         imageUrl = match.Groups[1].Value;
                     }
                 }
+                
+                // 6. Author Extraction
+                XNamespace dc = "http://purl.org/dc/elements/1.1/";
+                var author = item.Element(dc + "creator")?.Value;
+                if (string.IsNullOrEmpty(author))
+                {
+                    author = item.Element("author")?.Value;
+                }
 
                 return new RssItem
                 {
@@ -172,7 +180,8 @@ namespace Daily.Services
                     PublishDate = DateTime.TryParse(pubDateStr, out var date) ? date : DateTime.Now,
                     ImageUrl = imageUrl ?? channelImage,
                     Description = description,
-                    Content = contentEncoded
+                    Content = contentEncoded,
+                    Author = author
                 };
             }).ToList();
         }
@@ -205,8 +214,12 @@ namespace Daily.Services
                 var content = post["content"]?["rendered"]?.ToString();
                 var excerpt = post["excerpt"]?["rendered"]?.ToString();
 
-                string? imageUrl = null;
+                // WP JSON Author is usually an ID, requiring a separate lookup or 'embed'
+                // For now, check if embedded author is present
+                string? author = null;
                 var embedded = post["_embedded"];
+                
+                string? imageUrl = null;
                 if (embedded != null)
                 {
                     var media = embedded["wp:featuredmedia"]?.AsArray()?.FirstOrDefault();
@@ -219,6 +232,12 @@ namespace Daily.Services
                             imageUrl = media["media_details"]?["sizes"]?["medium"]?["source_url"]?.ToString();
                         }
                     }
+                    
+                    var authorObj = embedded["author"]?.AsArray()?.FirstOrDefault();
+                    if (authorObj != null)
+                    {
+                        author = authorObj["name"]?.ToString();
+                    }
                 }
                 
                 Items.Add(new RssItem
@@ -228,7 +247,8 @@ namespace Daily.Services
                      PublishDate = date,
                      ImageUrl = imageUrl,
                      Description = excerpt,
-                     Content = content
+                     Content = content,
+                     Author = author
                 });
             }
         }
@@ -307,6 +327,30 @@ namespace Daily.Services
                         }
                     }
 
+                    var author = article.Byline;
+                    if (!string.IsNullOrEmpty(author))
+                    {
+                        // 1. Remove "junk" phrases
+                        author = author.Replace("Social Links", "", StringComparison.OrdinalIgnoreCase)
+                                       .Replace("NavigationContributor", "", StringComparison.OrdinalIgnoreCase) // Specific combo
+                                       .Replace("Navigation", "", StringComparison.OrdinalIgnoreCase)
+                                       .Replace("See all articles", "", StringComparison.OrdinalIgnoreCase);
+
+                        // 2. Fix Concatenated or Unseparated Titles (e.g. "NameSenior" or "Name Senior")
+                        // Ensure comma separator. Order of titles matters (Longer first to capture full title).
+                        author = Regex.Replace(author, @"(?<=[a-z])\s*(?<!,\s)(Senior Editor|Executive Editor|Deals Editor|Managing Editor|Editor|Contributor|Freelance Writer|Freelance|Staff Writer|Staff|Writer|Journalist)", ", $1", RegexOptions.IgnoreCase);
+
+                        // 3. Trim around punctuation
+                        author = author.Trim();
+                        author = author.TrimEnd(',', '.', '-', '|');
+                        
+                        // 4. Fix "Space before Comma" (e.g. "Name , Title" -> "Name, Title")
+                        author = Regex.Replace(author, @"\s+,", ",");
+                        
+                        // Final trim
+                        author = author.Trim();
+                    }
+
                     return new RssItem
                     {
                         Title = article.Title,
@@ -314,7 +358,8 @@ namespace Daily.Services
                         Content = content, // Aggressively De-duplicated
                         Description = article.Excerpt,
                         ImageUrl = featImg,
-                        PublishDate = article.PublicationDate ?? DateTime.Now
+                        PublishDate = article.PublicationDate ?? DateTime.Now,
+                        Author = author
                     };
                 }
             }

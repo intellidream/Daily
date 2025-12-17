@@ -85,7 +85,14 @@
                                  {
                                      <MudImage Src="@RssService.CurrentFeed.IconUrl" Width="24" Height="24" />
                                  }
-                                 <MudText Typo="Typo.caption">@RssService.CurrentFeed?.Name • @_selectedItem.PublishDate.ToString("f")</MudText>
+                                 <MudText Typo="Typo.caption">
+                                     @RssService.CurrentFeed?.Name 
+                                     @if (!string.IsNullOrEmpty(_selectedItem.Author))
+                                     {
+                                         <span> •  @_selectedItem.Author</span>
+                                     } 
+                                     • @_selectedItem.PublishDate.ToString("f")
+                                 </MudText>
                             </div>
     
                             <!-- Featured Image (Only if NOT in Reader Mode or if desired) -->
