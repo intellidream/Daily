@@ -118,8 +118,20 @@
                 DotNet.invokeMethodAsync('Daily', 'HandleNativeBack');
             }
         });
+
+
     </script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script>
+        window.dailyInterop = {
+            setBodyAttribute: function (attr, value) {
+                document.body.setAttribute(attr, value);
+            },
+            addClassToBody: function (className) {
+                document.body.classList.add(className);
+            }
+        };
+    </script>
 </body>
 
 </html>

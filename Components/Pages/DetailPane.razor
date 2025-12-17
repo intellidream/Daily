@@ -34,40 +34,42 @@
         }
          else if (NavService.CurrentView == "RssFeed" && RssService.CurrentFeed != null)
          {
-              <div class="d-flex align-center flex-grow-1 overflow-x-auto gap-2 no-scrollbar px-2 py-1" style="mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);">
-                  @foreach (var feed in RssService.Feeds)
-                  {
-                      var isSelected = RssService.CurrentFeed == feed;
-                      <MudPaper Elevation="0" 
-                                Class="@($"d-flex align-center px-3 py-2 rounded-pill cursor-pointer flex-shrink-0 transition-all {(isSelected ? "mud-theme-primary" : "surface-glass")}")"
-                                @onclick="@(() => RssService.SelectFeed(feed))"
-                                Style="@(isSelected ? "" : "background-color: rgba(128,128,128,0.1); border: 1px solid rgba(255,255,255,0.1);")">
-                          
-                          @if (!string.IsNullOrEmpty(feed.IconUrl))
-                          {
-                              <MudImage Src="@feed.IconUrl" Width="16" Height="16" Class="mr-2" ObjectFit="ObjectFit.Contain" />
-                          }
-                          
-                          <MudText Typo="Typo.caption" Style="@(isSelected ? "font-weight: 700; color: white;" : "opacity: 0.8;")">
-                              @feed.Name
-                          </MudText>
-                          
-                          @if (isSelected && RssService.Items != null)
-                          {
-                              <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" Class="ml-2 my-0 py-0" style="height: 16px; font-size: 0.7em; color: white !important;">
-                                  @RssService.Items.Count
-                              </MudChip>
-                          }
-                      </MudPaper>
-                  }
+              <div class="d-flex align-center flex-grow-1 position-relative mx-4" style="min-width: 0; height: 100%;">
+                  <MudCarousel TData="object" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                               SelectedIndex="@_selectedFeedIndex" SelectedIndexChanged="@OnCarouselIndexChanged" 
+                               Class="flex-grow-1 rounded-pill mud-theme-primary">
+                      @foreach (var feed in RssService.Feeds)
+                      {
+                          <MudCarouselItem Transition="Transition.Slide">
+                              <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                                  @if (!string.IsNullOrEmpty(feed.IconUrl))
+                                  {
+                                      <MudImage Src="@feed.IconUrl" Width="20" Height="20" Class="mr-3 flex-shrink-0" ObjectFit="ObjectFit.Contain" />
+                                  }
+                                  
+                                  <div style="min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" class="mr-3 flex-shrink-1 text-center">
+                                      <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: white !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                          @feed.Name
+                                      </MudText>
+                                  </div>
+                                  
+                                  @if (RssService.Items != null && RssService.CurrentFeed == feed)
+                                  {
+                                      <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" Class="ml-2 my-0 py-0 flex-shrink-0" style="height: 20px; font-size: 0.8em; color: white !important;">
+                                          @RssService.Items.Count
+                                      </MudChip>
+                                  }
+                              </div>
+                          </MudCarouselItem>
+                      }
+                  </MudCarousel>
               </div>
          }
         else
         {
             <MudText Typo="Typo.h6"><b>@NavService.CurrentTitle</b></MudText>
+            <MudSpacer />
         }
-
-        <MudSpacer />
         
         @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
         {
@@ -202,8 +204,14 @@
     private async Task UpdateThemeJs()
     {
         var themeValue = _isDarkMode ? "dark" : "light";
-        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}')");
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("dailyInterop.setBodyAttribute", "data-theme", themeValue);
+        }
+        catch (Exception) { /* Ignore */ }
     }
+
+
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -211,11 +219,16 @@
         {
              // Fallback: Sync body theme too just in case external scripts need it
              await UpdateThemeJs();
+             
+             // Initial sync
+             SyncIndexFromService();
         }
         
         // Measure Toolbar Height whenever we render, to ensure we have the latest
         await UpdateToolbarHeight();
     }
+    
+
     
     private async Task UpdateToolbarHeight()
     {
@@ -307,8 +320,38 @@
     }
 
 
+    private int _selectedFeedIndex = 0;
+    
+    // Helper to sync carousel with service state
+    private void SyncIndexFromService()
+    {
+        if (RssService.CurrentFeed != null)
+        {
+            var index = RssService.Feeds.IndexOf(RssService.CurrentFeed);
+            if (index >= 0 && index != _selectedFeedIndex)
+            {
+                _selectedFeedIndex = index;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void OnCarouselIndexChanged(int index)
+    {
+        _selectedFeedIndex = index;
+        if (index >= 0 && index < RssService.Feeds.Count)
+        {
+            var feed = RssService.Feeds[index];
+            if (RssService.CurrentFeed != feed)
+            {
+                RssService.SelectFeed(feed);
+            }
+        }
+    }
+
     private async void OnFeedChangedHandler()
     {
+        SyncIndexFromService();
         await InvokeAsync(StateHasChanged);
     }
 }

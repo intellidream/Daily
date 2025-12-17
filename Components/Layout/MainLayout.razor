@@ -84,7 +84,11 @@
         }
 
         var themeValue = _isDarkMode ? "dark" : "light";
-        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}')");
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("dailyInterop.setBodyAttribute", "data-theme", themeValue);
+        }
+        catch (Exception) { /* If JS fails/disconnected, ignore */ }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -93,7 +97,11 @@
         {
             // Set initial theme based on _isDarkMode
             var initialTheme = _isDarkMode ? "dark" : "light";
-            await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{initialTheme}')");
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("dailyInterop.setBodyAttribute", "data-theme", initialTheme);
+            }
+            catch (Exception) { /* Ignore */ }
             
             // ... (rest of the mobile/desktop class logic)
 
@@ -101,12 +109,20 @@
                 Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
             {
                 // On Mobile, we use the XAML background, so body should be transparent
-                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('transparent-background')");
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("dailyInterop.addClassToBody", "transparent-background");
+                }
+                catch (Exception) { /* Ignore */ }
             }
             else
             {
                 // On Windows/Desktop, we use the CSS background
-                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('mesh-background')");
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("dailyInterop.addClassToBody", "mesh-background");
+                }
+                catch (Exception) { /* Ignore */ }
             }
         }
     }
@@ -147,7 +163,11 @@
 
         // Update CSS
         var themeValue = _isDarkMode ? "dark" : "light";
-        await JSRuntime.InvokeVoidAsync("eval", $"document.body.setAttribute('data-theme', '{themeValue}')");
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("dailyInterop.setBodyAttribute", "data-theme", themeValue);
+        }
+        catch (Exception) { /* Ignore */ }
     }
 
     public void Dispose()

@@ -4,33 +4,40 @@
 @inject IRssFeedService RssService
 @inject IRefreshService RefreshService
 @inject IWindowManagerService WindowManager
-@implements IDisposable
+@inject IJSRuntime JSRuntime
 
-<div class="d-flex align-start">
-    <div class="d-flex flex-grow-1 overflow-x-auto px-0 py-2 gap-1" style="white-space: nowrap; min-width: 0;">
-        @foreach (var feed in RssService.Feeds)
-        {
-            <div class="@GetChipClass(feed)" @onclick="@(() => OnFeedChipClicked(feed))">
-                <MudAvatar Size="Size.Medium" Class="mr-2">
-                    @if (!string.IsNullOrEmpty(feed.IconUrl))
-                    {
-                        <MudImage Src="@feed.IconUrl" Alt="@feed.Name" />
-                    }
-                    else
-                    {
-                        @feed.Name.Substring(0, 1)
-                    }
-                </MudAvatar>
-                <MudText Typo="Typo.body2" Class="mr-2">@feed.Name</MudText>
-                <div @onclick="@(async () => await ForceRefreshFeed(feed))" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1">
-                    <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Title="Refresh" />
-                </div>
-            </div>
-        }
+<div class="d-flex align-center my-2 flex-grow-1" style="width: 100%; gap: 2px;">
+    <div class="flex-grow-1" style="min-width: 0;">
+        <MudCarousel TData="object" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                     SelectedIndex="@_selectedFeedIndex" SelectedIndexChanged="@OnCarouselIndexChanged" 
+                     Class="flex-grow-1 rounded-pill mud-theme-primary">
+            @foreach (var feed in RssService.Feeds)
+            {
+                <MudCarouselItem Transition="Transition.Slide">
+                    <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                        @if (!string.IsNullOrEmpty(feed.IconUrl))
+                        {
+                            <MudImage Src="@feed.IconUrl" Width="20" Height="20" Class="mr-3 flex-shrink-0" ObjectFit="ObjectFit.Contain" />
+                        }
+                        <div style="min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" class="mr-3 flex-shrink-1 text-center">
+                            <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 1.1em; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                @feed.Name
+                            </MudText>
+                        </div>
+                        <div @onclick="@(async () => await ForceRefreshFeed(feed))" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1 flex-shrink-0 ml-2">
+                             <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Title="Refresh" Style="color: white;" />
+                        </div>
+                    </div>
+                </MudCarouselItem>
+            }
+        </MudCarousel>
     </div>
+    
     @if (HeaderAction != null)
     {
-        @HeaderAction
+        <div class="flex-shrink-0 d-flex align-center">
+             @HeaderAction
+        </div>
     }
 </div>
 
@@ -106,11 +113,30 @@
 
     private int _pageCount => RssService.Items != null ? (int)Math.Ceiling((double)RssService.Items.Count / _pageSize) : 0;
 
+    private int _selectedFeedIndex = 0;
+    
+    // Helper to sync carousel with service state
+    private void SyncIndexFromService()
+    {
+        if (RssService.CurrentFeed != null)
+        {
+            var index = RssService.Feeds.IndexOf(RssService.CurrentFeed);
+            if (index >= 0 && index != _selectedFeedIndex)
+            {
+                _selectedFeedIndex = index;
+                StateHasChanged();
+            }
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         RssService.OnItemsUpdated += async () => await InvokeAsync(StateHasChanged);
         RssService.OnFeedChanged += OnFeedChanged;
         RefreshService.RefreshRequested += OnRefreshRequested;
+
+        // Initial sync
+        SyncIndexFromService();
 
         // If service is empty (first load), trigger load
         if (RssService.Items.Count == 0 && RssService.CurrentFeed != null)
@@ -129,18 +155,27 @@
     private async void OnFeedChanged()
     {
         _currentPage = 1;
+        SyncIndexFromService();
         await InvokeAsync(StateHasChanged);
+    }
+    
+    private void OnCarouselIndexChanged(int index)
+    {
+        _selectedFeedIndex = index;
+        if (index >= 0 && index < RssService.Feeds.Count)
+        {
+            var feed = RssService.Feeds[index];
+            if (RssService.CurrentFeed != feed)
+            {
+                RssService.SelectFeed(feed);
+            }
+        }
     }
 
     private void OnPageChanged(int page)
     {
         _currentPage = page;
         StateHasChanged();
-    }
-
-    private void OnFeedChipClicked(FeedSource feed)
-    {
-        RssService.SelectFeed(feed);
     }
 
     private async Task ForceRefreshFeed(FeedSource feed)
@@ -152,19 +187,6 @@
     private async Task OnRefreshRequested()
     {
         await RssService.ReloadCurrentFeedAsync();
-    }
-
-    private string GetChipClass(FeedSource feed)
-    {
-        var baseClass = "rss-chip d-flex align-center px-2 py-1 rounded-pill cursor-pointer flex-shrink-0";
-        if (RssService.CurrentFeed == feed)
-        {
-            return $"{baseClass} selected";
-        }
-        else
-        {
-             return baseClass;
-        }
     }
 
     private void OpenItem(RssItem item)
