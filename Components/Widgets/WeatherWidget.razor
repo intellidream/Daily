@@ -76,7 +76,7 @@
                         <MudText Typo="Typo.body2" Class="pr-2" Style="opacity: 0.7; font-weight: 500;">H: @Math.Round(_currentWeather?.Main.TempMax ?? 0)° · L: @Math.Round(_currentWeather?.Main.TempMin ?? 0)°</MudText>
                     </MudStack>
 
-                    <MudDivider Class="my-2" Style="opacity: 0.4;" />
+                    <MudDivider Class="mt-4 mb-0" Style="opacity: 0.4;" />
                 </MudStack>
 
                     @* Bottom Section: Single Row Details (Vertical Stacks) *@
@@ -85,50 +85,50 @@
                         <div class="d-flex flex-column justify-space-between" style="height: 100%;">
                              @* Sunrise *@
                              <div class="d-flex align-center gap-2" style="position: relative; top: 5px;">
-                                 <MudIcon Icon="@Icons.Material.Outlined.WbSunny" Size="Size.Small" Style="opacity: 0.7; font-size: 1.3rem;" />
+                                 <MudIcon Icon="@Icons.Material.Outlined.WbSunny" Size="Size.Small" Style="opacity: 0.4; font-size: 1.3rem;" />
                                  <div class="d-flex flex-column">
-                                     <MudText Typo="Typo.body2" Style="font-weight: 800; line-height: 1;">
+                                     <MudText Typo="Typo.body2" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
                                          @(_currentWeather?.Sys?.Sunrise > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunrise).ToLocalTime().ToString("HH:mm") : "--:--")
                                      </MudText>
-                                     <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.7rem; line-height: 1;">Sunrise</MudText>
+                                     <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.7rem; line-height: 1;">Sunrise</MudText>
                                  </div>
                              </div>
                              @* Sunset *@
-                             <div class="d-flex align-center gap-2" style="position: relative; top: -2px;">
-                                 <MudIcon Icon="@Icons.Material.Outlined.WbTwilight" Size="Size.Small" Style="opacity: 0.7; font-size: 1.3rem;" />
+                             <div class="d-flex align-center gap-2" style="position: relative; top: -1px;">
+                                 <MudIcon Icon="@Icons.Material.Outlined.WbTwilight" Size="Size.Small" Style="opacity: 0.4; font-size: 1.3rem;" />
                                  <div class="d-flex flex-column">
-                                     <MudText Typo="Typo.body2" Style="font-weight: 800; line-height: 1;">
+                                     <MudText Typo="Typo.body2" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
                                          @(_currentWeather?.Sys?.Sunset > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunset).ToLocalTime().ToString("HH:mm") : "--:--")
                                      </MudText>
-                                     <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.7rem; line-height: 1;">Sunset</MudText>
+                                     <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.7rem; line-height: 1;">Sunset</MudText>
                                  </div>
                              </div>
                         </div>
 
                         @* Humidity *@
                         <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
-                            <MudIcon Icon="@Icons.Material.Outlined.WaterDrop" Size="Size.Medium" Style="opacity: 0.7; font-size: 1.5rem;" />
+                            <MudIcon Icon="@Icons.Material.Outlined.WaterDrop" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
                             <div class="d-flex flex-column align-center">
-                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1;">@(_currentWeather?.Main.Humidity)%</MudText>
-                                <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.75rem;">Humidity</MudText>
+                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@(_currentWeather?.Main.Humidity)%</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Humidity</MudText>
                             </div>
                         </div>
 
                         @* Wind *@
                         <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
-                            <MudIcon Icon="@Icons.Material.Outlined.Air" Size="Size.Medium" Style="opacity: 0.7; font-size: 1.5rem;" />
+                            <MudIcon Icon="@Icons.Material.Outlined.Air" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
                             <div class="d-flex flex-column align-center">
-                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1;">@Math.Round(_currentWeather?.Wind.Speed ?? 0) m/s</MudText>
-                                <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.75rem;">Wind</MudText>
+                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@Math.Round(_currentWeather?.Wind.Speed ?? 0) m/s</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Wind</MudText>
                             </div>
                         </div>
 
                         @* Visibility *@
                         <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
-                            <MudIcon Icon="@Icons.Material.Outlined.Visibility" Size="Size.Medium" Style="opacity: 0.7; font-size: 1.5rem;" />
+                            <MudIcon Icon="@Icons.Material.Outlined.Visibility" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
                             <div class="d-flex flex-column align-center">
-                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1;">@Math.Round((_currentWeather?.Visibility ?? 0) / 1000.0, 1) km</MudText>
-                                <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.75rem;">Visibility</MudText>
+                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@Math.Round((_currentWeather?.Visibility ?? 0) / 1000.0, 1) km</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Visibility</MudText>
                             </div>
                         </div>
                     </div>
