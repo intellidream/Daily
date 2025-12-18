@@ -44,5 +44,16 @@ namespace Daily.Services
             }
         }
         public string GetApiKey() => ApiKey;
+
+        public string CurrentLocationName { get; private set; }
+        public bool IsAutoLocation { get; private set; }
+        public event Action OnLocationChanged;
+
+        public void SetCurrentLocation(string name, bool isAuto)
+        {
+            CurrentLocationName = name;
+            IsAutoLocation = isAuto;
+            OnLocationChanged?.Invoke();
+        }
     }
 }

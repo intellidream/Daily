@@ -6,6 +6,7 @@
 @inject IDetailNavigationService NavService
 @inject ISnackbar Snackbar
 @inject IRssFeedService RssService
+@inject IWeatherService WeatherService
 @implements IDisposable
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
@@ -79,6 +80,37 @@
                                           YouTube
                                       </MudText>
                                   </div>
+                              </div>
+                          </MudCarouselItem>
+                  </MudCarousel>
+              </div>
+         }
+         else if (NavService.CurrentView == "Weather")
+         {
+              <!-- Weather Location Carousel -->
+              <div class="d-flex align-center flex-grow-1 position-relative ml-2 mr-4" style="min-width: 0; height: 100%;">
+                  <MudCarousel TData="object" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                               Class="flex-grow-1 rounded-pill mud-theme-primary">
+                          <MudCarouselItem Transition="Transition.Slide">
+                              <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                                  @if (!string.IsNullOrEmpty(WeatherService.CurrentLocationName))
+                                  {
+                                      <MudText Typo="Typo.body1" Class="font-weight-bold mr-2" Style="color: white !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                          @WeatherService.CurrentLocationName
+                                      </MudText>
+                                      @if (WeatherService.IsAutoLocation)
+                                      {
+                                           <MudIcon Icon="@Icons.Material.Filled.NearMe" Size="Size.Small" Style="color: white; opacity: 0.8;" />
+                                      }
+                                      else
+                                      {
+                                           <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Small" Style="color: white; opacity: 0.8;" />
+                                      }
+                                  }
+                                  else
+                                  {
+                                       <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Inherit" />
+                                  }
                               </div>
                           </MudCarouselItem>
                   </MudCarousel>
@@ -204,6 +236,7 @@
         NavService.OnReaderModeChanged += OnReaderModeChanged;
         RssService.OnItemsUpdated += StateHasChanged; // Subscribe for item count updates
         RssService.OnFeedChanged += OnFeedChangedHandler; // Subscribe for active feed changes
+        WeatherService.OnLocationChanged += StateHasChanged; // Subscribe for weather location changes
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
             Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
@@ -278,6 +311,7 @@
         NavService.OnReaderModeChanged -= OnReaderModeChanged;
         RssService.OnItemsUpdated -= StateHasChanged;
         RssService.OnFeedChanged -= OnFeedChangedHandler;
+        WeatherService.OnLocationChanged -= StateHasChanged;
         if (Application.Current != null)
         {
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
