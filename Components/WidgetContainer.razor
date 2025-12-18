@@ -7,7 +7,7 @@
     @foreach (var widget in _widgets)
     {
         <div class="masonry-item">
-            <MudPaper Class="pa-4 glass-panel" Elevation="0" Square="false" Style="">
+            <MudPaper Class="pa-4 glass-panel" Elevation="1" Square="false" Style="">
                 @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget")
                 {
                     <div class="d-flex align-center justify-space-between">
