@@ -116,61 +116,89 @@
                 <MudDivider Class="mt-4 mb-0" Style="opacity: 0.4;" />
             </MudStack>
 
-            @* Bottom Section: Single Row Details *@
-            <div class="d-flex justify-space-between px-2" style="width: 100%; height: 62px;">
-                @* Sun Times *@
-                <div class="d-flex flex-column align-center justify-space-between" style="height: 100%; cursor: pointer;" @onclick="ToggleSunState">
-                        @if (_showSunrise)
-                        {
-                            <MudIcon Icon="@Icons.Material.Outlined.WbSunny" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
+            @* Bottom Section: Toggleable Content *@
+            <div class="px-2" style="width: 100%; height: 62px;">
+                @if (_showHourlyBottom)
+                {
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Spacing="0" Style="height: 100%; width: 100%;">
+                         @if (_forecast != null)
+                         {
+                             @foreach (var item in _forecast.List.Take(4))
+                             {
+                                 <div class="d-flex flex-column align-center">
+                                      <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.7rem;">@DateTime.Parse(item.DtTxt).ToString("HH")</MudText>
+                                      <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}@2x.png")" Width="30" Height="30" />
+                                      <MudText Typo="Typo.body2" Style="font-weight: 700; font-size: 1.0rem;">@Math.Round(item.Main.Temp)°</MudText>
+                                 </div>
+                             }
+                         }
+                         else
+                         {
+                             <MudText Typo="Typo.caption">Loading forecast...</MudText>
+                         }
+                    </MudStack>
+                }
+                else
+                {
+                    @* Default Details View *@
+                    <div class="d-flex justify-space-between" style="width: 100%; height: 100%;">
+                        @* Sun Times *@
+                        <div class="d-flex flex-column align-center justify-space-between" style="height: 100%; cursor: pointer;" @onclick="ToggleSunState">
+                                @if (_showSunrise)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Outlined.WbSunny" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
+                                    <div class="d-flex flex-column align-center">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
+                                            @(_currentWeather?.Sys?.Sunrise > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunrise).ToLocalTime().ToString("HH:mm") : "--:--")
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Sunrise</MudText>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Outlined.WbTwilight" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
+                                    <div class="d-flex flex-column align-center">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
+                                            @(_currentWeather?.Sys?.Sunset > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunset).ToLocalTime().ToString("HH:mm") : "--:--")
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Sunset</MudText>
+                                    </div>
+                                }
+                        </div>
+
+                        @* Humidity *@
+                        <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
+                            <MudIcon Icon="@Icons.Material.Outlined.WaterDrop" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
                             <div class="d-flex flex-column align-center">
-                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
-                                    @(_currentWeather?.Sys?.Sunrise > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunrise).ToLocalTime().ToString("HH:mm") : "--:--")
-                                </MudText>
-                                <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Sunrise</MudText>
+                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@(_currentWeather?.Main.Humidity)%</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Humidity</MudText>
                             </div>
-                        }
-                        else
-                        {
-                            <MudIcon Icon="@Icons.Material.Outlined.WbTwilight" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
+                        </div>
+
+                        @* Wind *@
+                        <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
+                            <MudIcon Icon="@Icons.Material.Outlined.Air" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
                             <div class="d-flex flex-column align-center">
-                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
-                                    @(_currentWeather?.Sys?.Sunset > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunset).ToLocalTime().ToString("HH:mm") : "--:--")
-                                </MudText>
-                                <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Sunset</MudText>
+                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@Math.Round(_currentWeather?.Wind.Speed ?? 0) m/s</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Wind</MudText>
                             </div>
-                        }
-                </div>
+                        </div>
 
-                @* Humidity *@
-                <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
-                    <MudIcon Icon="@Icons.Material.Outlined.WaterDrop" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
-                    <div class="d-flex flex-column align-center">
-                        <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@(_currentWeather?.Main.Humidity)%</MudText>
-                        <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Humidity</MudText>
+                        @* Visibility *@
+                        <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
+                            <MudIcon Icon="@Icons.Material.Outlined.Visibility" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
+                            <div class="d-flex flex-column align-center">
+                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@Math.Round((_currentWeather?.Visibility ?? 0) / 1000.0, 1) km</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Visibility</MudText>
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                @* Wind *@
-                <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
-                    <MudIcon Icon="@Icons.Material.Outlined.Air" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
-                    <div class="d-flex flex-column align-center">
-                        <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@Math.Round(_currentWeather?.Wind.Speed ?? 0) m/s</MudText>
-                        <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Wind</MudText>
-                    </div>
-                </div>
-
-                @* Visibility *@
-                <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
-                    <MudIcon Icon="@Icons.Material.Outlined.Visibility" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
-                    <div class="d-flex flex-column align-center">
-                        <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@Math.Round((_currentWeather?.Visibility ?? 0) / 1000.0, 1) km</MudText>
-                        <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Visibility</MudText>
-                    </div>
-                </div>
+                }
             </div>
 
-            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Style="width: 100%;">
+            @* Bottom Controls *@
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Style="width: 100%;">
+                <MudIconButton Icon="@(_showHourlyBottom ? Icons.Material.Outlined.GridView : Icons.Material.Outlined.AccessTime)" Size="Size.Small" OnClick="@ToggleBottomView" Color="Color.Primary" />
                 <MudIconButton Icon="@Icons.Material.Rounded.ArrowForward" Size="Size.Small" OnClick="@OpenForecast" Color="Color.Primary" />
             </MudStack>
         }
@@ -184,6 +212,7 @@
     private ForecastResponse _forecast;
     private bool _showForecast = false;
     private bool _showSunrise = true; // Default
+    private bool _showHourlyBottom = false;
 
     [Parameter] public RenderFragment? HeaderAction { get; set; }
 
@@ -238,6 +267,12 @@
     private void ToggleSunState()
     {
         _showSunrise = !_showSunrise;
+        StateHasChanged();
+    }
+
+    private void ToggleBottomView()
+    {
+        _showHourlyBottom = !_showHourlyBottom;
         StateHasChanged();
     }
 
