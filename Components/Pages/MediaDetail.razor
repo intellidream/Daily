@@ -4,6 +4,9 @@
 @inject IGoogleAuthService AuthService
 @inject IYouTubeService YouTubeService
 @inject ISnackbar Snackbar
+@inject IRefreshService RefreshService
+
+@implements IDisposable
 
 <div class="d-flex flex-column" style="height: 100%; position: relative;">
     @if (!_isAuthenticated)
@@ -119,6 +122,8 @@
 
     protected override void OnInitialized()
     {
+        RefreshService.DetailRefreshRequested += OnDetailRefresh;
+
         if (Application.Current != null)
         {
             _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
@@ -225,5 +230,23 @@
     private async Task OpenVideo(string url)
     {
         await Browser.OpenAsync(url, BrowserLaunchMode.SystemPreferred);
+    }
+
+    private async Task OnDetailRefresh()
+    {
+        _videos = null;
+        _nextPageToken = null;
+        StateHasChanged();
+
+        var token = await AuthService.GetAccessTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            await LoadVideos(token);
+        }
+    }
+
+    public void Dispose()
+    {
+        RefreshService.DetailRefreshRequested -= OnDetailRefresh;
     }
 }

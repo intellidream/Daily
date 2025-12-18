@@ -1,0 +1,29 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/usr/local/share/dotnet/packs/Microsoft.Android.Sdk.Darwin/36.1.2/tools/Xamarin.Android.Tooling.targets(88,5): error XA5207: Could not find android.jar for API level 36. This means the Android SDK platform for API level 36 is not installed; it was expected to be in `/Users/mihai/Library/Developer/Xamarin/android-sdk-macosx/platforms/android-36/android.jar`. [/Users/mihai/Source/Daily/Daily.csproj::TargetFramework=net10.0-android]
+/usr/local/share/dotnet/packs/Microsoft.Android.Sdk.Darwin/36.1.2/tools/Xamarin.Android.Tooling.targets(88,5): error XA5207: You can install the missing API level by running `dotnet build -t:InstallAndroidDependencies -f net10.0-android "-p:AndroidSdkDirectory=/Users/mihai/Library/Developer/Xamarin/android-sdk-macosx"`, or change the project to target an API version that is installed. [/Users/mihai/Source/Daily/Daily.csproj::TargetFramework=net10.0-android]
+/usr/local/share/dotnet/packs/Microsoft.Android.Sdk.Darwin/36.1.2/tools/Xamarin.Android.Tooling.targets(88,5): error XA5207: See https://aka.ms/xa5207 for more details. [/Users/mihai/Source/Daily/Daily.csproj::TargetFramework=net10.0-android]
+  Detected signing identity:
+    Code Signing Key: "" (-)
+    Provisioning Profile: "" () - no entitlements
+    Bundle Id: com.intellidream.daily
+    App Id: com.intellidream.daily
+  Detected signing identity:
+    Code Signing Key: "" (-)
+    Provisioning Profile: "" () - no entitlements
+    Bundle Id: com.intellidream.daily
+    App Id: com.intellidream.daily
+  Daily -> /Users/mihai/Source/Daily/bin/Debug/net10.0-ios/iossimulator-arm64/Daily.dll
+  Daily -> /Users/mihai/Source/Daily/bin/Debug/net10.0-maccatalyst/maccatalyst-arm64/Daily.dll
+  Optimizing assemblies for size may change the behavior of the app. Be sure to test after publishing. See: https://aka.ms/dotnet-illink
+  Optimizing assemblies for size may change the behavior of the app. Be sure to test after publishing. See: https://aka.ms/dotnet-illink
+
+Build FAILED.
+
+/usr/local/share/dotnet/packs/Microsoft.Android.Sdk.Darwin/36.1.2/tools/Xamarin.Android.Tooling.targets(88,5): error XA5207: Could not find android.jar for API level 36. This means the Android SDK platform for API level 36 is not installed; it was expected to be in `/Users/mihai/Library/Developer/Xamarin/android-sdk-macosx/platforms/android-36/android.jar`. [/Users/mihai/Source/Daily/Daily.csproj::TargetFramework=net10.0-android]
+/usr/local/share/dotnet/packs/Microsoft.Android.Sdk.Darwin/36.1.2/tools/Xamarin.Android.Tooling.targets(88,5): error XA5207: You can install the missing API level by running `dotnet build -t:InstallAndroidDependencies -f net10.0-android "-p:AndroidSdkDirectory=/Users/mihai/Library/Developer/Xamarin/android-sdk-macosx"`, or change the project to target an API version that is installed. [/Users/mihai/Source/Daily/Daily.csproj::TargetFramework=net10.0-android]
+/usr/local/share/dotnet/packs/Microsoft.Android.Sdk.Darwin/36.1.2/tools/Xamarin.Android.Tooling.targets(88,5): error XA5207: See https://aka.ms/xa5207 for more details. [/Users/mihai/Source/Daily/Daily.csproj::TargetFramework=net10.0-android]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:02.24
