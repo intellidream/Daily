@@ -14,6 +14,10 @@
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script>
         // Critical: OS Detection for Background Strategy
         // Mac Catalyst: Needs Opaque Background to prevent White Flash.
@@ -129,6 +133,30 @@
             },
             addClassToBody: function (className) {
                 document.body.classList.add(className);
+            }
+        };
+
+        window.dailyMap = {
+            map: null,
+            initMap: function (elementId, lat, lon, apiKey) {
+                if (this.map) {
+                    this.map.remove();
+                    this.map = null;
+                }
+
+                this.map = L.map(elementId).setView([lat, lon], 10);
+
+                // OpenStreetMap Base Layer
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap'
+                }).addTo(this.map);
+
+                // OpenWeatherMap Precipitation Layer (Precipitation Classic)
+                L.tileLayer(`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`, {
+                    maxZoom: 18,
+                    attribution: '© OpenWeatherMap'
+                }).addTo(this.map);
             }
         };
     </script>

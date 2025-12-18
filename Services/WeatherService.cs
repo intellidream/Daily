@@ -43,5 +43,6 @@ namespace Daily.Services
                 return null;
             }
         }
+        public string GetApiKey() => ApiKey;
     }
 }

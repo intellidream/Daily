@@ -3,128 +3,158 @@
 @inject IWeatherService WeatherService
 @inject IGeolocation Geolocation
 @inject IRefreshService RefreshService
+@inject IJSRuntime JS
 
-<MudStack Style="width: 100%; height: 100%;" Spacing="4">
+<MudGrid Spacing="4" Class="h-100">
     @if (_isLoading)
     {
-        <div class="d-flex justify-center align-center flex-grow-1">
+        <MudItem xs="12" Class="d-flex justify-center align-center flex-grow-1">
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-        </div>
+        </MudItem>
     }
     else if (_errorMessage != null)
     {
-        <div class="d-flex flex-column justify-center align-center flex-grow-1">
+         <MudItem xs="12" Class="d-flex flex-column justify-center align-center flex-grow-1">
             <MudText Color="Color.Error">@_errorMessage</MudText>
             <MudButton OnClick="LoadWeatherData" Variant="Variant.Filled" Color="Color.Primary" Class="mt-2">Retry</MudButton>
-        </div>
+        </MudItem>
     }
     else if (_currentWeather != null)
     {
-        <!-- Hero Section -->
-        <MudPaper Class="glass-panel pa-6 d-flex flex-column align-center justify-center relative" Elevation="0" Style="min-height: 250px; overflow: hidden;">
-             <!-- Dynamic Background Gradient idea could go here based on weather -->
-             
-             <MudText Typo="Typo.h5" Class="mb-1" Style="opacity: 0.8; font-weight: 500;">@_currentWeather.Name</MudText>
-             
-             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
-                 <MudImage Src="@($"https://openweathermap.org/img/wn/{_currentWeather.Weather[0].Icon}@4x.png")" Width="120" Height="120" Style="filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.2));" />
-                 <MudText Typo="Typo.h1" Style="font-size: 5rem; font-weight: 700; line-height: 1;">@Math.Round(_currentWeather.Main.Temp)°</MudText>
-             </MudStack>
-             
-             <MudText Typo="Typo.h4" Class="mt-2" Style="font-weight: 600; text-transform: capitalize;">@_currentWeather.Weather[0].Description</MudText>
-             <MudText Typo="Typo.h6" Class="mt-1" Style="opacity: 0.7;">H: @Math.Round(_currentWeather.Main.TempMax)°  L: @Math.Round(_currentWeather.Main.TempMin)°</MudText>
-        </MudPaper>
+        <!-- Row 1: Hero (Left) | Details 4-Pack (Right) -->
+        <MudItem xs="12" lg="6">
+             <MudPaper Class="glass-panel pa-6 d-flex flex-column align-center justify-center relative" Elevation="0" Style="height: 100%; min-height: 250px; overflow: hidden;">
+                 <MudText Typo="Typo.h5" Class="mb-1" Style="opacity: 0.8; font-weight: 500;">@_currentWeather.Name</MudText>
+                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+                     <MudImage Src="@($"https://openweathermap.org/img/wn/{_currentWeather.Weather[0].Icon}@4x.png")" Width="120" Height="120" Style="filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.2));" />
+                     <MudText Typo="Typo.h1" Style="font-size: 5rem; font-weight: 700; line-height: 1;">@Math.Round(_currentWeather.Main.Temp)°</MudText>
+                 </MudStack>
+                 <MudText Typo="Typo.h4" Class="mt-2" Style="font-weight: 600; text-transform: capitalize;">@_currentWeather.Weather[0].Description</MudText>
+                 <MudText Typo="Typo.h6" Class="mt-1" Style="opacity: 0.7;">H: @Math.Round(_currentWeather.Main.TempMax)°  L: @Math.Round(_currentWeather.Main.TempMin)°</MudText>
+            </MudPaper>
+        </MudItem>
 
-        <!-- Details Grid -->
-        <MudGrid Spacing="3">
-            <MudItem xs="6" sm="3">
-                <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center" Elevation="0">
-                     <MudIcon Icon="@Icons.Material.Outlined.WaterDrop" Class="mb-2" Style="opacity: 0.7;" />
-                     <MudText Typo="Typo.caption" Style="opacity: 0.6;">HUMIDITY</MudText>
-                     <MudText Typo="Typo.h6">@_currentWeather.Main.Humidity%</MudText>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="6" sm="3">
-                <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center" Elevation="0">
-                     <MudIcon Icon="@Icons.Material.Outlined.Air" Class="mb-2" Style="opacity: 0.7;" />
-                     <MudText Typo="Typo.caption" Style="opacity: 0.6;">WIND</MudText>
-                     <MudText Typo="Typo.h6">@Math.Round(_currentWeather.Wind.Speed) m/s</MudText>
-                </MudPaper>
-            </MudItem>
-             <MudItem xs="6" sm="3">
-                <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center" Elevation="0">
-                     <MudIcon Icon="@Icons.Material.Outlined.Visibility" Class="mb-2" Style="opacity: 0.7;" />
-                     <MudText Typo="Typo.caption" Style="opacity: 0.6;">VISIBILITY</MudText>
-                     <MudText Typo="Typo.h6">@Math.Round(_currentWeather.Visibility / 1000.0, 1) km</MudText>
-                </MudPaper>
-            </MudItem>
-             <MudItem xs="6" sm="3">
-                <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center" Elevation="0">
-                     <MudIcon Icon="@Icons.Material.Outlined.Speed" Class="mb-2" Style="opacity: 0.7;" />
-                     <MudText Typo="Typo.caption" Style="opacity: 0.6;">PRESSURE</MudText>
-                     <MudText Typo="Typo.h6">@_currentWeather.Main.Pressure hPa</MudText>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
+        <MudItem xs="12" lg="6">
+            <div class="d-flex flex-column justify-space-between h-100 gap-4">
+                <MudGrid Spacing="3">
+                    <MudItem xs="6">
+                        <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center justify-center" Elevation="0" Style="height: 160px;">
+                             <MudIcon Icon="@Icons.Material.Outlined.WaterDrop" Class="mb-2" Style="opacity: 0.7;" />
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">HUMIDITY</MudText>
+                             <MudText Typo="Typo.h6">@_currentWeather.Main.Humidity%</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center justify-center" Elevation="0" Style="height: 160px;">
+                             <MudIcon Icon="@Icons.Material.Outlined.Air" Class="mb-2" Style="opacity: 0.7;" />
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">WIND</MudText>
+                             <MudText Typo="Typo.h6">@Math.Round(_currentWeather.Wind.Speed) m/s</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+                
+                <MudGrid Spacing="3">
+                     <MudItem xs="6">
+                        <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center justify-center" Elevation="0" Style="height: 160px;">
+                             <MudIcon Icon="@Icons.Material.Outlined.Visibility" Class="mb-2" Style="opacity: 0.7;" />
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">VISIBILITY</MudText>
+                             <MudText Typo="Typo.h6">@Math.Round(_currentWeather.Visibility / 1000.0, 1) km</MudText>
+                        </MudPaper>
+                    </MudItem>
+                     <MudItem xs="6">
+                        <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center justify-center" Elevation="0" Style="height: 160px;">
+                             <MudIcon Icon="@Icons.Material.Outlined.Speed" Class="mb-2" Style="opacity: 0.7;" />
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">PRESSURE</MudText>
+                             <MudText Typo="Typo.h6">@_currentWeather.Main.Pressure hPa</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </div>
+        </MudItem>
 
-        <!-- Forecasts Container -->
-        <MudGrid Spacing="4">
-            <!-- Hourly Forecast (Next 24h) -->
-            <MudItem xs="12">
-                 <MudText Typo="Typo.h6" Class="mb-2 ml-1" Style="font-weight: 700;">Hourly Forecast</MudText>
-                 <MudPaper Class="glass-panel pa-4" Elevation="0" Style="overflow-x: auto;">
-                     <MudStack Row="true" Spacing="4">
-                        @if (_forecast != null)
+        <!-- Row 2: Hourly (Left) | Sun Times (Right) -->
+        <MudItem xs="12" lg="6">
+             <MudText Typo="Typo.h6" Class="mb-2 ml-1" Style="font-weight: 700;">Hourly Forecast</MudText>
+             <MudPaper Class="glass-panel pa-4 d-flex align-center" Elevation="0" Style="overflow-x: auto; height: 160px;">
+                 <MudStack Row="true" Spacing="4">
+                    @if (_forecast != null)
+                    {
+                        @foreach (var item in _forecast.List.Take(8)) // 8 * 3h = 24h
                         {
-                            @foreach (var item in _forecast.List.Take(8)) // 8 * 3h = 24h
-                            {
-                                <div class="d-flex flex-column align-center" style="min-width: 60px;">
-                                    <MudText Typo="Typo.body2" Style="opacity: 0.7;">@DateTime.Parse(item.DtTxt).ToString("HH:mm")</MudText>
-                                    <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}.png")" Width="40" Height="40" />
-                                    <MudText Typo="Typo.h6" Style="font-weight: 700;">@Math.Round(item.Main.Temp)°</MudText>
-                                    <MudText Typo="Typo.caption" Style="color: #60a5fa;">@(item.Pop > 0 ? $"{Math.Round(item.Pop * 100)}%" : "")</MudText>
-                                </div>
-                            }
+                            <div class="d-flex flex-column align-center" style="min-width: 60px;">
+                                <MudText Typo="Typo.body2" Style="opacity: 0.7;">@DateTime.Parse(item.DtTxt).ToString("HH:mm")</MudText>
+                                <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}@4x.png")" Width="40" Height="40" Style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));" />
+                                <MudText Typo="Typo.h6" Style="font-weight: 700;">@Math.Round(item.Main.Temp)°</MudText>
+                                <MudText Typo="Typo.caption" Style="color: #60a5fa;">@(item.Pop > 0 ? $"{Math.Round(item.Pop * 100)}%" : "")</MudText>
+                            </div>
                         }
-                     </MudStack>
-                 </MudPaper>
-            </MudItem>
-            
-            <!-- Daily Forecast (Derived) -->
-            <MudItem xs="12">
-                <MudText Typo="Typo.h6" Class="mb-2 ml-1" Style="font-weight: 700;">5-Day Forecast</MudText>
-                <MudPaper Class="glass-panel pa-0" Elevation="0">
-                    <MudList Clickable="false" DisablePadding="true" T="object">
-                        @if (_dailyForecasts != null)
+                    }
+                 </MudStack>
+             </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" lg="6">
+             <!-- Aligned nicely with Header "Hourly Forecast" visually by adding Spacer or Margin if needed, but Grid handles spacing -->
+             <div class="mb-2 d-none d-lg-block" style="height: 32px"></div> <!-- Spacer to align with Hourly Header if we want perfect baseline, or just use Grid -->
+             <MudGrid Spacing="3" Class="h-100">
+                 <MudItem xs="6">
+                    <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center justify-center" Elevation="0" Style="height: 160px;">
+                         <MudIcon Icon="@Icons.Material.Outlined.WbSunny" Class="mb-2" Style="opacity: 0.7;" />
+                         <MudText Typo="Typo.caption" Style="opacity: 0.6;">SUNRISE</MudText>
+                         <MudText Typo="Typo.h6">@(_currentWeather.Sys.Sunrise > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunrise).ToLocalTime().ToString("HH:mm") : "--:--")</MudText>
+                    </MudPaper>
+                </MudItem>
+                 <MudItem xs="6">
+                    <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center justify-center" Elevation="0" Style="height: 160px;">
+                         <MudIcon Icon="@Icons.Material.Outlined.WbTwilight" Class="mb-2" Style="opacity: 0.7;" />
+                         <MudText Typo="Typo.caption" Style="opacity: 0.6;">SUNSET</MudText>
+                         <MudText Typo="Typo.h6">@(_currentWeather.Sys.Sunset > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunset).ToLocalTime().ToString("HH:mm") : "--:--")</MudText>
+                    </MudPaper>
+                </MudItem>
+             </MudGrid>
+        </MudItem>
+        
+        <!-- Row 3: 5-Day (Left) | Map (Right) -->
+        <MudItem xs="12" lg="6">
+            <MudText Typo="Typo.h6" Class="mb-2 ml-1" Style="font-weight: 700;">5-Day Forecast</MudText>
+            <MudPaper Class="glass-panel pa-0" Elevation="0" Style="height: 300px; overflow-y: auto;">
+                <MudList Clickable="false" DisablePadding="true" T="object">
+                    @if (_dailyForecasts != null)
+                    {
+                        @foreach (var day in _dailyForecasts)
                         {
-                            @foreach (var day in _dailyForecasts)
-                            {
-                                <MudListItem T="object">
-                                    <div class="d-flex align-center justify-space-between w-100">
-                                        <MudText Typo="Typo.body1" Style="font-weight: 600; width: 60px;">@day.Date.ToString("ddd")</MudText>
-                                        
-                                        <div class="d-flex align-center gap-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Size="Size.Small" Style="@($"color: #60a5fa; opacity: {(day.MaxPop > 0 ? 1 : 0)};")" />
-                                            <MudText Typo="Typo.caption" Style="@($"color: #60a5fa; width: 30px; opacity: {(day.MaxPop > 0 ? 1 : 0)};")">@(Math.Round(day.MaxPop * 100))%</MudText>
-                                        </div>
-                                        
-                                        <MudImage Src="@($"https://openweathermap.org/img/wn/{day.Icon}.png")" Width="40" Height="40" />
-                                        
-                                        <div class="d-flex align-center gap-4" style="width: 100px; justify-content: flex-end;">
-                                            <MudText Typo="Typo.body1" Style="font-weight: 700;">@Math.Round(day.MaxTemp)°</MudText>
-                                            <MudText Typo="Typo.body1" Style="opacity: 0.5;">@Math.Round(day.MinTemp)°</MudText>
-                                        </div>
+                            <MudListItem T="object">
+                                <div class="d-flex align-center justify-space-between w-100">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 600; width: 60px;">@day.Date.ToString("ddd")</MudText>
+                                    
+                                    <div class="d-flex align-center gap-2">
+                                        <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Size="Size.Small" Style="color: #60a5fa;" />
+                                        <MudText Typo="Typo.caption" Style="color: #60a5fa; width: 30px;">@(Math.Round(day.MaxPop * 100))%</MudText>
                                     </div>
-                                </MudListItem>
-                                <MudDivider />
-                            }
+                                    
+                                    <MudImage Src="@($"https://openweathermap.org/img/wn/{day.Icon}@4x.png")" Width="40" Height="40" Style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));" />
+                                    
+                                    <div class="d-flex align-center gap-4" style="width: 100px; justify-content: flex-end;">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 700;">@Math.Round(day.MaxTemp)°</MudText>
+                                        <MudText Typo="Typo.body1" Style="opacity: 0.5;">@Math.Round(day.MinTemp)°</MudText>
+                                    </div>
+                                </div>
+                            </MudListItem>
+                            <MudDivider />
                         }
-                    </MudList>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
+                    }
+                </MudList>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" lg="6">
+             <MudText Typo="Typo.h6" Class="mb-2 ml-1" Style="font-weight: 700;">Precipitation Map</MudText>
+             <MudPaper Class="glass-panel pa-0" Elevation="0" Style="height: 300px; overflow: hidden; border-radius: 12px;">
+                 <div id="weatherMap" style="width: 100%; height: 100%;"></div>
+             </MudPaper>
+        </MudItem>
     }
-</MudStack>
+</MudGrid>
 
 @code {
     private bool _isLoading = true;
@@ -137,6 +167,23 @@
     {
         RefreshService.DetailRefreshRequested += LoadWeatherData;
         await LoadWeatherData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_currentWeather != null)
+        {
+             // We can initialize map whenever we have coordinates
+             try 
+             {
+                 var apiKey = WeatherService.GetApiKey();
+                 await JS.InvokeVoidAsync("dailyMap.initMap", "weatherMap", _currentWeather.Coord.Lat, _currentWeather.Coord.Lon, apiKey);
+             }
+             catch(Exception ex)
+             {
+                 Console.WriteLine($"Map Init Error: {ex.Message}");
+             }
+        }
     }
 
     public void Dispose()
