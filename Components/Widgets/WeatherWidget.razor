@@ -49,7 +49,7 @@
     else if (_errorMessage != null)
     {
         <MudText Color="Color.Error">@_errorMessage</MudText>
-        <MudButton OnClick="LoadWeatherData" Variant="Variant.Filled" Color="Color.Primary">Retry</MudButton>
+        <MudButton OnClick="@(() => LoadWeatherData(true))" Variant="Variant.Filled" Color="Color.Primary">Retry</MudButton>
     }
     else
     {
@@ -186,19 +186,31 @@
     private bool _showSunrise = true; // Default
 
     [Parameter] public RenderFragment? HeaderAction { get; set; }
-    // [Parameter] public EventCallback<string> OnLocationLoaded { get; set; } // Removed as we handle title internally now
 
     protected override async Task OnInitializedAsync()
     {
-        RefreshService.RefreshRequested += LoadWeatherData;
+        RefreshService.RefreshRequested += HandleRefresh;
+        WeatherService.OnWeatherUpdated += HandleUpdate;
         BackButtonService.Register(OnBackNative);
-        await LoadWeatherData();
+        await LoadWeatherData(forceRefresh: false);
     }
 
     public void Dispose()
     {
         BackButtonService.Unregister(OnBackNative);
-        RefreshService.RefreshRequested -= LoadWeatherData;
+        RefreshService.RefreshRequested -= HandleRefresh;
+        WeatherService.OnWeatherUpdated -= HandleUpdate;
+    }
+
+    private async Task HandleRefresh()
+    {
+        await LoadWeatherData(forceRefresh: true);
+    }
+
+    private async void HandleUpdate()
+    {
+        // When updated from another source, just fetch cached data (forceRefresh=false)
+        await LoadWeatherData(forceRefresh: false);
     }
 
     private void CloseForecast()
@@ -229,7 +241,7 @@
         StateHasChanged();
     }
 
-    private async Task LoadWeatherData()
+    private async Task LoadWeatherData(bool forceRefresh = false)
     {
         _isLoading = true;
         _errorMessage = null;
@@ -249,8 +261,8 @@
 
             if (location != null)
             {
-                var fetchWeather = WeatherService.GetCurrentWeatherAsync(location.Latitude, location.Longitude);
-                var fetchForecast = WeatherService.GetForecastAsync(location.Latitude, location.Longitude);
+                var fetchWeather = WeatherService.GetCurrentWeatherAsync(location.Latitude, location.Longitude, forceRefresh);
+                var fetchForecast = WeatherService.GetForecastAsync(location.Latitude, location.Longitude, forceRefresh);
                 
                 await Task.WhenAll(fetchWeather, fetchForecast);
                 

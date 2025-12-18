@@ -16,7 +16,7 @@
     {
          <MudItem xs="12" Class="d-flex flex-column justify-center align-center flex-grow-1">
             <MudText Color="Color.Error">@_errorMessage</MudText>
-            <MudButton OnClick="LoadWeatherData" Variant="Variant.Filled" Color="Color.Primary" Class="mt-2">Retry</MudButton>
+            <MudButton OnClick="@(() => LoadWeatherData(true))" Variant="Variant.Filled" Color="Color.Primary" Class="mt-2">Retry</MudButton>
         </MudItem>
     }
     else if (_currentWeather != null)
@@ -157,19 +157,7 @@
 </MudGrid>
 
 <style>
-    /* Tinted Tiles for Detail Pane (Matched to SystemInfo) */
-    .detail-tile {
-        transition: background-color 0.3s ease;
-        /* Light Mode Tint: White with slight opacity */
-        background-color: rgba(255, 255, 255, 0.2) !important;
-        backdrop-filter: blur(10px);
-    }
-
-    [data-theme='dark'] .detail-tile {
-        /* Dark Mode Tint: Dark grey with opacity */
-        background-color: rgba(30, 30, 30, 0.6) !important;
-        border: 1px solid rgba(255,255,255,0.05);
-    }
+    /* Tinted Tiles for Detail Pane (Matched to SystemInfo) - Now in app.css */
 </style>
 
 @code {
@@ -181,8 +169,26 @@
 
     protected override async Task OnInitializedAsync()
     {
-        RefreshService.DetailRefreshRequested += LoadWeatherData;
-        await LoadWeatherData();
+        RefreshService.DetailRefreshRequested += HandleDetailRefresh;
+        WeatherService.OnWeatherUpdated += HandleUpdate;
+        await LoadWeatherData(forceRefresh: false);
+    }
+    
+    public void Dispose()
+    {
+        RefreshService.DetailRefreshRequested -= HandleDetailRefresh;
+        WeatherService.OnWeatherUpdated -= HandleUpdate;
+    }
+
+    private async Task HandleDetailRefresh()
+    {
+        await LoadWeatherData(forceRefresh: true);
+    }
+
+    private async void HandleUpdate()
+    {
+        // When updated from another source, just fetch cached data (forceRefresh=false)
+        await LoadWeatherData(forceRefresh: false);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -202,12 +208,7 @@
         }
     }
 
-    public void Dispose()
-    {
-        RefreshService.DetailRefreshRequested -= LoadWeatherData;
-    }
-
-    private async Task LoadWeatherData()
+    private async Task LoadWeatherData(bool forceRefresh = false)
     {
         _isLoading = true;
         _errorMessage = null;
@@ -228,8 +229,8 @@
 
             if (location != null)
             {
-                var fetchCurrent = WeatherService.GetCurrentWeatherAsync(location.Latitude, location.Longitude);
-                var fetchForecast = WeatherService.GetForecastAsync(location.Latitude, location.Longitude);
+                var fetchCurrent = WeatherService.GetCurrentWeatherAsync(location.Latitude, location.Longitude, forceRefresh);
+                var fetchForecast = WeatherService.GetForecastAsync(location.Latitude, location.Longitude, forceRefresh);
 
                 await Task.WhenAll(fetchCurrent, fetchForecast);
 

@@ -41,6 +41,20 @@ body {
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Tinted Tiles (Premium Glass Effect) - Shared by Details & Widgets */
+.detail-tile {
+    transition: background-color 0.3s ease;
+    /* Light Mode: White with slight opacity */
+    background-color: rgba(255, 255, 255, 0.2) !important;
+    backdrop-filter: blur(10px);
+}
+
+[data-theme='dark'] .detail-tile {
+    /* Dark Mode: Dark grey with opacity */
+    background-color: rgba(30, 30, 30, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
 /* --- DARK MODE (System Preference OR Explicit Override) --- */
 @media (prefers-color-scheme: dark) {
 
