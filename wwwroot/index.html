@@ -152,6 +152,12 @@
                     attribution: '© OpenStreetMap'
                 }).addTo(this.map);
 
+                // OpenWeatherMap Clouds Layer
+                L.tileLayer(`https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${apiKey}`, {
+                    maxZoom: 18,
+                    opacity: 0.8
+                }).addTo(this.map);
+
                 // OpenWeatherMap Precipitation Layer (Precipitation Classic)
                 L.tileLayer(`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`, {
                     maxZoom: 18,
