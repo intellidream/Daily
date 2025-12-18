@@ -81,6 +81,10 @@
         {
             WindowManager.OpenDetail("Media", "Recommendations");
         }
+        else if (widget.ComponentType == "WeatherWidget")
+        {
+            WindowManager.OpenDetail("Weather", "Weather Detail");
+        }
         else
         {
             // Ensure we reset the view to default/reading pane so we don't show stale SystemInfo

@@ -1,0 +1,240 @@
+@using Daily.Services
+@using Daily.Models
+@inject IWeatherService WeatherService
+@inject IGeolocation Geolocation
+@inject IRefreshService RefreshService
+
+<MudStack Style="width: 100%; height: 100%;" Spacing="4">
+    @if (_isLoading)
+    {
+        <div class="d-flex justify-center align-center flex-grow-1">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        </div>
+    }
+    else if (_errorMessage != null)
+    {
+        <div class="d-flex flex-column justify-center align-center flex-grow-1">
+            <MudText Color="Color.Error">@_errorMessage</MudText>
+            <MudButton OnClick="LoadWeatherData" Variant="Variant.Filled" Color="Color.Primary" Class="mt-2">Retry</MudButton>
+        </div>
+    }
+    else if (_currentWeather != null)
+    {
+        <!-- Hero Section -->
+        <MudPaper Class="glass-panel pa-6 d-flex flex-column align-center justify-center relative" Elevation="0" Style="min-height: 250px; overflow: hidden;">
+             <!-- Dynamic Background Gradient idea could go here based on weather -->
+             
+             <MudText Typo="Typo.h5" Class="mb-1" Style="opacity: 0.8; font-weight: 500;">@_currentWeather.Name</MudText>
+             
+             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+                 <MudImage Src="@($"https://openweathermap.org/img/wn/{_currentWeather.Weather[0].Icon}@4x.png")" Width="120" Height="120" Style="filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.2));" />
+                 <MudText Typo="Typo.h1" Style="font-size: 5rem; font-weight: 700; line-height: 1;">@Math.Round(_currentWeather.Main.Temp)°</MudText>
+             </MudStack>
+             
+             <MudText Typo="Typo.h4" Class="mt-2" Style="font-weight: 600; text-transform: capitalize;">@_currentWeather.Weather[0].Description</MudText>
+             <MudText Typo="Typo.h6" Class="mt-1" Style="opacity: 0.7;">H: @Math.Round(_currentWeather.Main.TempMax)°  L: @Math.Round(_currentWeather.Main.TempMin)°</MudText>
+        </MudPaper>
+
+        <!-- Details Grid -->
+        <MudGrid Spacing="3">
+            <MudItem xs="6" sm="3">
+                <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center" Elevation="0">
+                     <MudIcon Icon="@Icons.Material.Outlined.WaterDrop" Class="mb-2" Style="opacity: 0.7;" />
+                     <MudText Typo="Typo.caption" Style="opacity: 0.6;">HUMIDITY</MudText>
+                     <MudText Typo="Typo.h6">@_currentWeather.Main.Humidity%</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center" Elevation="0">
+                     <MudIcon Icon="@Icons.Material.Outlined.Air" Class="mb-2" Style="opacity: 0.7;" />
+                     <MudText Typo="Typo.caption" Style="opacity: 0.6;">WIND</MudText>
+                     <MudText Typo="Typo.h6">@Math.Round(_currentWeather.Wind.Speed) m/s</MudText>
+                </MudPaper>
+            </MudItem>
+             <MudItem xs="6" sm="3">
+                <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center" Elevation="0">
+                     <MudIcon Icon="@Icons.Material.Outlined.Visibility" Class="mb-2" Style="opacity: 0.7;" />
+                     <MudText Typo="Typo.caption" Style="opacity: 0.6;">VISIBILITY</MudText>
+                     <MudText Typo="Typo.h6">@Math.Round(_currentWeather.Visibility / 1000.0, 1) km</MudText>
+                </MudPaper>
+            </MudItem>
+             <MudItem xs="6" sm="3">
+                <MudPaper Class="glass-panel pa-4 d-flex flex-column align-center" Elevation="0">
+                     <MudIcon Icon="@Icons.Material.Outlined.Speed" Class="mb-2" Style="opacity: 0.7;" />
+                     <MudText Typo="Typo.caption" Style="opacity: 0.6;">PRESSURE</MudText>
+                     <MudText Typo="Typo.h6">@_currentWeather.Main.Pressure hPa</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Forecasts Container -->
+        <MudGrid Spacing="4">
+            <!-- Hourly Forecast (Next 24h) -->
+            <MudItem xs="12">
+                 <MudText Typo="Typo.h6" Class="mb-2 ml-1" Style="font-weight: 700;">Hourly Forecast</MudText>
+                 <MudPaper Class="glass-panel pa-4" Elevation="0" Style="overflow-x: auto;">
+                     <MudStack Row="true" Spacing="4">
+                        @if (_forecast != null)
+                        {
+                            @foreach (var item in _forecast.List.Take(8)) // 8 * 3h = 24h
+                            {
+                                <div class="d-flex flex-column align-center" style="min-width: 60px;">
+                                    <MudText Typo="Typo.body2" Style="opacity: 0.7;">@DateTime.Parse(item.DtTxt).ToString("HH:mm")</MudText>
+                                    <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}.png")" Width="40" Height="40" />
+                                    <MudText Typo="Typo.h6" Style="font-weight: 700;">@Math.Round(item.Main.Temp)°</MudText>
+                                    <MudText Typo="Typo.caption" Style="color: #60a5fa;">@(item.Pop > 0 ? $"{Math.Round(item.Pop * 100)}%" : "")</MudText>
+                                </div>
+                            }
+                        }
+                     </MudStack>
+                 </MudPaper>
+            </MudItem>
+            
+            <!-- Daily Forecast (Derived) -->
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2 ml-1" Style="font-weight: 700;">5-Day Forecast</MudText>
+                <MudPaper Class="glass-panel pa-0" Elevation="0">
+                    <MudList Clickable="false" DisablePadding="true" T="object">
+                        @if (_dailyForecasts != null)
+                        {
+                            @foreach (var day in _dailyForecasts)
+                            {
+                                <MudListItem T="object">
+                                    <div class="d-flex align-center justify-space-between w-100">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600; width: 60px;">@day.Date.ToString("ddd")</MudText>
+                                        
+                                        <div class="d-flex align-center gap-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Size="Size.Small" Style="@($"color: #60a5fa; opacity: {(day.MaxPop > 0 ? 1 : 0)};")" />
+                                            <MudText Typo="Typo.caption" Style="@($"color: #60a5fa; width: 30px; opacity: {(day.MaxPop > 0 ? 1 : 0)};")">@(Math.Round(day.MaxPop * 100))%</MudText>
+                                        </div>
+                                        
+                                        <MudImage Src="@($"https://openweathermap.org/img/wn/{day.Icon}.png")" Width="40" Height="40" />
+                                        
+                                        <div class="d-flex align-center gap-4" style="width: 100px; justify-content: flex-end;">
+                                            <MudText Typo="Typo.body1" Style="font-weight: 700;">@Math.Round(day.MaxTemp)°</MudText>
+                                            <MudText Typo="Typo.body1" Style="opacity: 0.5;">@Math.Round(day.MinTemp)°</MudText>
+                                        </div>
+                                    </div>
+                                </MudListItem>
+                                <MudDivider />
+                            }
+                        }
+                    </MudList>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudStack>
+
+@code {
+    private bool _isLoading = true;
+    private string _errorMessage;
+    private WeatherResponse _currentWeather;
+    private ForecastResponse _forecast;
+    private List<DailySummary> _dailyForecasts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        RefreshService.DetailRefreshRequested += LoadWeatherData;
+        await LoadWeatherData();
+    }
+
+    public void Dispose()
+    {
+        RefreshService.DetailRefreshRequested -= LoadWeatherData;
+    }
+
+    private async Task LoadWeatherData()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            // Re-use Geolocation logic (or ideally move to a shared store, but for now fetch fresh)
+            var location = await Geolocation.GetLastKnownLocationAsync();
+            if (location == null)
+            {
+                location = await Geolocation.GetLocationAsync(new GeolocationRequest
+                {
+                    DesiredAccuracy = GeolocationAccuracy.Best,
+                    Timeout = TimeSpan.FromSeconds(5)
+                });
+            }
+
+            if (location != null)
+            {
+                var fetchCurrent = WeatherService.GetCurrentWeatherAsync(location.Latitude, location.Longitude);
+                var fetchForecast = WeatherService.GetForecastAsync(location.Latitude, location.Longitude);
+
+                await Task.WhenAll(fetchCurrent, fetchForecast);
+
+                _currentWeather = await fetchCurrent;
+                _forecast = await fetchForecast;
+
+                if (_forecast != null)
+                {
+                    ProcessDailyForecast();
+                }
+            }
+            else
+            {
+                _errorMessage = "Unable to determine location.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Load Error: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ProcessDailyForecast()
+    {
+        _dailyForecasts = new List<DailySummary>();
+
+        // Group by Date (ignoring today since we have current weather, or include?)
+        // Let's include tomorrow onwards for "Forecast", or Today if we want rest of day.
+        // The list is every 3 hours.
+        
+        var grouped = _forecast.List
+            .GroupBy(x => DateTime.Parse(x.DtTxt).Date)
+            .OrderBy(g => g.Key)
+            .Take(5); // 5 Days
+
+        foreach (var group in grouped)
+        {
+            // Simple aggregation
+            var min = group.Min(x => x.Main.TempMin);
+            var max = group.Max(x => x.Main.TempMax);
+            var maxPop = group.Max(x => x.Pop);
+            
+            // Pick icon from the middle of the day (noon) or max occurrence
+            var noonItem = group.OrderBy(x => Math.Abs((DateTime.Parse(x.DtTxt) - group.Key.AddHours(12)).TotalHours)).FirstOrDefault();
+            var icon = noonItem?.Weather.FirstOrDefault()?.Icon ?? "01d";
+
+            _dailyForecasts.Add(new DailySummary
+            {
+                Date = group.Key,
+                MinTemp = min,
+                MaxTemp = max,
+                MaxPop = maxPop,
+                Icon = icon
+            });
+        }
+    }
+
+    private class DailySummary
+    {
+        public DateTime Date { get; set; }
+        public double MinTemp { get; set; }
+        public double MaxTemp { get; set; }
+        public double MaxPop { get; set; }
+        public string Icon { get; set; }
+    }
+}
