@@ -24,7 +24,8 @@
     @if (_showForecast)
         {
             @* Forecast View *@
-            <MudStack Row="true" Justify="Justify.SpaceBetween" Style="width: 100%; height: 100%;" AlignItems="AlignItems.Center">
+            @* Forecast View *@
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="px-2" Style="width: 100%; height: 100%;" AlignItems="AlignItems.Center">
                 @if (_forecast != null)
                 {
                     @foreach (var item in _forecast.List.Where(x => x.DtTxt.Contains("12:00:00")).Take(5))
@@ -35,19 +36,18 @@
                                 <MudText Typo="Typo.caption" Style="text-transform: uppercase; opacity: 0.9; font-weight: 700; font-size: 0.8rem;">@DateTime.Parse(item.DtTxt).ToString("ddd")</MudText>
                                 <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.7rem; margin-top: -2px;">@DateTime.Parse(item.DtTxt).ToString("dd MMM")</MudText>
                                 <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}@4x.png")" Width="50" Height="50" Style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));" />
-                                @if (item.Pop > 0)
-                                {
-                                    <div class="d-flex align-center gap-1">
-                                        <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Size="Size.Small" Style="font-size: 0.7rem; color: #60a5fa;" />
-                                        <MudText Typo="Typo.caption" Style="color: #60a5fa; font-weight: 700;">@Math.Round(item.Pop * 100)%</MudText>
-                                    </div>
-                                }
+                            </div>
+
+                            @* Middle Content: Rain (Centered) *@
+                            <div class="d-flex align-center gap-1">
+                                <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Size="Size.Small" Style="font-size: 0.7rem; color: #60a5fa;" />
+                                <MudText Typo="Typo.caption" Style="color: #60a5fa; font-weight: 700;">@Math.Round(item.Pop * 100)%</MudText>
                             </div>
                             
                             @* Bottom Content: Temps *@
                             <div class="d-flex flex-column align-center">
-                                <MudText Typo="Typo.body2" Style="font-weight: 700; font-size: 1.1rem;">@Math.Round(item.Main.TempMax)°</MudText>
-                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">@Math.Round(item.Main.TempMin)°</MudText>
+                                <MudText Typo="Typo.body2" Style="font-weight: 800; font-size: 1.4rem;">@Math.Round(item.Main.TempMax)°</MudText>
+                                <MudText Typo="Typo.body2" Style="opacity: 0.5; font-size: 1.0rem;">@Math.Round(item.Main.TempMin)°</MudText>
                             </div>
                         </MudStack>
                     }
@@ -226,7 +226,7 @@
                 {
                     var locationName = $"{_currentWeather.Name}, {_currentWeather.Sys.Country}";
                     await OnLocationLoaded.InvokeAsync(locationName);
-                    
+
                     // Determine initial sun state
                     var now = DateTimeOffset.Now.ToUnixTimeSeconds();
                     // If it is currently daytime (after sunrise, before sunset), show Sunset. 
