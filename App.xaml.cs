@@ -1,4 +1,5 @@
 ﻿using Daily.Services;
+using System.Runtime.InteropServices;
 #if WINDOWS
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -8,7 +9,6 @@ using Windows.Graphics;
 using UIKit;
 using Foundation;
 using CoreGraphics;
-using System.Runtime.InteropServices;
 using Daily.Platforms.MacCatalyst;
 #endif
 
@@ -215,16 +215,48 @@ namespace Daily
                             // 4. Set Level (Status Window)
                             nsWindow.SetValueForKey(Foundation.NSNumber.FromInt32(25), new Foundation.NSString("level"));
 
+                            
                             // 5. Apply Style (Borderless = 0)
                             // This removes Chrome and Resizability
-                            var setStyleMaskSelector = new ObjCRuntime.Selector("setStyleMask:");
-                            void_objc_msgSend_UInt(nsWindow.Handle, setStyleMaskSelector.Handle, 0); // NSWindowStyleMaskBorderless = 0
+                            // NSWindowStyleMaskBorderless = 0
+                            nsWindow.SetValueForKey(Foundation.NSNumber.FromInt32(0), new Foundation.NSString("styleMask"));
 
                             // 6. Ensure Shadow
-                            var setHasShadowSelector = new ObjCRuntime.Selector("setHasShadow:");
-                            void_objc_msgSend_Bool(nsWindow.Handle, setHasShadowSelector.Handle, true);
+                            nsWindow.SetValueForKey(Foundation.NSNumber.FromBoolean(true), new Foundation.NSString("hasShadow"));
 
-                            // 7. Show
+                            // 7. Rounded Corners (MACOS LOOK)
+                            try 
+                            {
+                                // A. Set Window Transparent/Clear
+                                nsWindow.SetValueForKey(Foundation.NSNumber.FromBoolean(false), new Foundation.NSString("opaque"));
+                                
+                                var nsColorClass = new ObjCRuntime.Class("NSColor");
+                                var clearColorSelector = new ObjCRuntime.Selector("clearColor");
+                                var clearColor = ObjCRuntime.Runtime.GetNSObject(
+                                    IntPtr_objc_msgSend(nsColorClass.Handle, clearColorSelector.Handle)
+                                );
+                                nsWindow.SetValueForKey(clearColor, new Foundation.NSString("backgroundColor"));
+
+                                // B. Round the ContentView Layer
+                                // Use KVC Path for safety
+                                var contentView = nsWindow.ValueForKey(new Foundation.NSString("contentView")) as NSObject;
+
+                                if (contentView != null)
+                                {
+                                    contentView.SetValueForKey(Foundation.NSNumber.FromBoolean(true), new Foundation.NSString("wantsLayer"));
+                                    
+                                    // Set Corner Radius on Layer
+                                    // Layer is a property of NSView
+                                    contentView.SetValueForKeyPath(Foundation.NSNumber.FromDouble(12.0), new Foundation.NSString("layer.cornerRadius"));
+                                    contentView.SetValueForKeyPath(Foundation.NSNumber.FromBoolean(true), new Foundation.NSString("layer.masksToBounds"));
+                                }
+                            }
+                            catch(Exception ex) 
+                            {
+                                Console.WriteLine($"Rounding Error: {ex}");
+                            }
+
+                            // 8. Show
                             var selector = new ObjCRuntime.Selector("makeKeyAndOrderFront:");
                             nsWindow.PerformSelector(selector, null, 0);
                             // MacTrayService.Log($"Window Shown at {rect}");
@@ -272,6 +304,10 @@ namespace Daily
                         presenter.IsResizable = false;
                         presenter.SetBorderAndTitleBar(false, false);
                     }
+                    
+
+                    
+
 
                     // Position on the right side
                     var displayArea = DisplayArea.GetFromWindowId(id, DisplayAreaFallback.Primary);
@@ -293,6 +329,10 @@ namespace Daily
 
             window.HandlerChanged += (s, e) => applySettings(window);
         }
+
+
+
+
         #endif
     }
 }
