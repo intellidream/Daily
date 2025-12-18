@@ -7,6 +7,37 @@
 @inject IBackButtonService BackButtonService
 @implements IDisposable
 
+<div class="d-flex align-center mb-2 flex-grow-1" style="width: 100%; gap: 2px;">
+    <div class="flex-grow-1" style="min-width: 0;">
+        <MudCarousel TData="object" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                     Class="flex-grow-1 rounded-pill mud-theme-primary">
+             <MudCarouselItem Transition="Transition.Slide">
+                 <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                     @if (_currentWeather != null)
+                     {
+                         <MudText Typo="Typo.body1" Class="font-weight-bold mr-2" Style="color: white !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                             @_currentWeather.Name
+                         </MudText>
+                         <!-- Assuming Auto Location since we use Geolocation -->
+                         <MudIcon Icon="@Icons.Material.Filled.NearMe" Size="Size.Small" Style="color: white; opacity: 0.8;" />
+                     }
+                     else
+                     {
+                          <MudText Typo="Typo.caption" Style="color: white;">Loading...</MudText>
+                     }
+                 </div>
+             </MudCarouselItem>
+        </MudCarousel>
+    </div>
+    
+    @if (HeaderAction != null)
+    {
+        <div class="flex-shrink-0 d-flex align-center">
+             @HeaderAction
+        </div>
+    }
+</div>
+
 <MudStack Style="height: 260px; width: 100%;" Justify="Justify.SpaceBetween">
     @if (_isLoading)
     {
@@ -154,7 +185,8 @@
     private bool _showForecast = false;
     private bool _showSunrise = true; // Default
 
-    [Parameter] public EventCallback<string> OnLocationLoaded { get; set; }
+    [Parameter] public RenderFragment? HeaderAction { get; set; }
+    // [Parameter] public EventCallback<string> OnLocationLoaded { get; set; } // Removed as we handle title internally now
 
     protected override async Task OnInitializedAsync()
     {
@@ -227,8 +259,8 @@
 
                 if (_currentWeather != null)
                 {
-                    var locationName = $"{_currentWeather.Name}, {_currentWeather.Sys.Country}";
-                    await OnLocationLoaded.InvokeAsync(locationName);
+                    // var locationName = $"{_currentWeather.Name}, {_currentWeather.Sys.Country}";
+                    // await OnLocationLoaded.InvokeAsync(locationName);
 
                     var now = DateTimeOffset.Now.ToUnixTimeSeconds();
                     if (now > _currentWeather.Sys.Sunrise && now < _currentWeather.Sys.Sunset)
