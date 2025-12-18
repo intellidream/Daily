@@ -11,13 +11,13 @@
 <div class="d-flex flex-column" style="height: 100%; position: relative;">
     
     <!-- List View (Always rendered, hidden via CSS when reading) -->
-    <div class="@(_selectedItem == null ? "d-flex flex-column" : "d-none")" style="height: 100%; overflow: hidden;">
+    <div class="@(_selectedItem == null ? "d-flex flex-column" : "d-none") mx-n4" style="height: 100%; overflow: hidden;">
         @if (RssService.IsLoading)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2 flex-shrink-0" />
         }
-        <div style="flex-grow: 1; overflow-y: auto;" class="px-2">
-            <MudGrid Spacing="2">
+        <div style="flex-grow: 1; overflow-y: auto;" class="px-4">
+            <MudGrid Spacing="4">
                 @if (RssService.Items != null)
                 {
                     @foreach (var item in RssService.Items.Skip((_currentPage - 1) * _pageSize).Take(_pageSize))
@@ -52,7 +52,7 @@
         </div>
         @if (RssService.Items != null && RssService.Items.Count > _pageSize)
         {
-            <div class="d-flex justify-center py-2 flex-shrink-0">
+            <div class="d-flex justify-center py-2 flex-shrink-0 px-4">
                  <MudPagination BoundaryCount="1" MiddleCount="1" Count="@_pageCount" SelectedChanged="OnPageChanged" Selected="@_currentPage" 
                                 Class="pa-2" Variant="Variant.Outlined" Size="Size.Small" ShowFirstButton="false" ShowLastButton="false" />
             </div>

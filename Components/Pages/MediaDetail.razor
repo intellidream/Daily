@@ -28,7 +28,7 @@
     else
     {
         <!-- Categories Chips -->
-        <div class="d-flex flex-shrink-0 align-center px-2 pb-4 gap-2 overflow-x-auto hide-scrollbar">
+        <div class="d-flex flex-shrink-0 align-center pb-4 gap-2 overflow-x-auto hide-scrollbar">
             <MudChip T="string" Variant="@(_selectedCategory == null ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == null ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory(null))">All</MudChip>
             <MudChip T="string" Variant="@(_selectedCategory == "Latest" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Latest" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Latest"))">Latest</MudChip>
             <MudChip T="string" Variant="@(_selectedCategory == "Tech" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Tech" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Tech"))">Tech</MudChip>
@@ -39,7 +39,7 @@
         </div>
 
         <!-- Video Grid -->
-        <div style="flex-grow: 1; overflow-y: auto;" class="px-2">
+        <div style="flex-grow: 1; overflow-y: auto;" class="mx-n4 px-4 py-4">
             @if (_videos == null)
             {
                 <div class="d-flex justify-center align-center pt-10">
@@ -54,11 +54,11 @@
             }
             else
             {
-                <MudGrid Spacing="3">
+                <MudGrid Spacing="4">
                     @foreach (var video in _videos)
                     {
                         <MudItem xs="12" sm="6" md="4" lg="3">
-                            <MudPaper Class="cursor-pointer hover-scale tile-glass d-flex flex-column h-100" Elevation="0" Style="border-radius: 12px; overflow: hidden;" @onclick="@(() => OpenVideo(video.Url))">
+                            <MudPaper Class="cursor-pointer hover-scale tile-glass d-flex flex-column h-100 mb-4" Elevation="0" Style="border-radius: 12px; overflow: hidden;" @onclick="@(() => OpenVideo(video.Url))">
                                 <div style="position: relative; width: 100%; padding-top: 56.25%;"> <!-- 16:9 Aspect Ratio -->
                                     <MudImage Src="@video.ThumbnailUrl" Style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;" />
                                     <div style="position: absolute; bottom: 8px; right: 8px; background-color: rgba(0,0,0,0.8); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
