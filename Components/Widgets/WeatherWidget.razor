@@ -29,19 +29,25 @@
                 {
                     @foreach (var item in _forecast.List.Where(x => x.DtTxt.Contains("12:00:00")).Take(5))
                     {
-                        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="0" Style="height: 100%; min-width: 50px;">
-                            <MudText Typo="Typo.caption" Style="text-transform: uppercase; opacity: 0.7; font-size: 0.75rem;">@DateTime.Parse(item.DtTxt).ToString("ddd")</MudText>
-                            <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}@4x.png")" Width="50" Height="50" Style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));" />
-                            @if (item.Pop > 0)
-                            {
-                                <div class="d-flex align-center gap-1">
-                                    <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Size="Size.Small" Style="font-size: 0.7rem; color: #60a5fa;" />
-                                    <MudText Typo="Typo.caption" Style="color: #60a5fa; font-weight: 700;">@Math.Round(item.Pop * 100)%</MudText>
-                                </div>
-                            }
-                            <div class="d-flex gap-1">
-                                <MudText Typo="Typo.body2" Style="font-weight: 700;">@Math.Round(item.Main.TempMax)°</MudText>
-                                <MudText Typo="Typo.caption" Style="opacity: 0.6;">@Math.Round(item.Main.TempMin)°</MudText>
+                        <MudStack AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="0" Style="height: 100%; min-width: 50px;">
+                            @* Top Content: Day/Date/Icon *@
+                            <div class="d-flex flex-column align-center pt-5">
+                                <MudText Typo="Typo.caption" Style="text-transform: uppercase; opacity: 0.9; font-weight: 700; font-size: 0.8rem;">@DateTime.Parse(item.DtTxt).ToString("ddd")</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.7rem; margin-top: -2px;">@DateTime.Parse(item.DtTxt).ToString("dd MMM")</MudText>
+                                <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}@4x.png")" Width="50" Height="50" Style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));" />
+                                @if (item.Pop > 0)
+                                {
+                                    <div class="d-flex align-center gap-1">
+                                        <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Size="Size.Small" Style="font-size: 0.7rem; color: #60a5fa;" />
+                                        <MudText Typo="Typo.caption" Style="color: #60a5fa; font-weight: 700;">@Math.Round(item.Pop * 100)%</MudText>
+                                    </div>
+                                }
+                            </div>
+                            
+                            @* Bottom Content: Temps *@
+                            <div class="d-flex flex-column align-center">
+                                <MudText Typo="Typo.body2" Style="font-weight: 700; font-size: 1.1rem;">@Math.Round(item.Main.TempMax)°</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">@Math.Round(item.Main.TempMin)°</MudText>
                             </div>
                         </MudStack>
                     }
@@ -81,28 +87,28 @@
 
                     @* Bottom Section: Single Row Details (Vertical Stacks) *@
                     <div class="d-flex justify-space-between px-2" style="width: 100%; height: 62px;">
-                        @* Sun Times (Stacked Column) - First *@
-                        <div class="d-flex flex-column justify-space-between" style="height: 100%;">
-                             @* Sunrise *@
-                             <div class="d-flex align-center gap-2" style="position: relative; top: 5px;">
-                                 <MudIcon Icon="@Icons.Material.Outlined.WbSunny" Size="Size.Small" Style="opacity: 0.4; font-size: 1.3rem;" />
-                                 <div class="d-flex flex-column">
-                                     <MudText Typo="Typo.body2" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
+                        @* Sun Times (Clickable Toggle) - First *@
+                        <div class="d-flex flex-column align-center justify-space-between" style="height: 100%; cursor: pointer;" @onclick="ToggleSunState">
+                             @if (_showSunrise)
+                             {
+                                 <MudIcon Icon="@Icons.Material.Outlined.WbSunny" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
+                                 <div class="d-flex flex-column align-center">
+                                     <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
                                          @(_currentWeather?.Sys?.Sunrise > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunrise).ToLocalTime().ToString("HH:mm") : "--:--")
                                      </MudText>
-                                     <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.7rem; line-height: 1;">Sunrise</MudText>
+                                     <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Sunrise</MudText>
                                  </div>
-                             </div>
-                             @* Sunset *@
-                             <div class="d-flex align-center gap-2" style="position: relative; top: -1px;">
-                                 <MudIcon Icon="@Icons.Material.Outlined.WbTwilight" Size="Size.Small" Style="opacity: 0.4; font-size: 1.3rem;" />
-                                 <div class="d-flex flex-column">
-                                     <MudText Typo="Typo.body2" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
+                             }
+                             else
+                             {
+                                 <MudIcon Icon="@Icons.Material.Outlined.WbTwilight" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
+                                 <div class="d-flex flex-column align-center">
+                                     <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">
                                          @(_currentWeather?.Sys?.Sunset > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunset).ToLocalTime().ToString("HH:mm") : "--:--")
                                      </MudText>
-                                     <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.7rem; line-height: 1;">Sunset</MudText>
+                                     <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Sunset</MudText>
                                  </div>
-                             </div>
+                             }
                         </div>
 
                         @* Humidity *@
@@ -148,6 +154,7 @@
     private WeatherResponse _currentWeather;
     private ForecastResponse _forecast;
     private bool _showForecast = false;
+    private bool _showSunrise = true; // Default
 
     [Parameter] public EventCallback<string> OnLocationLoaded { get; set; }
 
@@ -173,6 +180,12 @@
     {
         _showForecast = false;
         BackButtonService.Unregister(OnBackNative);
+    }
+    
+    private void ToggleSunState()
+    {
+        _showSunrise = !_showSunrise;
+        StateHasChanged();
     }
 
     private bool OnBackNative()
@@ -213,6 +226,19 @@
                 {
                     var locationName = $"{_currentWeather.Name}, {_currentWeather.Sys.Country}";
                     await OnLocationLoaded.InvokeAsync(locationName);
+                    
+                    // Determine initial sun state
+                    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+                    // If it is currently daytime (after sunrise, before sunset), show Sunset. 
+                    // Otherwise (night), show Sunrise (next event).
+                    if (now > _currentWeather.Sys.Sunrise && now < _currentWeather.Sys.Sunset)
+                    {
+                        _showSunrise = false; // Show Sunset
+                    }
+                    else
+                    {
+                        _showSunrise = true; // Show Sunrise
+                    }
                 }
             }
             else
