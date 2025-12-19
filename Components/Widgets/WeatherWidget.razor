@@ -177,13 +177,24 @@
                                 }
                         </div>
 
-                        @* Humidity *@
-                        <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
-                            <MudIcon Icon="@Icons.Material.Outlined.WaterDrop" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
-                            <div class="d-flex flex-column align-center">
-                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@(_currentWeather?.Main.Humidity)%</MudText>
-                                <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Humidity</MudText>
-                            </div>
+                        @* Humidity / Pressure Toggle *@
+                        <div class="d-flex flex-column align-center justify-space-between" style="height: 100%; cursor: pointer;" @onclick="ToggleHumidityState">
+                            @if (_showHumidity)
+                            {
+                                <MudIcon Icon="@Icons.Material.Outlined.WaterDrop" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
+                                <div class="d-flex flex-column align-center">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@(_currentWeather?.Main.Humidity)%</MudText>
+                                    <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Humidity</MudText>
+                                </div>
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Outlined.Speed" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
+                                <div class="d-flex flex-column align-center">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@_currentWeather?.Main.Pressure hPa</MudText>
+                                    <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Pressure</MudText>
+                                </div>
+                            }
                         </div>
 
                         @* Wind *@
@@ -224,6 +235,7 @@
     private bool _showForecast = false;
     private bool _showMap = false;
     private bool _showSunrise = true; // Default
+    private bool _showHumidity = true; // Default
     private bool _showHourlyBottom = false;
 
     [Parameter] public RenderFragment? HeaderAction { get; set; }
@@ -296,6 +308,12 @@
     private void ToggleSunState()
     {
         _showSunrise = !_showSunrise;
+        StateHasChanged();
+    }
+
+    private void ToggleHumidityState()
+    {
+        _showHumidity = !_showHumidity;
         StateHasChanged();
     }
 

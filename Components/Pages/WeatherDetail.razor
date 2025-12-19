@@ -25,9 +25,21 @@
         <MudItem xs="12" lg="6">
              <MudPaper Class="detail-tile rounded-lg pa-6 d-flex flex-column align-center justify-center relative" Elevation="3" Style="height: 100%; min-height: 250px; overflow: hidden;">
 
-                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
-                     <MudImage Src="@($"https://openweathermap.org/img/wn/{_currentWeather.Weather[0].Icon}@4x.png")" Width="120" Height="120" Style="filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.2));" />
-                     <MudText Typo="Typo.h1" Style="font-size: 5rem; font-weight: 700; line-height: 1;">@Math.Round(_currentWeather.Main.Temp)°</MudText>
+                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4" Class="mb-2">
+                     <!-- Icon and Temp -->
+                     <div class="d-flex align-center gap-4">
+                         <MudImage Src="@($"https://openweathermap.org/img/wn/{_currentWeather.Weather[0].Icon}@4x.png")" Width="120" Height="120" Style="filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.2));" />
+                         <MudText Typo="Typo.h1" Style="font-size: 5rem; font-weight: 700; line-height: 1;">@Math.Round(_currentWeather.Main.Temp)°</MudText>
+                     </div>
+
+                     <!-- Separator -->
+                     <div style="height: 80px; width: 2px; background-color: rgba(128,128,128, 0.3); margin: 0 16px;"></div>
+
+                     <!-- Feels Like -->
+                     <div class="d-flex flex-column justify-center align-start">
+                         <MudText Typo="Typo.h5" Style="font-weight: 800; opacity: 0.6; letter-spacing: 0.5px; text-transform: uppercase;">Feels Like</MudText>
+                         <MudText Typo="Typo.h3" Style="font-weight: 600;">@Math.Round(_currentWeather.Main.FeelsLike)°</MudText>
+                     </div>
                  </MudStack>
                  <MudText Typo="Typo.h4" Class="mt-2" Style="font-weight: 600; text-transform: capitalize;">@_currentWeather.Weather[0].Description</MudText>
                  <MudText Typo="Typo.h6" Class="mt-1" Style="opacity: 0.7;">H: @Math.Round(_currentWeather.Main.TempMax)°  L: @Math.Round(_currentWeather.Main.TempMin)°</MudText>
