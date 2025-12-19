@@ -11,6 +11,9 @@ namespace Daily.Services
         private readonly ISettingsService _settingsService;
         private readonly IRefreshService _refreshService;
 
+        // Static TCS to handle the callback from App.xaml.cs on Windows
+        public static TaskCompletionSource<string>? WindowsAuthTcs;
+
         public AuthService(Supabase.Client supabase, ISettingsService settingsService, IRefreshService refreshService)
         {
             _supabase = supabase;
@@ -37,14 +40,40 @@ namespace Daily.Services
                     return false;
 
                 // 2. Open the browser (WebAuthenticator)
-                // 2. Open the browser (WebAuthenticator)
+                string? code = null;
+
+#if WINDOWS
+                // Manual Protocol Activation for Windows (overcoming WebAuthenticator issues)
+                WindowsAuthTcs = new TaskCompletionSource<string>();
+                
+                // Launch System Browser
+                await Launcher.OpenAsync(state.Uri);
+
+                // Wait for the callback (handled in App.xaml.cs)
+                // Timeout after 2 minutes to prevent hanging
+                var completedTask = await Task.WhenAny(WindowsAuthTcs.Task, Task.Delay(TimeSpan.FromMinutes(2)));
+                
+                if (completedTask == WindowsAuthTcs.Task)
+                {
+                    var callbackUrl = await WindowsAuthTcs.Task;
+                    code = string.IsNullOrEmpty(callbackUrl) ? null : System.Web.HttpUtility.ParseQueryString(new Uri(callbackUrl).Query).Get("code");
+                }
+                else
+                {
+                    Console.WriteLine("[AuthService] Windows Auth Timed Out");
+                    WindowsAuthTcs.TrySetCanceled(); 
+                }
+                
+                WindowsAuthTcs = null; // Cleanup
+#else
                 var authResult = await WebAuthenticator.Default.AuthenticateAsync(
                     state.Uri,
                     new Uri("com.intellidream.daily://"));
 
                 // 3. Extract the Access Token & Refresh Token from the callback URL
                 
-                var code = authResult?.Properties.TryGetValue("code", out var c) == true ? c : null;
+                code = authResult?.Properties.TryGetValue("code", out var c) == true ? c : null;
+#endif
                 
                 if (!string.IsNullOrEmpty(code))
                 {

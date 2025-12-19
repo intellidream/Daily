@@ -22,6 +22,28 @@ namespace Daily.WinUI
         }
 
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+
+        protected override void OnLaunched(LaunchActivatedEventArgs args)
+        {
+            base.OnLaunched(args);
+        }
+
+        protected override void OnActivated(Windows.ApplicationModel.Activation.IActivatedEventArgs args)
+        {
+            base.OnActivated(args);
+
+            if (args.Kind == Windows.ApplicationModel.Activation.ActivationKind.Protocol)
+            {
+                var protocolArgs = (Windows.ApplicationModel.Activation.ProtocolActivatedEventArgs)args;
+                string uri = protocolArgs.Uri.ToString();
+                
+                // Pass the URI back to AuthService
+                if (Daily.Services.AuthService.WindowsAuthTcs != null && !Daily.Services.AuthService.WindowsAuthTcs.Task.IsCompleted)
+                {
+                     Daily.Services.AuthService.WindowsAuthTcs.TrySetResult(uri);
+                }
+            }
+        }
     }
 
 }
