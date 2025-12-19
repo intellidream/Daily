@@ -22,16 +22,15 @@ namespace Daily
         {
             base.OnHandlerChanged();
 #if WINDOWS
-            if (Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement)
+            // Safely retrieve the window without relying on internal types
+            // Application.Current.Windows gives us the MAUI Windows.
+            // We need the Native Window (Microsoft.UI.Xaml.Window).
+            if (App.Current != null && App.Current.Windows.Count > 0)
             {
-                // We need the Window, not just the Panel. 
-                // In MAUI Windows, Application.Current.Windows or just accessing the App Window is tricky from a Page.
-                // However, the cleanest way is often via the window associated with the page handler.
-                // Actually, the easiest way to get the window safely in MainPage is:
-                var window = App.Current.Windows.FirstOrDefault()?.Handler?.PlatformView as Microsoft.UI.Xaml.Window;
-                if (window != null)
+                var mauiWindow = App.Current.Windows.FirstOrDefault();
+                if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWindow)
                 {
-                   Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(window);
+                    Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(nativeWindow);
                 }
             }
 #endif
