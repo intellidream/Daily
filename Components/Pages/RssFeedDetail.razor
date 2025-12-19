@@ -23,7 +23,7 @@
                     @foreach (var item in RssService.Items.Skip((_currentPage - 1) * _pageSize).Take(_pageSize))
                     {
                         <MudItem xs="12">
-                            <MudPaper Class="pa-3 cursor-pointer hover-scale tile-glass" @onclick="@(() => OpenItem(item))">
+                            <MudPaper Class="pa-3 cursor-pointer hover-scale tile-glass rounded-lg" @onclick="@(() => OpenItem(item))">
                                 <div class="d-flex gap-4">
                                     @if (!string.IsNullOrEmpty(item.ImageUrl))
                                     {
