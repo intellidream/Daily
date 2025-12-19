@@ -68,9 +68,24 @@ namespace Daily.WinUI
                     {
                         Daily.Services.AuthService.WindowsAuthTcs.TrySetResult(uri);
                     }
+                    
+                    // Bring window to front
+                    var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
+                    if (handle != IntPtr.Zero)
+                    {
+                        ShowWindow(handle, 9); // SW_RESTORE = 9
+                        SetForegroundWindow(handle);
+                    }
                 }
             }
         }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     }
 
 }
