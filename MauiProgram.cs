@@ -114,6 +114,33 @@ namespace Daily
             };
             builder.Services.AddSingleton(provider => new Supabase.Client(supabaseUrl, supabaseKey, supabaseOptions));
 
+            // Custom Window Handler for Windows
+            Microsoft.Maui.Handlers.WindowHandler.Mapper.AppendToMapping(nameof(IWindow), (handler, view) =>
+            {
+#if WINDOWS
+                var nativeWindow = handler.PlatformView;
+                nativeWindow.Activate();
+                
+                // 1. Remove Chrome / Extend Content
+                nativeWindow.ExtendsContentIntoTitleBar = true; // Use this instead of AppWindow.TitleBar if possible for standard behavior
+
+                // 2. Square Corners
+                Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(nativeWindow);
+
+                // 3. Theme Title Bar Buttons
+                var appWindow = nativeWindow.AppWindow;
+                if (appWindow != null)
+                {
+                    // Basic default: transparent background for buttons to blend in
+                    if (appWindow.TitleBar != null)
+                    {
+                        appWindow.TitleBar.ButtonBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+                        appWindow.TitleBar.ButtonInactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+                    }
+                }
+#endif
+            });
+
             return builder.Build();
         }
 

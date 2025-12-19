@@ -18,23 +18,7 @@ namespace Daily
             RefreshCommand = new Command(async () => await ExecuteRefreshCommand());
         }
 
-        protected override void OnHandlerChanged()
-        {
-            base.OnHandlerChanged();
-#if WINDOWS
-            // Safely retrieve the window without relying on internal types
-            // Application.Current.Windows gives us the MAUI Windows.
-            // We need the Native Window (Microsoft.UI.Xaml.Window).
-            if (App.Current != null && App.Current.Windows.Count > 0)
-            {
-                var mauiWindow = App.Current.Windows.FirstOrDefault();
-                if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWindow)
-                {
-                    Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(nativeWindow);
-                }
-            }
-#endif
-        }
+
 
         protected override bool OnBackButtonPressed()
         {
