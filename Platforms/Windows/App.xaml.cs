@@ -51,6 +51,15 @@ namespace Daily.WinUI
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
             base.OnLaunched(args);
+
+            // Apply Window Styling (Square Corners, No Chrome) safely after creation
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWindow)
+            {
+                nativeWindow.ExtendsContentIntoTitleBar = true;
+                Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(nativeWindow);
+            }
+
             // Handle initial launch activation
             var appActivatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
             HandleActivation(appActivatedArgs);
