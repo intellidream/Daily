@@ -18,6 +18,25 @@ namespace Daily
             RefreshCommand = new Command(async () => await ExecuteRefreshCommand());
         }
 
+        protected override void OnHandlerChanged()
+        {
+            base.OnHandlerChanged();
+#if WINDOWS
+            if (Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ContentPanel panel)
+            {
+                // We need the Window, not just the Panel. 
+                // In MAUI Windows, Application.Current.Windows or just accessing the App Window is tricky from a Page.
+                // However, the cleanest way is often via the window associated with the page handler.
+                // Actually, the easiest way to get the window safely in MainPage is:
+                var window = App.Current.Windows.FirstOrDefault()?.Handler?.PlatformView as Microsoft.UI.Xaml.Window;
+                if (window != null)
+                {
+                   Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(window);
+                }
+            }
+#endif
+        }
+
         protected override bool OnBackButtonPressed()
         {
             if (_backButtonService.HandleBack())

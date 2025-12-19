@@ -25,11 +25,7 @@ namespace Daily
                     events.AddWindows(windows => windows
                         .OnLaunched((window, args) =>
                         {
-                            // Temporarily disabled to debug CCW crash
-                            // var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-                            // var attribute = 33;
-                            // var preference = 3;
-                            // DwmSetWindowAttribute(hWnd, attribute, ref preference, sizeof(int));
+                            // Logic moved to MainPage/WindowHelpers for safety
                         }));
 #endif
                 });
