@@ -21,9 +21,27 @@ namespace Daily.Services
         private const double LocationTolerance = 0.01; // Roughly 1km
         private readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
 
-        public WeatherService()
+        private readonly ISettingsService _settingsService;
+
+        public WeatherService(ISettingsService settingsService)
         {
             _httpClient = new HttpClient();
+            _settingsService = settingsService;
+            
+            // Re-fetch weather if units change
+            _settingsService.OnSettingsChanged += async () => 
+            {
+                if (_lastCurrentLocation.HasValue)
+                {
+                    await GetCurrentWeatherAsync(_lastCurrentLocation.Value.Lat, _lastCurrentLocation.Value.Lon, forceRefresh: true);
+                }
+                
+                // Also trigger forecast refresh if we have a location
+                if (_lastForecastLocation.HasValue)
+                {
+                    await GetForecastAsync(_lastForecastLocation.Value.Lat, _lastForecastLocation.Value.Lon, forceRefresh: true);
+                }
+            };
         }
 
         public async Task<WeatherResponse> GetCurrentWeatherAsync(double latitude, double longitude, bool forceRefresh = false)
@@ -40,7 +58,8 @@ namespace Daily.Services
 
             try
             {
-                var url = $"{BaseUrl}/weather?lat={latitude}&lon={longitude}&appid={ApiKey}&units=metric";
+                var units = _settingsService.Settings.UnitSystem; // "metric" or "imperial"
+                var url = $"{BaseUrl}/weather?lat={latitude}&lon={longitude}&appid={ApiKey}&units={units}";
                 var result = await _httpClient.GetFromJsonAsync<WeatherResponse>(url);
                 
                 if (result != null)
@@ -75,7 +94,8 @@ namespace Daily.Services
 
             try
             {
-                var url = $"{BaseUrl}/forecast?lat={latitude}&lon={longitude}&appid={ApiKey}&units=metric";
+                var units = _settingsService.Settings.UnitSystem;
+                var url = $"{BaseUrl}/forecast?lat={latitude}&lon={longitude}&appid={ApiKey}&units={units}";
                 var result = await _httpClient.GetFromJsonAsync<ForecastResponse>(url);
 
                 if (result != null)

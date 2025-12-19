@@ -26,6 +26,7 @@ namespace Daily.Models
         [JsonPropertyName("clouds")]
         public Clouds Clouds { get; set; }
 
+
         [JsonPropertyName("dt")]
         public long Dt { get; set; }
 

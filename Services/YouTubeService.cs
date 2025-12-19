@@ -19,7 +19,7 @@ namespace Daily.Services
         {
             if (string.IsNullOrEmpty(accessToken))
             {
-               return (new List<VideoItem>(), null);
+               return (new List<VideoItem>(), "");
             }
 
             try
@@ -149,15 +149,13 @@ namespace Daily.Services
                 }
                 else
                 {
-                    Console.WriteLine($"YouTube API Error: {response.StatusCode}");
-                    // Fallback to mock if API fails (e.g. quota, permissions)
-                    return (GetMockData(), null); 
+                     return (GetMockData(), "");
                 }
             }
             catch (Exception ex)
             {
                  Console.WriteLine($"YouTube Exception: {ex}");
-                 return (GetMockData(), null);
+                 return (GetMockData(), "");
             }
         }
 

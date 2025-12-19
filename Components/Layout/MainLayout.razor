@@ -9,6 +9,7 @@
 <MudPopoverProvider />
 
 @inject IWindowManagerService WindowManagerService
+@inject IDetailNavigationService NavService
 
 <MudLayout Style="background-color: transparent;">
 <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
@@ -26,7 +27,8 @@
         
         <MudTooltip Text="Settings">
             <MudIconButton Icon="@Icons.Material.Filled.Settings"
-                           Color="Color.Inherit" />
+                           Color="Color.Inherit"
+                           OnClick="@(() => { NavService.NavigateTo("Settings", "Settings"); WindowManagerService.OpenDetailWindow(); })" />
         </MudTooltip>
 
         @if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.WinUI || Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.MacCatalyst)

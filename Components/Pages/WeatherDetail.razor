@@ -1,6 +1,7 @@
 @using Daily.Services
 @using Daily.Models
 @inject IWeatherService WeatherService
+@inject ISettingsService SettingsService
 @inject IGeolocation Geolocation
 @inject IRefreshService RefreshService
 @inject IJSRuntime JS
@@ -77,7 +78,18 @@
                         <MudPaper Class="detail-tile rounded-lg pa-4 d-flex flex-column align-center justify-center" Elevation="3" Style="height: 160px;">
                              <MudIcon Icon="@Icons.Material.Outlined.Speed" Class="mb-2" Style="opacity: 0.7;" />
                              <MudText Typo="Typo.caption" Style="opacity: 0.6;">PRESSURE</MudText>
-                             <MudText Typo="Typo.h6">@_currentWeather.Main.Pressure hPa</MudText>
+                             @if (SettingsService.Settings.PressureUnit == "mmhg")
+                             {
+                                  <MudText Typo="Typo.h6">@Math.Round(_currentWeather.Main.Pressure * 0.750062) mmHg</MudText>
+                             }
+                             else if (SettingsService.Settings.PressureUnit == "inhg")
+                             {
+                                  <MudText Typo="Typo.h6">@Math.Round(_currentWeather.Main.Pressure * 0.02953, 2) inHg</MudText>
+                             }
+                             else
+                             {
+                                  <MudText Typo="Typo.h6">@_currentWeather.Main.Pressure hPa</MudText>
+                             }
                         </MudPaper>
                     </MudItem>
                 </MudGrid>

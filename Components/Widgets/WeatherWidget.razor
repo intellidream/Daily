@@ -3,6 +3,7 @@
 @inject IWeatherService WeatherService
 @inject IGeolocation Geolocation
 @inject IRefreshService RefreshService
+@inject ISettingsService SettingsService
 @inject IWindowManagerService WindowManager
 @inject IBackButtonService BackButtonService
 @inject IJSRuntime JSRuntime
@@ -191,8 +192,21 @@
                             {
                                 <MudIcon Icon="@Icons.Material.Outlined.Speed" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
                                 <div class="d-flex flex-column align-center">
-                                    <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@_currentWeather?.Main.Pressure hPa</MudText>
-                                    <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Pressure</MudText>
+                                    @if (SettingsService.Settings.PressureUnit == "mmhg")
+                                    {
+                                         <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@Math.Round((_currentWeather?.Main.Pressure ?? 0) * 0.750062)</MudText>
+                                         <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">mmHg</MudText>
+                                    }
+                                    else if (SettingsService.Settings.PressureUnit == "inhg")
+                                    {
+                                         <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@Math.Round((_currentWeather?.Main.Pressure ?? 0) * 0.02953, 2)</MudText>
+                                         <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">inHg</MudText>
+                                    }
+                                    else
+                                    {
+                                         <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@_currentWeather?.Main.Pressure hPa</MudText>
+                                         <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Pressure</MudText>
+                                    }
                                 </div>
                             }
                         </div>

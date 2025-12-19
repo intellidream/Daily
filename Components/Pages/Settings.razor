@@ -1,0 +1,280 @@
+@using Daily.Models
+@using Daily.Configuration
+@using Daily.Services
+@inject ISettingsService SettingsService
+@inject IAuthService AuthService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+
+<MudGrid Spacing="4" Class="h-100">
+    
+    <!-- Account Section -->
+    <MudItem xs="12">
+        <MudPaper Class="detail-tile rounded-lg pa-6" Elevation="3">
+            <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Account</MudText>
+            <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center gap-4">
+                    <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Size="Size.Large">
+                        @if (SettingsService.IsAuthenticated && !string.IsNullOrEmpty(SettingsService.CurrentUserEmail))
+                        {
+                            @SettingsService.CurrentUserEmail.Substring(0, 1).ToUpper()
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Person" />
+                        }
+                    </MudAvatar>
+                    <div>
+                        @if (SettingsService.IsAuthenticated)
+                        {
+                            <MudText Typo="Typo.h6" Class="font-weight-bold">@SettingsService.CurrentUserEmail</MudText>
+                            <div class="d-flex align-center gap-1">
+                                 <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Color="Color.Success" />
+                                 <MudText Typo="Typo.body2" Style="opacity: 0.7;">Synced to Cloud</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.h6" Class="font-weight-bold">Guest User</MudText>
+                             <div class="d-flex align-center gap-1">
+                                 <MudIcon Icon="@Icons.Material.Filled.CloudOff" Size="Size.Small" Color="Color.Warning" />
+                                 <MudText Typo="Typo.body2" Style="opacity: 0.7;">Settings saved locally</MudText>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div>
+                    @if (SettingsService.IsAuthenticated)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="@SignOut">Sign Out</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" 
+                                   StartIcon="@Icons.Custom.Brands.Google" 
+                                   Color="Color.Primary" 
+                                   OnClick="@SignInWithGoogle"
+                                   Disabled="_isAuthenticating">
+                             @if (_isAuthenticating)
+                             {
+                                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                                 <MudText Class="ms-2">Connecting...</MudText>
+                             }
+                             else
+                             {
+                                 <MudText>Sign In</MudText>
+                             }
+                        </MudButton>
+                    }
+                </div>
+            </div>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Weather Units Section -->
+    <MudItem xs="12">
+        <MudPaper Class="detail-tile rounded-lg pa-0" Elevation="3" Style="overflow: hidden;">
+            <div class="pa-6 pb-2">
+                 <MudText Typo="Typo.h6" Class="font-weight-bold">Units</MudText>
+            </div>
+            
+            <!-- Temperature -->
+            <div class="px-6 py-4 d-flex justify-space-between align-center">
+                <div>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Temperature</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">Degrees Celsius or Fahrenheit</MudText>
+                </div>
+                <MudToggleGroup T="string" SelectionMode="SelectionMode.SingleSelection" @bind-Value="SettingsService.Settings.UnitSystem" Color="Color.Primary" CheckMark="false" FixedContent="true" Class="border-solid" Style="border-color: rgba(255,255,255,0.1) !important;">
+                    <MudToggleItem Value="@("metric")" Text="°C" />
+                    <MudToggleItem Value="@("imperial")" Text="°F" />
+                </MudToggleGroup>
+            </div>
+            <MudDivider Style="opacity: 0.1;" />
+
+            <!-- Wind -->
+            <div class="px-6 py-4 d-flex justify-space-between align-center">
+                <div>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Wind Speed</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">Measurement unit for wind</MudText>
+                </div>
+                <MudToggleGroup T="string" SelectionMode="SelectionMode.SingleSelection" @bind-Value="SettingsService.Settings.WindUnit" Color="Color.Primary" CheckMark="false" FixedContent="true" Class="border-solid" Style="border-color: rgba(255,255,255,0.1) !important;">
+                    <MudToggleItem Value="@("km/h")" Text="km/h" />
+                    <MudToggleItem Value="@("m/s")" Text="m/s" />
+                    <MudToggleItem Value="@("mph")" Text="mph" />
+                </MudToggleGroup>
+            </div>
+            <MudDivider Style="opacity: 0.1;" />
+
+            <!-- Pressure -->
+            <div class="px-6 py-4 d-flex justify-space-between align-center">
+                 <div>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Pressure</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">Atmospheric pressure</MudText>
+                </div>
+                 <MudToggleGroup T="string" SelectionMode="SelectionMode.SingleSelection" @bind-Value="SettingsService.Settings.PressureUnit" Color="Color.Primary" CheckMark="false" FixedContent="true" Class="border-solid" Style="border-color: rgba(255,255,255,0.1) !important;">
+                    <MudToggleItem Value="@("hpa")" Text="hPa" />
+                    <MudToggleItem Value="@("mmhg")" Text="mmHg" />
+                    <MudToggleItem Value="@("inhg")" Text="inHg" />
+                </MudToggleGroup>
+            </div>
+            <MudDivider Style="opacity: 0.1;" />
+
+            <!-- Visibility -->
+            <div class="px-6 py-4 d-flex justify-space-between align-center">
+                <div>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Visibility</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">Distance measurement</MudText>
+                </div>
+                <MudToggleGroup T="string" SelectionMode="SelectionMode.SingleSelection" @bind-Value="SettingsService.Settings.VisibilityUnit" Color="Color.Primary" CheckMark="false" FixedContent="true" Class="border-solid" Style="border-color: rgba(255,255,255,0.1) !important;">
+                    <MudToggleItem Value="@("km")" Text="km" />
+                    <MudToggleItem Value="@("mi")" Text="mi" />
+                </MudToggleGroup>
+            </div>
+            <MudDivider Style="opacity: 0.1;" />
+
+            <!-- Precipitation -->
+            <div class="px-6 py-4 d-flex justify-space-between align-center">
+                <div>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Precipitation</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">Rain and snow volume</MudText>
+                </div>
+                <MudToggleGroup T="string" SelectionMode="SelectionMode.SingleSelection" @bind-Value="SettingsService.Settings.PrecipitationUnit" Color="Color.Primary" CheckMark="false" FixedContent="true" Class="border-solid" Style="border-color: rgba(255,255,255,0.1) !important;">
+                    <MudToggleItem Value="@("mm")" Text="mm" />
+                    <MudToggleItem Value="@("in")" Text="in" />
+                </MudToggleGroup>
+            </div>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Notifications Section -->
+    <MudItem xs="12">
+        <MudPaper Class="detail-tile rounded-lg pa-0" Elevation="3" Style="overflow: hidden;">
+             <div class="pa-6 pb-2">
+                 <MudText Typo="Typo.h6" Class="font-weight-bold">Notifications</MudText>
+            </div>
+             <div class="px-6 py-4 d-flex justify-space-between align-center">
+                <div>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Daily Forecast</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">Receive a daily summary at 8:00 AM</MudText>
+                </div>
+                <MudSwitch @bind-Value="SettingsService.Settings.DailyForecastAlert" Color="Color.Primary" />
+            </div>
+            <MudDivider Style="opacity: 0.1;" />
+             <div class="px-6 py-4 d-flex justify-space-between align-center">
+                <div>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Precipitation Alerts</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">Get notified when rain is expected</MudText>
+                </div>
+                 <MudSwitch @bind-Value="SettingsService.Settings.PrecipitationAlert" Color="Color.Primary" />
+            </div>
+        </MudPaper>
+    </MudItem>
+    
+    <!-- Global Save Action -->
+    <MudItem xs="12" Class="d-flex justify-end pb-8">
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   Size="Size.Large" 
+                   OnClick="SaveSettings" 
+                   Disabled="_isSaving"
+                   Class="px-8 py-2 elevation-4">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Saving...</MudText>
+            }
+            else
+            {
+                <MudText>Save Preferences</MudText>
+            }
+        </MudButton>
+    </MudItem>
+    
+    <!-- About / System -->
+    <MudItem xs="12">
+         <MudPaper Class="detail-tile rounded-lg pa-6" Elevation="3">
+             <div class="d-flex justify-space-between align-center">
+                 <div>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Daily Dashboard</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">Version 1.0.0 (Build 2025.1)</MudText>
+                 </div>
+                 <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small">Check for Updates</MudButton>
+             </div>
+         </MudPaper>
+    </MudItem>
+
+</MudGrid>
+
+@code {
+    private bool _isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SettingsService.InitializeAsync();
+        SettingsService.OnSettingsChanged += StateHasChanged;
+    }
+    
+    public void Dispose()
+    {
+        SettingsService.OnSettingsChanged -= StateHasChanged;
+    }
+
+    private async Task SaveSettings()
+    {
+        _isSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            await SettingsService.SaveSettingsAsync();
+            Snackbar.Add("Settings saved", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+             Snackbar.Add($"Error saving: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool _isAuthenticating;
+
+    private async Task SignInWithGoogle()
+    {
+        _isAuthenticating = true;
+        StateHasChanged();
+        
+        try
+        {
+            var success = await AuthService.SignInWithGoogleAsync();
+            if (success)
+            {
+                Snackbar.Add("Welcome back!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Authentication cancelled or failed.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+             Snackbar.Add($"Auth Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isAuthenticating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SignOut()
+    {
+        await AuthService.SignOutAsync();
+        Snackbar.Add("Signed out.", Severity.Info);
+    }
+}

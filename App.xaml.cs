@@ -235,7 +235,7 @@ namespace Daily
                                 var clearColor = ObjCRuntime.Runtime.GetNSObject(
                                     IntPtr_objc_msgSend(nsColorClass.Handle, clearColorSelector.Handle)
                                 );
-                                nsWindow.SetValueForKey(clearColor, new Foundation.NSString("backgroundColor"));
+                                nsWindow.SetValueForKey(clearColor!, new Foundation.NSString("backgroundColor"));
 
                                 // B. Round the ContentView Layer
                                 // Use KVC Path for safety

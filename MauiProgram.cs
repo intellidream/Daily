@@ -84,6 +84,8 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.IDetailNavigationService, Daily.Services.DetailNavigationService>();
             builder.Services.AddSingleton<Daily.Services.IBackButtonService, Daily.Services.BackButtonService>();
             builder.Services.AddSingleton<Daily.Services.IRssFeedService, Daily.Services.RssFeedService>();
+            builder.Services.AddSingleton<Daily.Services.ISettingsService, Daily.Services.SettingsService>();
+            builder.Services.AddSingleton<Daily.Services.IAuthService, Daily.Services.AuthService>();
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
 
 #if DEBUG
@@ -97,7 +99,18 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.ITrayService, Daily.Platforms.MacCatalyst.MacTrayService>();
 #else
             builder.Services.AddSingleton<Daily.Services.ITrayService, Daily.Services.StubTrayService>();
+            builder.Services.AddSingleton<Daily.Services.ITrayService, Daily.Services.StubTrayService>();
 #endif
+
+            // Supabase Configuration
+            var supabaseUrl = Daily.Configuration.Secrets.SupabaseUrl;
+            var supabaseKey = Daily.Configuration.Secrets.SupabaseKey;
+            var supabaseOptions = new Supabase.SupabaseOptions
+            {
+                AutoRefreshToken = true,
+                AutoConnectRealtime = true
+            };
+            builder.Services.AddSingleton(provider => new Supabase.Client(supabaseUrl, supabaseKey, supabaseOptions));
 
             return builder.Build();
         }
