@@ -22,7 +22,7 @@ namespace Daily
         {
             base.OnHandlerChanged();
 #if WINDOWS
-            if (Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ContentPanel panel)
+            if (Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement)
             {
                 // We need the Window, not just the Panel. 
                 // In MAUI Windows, Application.Current.Windows or just accessing the App Window is tricky from a Page.
