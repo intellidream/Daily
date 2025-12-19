@@ -16,9 +16,9 @@ namespace Daily.Platforms.Windows
                 var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
                 
                 // DWMWA_WINDOW_CORNER_PREFERENCE = 33
-                // DWMWCP_DONOTROUND = 3
+                // DWMWCP_DONOTROUND = 1
                 var attribute = 33;
-                var preference = 3;
+                var preference = 1;
                 var result = DwmSetWindowAttribute(hWnd, attribute, ref preference, sizeof(int));
                 if (result != 0)
                 {
