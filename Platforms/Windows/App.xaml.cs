@@ -40,7 +40,7 @@ namespace Daily.WinUI
         private void OnAppInstanceActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments e)
         {
             // Must run on UI thread
-            this.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+            Microsoft.Maui.Controls.Application.Current.Dispatcher.Dispatch(() =>
             {
                 HandleActivation(e);
             });
