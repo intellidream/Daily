@@ -26,21 +26,18 @@ namespace Daily.WinUI
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
             base.OnLaunched(args);
-        }
 
-        protected override void OnActivated(Windows.ApplicationModel.Activation.IActivatedEventArgs args)
-        {
-            base.OnActivated(args);
-
-            if (args.Kind == Windows.ApplicationModel.Activation.ActivationKind.Protocol)
+            var appActivatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+            if (appActivatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
             {
-                var protocolArgs = (Windows.ApplicationModel.Activation.ProtocolActivatedEventArgs)args;
-                string uri = protocolArgs.Uri.ToString();
-                
-                // Pass the URI back to AuthService
-                if (Daily.Services.AuthService.WindowsAuthTcs != null && !Daily.Services.AuthService.WindowsAuthTcs.Task.IsCompleted)
+                var protocolArgs = appActivatedArgs.Data as Windows.ApplicationModel.Activation.ProtocolActivatedEventArgs;
+                if (protocolArgs != null)
                 {
-                     Daily.Services.AuthService.WindowsAuthTcs.TrySetResult(uri);
+                    var uri = protocolArgs.Uri.ToString();
+                    if (Daily.Services.AuthService.WindowsAuthTcs != null && !Daily.Services.AuthService.WindowsAuthTcs.Task.IsCompleted)
+                    {
+                        Daily.Services.AuthService.WindowsAuthTcs.TrySetResult(uri);
+                    }
                 }
             }
         }
