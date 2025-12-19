@@ -37,42 +37,14 @@ namespace Daily.Services
                     return false;
 
                 // 2. Open the browser (WebAuthenticator)
-#if WINDOWS
-                // Use native WebAuthenticationBroker on Windows to avoid PlatformNotSupportedException in MAUI wrapper
-                // This requires the app to be packaged (MSIX)
-                var wapResult = await Windows.Security.Authentication.Web.WebAuthenticationBroker.AuthenticateAsync(
-                    Windows.Security.Authentication.Web.WebAuthenticationOptions.None,
+                // 2. Open the browser (WebAuthenticator)
+                var authResult = await WebAuthenticator.Default.AuthenticateAsync(
                     state.Uri,
                     new Uri("com.intellidream.daily://"));
-
-                string? callbackUrl = null;
-                if (wapResult.ResponseStatus == Windows.Security.Authentication.Web.WebAuthenticationStatus.Success)
-                {
-                    callbackUrl = wapResult.ResponseData;
-                }
-                else
-                {
-                    Console.WriteLine($"[AuthService] Windows Auth Failed: {wapResult.ResponseStatus} - {wapResult.ResponseErrorDetail}");
-                }
-#else
-                 var authResult = await WebAuthenticator.Default.AuthenticateAsync(
-                    state.Uri,
-                    new Uri("com.intellidream.daily://"));
-                 
-                 string? callbackUrl = authResult?.Properties.TryGetValue("code", out var c) == true ? $"?code={c}" : authResult?.AccessToken; 
-                 // Note: WebAuthenticator usually parses the updated URL or returns the result properties. 
-                 // Actually, Supabase needs the 'code' from the query parameters basically.
-                 // Let's stick to existing logic for non-Windows but adapt variables.
-#endif
 
                 // 3. Extract the Access Token & Refresh Token from the callback URL
-                 
-#if WINDOWS
-                // Extract code from callbackUrl for Windows
-                var code = string.IsNullOrEmpty(callbackUrl) ? null : System.Web.HttpUtility.ParseQueryString(new Uri(callbackUrl).Query).Get("code");
-#else
+                
                 var code = authResult?.Properties.TryGetValue("code", out var c) == true ? c : null;
-#endif
                 
                 if (!string.IsNullOrEmpty(code))
                 {
