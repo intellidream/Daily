@@ -18,7 +18,32 @@ namespace Daily.WinUI
         {
             // Force WebView2 to be transparent (Critical for Light Mode spinner fix)
             System.Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0");
+            
             this.InitializeComponent();
+
+            // Single Instance Logic
+            var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("DailyMainInstance");
+            if (!mainInstance.IsCurrent)
+            {
+                // Redirect activation to the main instance
+                var activationArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+                var task = mainInstance.RedirectActivationToAsync(activationArgs).AsTask();
+                task.Wait(); // Synchronous wait to ensure redirection finishes before exit
+                System.Diagnostics.Process.GetCurrentProcess().Kill();
+                return;
+            }
+
+            // Register for future activations (e.g., Protocol redirect while running)
+            mainInstance.Activated += OnAppInstanceActivated;
+        }
+
+        private void OnAppInstanceActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments e)
+        {
+            // Must run on UI thread
+            this.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+            {
+                HandleActivation(e);
+            });
         }
 
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
@@ -26,11 +51,16 @@ namespace Daily.WinUI
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
             base.OnLaunched(args);
-
+            // Handle initial launch activation
             var appActivatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
-            if (appActivatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
+            HandleActivation(appActivatedArgs);
+        }
+
+        private void HandleActivation(Microsoft.Windows.AppLifecycle.AppActivationArguments args)
+        {
+            if (args.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
             {
-                var protocolArgs = appActivatedArgs.Data as Windows.ApplicationModel.Activation.ProtocolActivatedEventArgs;
+                var protocolArgs = args.Data as Windows.ApplicationModel.Activation.ProtocolActivatedEventArgs;
                 if (protocolArgs != null)
                 {
                     var uri = protocolArgs.Uri.ToString();
