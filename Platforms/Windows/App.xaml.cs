@@ -37,7 +37,7 @@ namespace Daily.WinUI
             mainInstance.Activated += OnAppInstanceActivated;
         }
 
-        private void OnAppInstanceActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments e)
+        private static void OnAppInstanceActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments e)
         {
             // Must run on UI thread
             Microsoft.Maui.Controls.Application.Current.Dispatcher.Dispatch(() =>
@@ -56,7 +56,7 @@ namespace Daily.WinUI
             HandleActivation(appActivatedArgs);
         }
 
-        private void HandleActivation(Microsoft.Windows.AppLifecycle.AppActivationArguments args)
+        private static void HandleActivation(Microsoft.Windows.AppLifecycle.AppActivationArguments args)
         {
             if (args.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
             {
