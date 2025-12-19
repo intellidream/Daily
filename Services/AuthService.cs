@@ -9,22 +9,25 @@ namespace Daily.Services
     {
         private readonly Supabase.Client _supabase;
         private readonly ISettingsService _settingsService;
+        private readonly IRefreshService _refreshService;
 
-        public AuthService(Supabase.Client supabase, ISettingsService settingsService)
+        public AuthService(Supabase.Client supabase, ISettingsService settingsService, IRefreshService refreshService)
         {
             _supabase = supabase;
             _settingsService = settingsService;
+            _refreshService = refreshService;
         }
 
         public async Task<bool> SignInWithGoogleAsync()
         {
             try
             {
-                // 1. Ask Supabase for the Google Login URL
+                // 1. Ask Supabase for the Google Login URL - requesting YouTube scopes
                 var state = await _supabase.Auth.SignIn(global::Supabase.Gotrue.Constants.Provider.Google, new SignInOptions
                 {
-                    RedirectTo = "com.intellidream.daily://", // Changed from com.intellidream.daily://login-callback to match generic scheme
-                    FlowType = global::Supabase.Gotrue.Constants.OAuthFlowType.PKCE 
+                    RedirectTo = "com.intellidream.daily://", 
+                    FlowType = global::Supabase.Gotrue.Constants.OAuthFlowType.PKCE,
+                    Scopes = "https://www.googleapis.com/auth/youtube.readonly"
                 });
 
                 Console.WriteLine($"[AuthService] Generated Auth URI: {state.Uri}");
@@ -39,16 +42,6 @@ namespace Daily.Services
                     new Uri("com.intellidream.daily://"));
 
                 // 3. Extract the Access Token & Refresh Token from the callback URL
-                // Supabase redirects to: com.intellidream.daily://login-callback#access_token=...&refresh_token=...
-                // WebAuthenticator handles the callback capture.
-                
-                var accessToken = authResult?.AccessToken;
-                var refreshToken = authResult?.RefreshToken;
-                
-                // Note: WebAuthenticator might parse parameters into 'Properties'.
-                // Supabase often returns fragments. Let's check how WebAuthenticator parses it.
-                // If standard OAuth, it might be in query. Supabase default is fragment for Implicit, but we requested PKCE.
-                // With PKCE, it usually returns a 'code' in query.
                 
                 var code = authResult?.Properties.TryGetValue("code", out var c) == true ? c : null;
                 
@@ -59,13 +52,16 @@ namespace Daily.Services
                 }
                 else
                 {
-                    // Fallback: If implicit flow (or if Supabase handling is different), try URL parsing if needed.
-                    // But we set PKCE, so 'code' should be there.
-                    // If we got here, we might need to debug the response.
+                    // Fallback or error handling
+                    Console.WriteLine("AuthService: No code received in callback.");
                 }
 
                 // 4. Update Settings Service (Triggers UI update)
                 await _settingsService.InitializeAsync();
+
+                // 5. Trigger Global Refresh (Media Widget, etc.)
+                await _refreshService.TriggerRefreshAsync();
+                await _refreshService.TriggerDetailRefreshAsync();
                 
                 return _supabase.Auth.CurrentSession != null;
 
@@ -82,10 +78,20 @@ namespace Daily.Services
             }
         }
 
+        public string? GetProviderToken()
+        {
+            // Supabase stores the provider's access token in the session if Scopes were requested
+            return _supabase.Auth.CurrentSession?.ProviderToken;
+        }
+
         public async Task SignOutAsync()
         {
             await _supabase.Auth.SignOut();
             await _settingsService.InitializeAsync();
+            
+            // Trigger Global Refresh to clear UI
+            await _refreshService.TriggerRefreshAsync();
+            await _refreshService.TriggerDetailRefreshAsync();
         }
     }
 }

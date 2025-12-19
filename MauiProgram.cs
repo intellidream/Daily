@@ -78,7 +78,7 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.IWeatherService, Daily.Services.WeatherService>();
             builder.Services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();
             builder.Services.AddSingleton<Daily.Services.ISystemMonitorService, Daily.Services.SystemMonitorService>();
-            builder.Services.AddSingleton<Daily.Services.IGoogleAuthService, Daily.Services.GoogleAuthService>();
+
             builder.Services.AddSingleton<Daily.Services.IYouTubeService, Daily.Services.YouTubeService>();
             builder.Services.AddSingleton<Daily.Services.IWindowManagerService, Daily.Services.WindowManagerService>();
             builder.Services.AddSingleton<Daily.Services.IDetailNavigationService, Daily.Services.DetailNavigationService>();

@@ -3,8 +3,10 @@
 @using Daily.Services
 @using Daily.Models 
 @inject ISnackbar Snackbar
-@inject IGoogleAuthService AuthService
+@inject IAuthService AuthService
 @inject IYouTubeService YouTubeService
+@inject IRefreshService RefreshService
+@implements IDisposable
 
 <MudPaper Elevation="0" Class="pa-4 mb-4 glass-panel" Style="border-radius: 16px;">
     <div class="d-flex align-center justify-space-between mb-2">
@@ -115,39 +117,64 @@
     private bool _isLoadingMore = false;
     private string? _selectedCategory = null;
 
+    protected override void OnInitialized()
+    {
+        RefreshService.RefreshRequested += OnRefresh;
+    }
+
     protected override async Task OnInitializedAsync()
     {
-        // Check if we have a stored token
-        var token = await AuthService.GetAccessTokenAsync();
+        await CheckAuthAndLoad();
+    }
+
+    private async Task OnRefresh()
+    {
+        // Global refresh triggered (e.g. from Settings login)
+        await CheckAuthAndLoad();
+        StateHasChanged();
+    }
+
+    private async Task CheckAuthAndLoad()
+    {
+        var token = AuthService.GetProviderToken();
         if (!string.IsNullOrEmpty(token))
         {
-            _isAuthenticated = true;
-            await LoadVideos(token);
+            if (!_isAuthenticated) 
+            {
+                _isAuthenticated = true;
+                await LoadVideos(token);
+            }
+        }
+        else
+        {
+            // Logged out
+            if (_isAuthenticated)
+            {
+                 _isAuthenticated = false;
+                 _videos = null;
+                 _nextPageToken = null;
+                 _selectedCategory = null;
+            }
         }
     }
 
     private async Task LoginAsync()
     {
-        var (token, error) = await AuthService.LoginAsync();
-        if (!string.IsNullOrEmpty(token))
+        var success = await AuthService.SignInWithGoogleAsync();
+        if (success)
         {
-            _isAuthenticated = true;
-            await LoadVideos(token);
+             await CheckAuthAndLoad();
         }
         else
         {
-            var msg = !string.IsNullOrEmpty(error) ? error : "Login cancelled or failed";
-            Snackbar.Add(msg, Severity.Error);
+             Snackbar.Add("Login cancelled or failed", Severity.Error);
         }
     }
 
     private async Task LogoutAsync()
     {
-        await AuthService.LogoutAsync();
-        _isAuthenticated = false;
-        _videos = null;
-        _nextPageToken = null;
-        _selectedCategory = null;
+        await AuthService.SignOutAsync();
+        await CheckAuthAndLoad();
     }
 
     private async Task SelectCategory(string? category)
@@ -159,7 +186,7 @@
         _nextPageToken = null;
         StateHasChanged();
 
-        var token = await AuthService.GetAccessTokenAsync();
+        var token = AuthService.GetProviderToken();
         if (!string.IsNullOrEmpty(token))
         {
             await LoadVideos(token, append: false);
@@ -210,7 +237,7 @@
 
     private async Task LoadMore()
     {
-        var token = await AuthService.GetAccessTokenAsync();
+        var token = AuthService.GetProviderToken();
         if (!string.IsNullOrEmpty(token))
         {
             await LoadVideos(token, append: true);
@@ -222,4 +249,8 @@
         await Browser.OpenAsync(url, BrowserLaunchMode.SystemPreferred);
     }
 
+    public void Dispose()
+    {
+        RefreshService.RefreshRequested -= OnRefresh;
+    }
 }

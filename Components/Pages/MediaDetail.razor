@@ -1,7 +1,7 @@
 @using Daily.Services
 @using Daily.Models
 @using MudBlazor
-@inject IGoogleAuthService AuthService
+@inject IAuthService AuthService
 @inject IYouTubeService YouTubeService
 @inject ISnackbar Snackbar
 @inject IRefreshService RefreshService
@@ -137,7 +137,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var token = await AuthService.GetAccessTokenAsync();
+        var token = AuthService.GetProviderToken();
         if (!string.IsNullOrEmpty(token))
         {
             _isAuthenticated = true;
@@ -147,21 +147,25 @@
 
     private async Task LoginAsync()
     {
-        var (token, error) = await AuthService.LoginAsync();
-        if (!string.IsNullOrEmpty(token))
+        var success = await AuthService.SignInWithGoogleAsync();
+        if (success)
         {
-            _isAuthenticated = true;
-            await LoadVideos(token);
+            var token = AuthService.GetProviderToken();
+            if(!string.IsNullOrEmpty(token))
+            {
+                _isAuthenticated = true;
+                await LoadVideos(token);
+            }
         }
         else
         {
-            Snackbar.Add(!string.IsNullOrEmpty(error) ? error : "Login failed", Severity.Error);
+             Snackbar.Add("Login cancelled or failed", Severity.Error);
         }
     }
 
     private async Task LogoutAsync()
     {
-        await AuthService.LogoutAsync();
+        await AuthService.SignOutAsync();
         _isAuthenticated = false;
         _videos = null;
         _nextPageToken = null;
@@ -177,7 +181,7 @@
         _nextPageToken = null;
         StateHasChanged();
 
-        var token = await AuthService.GetAccessTokenAsync();
+        var token = AuthService.GetProviderToken();
         if (!string.IsNullOrEmpty(token))
         {
             await LoadVideos(token);
@@ -220,7 +224,7 @@
 
     private async Task LoadMore()
     {
-        var token = await AuthService.GetAccessTokenAsync();
+        var token = AuthService.GetProviderToken();
         if (!string.IsNullOrEmpty(token))
         {
             await LoadVideos(token, append: true);
@@ -238,7 +242,7 @@
         _nextPageToken = null;
         StateHasChanged();
 
-        var token = await AuthService.GetAccessTokenAsync();
+        var token = AuthService.GetProviderToken();
         if (!string.IsNullOrEmpty(token))
         {
             await LoadVideos(token);
