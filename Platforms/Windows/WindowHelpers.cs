@@ -19,7 +19,15 @@ namespace Daily.Platforms.Windows
                 // DWMWCP_DONOTROUND = 3
                 var attribute = 33;
                 var preference = 3;
-                DwmSetWindowAttribute(hWnd, attribute, ref preference, sizeof(int));
+                var result = DwmSetWindowAttribute(hWnd, attribute, ref preference, sizeof(int));
+                if (result != 0)
+                {
+                    Console.WriteLine($"[WindowHelpers] DwmSetWindowAttribute failed with HRESULT: {result}");
+                }
+                else 
+                {
+                    Console.WriteLine($"[WindowHelpers] Square corners applied successfully to HWND: {hWnd}");
+                }
             }
             catch (Exception ex)
             {
