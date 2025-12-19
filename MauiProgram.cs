@@ -38,13 +38,7 @@ namespace Daily
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddMudServices();
 
-            return builder.Build();
-        }
 
-#if WINDOWS
-        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int pvAttribute, int cbAttribute);
-#endif
 
 #if WINDOWS
             builder.UseNotifyIcon();
@@ -127,5 +121,10 @@ namespace Daily
 
             return builder.Build();
         }
+
+#if WINDOWS
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int pvAttribute, int cbAttribute);
+#endif
     }
 }
