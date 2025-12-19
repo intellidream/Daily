@@ -539,9 +539,6 @@ namespace Daily.Services
                 // Borderless Style Only
                 nativeWindow.ExtendsContentIntoTitleBar = true;
                 
-                // Square Corners
-                Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(nativeWindow);
-                
                 // Theme Title Bar based on initial request
                 if (Application.Current != null)
                 {
@@ -563,6 +560,9 @@ namespace Daily.Services
                        presenter.IsAlwaysOnTop = true;
                     }
                 }
+                
+                // Square Corners (Apply LAST to ensure it overrides other styles)
+                Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(nativeWindow);
             }
             catch { }
         }
