@@ -25,13 +25,26 @@ namespace Daily
                     events.AddWindows(windows => windows
                         .OnLaunched((window, args) =>
                         {
-                            // Placeholder for correct implementation if needed
+                            var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+                            // DWMWA_WINDOW_CORNER_PREFERENCE = 33
+                            // DWMWCP_DONOTROUND = 3
+                            var attribute = 33;
+                            var preference = 3;
+                            DwmSetWindowAttribute(hWnd, attribute, ref preference, sizeof(int));
                         }));
 #endif
                 });
 
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddMudServices();
+
+            return builder.Build();
+        }
+
+#if WINDOWS
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int pvAttribute, int cbAttribute);
+#endif
 
 #if WINDOWS
             builder.UseNotifyIcon();
