@@ -539,6 +539,9 @@ namespace Daily.Services
                 // Borderless Style Only
                 nativeWindow.ExtendsContentIntoTitleBar = true;
                 
+                // Square Corners
+                Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(nativeWindow);
+                
                 // Theme Title Bar based on initial request
                 if (Application.Current != null)
                 {
