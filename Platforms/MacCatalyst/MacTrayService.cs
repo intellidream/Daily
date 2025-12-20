@@ -80,23 +80,47 @@ namespace Daily.Platforms.MacCatalyst
                      {
                          // Log("Step 3: Button found");
                          
-                         // Set Image (Use Real App Icon)
-                         var nsAppClass = new Class("NSApplication");
-                         var sharedAppSelector = new Selector("sharedApplication");
-                         var sharedApp = Runtime.GetNSObject(
-                             IntPtr_objc_msgSend(nsAppClass.Handle, sharedAppSelector.Handle)
-                         );
+                         // Set Image (Use Real App Icon or Custom 'menubaricon')
+                         var nsImageClass = new Class("NSImage");
                          
-                         var appIconSelector = new Selector("applicationIconImage");
+                         // Try to load "menubaricon" (User provided tinted icon)
+                         var imageNamedSelector = new Selector("imageNamed:");
                          var image = Runtime.GetNSObject(
-                             IntPtr_objc_msgSend(sharedApp.Handle, appIconSelector.Handle)
+                             IntPtr_objc_msgSend_IntPtr(
+                                 nsImageClass.Handle, 
+                                 imageNamedSelector.Handle, 
+                                 new NSString("menubaricon").Handle
+                             )
                          );
+
+                         if (image != null)
+                         {
+                             Log("Loaded custom menubaricon");
+                             // Set Template = true for tinting support
+                             var setTemplateSelector = new Selector("setTemplate:");
+                             void_objc_msgSend_Bool(image.Handle, setTemplateSelector.Handle, true);
+                         }
+                         else
+                         {
+                             // Fallback to App Icon
+                             Log("menubaricon not found, falling back to App Icon");
+                             
+                             var nsAppClass = new Class("NSApplication");
+                             var sharedAppSelector = new Selector("sharedApplication");
+                             var sharedApp = Runtime.GetNSObject(
+                                 IntPtr_objc_msgSend(nsAppClass.Handle, sharedAppSelector.Handle)
+                             );
+                             
+                             var appIconSelector = new Selector("applicationIconImage");
+                             image = Runtime.GetNSObject(
+                                 IntPtr_objc_msgSend(sharedApp.Handle, appIconSelector.Handle)
+                             );
+                         }
 
                          if (image == null)
                          {
                              // Fallback to Star if App Icon fails
                              Log("App Icon is null, using Star fallback...");
-                             var nsImageClass = new Class("NSImage");
                              var sysImgSelector = new Selector("imageWithSystemSymbolName:accessibilityDescription:");
                              image = Runtime.GetNSObject(
                                  IntPtr_objc_msgSend_IntPtr_IntPtr(

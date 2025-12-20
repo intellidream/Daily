@@ -1,0 +1,19 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <path id="s" d="M 0 -10 Q 0 0, 10 0 Q 0 0, 0 10 Q 0 0, -10 0 Q 0 0, 0 -10 Z" />
+    
+    <mask id="cutout-mask">
+      <rect x="0" y="0" width="512" height="512" fill="white"/>
+      
+      <g fill="black" transform="translate(290, 256)">
+          <use href="#s" transform="scale(15.0)"/> 
+      </g>
+    </mask>
+  </defs>
+
+  <g transform="translate(271 256) scale(1.6) translate(-271 -256)">
+    <path d="M130 135 Q 130 115, 150 115 H 300 C 430 115, 430 397, 300 397 H 150 Q 130 397, 130 377 V 135 Z" 
+          fill="black" 
+          mask="url(#cutout-mask)"/>
+  </g>
+</svg>

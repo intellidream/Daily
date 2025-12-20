@@ -1,0 +1,30 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="neon_gradient" x1="130" y1="115" x2="430" y2="397" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7A00FF"/>
+      <stop offset="100%" stop-color="#00F0FF"/>
+    </linearGradient>
+    
+    <path id="s" d="M 0 -6 Q 0 0, 6 0 Q 0 0, 0 6 Q 0 0, -6 0 Q 0 0, 0 -6 Z" fill="white"/>
+  </defs>
+
+  <g transform="translate(256 256) scale(0.8) translate(-256 -256)">
+      
+      <g transform="translate(15, 0)">
+        <path d="M130 135 Q 130 115, 150 115 H 300 C 430 115, 430 397, 300 397 H 150 Q 130 397, 130 377 V 135 Z" fill="url(#neon_gradient)"/>
+      </g>
+
+      <g transform="translate(190, 350) rotate(45) scale(1.5)">
+        <path d="M0 -14 C 0 -14, -6 4, -8 12 L 0 8 L 8 12 C 6 4, 0 -14, 0 -14 Z" fill="white"/>
+      </g>
+
+      <g transform="translate(390, 150) scale(0.9)">
+          <g stroke="none">
+            <use href="#s" x="-30" y="0" transform="scale(3.0)"/>
+            <use href="#s" x="-30" y="40" transform="scale(2.0)"/>
+            <use href="#s" x="-30" y="80" transform="scale(2.5)"/>
+          </g>
+      </g>
+      
+  </g>
+</svg>
