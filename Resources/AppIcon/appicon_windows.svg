@@ -5,38 +5,27 @@
       <stop offset="100%" stop-color="#00F0FF"/>
     </linearGradient>
     
-    <path id="s" d="M 0 -7 Q 0 0, 7 0 Q 0 0, 0 7 Q 0 0, -7 0 Q 0 0, 0 -7 Z" fill="white"/>
-
-    <filter id="icon-shadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
-      <feOffset dx="0" dy="6" result="offsetblur"/>
-      <feFlood flood-color="#3a0088" flood-opacity="0.5"/>
-      <feComposite in2="offsetblur" operator="in"/>
-      <feMerge>
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
+    <path id="s" d="M 0 -8 Q 0 0, 8 0 Q 0 0, 0 8 Q 0 0, -8 0 Q 0 0, 0 -8 Z" fill="white"/>
   </defs>
 
-  <g transform="translate(270 256) scale(1.7) translate(-270 -256)">
+  <rect width="512" height="512" rx="110" fill="#101222"/>
+
+  <g transform="translate(256 256) scale(1.3) translate(-271 -256)">
       
-      <g filter="url(#icon-shadow)">
-         <path d="M130 135 Q 130 115, 150 115 H 300 C 430 115, 430 397, 300 397 H 150 Q 130 397, 130 377 V 135 Z" fill="url(#neon_gradient)"/>
+      <g>
+         <path d="M130 135 Q 130 115, 150 115 H 300 C 430 115, 430 397, 300 397 H 150 Q 130 397, 130 377 V 135 Z" 
+               fill="url(#neon_gradient)"/>
       </g>
 
-      <g transform="translate(185, 365) rotate(45) scale(3.0)">
+      <g transform="translate(190, 340) rotate(45) scale(2.2)">
         <path d="M0 -14 C 0 -14, -6 4, -8 12 L 0 8 L 8 12 C 6 4, 0 -14, 0 -14 Z" fill="white"/>
       </g>
 
-      <g transform="translate(360, 170) scale(1.6)">
+      <g transform="translate(375, 155) scale(1.2)">
           <g stroke="none">
-            <use href="#s" x="-30" y="0" transform="scale(2.5)"/>
-            <use href="#s" x="30" y="0" transform="scale(2.5)"/>
-            <use href="#s" x="-30" y="40" transform="scale(1.8)"/>
-            <use href="#s" x="30" y="40" transform="scale(1.8)"/>
-            <use href="#s" x="-30" y="80" transform="scale(2.2)"/>
-            <use href="#s" x="30" y="80" transform="scale(2.2)"/>
+            <use href="#s" x="-10" y="0" transform="scale(2.5)"/>
+            <use href="#s" x="-15" y="45" transform="scale(1.8)"/>
+            <use href="#s" x="-35" y="85" transform="scale(2.2)"/>
           </g>
       </g>
   </g>
