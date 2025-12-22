@@ -1,30 +1,8 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <!-- Orbital Ring -->
-    <circle id="orbital-ring" cx="256" cy="256" r="230" />
-
-    <!-- Sharp Rocket -->
-    <g id="united-rocket">
-        <path d="M 256 20 L 330 400 L 256 350 L 182 400 Z" /> <!-- Body -->
-        <path d="M 280 200 L 420 300 L 300 300 Z" /> <!-- R Wing -->
-        <path d="M 232 200 L 92 300 L 212 300 Z" /> <!-- L Wing -->
-    </g>
-  </defs>
-
-  <!-- Monochrome Mask -->
-  <mask id="mono-mask">
-      <rect width="100%" height="100%" fill="black" />
-      
-      <!-- Show Ring -->
-      <use href="#orbital-ring" fill="white" />
-      
-      <!-- Cut Rocket -->
-      <g transform="translate(256 256) rotate(45) translate(-256 -256) scale(1.1)">
-         <use href="#united-rocket" fill="black" />
-      </g>
-  </mask>
-
-  <!-- Final Render: Black Fill mask -->
-  <rect width="100%" height="100%" fill="black" mask="url(#mono-mask)" />
-  
+  <!-- Scaled 1.2x Flat Black Rocket -->
+  <g id="united-rocket" transform="translate(0, 30) translate(256 256) scale(1.2) translate(-256 -256)">
+      <path d="M 256 20 L 330 400 L 256 350 L 182 400 Z" fill="black"/>
+      <path d="M 280 200 L 420 300 L 300 300 Z" fill="black"/>
+      <path d="M 232 200 L 92 300 L 212 300 Z" fill="black"/>
+  </g>
 </svg>

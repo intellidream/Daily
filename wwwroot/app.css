@@ -196,3 +196,18 @@ h1:focus {
         padding-left: env(safe-area-inset-left);
     }
 }
+
+/* --- ANIMATIONS --- */
+@keyframes rotate-center {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.spin-animation {
+    animation: rotate-center 1s linear infinite;
+    transform-origin: center;
+}

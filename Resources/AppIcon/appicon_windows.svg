@@ -1,47 +1,31 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="dark_d_gradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+    <linearGradient id="rocket-gradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
       <stop stop-color="#594AE2" />
       <stop offset="0.5" stop-color="#1b0e33" />
       <stop offset="1" stop-color="#00d2ff" />
     </linearGradient>
 
-    <!-- Orbital Sharpness Geometry -->
-    
-    <!-- 1. The Circle Container (Orbital Ring) -->
-    <circle id="orbital-ring" cx="256" cy="256" r="230" />
-    
-    <!-- 2. The Sharp Rocket (From Sketch) -->
-    <g id="united-rocket">
-        <path d="M 256 20 L 330 400 L 256 350 L 182 400 Z" /> <!-- Body -->
-        <path d="M 280 200 L 420 300 L 300 300 Z" /> <!-- R Wing -->
-        <path d="M 232 200 L 92 300 L 212 300 Z" /> <!-- L Wing -->
-    </g>
-    
+    <filter id="emboss-glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="12" result="glowBlur"/>
+        <feOffset in="glowBlur" dx="0" dy="8" result="glowOffset"/>
+        <feFlood flood-color="#00d2ff" flood-opacity="0.4" result="glowColor"/>
+        <feComposite in="glowColor" in2="glowOffset" operator="in" result="glowShadow"/>
+        <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="shadowBlur"/>
+        <feOffset in="shadowBlur" dx="0" dy="4" result="shadowOffset"/>
+        <feFlood flood-color="#000000" flood-opacity="0.6" result="shadowColor"/>
+        <feComposite in="shadowColor" in2="shadowOffset" operator="in" result="hardShadow"/>
+        <feMerge>
+            <feMergeNode in="glowShadow"/>
+            <feMergeNode in="hardShadow"/>
+            <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+    </filter>
   </defs>
 
-  <!-- Composition: 
-       Rocket INSIDE Circle (Cutout style or Filled style?)
-       User: "keep this rocket inside a circle... bigger... to look clear" 
-       Best visibility: Circle is the container. Rocket is the hole (negative space) OR Rocket is the Figure (filled).
-       Let's stick to our Negative Space Cutout theme, it's very distinct.
-  -->
-  
-  <mask id="cutout-mask">
-      <rect width="100%" height="100%" fill="white" />
-      <!-- Cut out the Rocket -->
-      <g transform="translate(256 256) rotate(45) translate(-256 -256) scale(1.1)">
-         <use href="#united-rocket" fill="black" />
-         <!-- Optional: Add a stroke if we want it strictly separated, but here it IS the negative space -->
-      </g>
-  </mask>
-  
-  <!-- If we just cut it out, the rocket is transparent. On Windows, that means background color shines through.
-       If tile is white, rocket is white. If tile is dark, rocket is dark.
-       Better: Fill the Circle with Gradient. Cut the Rocket out.
-       This creates a "Coin" or "Token" look. Very high visibility.
-  -->
-
-  <use href="#orbital-ring" fill="url(#dark_d_gradient)" mask="url(#cutout-mask)" />
-
+  <g id="united-rocket" filter="url(#emboss-glow)" transform="translate(0, 30) translate(256 256) scale(1.2) translate(-256 -256)">
+      <path d="M 256 20 L 330 400 L 256 350 L 182 400 Z" fill="url(#rocket-gradient)"/>
+      <path d="M 280 200 L 420 300 L 300 300 Z" fill="url(#rocket-gradient)"/>
+      <path d="M 232 200 L 92 300 L 212 300 Z" fill="url(#rocket-gradient)"/>
+  </g>
 </svg>

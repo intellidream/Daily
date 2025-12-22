@@ -1,4 +1,32 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="456" height="456" viewBox="0 0 456 456" version="1.1" xmlns="http://www.w3.org/2000/svg">
-    <rect x="0" y="0" width="456" height="456" fill="#512BD4" />
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="rocket-gradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#594AE2" />
+      <stop offset="0.5" stop-color="#1b0e33" />
+      <stop offset="1" stop-color="#00d2ff" />
+    </linearGradient>
+
+    <filter id="emboss-glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="12" result="glowBlur"/>
+        <feOffset in="glowBlur" dx="0" dy="8" result="glowOffset"/>
+        <feFlood flood-color="#00d2ff" flood-opacity="0.4" result="glowColor"/>
+        <feComposite in="glowColor" in2="glowOffset" operator="in" result="glowShadow"/>
+        <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="shadowBlur"/>
+        <feOffset in="shadowBlur" dx="0" dy="4" result="shadowOffset"/>
+        <feFlood flood-color="#000000" flood-opacity="0.6" result="shadowColor"/>
+        <feComposite in="shadowColor" in2="shadowOffset" operator="in" result="hardShadow"/>
+        <feMerge>
+            <feMergeNode in="glowShadow"/>
+            <feMergeNode in="hardShadow"/>
+            <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Scaled 1.2x around center (256,256) + Translate Y 30 -->
+  <g id="united-rocket" filter="url(#emboss-glow)" transform="translate(0, 30) translate(256 256) scale(1.2) translate(-256 -256)">
+      <path d="M 256 20 L 330 400 L 256 350 L 182 400 Z" fill="url(#rocket-gradient)"/>
+      <path d="M 280 200 L 420 300 L 300 300 Z" fill="url(#rocket-gradient)"/>
+      <path d="M 232 200 L 92 300 L 212 300 Z" fill="url(#rocket-gradient)"/>
+  </g>
 </svg>

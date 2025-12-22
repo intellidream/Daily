@@ -13,9 +13,10 @@
 
 <MudLayout Style="background-color: transparent;">
 <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
-        <MudIconButton Icon="@Icons.Material.Filled.Scale"
+        <MudIconButton Icon="@AppIconPath"
                        Color="Color.Inherit"
-                       OnClick="@(async () => await RefreshService.TriggerRefreshAsync())" />
+                       Class="@(_isRefreshing ? "spin-animation" : "")"
+                       OnClick="@(async () => await TriggerLocalRefresh())" />
         <MudText Class="pl-2" Typo="Typo.h5"><b>Daily</b></MudText>
         <MudSpacer />
         
@@ -56,7 +57,21 @@
 @inject IJSRuntime JSRuntime
 
 @code {
+    private bool _isRefreshing;
     private bool _isDarkMode = true;
+
+    private async Task TriggerLocalRefresh()
+    {
+        if (_isRefreshing) return;
+        _isRefreshing = true;
+        StateHasChanged();
+        
+        await RefreshService.TriggerRefreshAsync();
+        
+        _isRefreshing = false;
+        StateHasChanged();
+    }
+
     private MudTheme _theme = new()
     {
         PaletteLight = new PaletteLight
@@ -179,4 +194,26 @@
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
         }
     }
+    // Rocket Path Data (Body + Wings) - Scaled 1.2x and Centered manually via group transform in SVG, 
+    // but here we use the raw path coordinates. 
+    // Note: The menubaricon.svg had a transform on the group: transform="translate(0, 30) translate(256 256) scale(1.2) translate(-256 -256)"
+    // If we want to preserve that EXACT scale/position, we need to wrap it in a group with that transform.
+    // MudBlazor Icon property takes a string. If it starts with <svg, it renders it as is.
+    // If it is just path data, it puts it in d="...".
+    // Since we need the transform, let's stick to the full SVG definition but REMOVE the fill color to allow inheritance.
+    // Simplified Path Data (Inner Content Only)
+    // MudBlazor wraps this in an <svg>, so we shouldn't provide the <svg> tag ourselves.
+    // We MUST use ViewBox="0 0 512 512" on the MudIconButton to make this work.
+    // Correct Custom SVG for MudBlazor:
+    // 1. Must start with <svg to be detected as markup.
+    // 2. Must NOT have fixed width/height (so it fits the button).
+    // 3. Must have correct viewBox matching the coordinates.
+    // 4. Must use fill="currentColor" to inherit text color.
+    private const string AppIconPath = @"<svg viewBox=""0 0 512 512"" fill=""none"" xmlns=""http://www.w3.org/2000/svg"">
+      <g id=""united-rocket"" transform=""translate(0, 30) translate(256 256) scale(1.2) translate(-256 -256)"">
+          <path d=""M 256 20 L 330 400 L 256 350 L 182 400 Z"" fill=""currentColor""/>
+          <path d=""M 280 200 L 420 300 L 300 300 Z"" fill=""currentColor""/>
+          <path d=""M 232 200 L 92 300 L 212 300 Z"" fill=""currentColor""/>
+      </g>
+    </svg>";
 }
