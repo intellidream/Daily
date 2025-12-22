@@ -89,6 +89,7 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.ISettingsService, Daily.Services.SettingsService>();
             builder.Services.AddSingleton<Daily.Services.IAuthService, Daily.Services.AuthService>();
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
+            builder.Services.AddSingleton<HttpClient>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

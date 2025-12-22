@@ -240,16 +240,8 @@
 
         try
         {
-            // Re-use Geolocation logic (or ideally move to a shared store, but for now fetch fresh)
-            var location = await Geolocation.GetLastKnownLocationAsync();
-            if (location == null)
-            {
-                location = await Geolocation.GetLocationAsync(new GeolocationRequest
-                {
-                    DesiredAccuracy = GeolocationAccuracy.Best,
-                    Timeout = TimeSpan.FromSeconds(5)
-                });
-            }
+            // Use the centralized robust location logic
+            var location = await WeatherService.GetResilientLocationAsync();
 
             if (location != null)
             {

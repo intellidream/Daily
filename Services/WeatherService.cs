@@ -23,10 +23,13 @@ namespace Daily.Services
 
         private readonly ISettingsService _settingsService;
 
-        public WeatherService(ISettingsService settingsService)
+        private readonly IGeolocation _geolocation;
+
+        public WeatherService(ISettingsService settingsService, IGeolocation geolocation)
         {
             _httpClient = new HttpClient();
             _settingsService = settingsService;
+            _geolocation = geolocation;
             
             // Re-fetch weather if units change
             _settingsService.OnSettingsChanged += async () => 
@@ -44,6 +47,146 @@ namespace Daily.Services
             };
         }
 
+        private Location? _cachedUserLocation;
+        private DateTime _lastUserLocationTime;
+
+        public async Task<Location?> GetResilientLocationAsync()
+        {
+            // Check cache
+            if (_cachedUserLocation != null && DateTime.Now - _lastUserLocationTime < CacheDuration)
+            {
+                return _cachedUserLocation;
+            }
+
+            try
+            {
+                // 1. Check Permissions
+                var status = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
+                if (status != PermissionStatus.Granted)
+                {
+                    status = await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
+                }
+
+                if (status == PermissionStatus.Granted)
+                {
+                    // 2. Try Last Known
+                    var location = await _geolocation.GetLastKnownLocationAsync();
+                    if (location != null) 
+                    {
+                        _cachedUserLocation = location;
+                        _lastUserLocationTime = DateTime.Now;
+                        return location;
+                    }
+
+                    // 3. Try Accuracies from Best to Lowest
+                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Best, 3));
+                    if (location != null) 
+                    {
+                        _cachedUserLocation = location;
+                        _lastUserLocationTime = DateTime.Now;
+                        return location;
+                    }
+
+                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.High, 3));
+                    if (location != null) 
+                    {
+                        _cachedUserLocation = location;
+                        _lastUserLocationTime = DateTime.Now;
+                        return location;
+                    }
+
+                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Medium, 5));
+                    if (location != null) 
+                    {
+                        _cachedUserLocation = location;
+                        _lastUserLocationTime = DateTime.Now;
+                        return location;
+                    }
+                    
+                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Default, 5));
+                    if (location != null) 
+                    {
+                        _cachedUserLocation = location;
+                        _lastUserLocationTime = DateTime.Now;
+                        return location;
+                    }
+
+                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Low, 5));
+                    if (location != null) 
+                    {
+                        _cachedUserLocation = location;
+                        _lastUserLocationTime = DateTime.Now;
+                        return location;
+                    }
+
+                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Lowest, 5));
+                    if (location != null) 
+                    {
+                        _cachedUserLocation = location;
+                        _lastUserLocationTime = DateTime.Now;
+                        return location;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Ignore errors to fall through to IP
+            }
+
+            // 4. Fallback to IP
+            var ipLocation = await GetLocationFromIpAsync();
+            if (ipLocation != null)
+            {
+                _cachedUserLocation = ipLocation;
+                _lastUserLocationTime = DateTime.Now;
+                return ipLocation;
+            }
+
+            return null;
+        }
+
+        private async Task<Location?> AttemptGetLocation(GeolocationAccuracy accuracy, int timeoutSeconds)
+        {
+            try
+            {
+                return await _geolocation.GetLocationAsync(new GeolocationRequest
+                {
+                    DesiredAccuracy = accuracy,
+                    Timeout = TimeSpan.FromSeconds(timeoutSeconds)
+                });
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private async Task<Location?> GetLocationFromIpAsync()
+        {
+            try
+            {
+                // Using ip-api.com (free, no key required for non-commercial)
+                var ipInfo = await _httpClient.GetFromJsonAsync<IpLocationInfo>("http://ip-api.com/json/");
+                if (ipInfo != null && ipInfo.Status == "success")
+                {
+                    return new Location(ipInfo.Lat, ipInfo.Lon);
+                }
+            }
+            catch
+            {
+                // Ignore
+            }
+            return null;
+        }
+
+        private class IpLocationInfo
+        {
+            public string Status { get; set; }
+            public double Lat { get; set; }
+            public double Lon { get; set; }
+        }
+
+        // ... Existing Methods ...
         public async Task<WeatherResponse> GetCurrentWeatherAsync(double latitude, double longitude, bool forceRefresh = false)
         {
             // Check cache

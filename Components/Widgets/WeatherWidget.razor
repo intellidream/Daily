@@ -239,6 +239,7 @@
             </MudStack>
         }
     }
+    @* Debug Logs Removed *@
 </MudStack>
 
 @code {
@@ -351,15 +352,8 @@
 
         try
         {
-            var location = await Geolocation.GetLastKnownLocationAsync();
-            if (location == null)
-            {
-                location = await Geolocation.GetLocationAsync(new GeolocationRequest
-                {
-                    DesiredAccuracy = GeolocationAccuracy.Best,
-                    Timeout = TimeSpan.FromSeconds(5)
-                });
-            }
+            // Use the centralized robust location logic
+            var location = await WeatherService.GetResilientLocationAsync();
 
             if (location != null)
             {
@@ -373,9 +367,6 @@
 
                 if (_currentWeather != null)
                 {
-                    // var locationName = $"{_currentWeather.Name}, {_currentWeather.Sys.Country}";
-                    // await OnLocationLoaded.InvokeAsync(locationName);
-
                     var now = DateTimeOffset.Now.ToUnixTimeSeconds();
                     if (now > _currentWeather.Sys.Sunrise && now < _currentWeather.Sys.Sunset)
                     {
@@ -389,7 +380,7 @@
             }
             else
             {
-                _errorMessage = "Unable to get location.";
+                _errorMessage = "Unable to determine location.";
             }
         }
         catch (Exception ex)

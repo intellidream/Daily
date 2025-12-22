@@ -13,5 +13,6 @@ namespace Daily.Services
         event Action OnLocationChanged;
         event Action OnWeatherUpdated;
         void SetCurrentLocation(string name, bool isAuto);
+        Task<Location?> GetResilientLocationAsync();
     }
 }
