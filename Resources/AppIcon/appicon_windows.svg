@@ -1,32 +1,37 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="neon_gradient" x1="130" y1="115" x2="430" y2="397" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#7A00FF"/>
-      <stop offset="100%" stop-color="#00F0FF"/>
+    <linearGradient id="light_bg_gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#CAC7E4"/>
+      <stop offset="50%" stop-color="#E6E6E6"/>
+      <stop offset="100%" stop-color="#C1D8E4"/>
+    </linearGradient>
+
+    <linearGradient id="dark_d_gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#594AE2"/>
+      <stop offset="50%" stop-color="#1b0e33"/>
+      <stop offset="100%" stop-color="#00d2ff"/>
     </linearGradient>
     
-    <path id="s" d="M 0 -8 Q 0 0, 8 0 Q 0 0, 0 8 Q 0 0, -8 0 Q 0 0, 0 -8 Z" fill="white"/>
+    <path id="star-nose" d="M 0 -14 Q 0 0, 10 0 Q 0 0, 0 14 Q 0 0, -10 0 Q 0 0, 0 -14 Z" />
+    <path id="rocket-body" d="M -6 2 L -8 12 L 0 8 L 8 12 L 6 2 Z" />
   </defs>
 
-  <rect width="512" height="512" rx="110" fill="#101222"/>
+  <rect width="512" height="512" fill="url(#light_bg_gradient)"/>
 
   <g transform="translate(256 256) scale(1.3) translate(-271 -256)">
       
+      <g stroke="#F4F4F8" stroke-width="16" stroke-linejoin="round">
+         <path d="M130 135 Q 130 115, 150 115 H 300 C 430 115, 430 397, 300 397 H 150 Q 130 397, 130 377 V 135 Z" fill="none"/>
+      </g>
+
       <g>
          <path d="M130 135 Q 130 115, 150 115 H 300 C 430 115, 430 397, 300 397 H 150 Q 130 397, 130 377 V 135 Z" 
-               fill="url(#neon_gradient)"/>
+               fill="url(#dark_d_gradient)"/>
       </g>
 
-      <g transform="translate(190, 340) rotate(45) scale(2.2)">
-        <path d="M0 -14 C 0 -14, -6 4, -8 12 L 0 8 L 8 12 C 6 4, 0 -14, 0 -14 Z" fill="white"/>
-      </g>
-
-      <g transform="translate(375, 155) scale(1.2)">
-          <g stroke="none">
-            <use href="#s" x="-10" y="0" transform="scale(2.5)"/>
-            <use href="#s" x="-15" y="45" transform="scale(1.8)"/>
-            <use href="#s" x="-35" y="85" transform="scale(2.2)"/>
-          </g>
+      <g transform="translate(280, 220) rotate(-30) scale(3.8)" fill="white">
+        <use href="#star-nose" y="-10"/>
+        <use href="#rocket-body" y="10"/>
       </g>
   </g>
 </svg>
