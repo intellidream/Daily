@@ -1,31 +1,30 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <path id="starship-united" d="M 0 -22 Q 0 -5, 14 -5 Q 5 0, 8 15 L 0 10 L -8 15 Q -5 0, -14 -5 Q 0 -5, 0 -22 Z" />
-    
-    <mask id="cutout-mask">
-      <!-- Everything white is visible (the D) -->
-      <rect x="0" y="0" width="512" height="512" fill="white"/>
-      
-      <!-- The Starship is black (hidden/cutout) 
-           Position matches the D's coordinate space if applied there, 
-           BUT masks are direct coordinates. 
-           So we need to replicate the Transform of the D here. 
-           D Transform: translate(256 256) scale(1.65) translate(-264 -256)
-           
-           We'll group this and apply the same transform.
-      -->
-      <g transform="translate(256 256) scale(1.65) translate(-264 -256)">
-         <g transform="translate(264, 256) rotate(45) scale(3.5)" fill="black">
-            <use href="#starship-united" />
-         </g>
-      </g>
-    </mask>
+    <!-- Orbital Ring -->
+    <circle id="orbital-ring" cx="256" cy="256" r="230" />
+
+    <!-- Sharp Rocket -->
+    <g id="united-rocket">
+        <path d="M 256 20 L 330 400 L 256 350 L 182 400 Z" /> <!-- Body -->
+        <path d="M 280 200 L 420 300 L 300 300 Z" /> <!-- R Wing -->
+        <path d="M 232 200 L 92 300 L 212 300 Z" /> <!-- L Wing -->
+    </g>
   </defs>
 
-  <!-- Main D Shape -->
-  <g transform="translate(256 256) scale(1.65) translate(-264 -256)">
-    <path d="M130 135 Q 130 115, 150 115 H 300 C 430 115, 430 397, 300 397 H 150 Q 130 397, 130 377 V 135 Z" 
-          fill="black" 
-          mask="url(#cutout-mask)"/>
-  </g>
+  <!-- Monochrome Mask -->
+  <mask id="mono-mask">
+      <rect width="100%" height="100%" fill="black" />
+      
+      <!-- Show Ring -->
+      <use href="#orbital-ring" fill="white" />
+      
+      <!-- Cut Rocket -->
+      <g transform="translate(256 256) rotate(45) translate(-256 -256) scale(1.1)">
+         <use href="#united-rocket" fill="black" />
+      </g>
+  </mask>
+
+  <!-- Final Render: Black Fill mask -->
+  <rect width="100%" height="100%" fill="black" mask="url(#mono-mask)" />
+  
 </svg>
