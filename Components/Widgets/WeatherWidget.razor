@@ -135,14 +135,24 @@
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Spacing="0" Style="height: 100%; width: 100%;">
                          @if (_forecast != null)
                          {
-                             @foreach (var item in _forecast.List.Take(4))
+                         @if (_forecast != null)
+                         {
+                             @for (int i = 0; i < 4; i++)
                              {
-                                 <div class="d-flex flex-column align-center">
-                                      <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.7rem;">@DateTime.Parse(item.DtTxt).ToString("HH")</MudText>
-                                      <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}@2x.png")" Width="30" Height="30" />
-                                      <MudText Typo="Typo.body2" Style="font-weight: 700; font-size: 1.0rem;">@Math.Round(item.Main.Temp)°</MudText>
-                                 </div>
+                                 var index = i; // Capture for lambda
+                                 var displayIndex = _hourlyToggles[index] ? index + 4 : index;
+                                 
+                                 if (displayIndex < _forecast.List.Count)
+                                 {
+                                     var item = _forecast.List[displayIndex];
+                                     <div class="d-flex flex-column align-center" @onclick="() => ToggleHourly(index)" style="cursor: pointer;">
+                                          <MudText Typo="Typo.caption" Style="opacity: 0.6; font-size: 0.7rem;">@DateTime.Parse(item.DtTxt).ToString("HH")</MudText>
+                                          <MudImage Src="@($"https://openweathermap.org/img/wn/{item.Weather[0].Icon}@2x.png")" Width="30" Height="30" />
+                                          <MudText Typo="Typo.body2" Style="font-weight: 700; font-size: 1.0rem;">@Math.Round(item.Main.Temp)°</MudText>
+                                     </div>
+                                 }
                              }
+                         }
                          }
                          else
                          {
@@ -252,6 +262,7 @@
     private bool _showSunrise = true; // Default
     private bool _showHumidity = true; // Default
     private bool _showHourlyBottom = false;
+    private bool[] _hourlyToggles = new bool[4];
 
     [Parameter] public RenderFragment? HeaderAction { get; set; }
 
@@ -336,6 +347,15 @@
     {
         _showHourlyBottom = !_showHourlyBottom;
         StateHasChanged();
+    }
+
+    private void ToggleHourly(int index)
+    {
+        if (index >= 0 && index < 4)
+        {
+            _hourlyToggles[index] = !_hourlyToggles[index];
+            StateHasChanged();
+        }
     }
 
     private async Task ToggleMap()
