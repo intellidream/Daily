@@ -202,6 +202,7 @@ h1:focus {
     0% {
         transform: rotate(0deg);
     }
+
     100% {
         transform: rotate(360deg);
     }
@@ -210,4 +211,34 @@ h1:focus {
 .spin-animation {
     animation: rotate-center 1s linear infinite;
     transform-origin: center;
+}
+
+/* --- GLASSY APP BAR (Photo with Transparency) --- */
+.glassy-appbar {
+    /* Ensure glass effect works */
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    /* Subtle white tint base */
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    /* Border matching other glass panels */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    /* Contain the pseudo-element */
+    overflow: hidden;
+}
+
+/* The Photo Layer (Low Opacity) */
+.glassy-appbar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    /* The photo from wwwroot/images */
+    background-image: url('images/apptopbar.png');
+    background-size: cover;
+    background-position: center 35%;
+    background-repeat: no-repeat;
+    /* KEY: Make the photo transparent so we see through to the content behind */
+    opacity: 0.15;
+    /* Sit behind the text/buttons of the app bar */
+    z-index: -1;
+    pointer-events: none;
 }

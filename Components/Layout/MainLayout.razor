@@ -12,12 +12,12 @@
 @inject IDetailNavigationService NavService
 
 <MudLayout Style="background-color: transparent;">
-<MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
+<MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@($"glassy-appbar {AppBarClass}")" Style="">
         <MudIconButton Icon="@AppIconPath"
                        Color="Color.Inherit"
                        Class="@(_isRefreshing ? "spin-animation" : "")"
                        OnClick="@(async () => await TriggerLocalRefresh())" />
-        <MudText Class="pl-2" Typo="Typo.h5"><b>Daily</b></MudText>
+        <MudText Class="pl-2" Typo="Typo.h5"><b>DayOne</b></MudText>
         <MudSpacer />
         
         <MudTooltip Text="@(_isDarkMode ? "Switch to Light Theme" : "Switch to Dark Theme")">
