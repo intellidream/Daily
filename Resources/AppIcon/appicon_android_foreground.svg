@@ -23,8 +23,8 @@
     </filter>
   </defs>
 
-  <!-- Scaled 0.95x (optimized for Android safe zone) -->
-  <g id="united-rocket" filter="url(#emboss-glow)" transform="translate(0, 30) translate(256 256) scale(0.95) translate(-256 -256)">
+  <!-- Scaled 0.65x (optimized for spacing/padding) -->
+  <g id="united-rocket" filter="url(#emboss-glow)" transform="translate(0, 30) translate(256 256) scale(0.65) translate(-256 -256)">
       <path d="M 256 20 L 330 400 L 256 350 L 182 400 Z" fill="url(#rocket-gradient)"/>
       <path d="M 280 200 L 420 300 L 300 300 Z" fill="url(#rocket-gradient)"/>
       <path d="M 232 200 L 92 300 L 212 300 Z" fill="url(#rocket-gradient)"/>
