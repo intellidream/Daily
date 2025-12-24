@@ -158,18 +158,18 @@
             _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
         }
 
-        if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
-            Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
+        if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.MacCatalyst)
         {
-            // Mobile Layout
+            // MacOS (Keep "Perfect" Original)
             AppBarClass = "pt-20 pb-2";
             ContainerClass = "mt-20 pt-8 px-6 pb-8";
         }
         else
         {
-            // Desktop Layout (Windows/Mac)
+            // Windows & Mobile (Android/iOS)
+            // Reduce horizontal padding to match Detail Views better (px-6 -> px-2)
             AppBarClass = "pt-20 pb-2";
-            ContainerClass = "mt-20 pt-8 px-6 pb-8";
+            ContainerClass = "mt-20 pt-8 px-2 pb-8";
         }
     }
 
