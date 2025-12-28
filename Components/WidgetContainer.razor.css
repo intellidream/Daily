@@ -1,12 +1,12 @@
 .masonry-grid {
     column-count: 1;
-    column-gap: 24px;
+    column-gap: 16px;
 }
 
 @media (min-width: 600px) {
     .masonry-grid {
         column-count: 2;
-        column-gap: 24px;
+        column-gap: 16px;
     }
 }
 
@@ -18,11 +18,11 @@
 
 .masonry-item {
     break-inside: avoid;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
 
 @media (min-width: 600px) {
     .masonry-item {
-        margin-bottom: 24px;
+        margin-bottom: 16px;
     }
 }
