@@ -1,0 +1,257 @@
+@using Daily.Services
+@using Daily.Models
+@using System.Text
+@inject IHabitsService HabitsService
+@implements IDisposable
+
+<div class="d-flex align-center mb-1 flex-grow-1" style="width: 100%; gap: 2px;">
+    <div class="flex-grow-1" style="min-width: 0;">
+        <MudCarousel TData="object" ShowArrows="false" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                     Class="flex-grow-1 rounded-pill mud-theme-primary">
+             <MudCarouselItem Transition="Transition.Slide">
+                 <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                     <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                     <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: white !important;">
+                         Water Tracker
+                     </MudText>
+                 </div>
+             </MudCarouselItem>
+        </MudCarousel>
+    </div>
+    
+    @if (HeaderAction != null)
+    {
+        <div class="flex-shrink-0 d-flex align-center">
+             @HeaderAction
+        </div>
+    }
+</div>
+
+<div class="d-flex flex-row align-center flex-grow-1 gap-4 px-2 py-4" style="width: 100%; height: 100%; overflow: hidden;">
+    <!-- Left: SVG Chart Section -->
+    <div class="d-flex align-center justify-center" style="position: relative; min-width: 130px; height: 130px;">
+        <div style="position: relative; width: 130px; height: 130px;">
+            <!-- Custom SVG Donut -->
+            <svg width="130" height="130" viewBox="0 0 100 100" style="transform: rotate(-90deg);">
+                <!-- Track (Always Visible) -->
+                <circle cx="50" cy="50" r="44" fill="transparent" stroke="var(--mud-palette-action-disabled)" stroke-width="12" />
+                
+                @if (_svgPaths.Any())
+                {
+                    @foreach (var path in _svgPaths)
+                    {
+                        <path d="@path.PathData" fill="transparent" stroke="@path.Color" stroke-width="12" />
+                    }
+                }
+            </svg>
+            
+            <!-- Center Text -->
+            <div class="d-flex flex-column align-center justify-center" style="position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none;">
+                 <MudText Typo="Typo.h6" Class="font-weight-bold" Color="Color.Inherit" Style="line-height: 1;">@Math.Round(_currentValue)</MudText>
+                 <MudText Typo="Typo.caption" Style="opacity: 0.7; font-size: 0.7rem;">@_unit</MudText>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right: Controls & Summary -->
+    <div class="d-flex flex-column justify-center flex-grow-1 gap-2" style="min-width: 0;">
+        
+        <!-- Legend / Breakdown -->
+        <MudStack Spacing="0" Class="mb-1">
+             @if (_breakdownDict.ContainsKey("Water") && _breakdownDict["Water"] > 0)
+             {
+                 <div class="d-flex align-center justify-space-between">
+                     <div class="d-flex align-center">
+                        <MudIcon Icon="@Icons.Material.Filled.LocalDrink" Size="Size.Small" Style="font-size: 0.9rem; color: #29B6F6;" Class="mr-1"/>
+                        <MudText Typo="Typo.caption" Style="color: #29B6F6;">Water</MudText>
+                     </div>
+                     <MudText Typo="Typo.caption" Style="font-weight: bold;">@_breakdownDict["Water"]</MudText>
+                 </div>
+             }
+             @if (_breakdownDict.ContainsKey("Coffee") && _breakdownDict["Coffee"] > 0)
+             {
+                 <div class="d-flex align-center justify-space-between">
+                     <div class="d-flex align-center">
+                        <MudIcon Icon="@Icons.Material.Filled.Coffee" Size="Size.Small" Style="font-size: 0.9rem; color: #FF9800;" Class="mr-1"/>
+                        <MudText Typo="Typo.caption" Style="color: #FF9800;">Coffee</MudText>
+                     </div>
+                     <MudText Typo="Typo.caption" Style="font-weight: bold;">@_breakdownDict["Coffee"]</MudText>
+                 </div>
+             }
+             @if (_breakdownDict.ContainsKey("Tea") && _breakdownDict["Tea"] > 0)
+             {
+                 <div class="d-flex align-center justify-space-between">
+                     <div class="d-flex align-center">
+                        <MudIcon Icon="@Icons.Material.Filled.EmojiFoodBeverage" Size="Size.Small" Style="font-size: 0.9rem; color: #4CAF50;" Class="mr-1"/>
+                        <MudText Typo="Typo.caption" Style="color: #4CAF50;">Tea</MudText>
+                     </div>
+                     <MudText Typo="Typo.caption" Style="font-weight: bold;">@_breakdownDict["Tea"]</MudText>
+                 </div>
+             }
+             <MudDivider Class="my-1"/>
+             <div class="d-flex align-center justify-space-between">
+                 <MudText Typo="Typo.caption" Style="opacity: 0.7;">Goal</MudText>
+                 <MudText Typo="Typo.caption" Style="font-weight: bold;">@Math.Round(_goalValue)</MudText>
+             </div>
+        </MudStack>
+        
+        <!-- Quick Add Buttons -->
+        <div class="d-flex align-center justify-space-between gap-2">
+            <MudTooltip Text="+250ml Water">
+                <MudIconButton Icon="@Icons.Material.Filled.LocalDrink" Size="Size.Medium" Style="color: #29B6F6; background-color: rgba(41, 182, 246, 0.1);" OnClick="@(() => QuickAdd("Small Water", 250, "ml"))" />
+            </MudTooltip>
+            <MudTooltip Text="+200ml Coffee">
+                <MudIconButton Icon="@Icons.Material.Filled.Coffee" Size="Size.Medium" Style="color: #FF9800; background-color: rgba(255, 152, 0, 0.1);" OnClick="@(() => QuickAdd("Coffee", 200, "ml"))" />
+            </MudTooltip>
+            <MudTooltip Text="+300ml Tea">
+                <MudIconButton Icon="@Icons.Material.Filled.EmojiFoodBeverage" Size="Size.Medium" Style="color: #4CAF50; background-color: rgba(76, 175, 80, 0.1);" OnClick="@(() => QuickAdd("Tea", 300, "ml"))" />
+            </MudTooltip>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? HeaderAction { get; set; }
+
+    private double _currentValue = 0;
+    private double _goalValue = 2000;
+    private string _unit = "ml";
+    
+    // SVG Data
+    record SvgSegment(string PathData, string Color);
+    private List<SvgSegment> _svgPaths = new();
+    
+    private Dictionary<string, double> _breakdownDict = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        HabitsService.OnHabitsUpdated += RefreshData;
+        await LoadData();
+    }
+
+    public void Dispose()
+    {
+        HabitsService.OnHabitsUpdated -= RefreshData;
+    }
+
+    private async void RefreshData()
+    {
+        try
+        {
+            await LoadData();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refreshing habits data: {ex}");
+        }
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            var goal = await HabitsService.GetGoalAsync("water");
+            if (goal != null)
+            {
+                _goalValue = goal.TargetValue;
+                _unit = goal.Unit;
+            }
+
+            var breakdown = await HabitsService.GetDailyBreakdownAsync("water", DateTime.UtcNow);
+            _currentValue = breakdown.Values.Sum();
+            
+            _breakdownDict.Clear();
+            _svgPaths.Clear();
+            
+            double waterSum = 0;
+            double coffeeSum = 0;
+            double teaSum = 0;
+            double otherSum = 0;
+
+            foreach (var kvp in breakdown)
+            {
+                if (kvp.Key.Contains("Water")) waterSum += kvp.Value;
+                else if (kvp.Key.Contains("Coffee")) coffeeSum += kvp.Value;
+                else if (kvp.Key.Contains("Tea")) teaSum += kvp.Value;
+                else otherSum += kvp.Value;
+            }
+            
+            _breakdownDict["Water"] = waterSum;
+            _breakdownDict["Coffee"] = coffeeSum;
+            _breakdownDict["Tea"] = teaSum;
+
+            // Generate SVG Paths
+            // Max total for chart is either Goal or Current (whichever is larger, to show overage or partial)
+            // But usually donut implies 100% of circle = Goal. Let's cap at 100% or loop?
+            // Standard chart logic: 100% = Goal.
+            
+            double totalForCalc = Math.Max(_goalValue, _currentValue);
+            double currentAngle = 0;
+
+            if (waterSum > 0) currentAngle = AddSvgSegment(waterSum, totalForCalc, currentAngle, "#29B6F6");
+            if (coffeeSum > 0) currentAngle = AddSvgSegment(coffeeSum, totalForCalc, currentAngle, "#FF9800");
+            if (teaSum > 0) currentAngle = AddSvgSegment(teaSum, totalForCalc, currentAngle, "#4CAF50");
+            if (otherSum > 0) currentAngle = AddSvgSegment(otherSum, totalForCalc, currentAngle, "#9C27B0");
+            
+        }
+        catch (Exception ex)
+        {
+             Console.WriteLine($"Error loading habits data: {ex}");
+        }
+    }
+
+    private double AddSvgSegment(double value, double total, double startAngle, string color)
+    {
+        // Circumference is based on radius 44 (center 50,50)
+        // Arc calculation
+        double percentage = value / total;
+        double degrees = percentage * 360;
+        
+        // If > 360 (over goal), we clamp visually or maybe overlap, for now clamp total visual to 360 max for segments
+        // Real implementation for donut paths manually is complex for arcs > 180.
+        // Simplified approach: StrokeDashArray.
+        // Circumference C = 2 * PI * r = 2 * 3.14159 * 44 ≈ 276.46
+        
+        string pathData = CalculateArcPath(50, 50, 44, startAngle, startAngle + degrees);
+        _svgPaths.Add(new SvgSegment(pathData, color));
+        
+        return startAngle + degrees;
+    }
+    
+    private string CalculateArcPath(double cx, double cy, double r, double startDegrees, double endDegrees)
+    {
+        // Convert to radians
+        double startProp = startDegrees;
+        double endProp = endDegrees;
+        
+        // Handle full circle case approximately
+        if (endProp - startProp >= 360) endProp = startProp + 359.99;
+        
+        double startRad = (Math.PI / 180.0) * startProp;
+        double endRad = (Math.PI / 180.0) * endProp;
+
+        double x1 = cx + r * Math.Cos(startRad);
+        double y1 = cy + r * Math.Sin(startRad);
+        double x2 = cx + r * Math.Cos(endRad);
+        double y2 = cy + r * Math.Sin(endRad);
+
+        // Large arc flag
+        int largeArc = (endProp - startProp) > 180 ? 1 : 0;
+        
+        // Move to start, Arc to end
+        return $"M {x1} {y1} A {r} {r} 0 {largeArc} 1 {x2} {y2}";
+    }
+
+    private async Task QuickAdd(string name, double amount, string unit)
+    {
+        try
+        {
+            await HabitsService.AddLogAsync("water", amount, unit, DateTime.UtcNow, "{ \"drink\": \"" + name + "\" }");
+        }
+        catch (Exception ex)
+        {
+             Console.WriteLine($"Error adding habit log: {ex}");
+        }
+    }
+}

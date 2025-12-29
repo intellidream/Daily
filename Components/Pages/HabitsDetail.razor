@@ -1,0 +1,270 @@
+@using Daily.Models
+@using Daily.Services
+@inject IHabitsService HabitsService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<div class="d-flex flex-column gap-6" style="height: 100%; overflow-y: auto;">
+    <!-- Top Section: Water Glass & Summary -->
+    <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+        <div class="d-flex flex-wrap align-center justify-space-around gap-8">
+            <!-- Glass Visualization -->
+            <div style="position: relative; width: 100px; height: 160px; border: 4px solid rgba(255,255,255,0.3); border-top: 0; border-radius: 0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); overflow: hidden; background: rgba(255,255,255,0.05);">
+                
+                <!-- Stacked Liquid Segments -->
+                <div class="d-flex flex-column-reverse" style="position: absolute; bottom: 0; left: 0; right: 0; height: 100%; width: 100%;">
+                    @foreach (var segment in _liquidSegments)
+                    {
+                        <div style="height: @(segment.Percentage)%; background-color: @segment.Color; width: 100%; opacity: 0.9; transition: height 0.3s ease;"></div>
+                    }
+                </div>
+                
+                <!-- Reflections/Glass effect -->
+                <div style="position: absolute; top:0; left:0; right:0; bottom:0; background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%, rgba(255,255,255,0.1) 100%); pointer-events: none;"></div>
+                
+                <!-- Percentage Text -->
+                <div class="d-flex flex-column align-center justify-center" style="position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none;">
+                     <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">@_progressPercentage%</MudText>
+                </div>
+            </div>
+            
+            <div class="d-flex flex-column gap-3" style="min-width: 200px;">
+                <MudText Typo="Typo.h5">@Math.Round(_currentValue) <span style="font-size: 0.7em; opacity: 0.7;">/ @Math.Round(_goalValue) @_unit</span></MudText>
+                <div class="d-flex align-center gap-2">
+                    <MudText>Daily Goal:</MudText>
+                    <MudNumericField @bind-Value="_goalValue" DebounceInterval="500" OnDebounceIntervalElapsed="UpdateGoal" Variant="Variant.Outlined" Margin="Margin.Dense" Class="rounded-lg" Style="width: 100px;" />
+                    <MudText>@_unit</MudText>
+                </div>
+                <MudText Typo="Typo.caption" Style="opacity: 0.7;">@GetEncouragement()</MudText>
+            </div>
+        </div>
+    </MudPaper>
+
+    <!-- Quick Add Grid -->
+    <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+         <MudText Typo="Typo.h6" Class="mb-4">Quick Add</MudText>
+         <MudGrid>
+             @foreach (var drink in _drinkTypes)
+             {
+                 <MudItem xs="6" sm="3">
+                     <MudPaper Class="pa-4 d-flex flex-column align-center justify-center cursor-pointer hover-scale rounded-lg" Elevation="0" Style="@($"background-color: {drink.HexColor}20; border: 1px solid {drink.HexColor}40; gap: 8px;")" @onclick="@(() => AddDrink(drink))">
+                         <MudIcon Icon="@drink.Icon" Size="Size.Large" Style="@($"color: {drink.HexColor};")" />
+                         <MudText Typo="Typo.body1" Class="font-weight-bold">@drink.Name</MudText>
+                         <MudText Typo="Typo.caption" Style="opacity: 0.7;">@drink.Amount @_unit</MudText>
+                     </MudPaper>
+                 </MudItem>
+             }
+         </MudGrid>
+    </MudPaper>
+
+    <!-- History Chart -->
+    <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+         <MudText Typo="Typo.h6" Class="mb-4">Last 7 Days</MudText>
+         <MudChart ChartType="ChartType.Bar" ChartSeries="@_series" XAxisLabels="@_xAxisLabels" Width="100%" Height="300px" />
+    </MudPaper>
+
+    <!-- Today's Log -->
+    <MudPaper Class="pa-6 rounded-xl detail-tile mb-4" Elevation="3">
+         <div class="d-flex justify-space-between align-center mb-4">
+             <MudText Typo="Typo.h6">Today's Log</MudText>
+         </div>
+         
+     <MudList T="HabitLog" Dense="true" DisablePadding="true">
+             @if (_todaysLogs.Any())
+             {
+                 @foreach (var log in _todaysLogs)
+                 {
+                     var drinkName = GetDrinkName(log);
+                     <MudListItem Icon="@GetIconForType(drinkName)" IconColor="Color.Inherit" Style="@($"color: {GetHexColorForType(drinkName)};")">
+                         <div class="d-flex justify-space-between align-center w-100">
+                             <div class="d-flex flex-column">
+                                 <MudText Color="Color.Default">@log.Value @log.Unit <span style="opacity: 0.6; font-size: 0.9em;">- @drinkName</span></MudText>
+                                 <MudText Typo="Typo.caption" Style="opacity: 0.6;" Color="Color.Default">@log.LoggedAt.ToLocalTime().ToString("t")</MudText>
+                             </div>
+                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" Color="Color.Default" />
+                         </div>
+                     </MudListItem>
+                     <MudDivider />
+                 }
+             }
+             else
+             {
+                 <MudText Typo="Typo.body2" Style="opacity: 0.6;" Class="py-4">No entries yet today.</MudText>
+             }
+         </MudList>
+    </MudPaper>
+</div>
+
+@code {
+    private double _currentValue = 0;
+    private double _goalValue = 2000;
+    private string _unit = "ml";
+    private int _progressPercentage => _goalValue > 0 ? (int)((_currentValue / _goalValue) * 100) : 0;
+    private List<HabitLog> _todaysLogs = new();
+    
+    // Liquid Visualization Data
+    record LiquidSegment(double Percentage, string Color);
+    private List<LiquidSegment> _liquidSegments = new();
+
+    // Chart Data
+    private List<ChartSeries> _series = new();
+    private string[] _xAxisLabels = Array.Empty<string>();
+
+    // Drink Types Configuration
+    record DrinkType(string Name, double Amount, string Icon, string HexColor);
+    private List<DrinkType> _drinkTypes = new()
+    {
+        new DrinkType("Small Water", 250, Icons.Material.Filled.LocalDrink, "#29B6F6"), // Info Blue
+        new DrinkType("Large Water", 500, Icons.Material.Filled.WaterDrop, "#0288D1"), // Darker Blue
+        new DrinkType("Coffee", 200, Icons.Material.Filled.Coffee, "#FF9800"), // Warning Orange
+        new DrinkType("Tea", 300, Icons.Material.Filled.EmojiFoodBeverage, "#4CAF50") // Success Green
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        HabitsService.OnHabitsUpdated += RefreshData;
+        await LoadData();
+        await LoadHistory();
+    }
+
+    public void Dispose()
+    {
+        HabitsService.OnHabitsUpdated -= RefreshData;
+    }
+
+    private async void RefreshData()
+    {
+        try
+        {
+            await LoadData();
+            await LoadHistory();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refreshing habits detail: {ex}");
+        }
+    }
+    
+    private void UpdateGoal()
+    {
+        _ = HabitsService.UpdateGoalAsync("water", _goalValue, _unit);
+    }
+
+    private async Task LoadData()
+    {
+        var goal = await HabitsService.GetGoalAsync("water");
+        if (goal != null)
+        {
+            _goalValue = goal.TargetValue;
+            _unit = goal.Unit;
+        }
+
+        var now = DateTime.UtcNow;
+        _todaysLogs = await HabitsService.GetLogsAsync("water", now);
+        _currentValue = _todaysLogs.Sum(l => l.Value);
+        
+        CalculateLiquidSegments();
+    }
+    
+    private void CalculateLiquidSegments()
+    {
+        _liquidSegments.Clear();
+        if (_goalValue <= 0) return;
+
+        foreach (var log in _todaysLogs)
+        {
+            var percentage = (log.Value / _goalValue) * 100;
+            var drinkName = GetDrinkName(log);
+            var color = "#29B6F6"; // Default
+            
+            // Match color
+            var type = _drinkTypes.FirstOrDefault(d => d.Name == drinkName);
+            if (type != null) color = type.HexColor;
+            else if (drinkName.Contains("Coffee")) color = "#FF9800";
+            else if (drinkName.Contains("Tea")) color = "#4CAF50";
+            
+            _liquidSegments.Add(new LiquidSegment(percentage, color));
+        }
+    }
+    
+    private string GetDrinkName(HabitLog log)
+    {
+        string name = "Water";
+        if (!string.IsNullOrEmpty(log.Metadata) && log.Metadata.Contains("\"drink\":"))
+        {
+            try {
+                var parts = log.Metadata.Split(new[] { "\"drink\":" }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length > 1) name = parts[1].Trim().Trim(new[] { ' ', '}', '"' });
+            } catch {}
+        }
+        return name;
+    }
+
+    private async Task LoadHistory()
+    {
+        // Simple 7 day history
+        var data = new double[7];
+        var labels = new string[7];
+        var today = DateTime.UtcNow.Date;
+
+        for (int i = 0; i < 7; i++)
+        {
+            var date = today.AddDays(-6 + i);
+            labels[i] = date.ToString("dd MMM");
+            data[i] = await HabitsService.GetDailyProgressAsync("water", date);
+        }
+
+        _series = new List<ChartSeries>
+        {
+            new ChartSeries { Name = "Intake (" + _unit + ")", Data = data }
+        };
+        _xAxisLabels = labels;
+    }
+
+    private async Task AddDrink(DrinkType drink)
+    {
+        await HabitsService.AddLogAsync("water", drink.Amount, _unit, DateTime.UtcNow, "{ \"drink\": \"" + drink.Name + "\" }");
+        Snackbar.Add($"Added {drink.Amount}{_unit} of {drink.Name}", Severity.Success);
+    }
+
+    private async Task DeleteLog(HabitLog log)
+    {
+        await HabitsService.DeleteLogAsync(log.Id);
+    }
+
+    private string GetEncouragement()
+    {
+        if (_progressPercentage >= 100) return "Goal Reached! Amazing job! 🎉";
+        if (_progressPercentage >= 75) return "Almost there! Keep it up!";
+        if (_progressPercentage >= 50) return "Halfway through! Stay hydrated.";
+        return "Every drop counts. You got this!";
+    }
+    
+    private string GetIconForType(string drinkName) 
+    {
+        var type = _drinkTypes.FirstOrDefault(d => d.Name == drinkName);
+        if (type != null) return type.Icon;
+        if (drinkName.Contains("Coffee")) return Icons.Material.Filled.Coffee;
+        if (drinkName.Contains("Tea")) return Icons.Material.Filled.EmojiFoodBeverage;
+        return Icons.Material.Filled.LocalDrink;
+    }
+
+    private Color GetColorForType(string drinkName)
+    {
+        // MudBlazor Color enum doesn't support custom hex easily in IconColor, 
+        // using style instead in the markup or mapping to closest theme color
+        // For simplicity, let's return a Color enum if possible, or use Style in razor
+        return Color.Default; 
+    }
+    
+    // Helper to get hex color string for style binding
+    private string GetHexColorForType(string drinkName)
+    {
+        var type = _drinkTypes.FirstOrDefault(d => d.Name == drinkName);
+        if (type != null) return type.HexColor;
+        if (drinkName.Contains("Coffee")) return "#FF9800";
+        if (drinkName.Contains("Tea")) return "#4CAF50";
+        return "#29B6F6";
+    }
+}

@@ -8,7 +8,7 @@
     {
         <div class="masonry-item">
             <MudPaper Class="pa-4 detail-tile rounded-xl" Elevation="3" Square="false" Style="">
-                @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget")
+                @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget" && widget.ComponentType != "HabitsWidget")
                 {
                     <div class="d-flex align-center justify-space-between">
                          <MudText Typo="Typo.h6">@widget.Title</MudText>
@@ -47,6 +47,14 @@
                 else if (widget.ComponentType == "MediaWidget")
                 {
                     <Daily.Components.Widgets.MediaWidget />
+                }
+                else if (widget.ComponentType == "HabitsWidget")
+                {
+                    <Daily.Components.Widgets.HabitsWidget>
+                        <HeaderAction>
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => OpenWidgetDetail(widget))" Color="Color.Primary" Style="transform: scaleX(-1);" />
+                        </HeaderAction>
+                    </Daily.Components.Widgets.HabitsWidget>
                 }
                 else
                 {
@@ -88,6 +96,10 @@
         else if (widget.ComponentType == "WeatherWidget")
         {
             WindowManager.OpenDetail("Weather", "Weather Detail");
+        }
+        else if (widget.ComponentType == "HabitsWidget")
+        {
+            WindowManager.OpenDetail("Habits", widget.Title);
         }
         else
         {

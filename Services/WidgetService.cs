@@ -16,6 +16,7 @@ namespace Daily.Services
             {
                 // Default widgets
                 new WidgetModel { Title = "Weather", ComponentType = "WeatherWidget", RowSpan = 2 },
+                new WidgetModel { Title = "Water Tracker", ComponentType = "HabitsWidget", RowSpan = 3 },
                 new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", RowSpan = 2 },
                 new WidgetModel { Title = "Notes", ComponentType = "NotesWidget" },
                 new WidgetModel { Title = "Feeds", ComponentType = "RssFeedWidget", RowSpan = 2 },
