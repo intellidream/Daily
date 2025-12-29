@@ -154,7 +154,7 @@
             }
         }
 
-        <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" />
+        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" Style="transform: scaleY(-1);" />
     </MudAppBar>
     <MudMainContent Class="d-flex flex-column" Style="flex-grow: 1;">
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="@ContainerClass" Style="flex-grow: 1; display: flex; flex-direction: column;">
