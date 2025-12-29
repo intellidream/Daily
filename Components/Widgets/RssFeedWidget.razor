@@ -64,17 +64,17 @@
                      <div class="d-flex align-center gap-4" style="height: 100%; width: 100%;">
                         @if (!string.IsNullOrEmpty(item.ImageUrl))
                         {
-                            <MudImage Src="@item.ImageUrl" Width="60" Height="40" ObjectFit="ObjectFit.Cover" Class="rounded flex-shrink-0" />
+                            <MudImage Src="@item.ImageUrl" Width="60" Height="40" ObjectFit="ObjectFit.Cover" Class="rounded-lg flex-shrink-0" />
                         }
                         else if (!string.IsNullOrEmpty(RssService.CurrentFeed?.IconUrl))
                         {
-                             <div class="rounded flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 40px; background-color: var(--mud-palette-action-disabled-background);">
+                             <div class="rounded-lg flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 40px; background-color: var(--mud-palette-action-disabled-background);">
                                 <MudImage Src="@RssService.CurrentFeed.IconUrl" Width="40" Height="40" ObjectFit="ObjectFit.Contain" />
                              </div>
                         }
                         else
                         {
-                            <div class="rounded flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 40px; background-color: var(--mud-palette-action-disabled-background);">
+                            <div class="rounded-lg flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 40px; background-color: var(--mud-palette-action-disabled-background);">
                                 <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Medium" />
                             </div>
                         }

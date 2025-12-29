@@ -13,13 +13,13 @@
         <MudGrid Spacing="2" Class="flex-grow-1 animate-fade-in" Style="height: 100%">
             <!-- Row 1: CPU & RAM (Big, xs=6) -->
             <MudItem xs="6">
-                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-2 cursor-pointer hover-scale tile-glass" 
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-2 cursor-pointer hover-scale tile-glass rounded-lg" 
                           Height="100%" @onclick="@(() => SelectMetric("CPU"))">
                     @Speedometer(_cpuUsage, _cpuLabel, Color.Info)
                 </MudPaper>
             </MudItem>
             <MudItem xs="6">
-                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-2 cursor-pointer hover-scale tile-glass" 
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-2 cursor-pointer hover-scale tile-glass rounded-lg" 
                           Height="100%" @onclick="@(() => SelectMetric("RAM"))">
                      @Speedometer(_ramUsage, "RAM", Color.Secondary)
                 </MudPaper>
@@ -27,7 +27,7 @@
 
             <!-- Row 2: Battery, Storage, Uptime (xs=4) -->
             <MudItem xs="4">
-                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass rounded-lg" 
                           Height="100%" @onclick="@(() => SelectMetric("Battery"))">
                     <MudIcon Icon="@(_isCharging ? Icons.Material.Filled.BatteryChargingFull : Icons.Material.Filled.BatteryStd)" 
                              Color="@(_batteryLevel < 0.2 ? Color.Error : Color.Success)" Size="Size.Small" />
@@ -35,14 +35,14 @@
                 </MudPaper>
             </MudItem>
             <MudItem xs="4">
-                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass rounded-lg" 
                           Height="100%" @onclick="@(() => SelectMetric("Storage"))">
                     <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Warning" Size="Size.Small" />
                     <MudText Typo="Typo.caption" Class="mt-1">@(_storageFree.ToString("F0"))GB</MudText>
                 </MudPaper>
             </MudItem>
             <MudItem xs="4">
-                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass rounded-lg" 
                           Height="100%" @onclick="@(() => SelectMetric("Uptime"))">
                     <MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Default" Size="Size.Small" />
                     <MudText Typo="Typo.caption" Class="mt-1">@_uptime.Days days</MudText>
@@ -51,14 +51,14 @@
 
             <!-- Row 3: Network, Health, Usage (xs=4) -->
             <MudItem xs="4">
-                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass rounded-lg" 
                           Height="100%" @onclick="@(() => SelectMetric("Network"))">
                     <MudIcon Icon="@GetNetworkIcon()" Color="Color.Success" Size="Size.Small" />
                     <MudText Typo="Typo.caption" Class="mt-1" Align="Align.Center" Style="font-size: 0.65rem; line-height: 1;">@_networkProfile</MudText>
                 </MudPaper>
             </MudItem>
             <MudItem xs="4">
-                 <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass" 
+                 <MudPaper Outlined="true" Class="d-flex flex-column align-center justify-center pa-1 cursor-pointer hover-scale tile-glass rounded-lg" 
                            Height="100%" @onclick="@(() => SelectMetric("Health"))">
                     <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Error" Size="Size.Small" />
                      @if (DeviceInfo.Platform == DevicePlatform.WinUI)

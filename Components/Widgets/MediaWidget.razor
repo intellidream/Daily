@@ -8,7 +8,7 @@
 @inject IRefreshService RefreshService
 @implements IDisposable
 
-<MudPaper Elevation="0" Class="pa-4 mb-4 glass-panel" Style="border-radius: 16px;">
+<MudPaper Elevation="0" Class="pa-4 mb-4 glass-panel rounded-xl" Style="">
     <div class="d-flex align-center justify-space-between mb-2">
         <div class="d-flex align-center">
             <MudIcon Icon="@Icons.Custom.Brands.YouTube" Color="Color.Error" Class="mr-2" Size="Size.Large" />
@@ -66,7 +66,7 @@
                         <MudListItem OnClick="@(() => OpenVideo(video.Url))" Class="pa-2">
                             <div class="d-flex gap-3">
                                 <!-- Thumbnail (16:9 ratio approx) -->
-                                <MudImage Src="@video.ThumbnailUrl" Width="80" Height="44" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                                <MudImage Src="@video.ThumbnailUrl" Width="80" Height="44" ObjectFit="ObjectFit.Cover" Class="rounded-lg" />
                                 
                                 <div class="d-flex flex-column" style="min-width: 0; flex: 1;">
                                     <div title="@video.Title" style="width: 100%; cursor: help;">
