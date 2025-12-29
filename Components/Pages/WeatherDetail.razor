@@ -96,7 +96,7 @@
         <MudItem xs="12" lg="6">
              <MudPaper Class="detail-tile rounded-lg pa-4 d-flex flex-column hourly-forecast-tile" Elevation="3">
                  <MudText Typo="Typo.h6" Class="mb-2" Style="font-weight: 700;">Hourly Forecast</MudText>
-                 <div class="d-flex align-center pb-2" style="overflow-x: auto;">
+                 <div class="d-flex align-center pb-4" style="overflow-x: auto;">
                      <MudStack Row="true" Spacing="4">
                         @if (_forecast != null)
                         {
@@ -119,14 +119,14 @@
              <!-- Aligned nicely with Header "Hourly Forecast" visually by adding Spacer or Margin if needed, but Grid handles spacing -->
              <MudGrid Spacing="4" Class="h-100">
                 <MudItem xs="6">
-                    <MudPaper Class="detail-tile rounded-lg pa-4 d-flex flex-column align-center justify-center" Elevation="3" Style="height: 160px;">
+                    <MudPaper Class="detail-tile rounded-lg pa-4 d-flex flex-column align-center justify-center sun-time-tile" Elevation="3">
                          <MudIcon Icon="@Icons.Material.Outlined.WbSunny" Class="mb-2" Style="opacity: 0.7;" />
                          <MudText Typo="Typo.caption" Style="opacity: 0.6;">SUNRISE</MudText>
                          <MudText Typo="Typo.h6">@(_currentWeather.Sys.Sunrise > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunrise).ToLocalTime().ToString("HH:mm") : "--:--")</MudText>
                     </MudPaper>
                 </MudItem>
                  <MudItem xs="6">
-                    <MudPaper Class="detail-tile rounded-lg pa-4 d-flex flex-column align-center justify-center" Elevation="3" Style="height: 160px;">
+                    <MudPaper Class="detail-tile rounded-lg pa-4 d-flex flex-column align-center justify-center sun-time-tile" Elevation="3">
                          <MudIcon Icon="@Icons.Material.Outlined.WbTwilight" Class="mb-2" Style="opacity: 0.7;" />
                          <MudText Typo="Typo.caption" Style="opacity: 0.6;">SUNSET</MudText>
                          <MudText Typo="Typo.h6">@(_currentWeather.Sys.Sunset > 0 ? DateTimeOffset.FromUnixTimeSeconds(_currentWeather.Sys.Sunset).ToLocalTime().ToString("HH:mm") : "--:--")</MudText>
@@ -330,12 +330,16 @@
 
 <style>
     .hourly-forecast-tile {
-        height: 190px; /* Default for Mobile/Tablet */
+        height: 190px; /* Always 190px */
+    }
+    
+    .sun-time-tile {
+        height: 160px; /* Default (Mobile) */
     }
 
     @@media (min-width: 1280px) {
-        .hourly-forecast-tile {
-            height: 160px; /* Reduced for Desktop to match Sunrise/Sunset */
+        .sun-time-tile {
+            height: 190px; /* Match Hourly on Desktop */
         }
     }
 </style>
