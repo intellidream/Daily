@@ -286,6 +286,19 @@
              
              // Initial sync
              SyncIndexFromService();
+
+             // On Mobile, DetailPane needs to enforce the mesh-background on the body to cover system bars (Status/Nav)
+             // which would otherwise show the black window background through the transparent body.
+             if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
+                 Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
+             {
+                 try
+                 {
+                     await JSRuntime.InvokeVoidAsync("dailyInterop.removeClassFromBody", "transparent-background");
+                     await JSRuntime.InvokeVoidAsync("dailyInterop.addClassToBody", "mesh-background");
+                 }
+                 catch (Exception) { /* Ignore */ }
+             }
         }
         
         // Measure Toolbar Height whenever we render, to ensure we have the latest
@@ -319,6 +332,26 @@
         if (Application.Current != null)
         {
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
+        }
+
+        // Cleanup body classes on Mobile
+        if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
+            Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
+        {
+            // We can't await in Dispose, but we can fire and forget or use JSRuntime if it's not disposed? 
+            // Dispose is sync, JSRuntime might be disposed.
+            // Ideally we rely on MainLayout to restore transparent-background when it becomes active again.
+            // But MainLayout isn't re-initialized.
+            // We can try to invoke void async if possible.
+             _ = InvokeAsync(async () =>
+             {
+                 try
+                 {
+                     await JSRuntime.InvokeVoidAsync("dailyInterop.removeClassFromBody", "mesh-background");
+                     await JSRuntime.InvokeVoidAsync("dailyInterop.addClassToBody", "transparent-background");
+                 }
+                 catch { }
+             });
         }
     }
 
