@@ -1,0 +1,38 @@
+@namespace Daily.Components.Shared
+@using MudBlazor
+
+<div class="app-loading-spinner @Class" style="@Style">
+    <svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" class="spinner-icon">
+        <g id="united-rocket" transform="translate(0, 30) translate(256 256) scale(1.2) translate(-256 -256)">
+             <path d="M 256 20 L 330 400 L 256 350 L 182 400 Z" fill="currentColor"/>
+             <path d="M 280 200 L 420 300 L 300 300 Z" fill="currentColor"/>
+             <path d="M 232 200 L 92 300 L 212 300 Z" fill="currentColor"/>
+        </g>
+    </svg>
+</div>
+
+<style>
+    .app-loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: var(--mud-palette-primary); /* Default to primary color */
+    }
+
+    .spinner-icon {
+        width: 48px;
+        height: 48px;
+        animation: rocket-spin 2s linear infinite; /* Slower spin for smoothness */
+    }
+
+    @@keyframes rocket-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+
+@code {
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter] public string Style { get; set; } = "";
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+}

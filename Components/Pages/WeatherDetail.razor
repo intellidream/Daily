@@ -10,7 +10,7 @@
     @if (_isLoading)
     {
         <MudItem xs="12" Class="d-flex justify-center align-center flex-grow-1">
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            <Daily.Components.Shared.AppLoadingSpinner />
         </MudItem>
     }
     else if (_errorMessage != null)
