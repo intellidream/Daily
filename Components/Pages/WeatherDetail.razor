@@ -94,9 +94,9 @@
 
         <!-- Row 2: Hourly (Left) | Sun Times (Right) -->
         <MudItem xs="12" lg="6">
-             <MudPaper Class="detail-tile rounded-lg pa-4 d-flex flex-column" Elevation="3" Style="height: 190px;">
+             <MudPaper Class="detail-tile rounded-lg pa-4 d-flex flex-column hourly-forecast-tile" Elevation="3">
                  <MudText Typo="Typo.h6" Class="mb-2" Style="font-weight: 700;">Hourly Forecast</MudText>
-                 <div class="d-flex align-center pb-4" style="overflow-x: auto;">
+                 <div class="d-flex align-center pb-2" style="overflow-x: auto;">
                      <MudStack Row="true" Spacing="4">
                         @if (_forecast != null)
                         {
@@ -117,7 +117,6 @@
 
         <MudItem xs="12" lg="6">
              <!-- Aligned nicely with Header "Hourly Forecast" visually by adding Spacer or Margin if needed, but Grid handles spacing -->
-             <div class="mb-2 d-none d-lg-block" style="height: 32px"></div> <!-- Spacer to align with Hourly Header if we want perfect baseline, or just use Grid -->
              <MudGrid Spacing="4" Class="h-100">
                 <MudItem xs="6">
                     <MudPaper Class="detail-tile rounded-lg pa-4 d-flex flex-column align-center justify-center" Elevation="3" Style="height: 160px;">
@@ -328,3 +327,15 @@
         public string Icon { get; set; }
     }
 }
+
+<style>
+    .hourly-forecast-tile {
+        height: 190px; /* Default for Mobile/Tablet */
+    }
+
+    @@media (min-width: 1280px) {
+        .hourly-forecast-tile {
+            height: 160px; /* Reduced for Desktop to match Sunrise/Sunset */
+        }
+    }
+</style>
