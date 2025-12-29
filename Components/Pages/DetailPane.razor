@@ -124,34 +124,17 @@
         
         @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
         {
-            @if (NavService.IsBrowserOpen)
-            {
-                <!-- Browser Controls -->
-                 <MudTooltip Text="Toggle Reader View">
-                    <MudIconButton Icon="@Icons.Material.Filled.MenuBook" Color="@(NavService.IsReaderMode ? Color.Primary : Color.Inherit)" OnClick="OnReaderModeClicked" Class="mr-2" />
+                <MudTooltip Text="@(NavService.IsBrowserOpen ? "Return to Reader" : "Read original article")">
+                     <MudIconButton Icon="@Icons.Material.Filled.Web" Color="@(NavService.IsBrowserOpen ? Color.Primary : Color.Inherit)" OnClick="ToggleBrowser" Class="mr-2" />
                 </MudTooltip>
-                
-                 <MudTooltip Text="Close Browser">
-                    <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="OnBrowserCloseClicked" Class="mr-2" />
-                </MudTooltip>
-                 
+
                 <MudTooltip Text="Open in System Browser">
-                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Inherit" OnClick="OpenSystemBrowser" />
+                     <MudIconButton Icon="@Icons.Material.Filled.Public" Color="Color.Inherit" OnClick="OpenSystemBrowser" Class="mr-2" />
                 </MudTooltip>
-            }
-            else
-            {
-                <!-- Standard RSS Controls -->
-                <MudTooltip Text="Read full article">
-                    <MudIconButton Icon="@Icons.Material.Filled.Web" Color="Color.Inherit" OnClick="OpenInternalBrowser" Class="mr-2" />
-                </MudTooltip>
-                <MudTooltip Text="Copy Link">
+
+                 <MudTooltip Text="Copy Link">
                     <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Inherit" OnClick="CopyToClipboard" />
                 </MudTooltip>
-                <MudTooltip Text="Open in System Browser">
-                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Inherit" OnClick="OpenSystemBrowser" />
-                </MudTooltip>
-            }
         }
 
         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" Style="transform: scaleY(-1);" />
@@ -366,6 +349,18 @@
     private void OnBrowserCloseClicked()
     {
          NavService.SetBrowserState(false);
+    }
+    
+    private void ToggleBrowser()
+    {
+        if (NavService.IsBrowserOpen)
+        {
+            NavService.SetBrowserState(false);
+        }
+        else
+        {
+            OpenInternalBrowser();
+        }
     }
 
     private async Task OpenSystemBrowser()
