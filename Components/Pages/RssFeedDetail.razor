@@ -77,7 +77,7 @@
                     @((MarkupString)Configuration.ReadabilitySettings.GetCss(true))
                 </style>
 
-                <MudPaper Class="pa-6 reader-paper rounded-xl mb-4" Style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
+                <MudPaper Class="pa-6 reader-paper rounded-xl mb-4" Elevation="3" Style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
                     <div class="reader-content" data-theme="@(_isDarkMode ? "dark" : "light")">
                         <MudText Typo="Typo.h4" GutterBottom="true" Style="font-weight: 800;">@_selectedItem.Title</MudText>
                         
@@ -137,7 +137,7 @@
 </div>
 
 <style>
-    .tile-glass { background-color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(5px); }
+    .tile-glass { background-color: rgba(255, 255, 255, 0.4); backdrop-filter: blur(5px); }
     [data-theme='dark'] .tile-glass { background-color: rgba(0, 0, 0, 0.4); }
 
     [data-theme='light'] .reader-paper { background-color: rgba(250, 249, 246, 0.20); backdrop-filter: blur(5px); }
