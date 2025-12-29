@@ -18,11 +18,11 @@
     <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
         @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
         {
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="@(() => NavService.SetCurrentArticle(null))" Class="mr-2" />
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Edge="@_startEdge" Color="Color.Inherit" OnClick="@(() => NavService.SetCurrentArticle(null))" Class="mr-2" />
         }
         else
         {
-            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Inherit" OnClick="@(async () => await RefreshService.TriggerDetailRefreshAsync())" Class="mr-2" />
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Edge="@_startEdge" Color="Color.Inherit" OnClick="@(async () => await RefreshService.TriggerDetailRefreshAsync())" Class="mr-2" />
         }
 
         @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
@@ -137,7 +137,7 @@
                 </MudTooltip>
         }
 
-        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" Style="transform: scaleY(-1);" />
+        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Edge="@_endEdge" Color="Color.Inherit" OnClick="@(() => WindowManager.CloseDetailWindow())" Title="Close" Style="transform: scaleY(-1);" />
     </MudAppBar>
     <MudMainContent Class="d-flex flex-column" Style="flex-grow: 1;">
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="@ContainerClass" Style="flex-grow: 1; display: flex; flex-direction: column;">
@@ -208,6 +208,8 @@
 
     private string AppBarClass { get; set; } = "";
     private string ContainerClass { get; set; } = "";
+    private Edge _startEdge = Edge.False;
+    private Edge _endEdge = Edge.False;
 
     protected override void OnInitialized()
     {
@@ -215,6 +217,12 @@
         {
             Application.Current.RequestedThemeChanged += OnThemeChanged;
             _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
+        }
+
+        if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.WinUI)
+        {
+            _startEdge = Edge.Start;
+            _endEdge = Edge.End;
         }
 
         NavService.OnViewChanged += StateHasChanged;
