@@ -29,17 +29,18 @@
                  <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4" Class="mb-2">
                      <!-- Icon and Temp -->
                      <div class="d-flex align-center gap-4">
-                         <MudImage Src="@($"https://openweathermap.org/img/wn/{_currentWeather.Weather[0].Icon}@4x.png")" Width="120" Height="120" Style="filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.2));" />
-                         <MudText Typo="Typo.h1" Style="font-size: 5rem; font-weight: 700; line-height: 1;">@Math.Round(_currentWeather.Main.Temp)°</MudText>
+                         <MudImage Src="@($"https://openweathermap.org/img/wn/{_currentWeather.Weather[0].Icon}@4x.png")" Style="width: clamp(72px, 20vw, 120px); height: clamp(72px, 20vw, 120px); filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.2));" />
+                         <MudText Typo="Typo.h1" Style="font-size: clamp(3.5rem, 12vw, 5rem); font-weight: 700; line-height: 1;">@Math.Round(_currentWeather.Main.Temp)°</MudText>
                      </div>
 
                      <!-- Separator -->
-                     <div style="height: 80px; width: 2px; background-color: rgba(128,128,128, 0.3); margin: 0 16px;"></div>
+                     <!-- Separator -->
+                     <div style="height: clamp(50px, 10vw, 80px); width: 2px; background-color: rgba(128,128,128, 0.3); margin: 0 16px;"></div>
 
                      <!-- Feels Like -->
                      <div class="d-flex flex-column justify-center align-start">
-                         <MudText Typo="Typo.h5" Style="font-weight: 800; opacity: 0.6; letter-spacing: 0.5px; text-transform: uppercase;">Feels Like</MudText>
-                         <MudText Typo="Typo.h3" Style="font-weight: 600;">@Math.Round(_currentWeather.Main.FeelsLike)°</MudText>
+                         <MudText Typo="Typo.h5" Style="font-size: clamp(1rem, 3vw, 1.5rem); font-weight: 800; opacity: 0.6; letter-spacing: 0.5px; text-transform: uppercase;">Feels Like</MudText>
+                         <MudText Typo="Typo.h3" Style="font-size: clamp(2rem, 6vw, 3rem); font-weight: 600;">@Math.Round(_currentWeather.Main.FeelsLike)°</MudText>
                      </div>
                  </MudStack>
                  <MudText Typo="Typo.h4" Class="mt-2" Style="font-weight: 600; text-transform: capitalize;">@_currentWeather.Weather[0].Description</MudText>
