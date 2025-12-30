@@ -242,3 +242,30 @@ h1:focus {
     z-index: -1;
     pointer-events: none;
 }
+
+/* --- SEPARATORS --- */
+/* Light Mode (Default) */
+.mud-divider {
+    background-color: rgba(0, 0, 0, 0.10) !important;
+    height: 1px !important;
+    opacity: 1 !important;
+    /* Opacity via color alpha */
+    border: none !important;
+}
+
+/* Dark Mode Overrides */
+[data-theme="dark"] .mud-divider {
+    background-color: rgba(255, 255, 255, 0.10) !important;
+    height: 1px !important;
+    opacity: 1 !important;
+    border: none !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    .mud-divider:not([data-theme="light"]) {
+        background-color: rgba(255, 255, 255, 0.10) !important;
+        height: 1px !important;
+        opacity: 1 !important;
+        border: none !important;
+    }
+}
