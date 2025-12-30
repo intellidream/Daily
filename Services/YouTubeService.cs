@@ -15,6 +15,18 @@ namespace Daily.Services
             _httpClient = new HttpClient();
         }
 
+        public string? SelectedCategory { get; private set; }
+        public event Action<string?>? OnCategoryChanged;
+
+        public void SetCategory(string? category)
+        {
+            if (SelectedCategory != category)
+            {
+                SelectedCategory = category;
+                OnCategoryChanged?.Invoke(category);
+            }
+        }
+
         public async Task<(List<VideoItem> Videos, string NextPageToken)> GetRecommendationsAsync(string accessToken, string? pageToken = null, string? category = null)
         {
             if (string.IsNullOrEmpty(accessToken))

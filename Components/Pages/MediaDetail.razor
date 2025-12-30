@@ -123,6 +123,7 @@
     protected override void OnInitialized()
     {
         RefreshService.DetailRefreshRequested += OnDetailRefresh;
+        YouTubeService.OnCategoryChanged += OnExternalCategoryChanged;
 
         if (Application.Current != null)
         {
@@ -142,6 +143,23 @@
         {
             _isAuthenticated = true;
             await LoadVideos(token);
+        }
+    }
+
+    private async void OnExternalCategoryChanged(string? category)
+    {
+        if (_selectedCategory != category)
+        {
+            _selectedCategory = category;
+            _videos = null; // Reload
+            _nextPageToken = null;
+            await InvokeAsync(StateHasChanged);
+
+            var token = AuthService.GetProviderToken();
+            if (!string.IsNullOrEmpty(token))
+            {
+                await LoadVideos(token);
+            }
         }
     }
 
@@ -176,16 +194,17 @@
     {
         if (_selectedCategory == category) return;
 
-        _selectedCategory = category;
-        _videos = null;
-        _nextPageToken = null;
-        StateHasChanged();
-
-        var token = AuthService.GetProviderToken();
-        if (!string.IsNullOrEmpty(token))
-        {
-            await LoadVideos(token);
-        }
+        YouTubeService.SetCategory(category); // Sync
+        // The event handler will take care of the rest, OR we can do it here to be instant?
+        // Better to do it here to avoid lag/race, but the Setter checks (if !=).
+        // If we call SetCategory, it fires event. The event handler updates us.
+        // However, if we are the initiator, we might want to update immediately.
+        // But let's rely on the SetCategory logic:
+        // If we call SetCategory(newCat), it updates state and fires event.
+        // Our event handler sees it and updates. 
+        // Wait, if I rely solely on event, it's cleaner.
+        // But for UI responsiveness, usually we update local state immediately.
+        // Let's stick to the pattern: Init -> Set Service -> Service fires -> Everyone updates.
     }
 
     private async Task LoadVideos(string token, bool append = false)
@@ -193,7 +212,7 @@
         if (append)
         {
             _isLoadingMore = true;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
 
         try
@@ -218,7 +237,7 @@
         finally
         {
             _isLoadingMore = false;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -238,19 +257,33 @@
 
     private async Task OnDetailRefresh()
     {
-        _videos = null;
-        _nextPageToken = null;
-        StateHasChanged();
-
         var token = AuthService.GetProviderToken();
-        if (!string.IsNullOrEmpty(token))
+        bool isAuth = !string.IsNullOrEmpty(token);
+
+        if (_isAuthenticated != isAuth)
         {
-            await LoadVideos(token);
+            _isAuthenticated = isAuth;
+        }
+
+        if (_isAuthenticated)
+        {
+            _videos = null; // Reload
+            _nextPageToken = null;
+            await InvokeAsync(StateHasChanged);
+            await LoadVideos(token!);
+        }
+        else
+        {
+            _videos = null;
+            _nextPageToken = null;
+            _selectedCategory = null;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
     public void Dispose()
     {
         RefreshService.DetailRefreshRequested -= OnDetailRefresh;
+        YouTubeService.OnCategoryChanged -= OnExternalCategoryChanged;
     }
 }
