@@ -97,15 +97,23 @@
         
         <!-- Quick Add Buttons -->
         <div class="d-flex align-center justify-space-between gap-2">
-            <MudTooltip Text="+250ml Water">
-                <MudIconButton Icon="@Icons.Material.Filled.LocalDrink" Size="Size.Medium" Style="color: #29B6F6; background-color: rgba(41, 182, 246, 0.1);" OnClick="@(() => QuickAdd("Small Water", 250, "ml"))" />
-            </MudTooltip>
-            <MudTooltip Text="+200ml Coffee">
-                <MudIconButton Icon="@Icons.Material.Filled.Coffee" Size="Size.Medium" Style="color: #FF9800; background-color: rgba(255, 152, 0, 0.1);" OnClick="@(() => QuickAdd("Coffee", 200, "ml"))" />
-            </MudTooltip>
-            <MudTooltip Text="+300ml Tea">
-                <MudIconButton Icon="@Icons.Material.Filled.EmojiFoodBeverage" Size="Size.Medium" Style="color: #4CAF50; background-color: rgba(76, 175, 80, 0.1);" OnClick="@(() => QuickAdd("Tea", 300, "ml"))" />
-            </MudTooltip>
+            <!-- Water -->
+            <div class="d-flex flex-column align-center">
+                 <MudIconButton Icon="@Icons.Material.Filled.LocalDrink" Size="Size.Medium" Style="color: #29B6F6; background-color: rgba(41, 182, 246, 0.1);" OnClick="@(() => QuickAdd("Small Water", 250, "ml"))" />
+                 <MudText Typo="Typo.caption" Class="mt-1" Style="font-size: 0.7rem; opacity: 0.6;">250ml</MudText>
+            </div>
+            
+            <!-- Coffee -->
+            <div class="d-flex flex-column align-center">
+                 <MudIconButton Icon="@Icons.Material.Filled.Coffee" Size="Size.Medium" Style="color: #FF9800; background-color: rgba(255, 152, 0, 0.1);" OnClick="@(() => QuickAdd("Coffee", 200, "ml"))" />
+                 <MudText Typo="Typo.caption" Class="mt-1" Style="font-size: 0.7rem; opacity: 0.6;">200ml</MudText>
+            </div>
+
+            <!-- Tea -->
+            <div class="d-flex flex-column align-center">
+                 <MudIconButton Icon="@Icons.Material.Filled.EmojiFoodBeverage" Size="Size.Medium" Style="color: #4CAF50; background-color: rgba(76, 175, 80, 0.1);" OnClick="@(() => QuickAdd("Tea", 300, "ml"))" />
+                 <MudText Typo="Typo.caption" Class="mt-1" Style="font-size: 0.7rem; opacity: 0.6;">300ml</MudText>
+            </div>
         </div>
     </div>
 </div>
