@@ -59,7 +59,7 @@ namespace Daily.Services
             // Reset article link on navigation change unless intended otherwise? 
             // Better to let the component clear it or keep it if it's the same view context.
             // For safety, let's NOT clear it here automatically unless we change View Type.
-            if (view != "RssFeed" && view != "Media") 
+            if (view != "RssFeed") 
             {
                 CurrentArticleLink = null;
                 CurrentArticleTitle = null;

@@ -156,6 +156,9 @@ public partial class DetailPage : ContentPage, IDisposable
                  blazorWebView.BackgroundColor = color;
              }
 #endif
+#if MACCATALYST
+            UpdateMacWebViewTheme(theme);
+#endif
         });
     }
 
@@ -206,6 +209,28 @@ public partial class DetailPage : ContentPage, IDisposable
     }
 #endif
 
+#if MACCATALYST
+    private void UpdateMacWebViewTheme(AppTheme theme)
+    {
+        if (InternalBrowser?.Handler?.PlatformView is WebKit.WKWebView wkWebView)
+        {
+            // Map MAUI AppTheme to UIKit UserInterfaceStyle
+            var style = theme == AppTheme.Dark ? UIKit.UIUserInterfaceStyle.Dark : UIKit.UIUserInterfaceStyle.Light;
+            
+            // Apply to the WebView
+            wkWebView.OverrideUserInterfaceStyle = style;
+            
+            // Also apply to the Underlaying ScrollView to prevent white flashes
+            if (wkWebView.ScrollView != null)
+            {
+                wkWebView.ScrollView.OverrideUserInterfaceStyle = style;
+                // Force background refresh
+                wkWebView.ScrollView.BackgroundColor = theme == AppTheme.Dark ? UIKit.UIColor.Black : UIKit.UIColor.White;
+            }
+        }
+    }
+#endif
+    
     public void Dispose()
     {
         // Cleanup Native WebView

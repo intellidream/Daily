@@ -124,9 +124,12 @@
         
         @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
         {
-                <MudTooltip Text="@(NavService.IsBrowserOpen ? "Return to Reader" : "Read original article")">
-                     <MudIconButton Icon="@Icons.Material.Filled.Web" Color="@(NavService.IsBrowserOpen ? Color.Primary : Color.Inherit)" OnClick="ToggleBrowser" Class="mr-2" />
-                </MudTooltip>
+                @if (NavService.CurrentView != "Media")
+                {
+                    <MudTooltip Text="@(NavService.IsBrowserOpen ? "Return to Reader" : "Read original article")">
+                         <MudIconButton Icon="@Icons.Material.Filled.Web" Color="@(NavService.IsBrowserOpen ? Color.Primary : Color.Inherit)" OnClick="ToggleBrowser" Class="mr-2" />
+                    </MudTooltip>
+                }
 
                 <MudTooltip Text="Open in System Browser">
                      <MudIconButton Icon="@Icons.Material.Filled.Public" Color="Color.Inherit" OnClick="OpenSystemBrowser" Class="mr-2" />
