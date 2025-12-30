@@ -7,6 +7,7 @@
 @inject IRefreshService RefreshService
 
 @implements IDisposable
+@inject IDetailNavigationService NavService
 
 <div class="d-flex flex-column" style="height: 100%; position: relative;">
     @if (!_isAuthenticated)
@@ -27,78 +28,87 @@
     }
     else
     {
-        <!-- Categories Chips -->
-        <div class="d-flex flex-shrink-0 align-center pb-4 gap-2 overflow-x-auto hide-scrollbar">
-            <MudChip T="string" Variant="@(_selectedCategory == null ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == null ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory(null))">All</MudChip>
-            <MudChip T="string" Variant="@(_selectedCategory == "Latest" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Latest" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Latest"))">Latest</MudChip>
-            <MudChip T="string" Variant="@(_selectedCategory == "Tech" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Tech" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Tech"))">Tech</MudChip>
-            <MudChip T="string" Variant="@(_selectedCategory == "Podcasts" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Podcasts" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Podcasts"))">Podcasts</MudChip>
-            <MudChip T="string" Variant="@(_selectedCategory == "Music" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Music" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Music"))">Music</MudChip>
-            <MudSpacer />
-            <MudButton StartIcon="@Icons.Material.Filled.Logout" Variant="Variant.Text" Color="Color.Inherit" OnClick="LogoutAsync" Size="Size.Small">Sign Out</MudButton>
-        </div>
+        @if (NavService.IsBrowserOpen)
+        {
+             <div class="d-flex align-center justify-center h-100 animate-fade-in">
+                 <MudText Typo="Typo.h5" Style="opacity: 0.5;">Watching on YouTube...</MudText>
+             </div>
+        }
+        else
+        {
+            <!-- Categories Chips -->
+            <div class="d-flex flex-shrink-0 align-center pb-4 gap-2 overflow-x-auto hide-scrollbar">
+                <MudChip T="string" Variant="@(_selectedCategory == null ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == null ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory(null))">All</MudChip>
+                <MudChip T="string" Variant="@(_selectedCategory == "Latest" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Latest" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Latest"))">Latest</MudChip>
+                <MudChip T="string" Variant="@(_selectedCategory == "Tech" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Tech" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Tech"))">Tech</MudChip>
+                <MudChip T="string" Variant="@(_selectedCategory == "Podcasts" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Podcasts" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Podcasts"))">Podcasts</MudChip>
+                <MudChip T="string" Variant="@(_selectedCategory == "Music" ? Variant.Filled : Variant.Outlined)" Color="@(_selectedCategory == "Music" ? Color.Primary : Color.Default)" OnClick="@(() => SelectCategory("Music"))">Music</MudChip>
+                <MudSpacer />
+                <MudButton StartIcon="@Icons.Material.Filled.Logout" Variant="Variant.Text" Color="Color.Inherit" OnClick="LogoutAsync" Size="Size.Small">Sign Out</MudButton>
+            </div>
 
-        <!-- Video Grid -->
-        <div style="flex-grow: 1; overflow-y: auto;" class="mx-n4 px-4 py-4">
-            @if (_videos == null)
-            {
-                <div class="d-flex justify-center align-center pt-10">
-                    <Daily.Components.Shared.AppLoadingSpinner />
-                </div>
-            }
-            else if (_videos.Count == 0)
-            {
-                <div class="d-flex justify-center align-center pt-10">
-                    <MudText>No videos found.</MudText>
-                </div>
-            }
-            else
-            {
-                <MudGrid Spacing="4">
-                    @foreach (var video in _videos)
-                    {
-                        <MudItem xs="12" sm="6" md="4" lg="3">
-                            <MudPaper Class="cursor-pointer hover-scale tile-glass d-flex flex-column h-100 mb-4 rounded-xl" Elevation="0" Style="overflow: hidden;" @onclick="@(() => OpenVideo(video.Url))">
-                                <div style="position: relative; width: 100%; padding-top: 56.25%;"> <!-- 16:9 Aspect Ratio -->
-                                    <MudImage Src="@video.ThumbnailUrl" Style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;" />
-                                    <div style="position: absolute; bottom: 8px; right: 8px; background-color: rgba(0,0,0,0.8); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
-                                        @video.Duration
+            <!-- Video Grid -->
+            <div style="flex-grow: 1; overflow-y: auto;" class="mx-n4 px-4 py-4">
+                @if (_videos == null)
+                {
+                    <div class="d-flex justify-center align-center pt-10">
+                        <Daily.Components.Shared.AppLoadingSpinner />
+                    </div>
+                }
+                else if (_videos.Count == 0)
+                {
+                    <div class="d-flex justify-center align-center pt-10">
+                        <MudText>No videos found.</MudText>
+                    </div>
+                }
+                else
+                {
+                    <MudGrid Spacing="4">
+                        @foreach (var video in _videos)
+                        {
+                            <MudItem xs="12" sm="6" md="4" lg="3">
+                                <MudPaper Class="cursor-pointer hover-scale tile-glass d-flex flex-column h-100 mb-4 rounded-xl" Elevation="0" Style="overflow: hidden;" @onclick="@(() => OpenVideo(video))">
+                                    <div style="position: relative; width: 100%; padding-top: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                        <MudImage Src="@video.ThumbnailUrl" Style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;" />
+                                        <div style="position: absolute; bottom: 8px; right: 8px; background-color: rgba(0,0,0,0.8); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
+                                            @video.Duration
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="pa-3 d-flex flex-column flex-grow-1">
-                                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" Title="@video.Title">
-                                        @video.Title
-                                    </MudText>
-                                    <MudText Typo="Typo.caption" Class="mt-1" Color="Color.Secondary">@video.ChannelTitle</MudText>
-                                </div>
-                            </MudPaper>
-                        </MudItem>
-                    }
-                    
-                    @if (!string.IsNullOrEmpty(_nextPageToken))
-                    {
-                        <MudItem xs="12" Class="d-flex justify-center py-4">
-                            <MudButton Variant="Variant.Outlined" 
-                                       Color="@(_isDarkMode ? Color.Inherit : Color.Primary)" 
-                                       Style="@(_isDarkMode ? "color: rgba(255,255,255,0.9); border-color: rgba(255,255,255,0.5);" : "")"
-                                       OnClick="LoadMore" 
-                                       Disabled="@_isLoadingMore" 
-                                       Class="rounded-pill px-6">
-                                @if (_isLoadingMore)
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/>
-                                    <span>Loading...</span>
-                                }
-                                else
-                                {
-                                    <span>Load More</span>
-                                }
-                            </MudButton>
-                        </MudItem>
-                    }
-                </MudGrid>
-            }
-        </div>
+                                    <div class="pa-3 d-flex flex-column flex-grow-1">
+                                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" Title="@video.Title">
+                                            @video.Title
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Class="mt-1" Color="Color.Secondary">@video.ChannelTitle</MudText>
+                                    </div>
+                                </MudPaper>
+                            </MudItem>
+                        }
+                        
+                        @if (!string.IsNullOrEmpty(_nextPageToken))
+                        {
+                            <MudItem xs="12" Class="d-flex justify-center py-4">
+                                <MudButton Variant="Variant.Outlined" 
+                                           Color="@(_isDarkMode ? Color.Inherit : Color.Primary)" 
+                                           Style="@(_isDarkMode ? "color: rgba(255,255,255,0.9); border-color: rgba(255,255,255,0.5);" : "")"
+                                           OnClick="LoadMore" 
+                                           Disabled="@_isLoadingMore" 
+                                           Class="rounded-pill px-6">
+                                    @if (_isLoadingMore)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/>
+                                        <span>Loading...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Load More</span>
+                                    }
+                                </MudButton>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+            </div>
+        }
     }
 </div>
 
@@ -110,6 +120,9 @@
     
     .hide-scrollbar::-webkit-scrollbar { display: none; }
     .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+    @@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 
 @code {
@@ -124,6 +137,7 @@
     {
         RefreshService.DetailRefreshRequested += OnDetailRefresh;
         YouTubeService.OnCategoryChanged += OnExternalCategoryChanged;
+        NavService.OnBrowserStateChanged += OnBrowserStateChanged;
         _selectedCategory = YouTubeService.SelectedCategory;
 
         if (Application.Current != null)
@@ -147,6 +161,11 @@
         }
     }
 
+    private void OnBrowserStateChanged(bool isOpen)
+    {
+        StateHasChanged();
+    }
+
     private async void OnExternalCategoryChanged(string? category)
     {
         if (_selectedCategory != category)
@@ -154,6 +173,10 @@
             _selectedCategory = category;
             _videos = null; // Reload
             _nextPageToken = null;
+            
+            // If browser is open, close it on category switch?
+            if (NavService.IsBrowserOpen) NavService.SetBrowserState(false);
+            
             await InvokeAsync(StateHasChanged);
 
             var token = AuthService.GetProviderToken();
@@ -189,23 +212,13 @@
         _videos = null;
         _nextPageToken = null;
         _selectedCategory = null;
+        if (NavService.IsBrowserOpen) NavService.SetBrowserState(false);
     }
 
     private async Task SelectCategory(string? category)
     {
         if (_selectedCategory == category) return;
-
         YouTubeService.SetCategory(category); // Sync
-        // The event handler will take care of the rest, OR we can do it here to be instant?
-        // Better to do it here to avoid lag/race, but the Setter checks (if !=).
-        // If we call SetCategory, it fires event. The event handler updates us.
-        // However, if we are the initiator, we might want to update immediately.
-        // But let's rely on the SetCategory logic:
-        // If we call SetCategory(newCat), it updates state and fires event.
-        // Our event handler sees it and updates. 
-        // Wait, if I rely solely on event, it's cleaner.
-        // But for UI responsiveness, usually we update local state immediately.
-        // Let's stick to the pattern: Init -> Set Service -> Service fires -> Everyone updates.
     }
 
     private async Task LoadVideos(string token, bool append = false)
@@ -251,9 +264,10 @@
         }
     }
 
-    private async Task OpenVideo(string url)
+    private void OpenVideo(VideoItem video)
     {
-        await Browser.OpenAsync(url, BrowserLaunchMode.SystemPreferred);
+        NavService.SetCurrentArticle(video.Url, video.Title);
+        NavService.RequestOpenUrl(video.Url);
     }
 
     private async Task OnDetailRefresh()
@@ -278,6 +292,7 @@
             _videos = null;
             _nextPageToken = null;
             _selectedCategory = null;
+            if (NavService.IsBrowserOpen) NavService.SetBrowserState(false);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -286,5 +301,6 @@
     {
         RefreshService.DetailRefreshRequested -= OnDetailRefresh;
         YouTubeService.OnCategoryChanged -= OnExternalCategoryChanged;
+        NavService.OnBrowserStateChanged -= OnBrowserStateChanged;
     }
 }

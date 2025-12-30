@@ -27,6 +27,13 @@ public partial class DetailPage : ContentPage, IDisposable
     {
         InitializeComponent();
         
+        InternalBrowser.Loaded += (s, e) =>
+        {
+#if MACCATALYST
+            ConfigureMacWebView();
+#endif
+        };
+        
 #if ANDROID || IOS || WINDOWS
         // Set initial color based on current theme, but verify in OnAppearing too
         UpdateBackgroundColor();
@@ -174,9 +181,31 @@ public partial class DetailPage : ContentPage, IDisposable
         Dispatcher.Dispatch(() => 
         {
             IsRefreshing = false;
-            //refreshView.IsRefreshing = false; // Force direct update
         });
     }
+
+#if MACCATALYST
+    private void ConfigureMacWebView()
+    {
+        if (InternalBrowser.Handler?.PlatformView is WebKit.WKWebView wkWebView)
+        {
+            // Enable Full Screen
+            if (wkWebView.Configuration.Preferences != null)
+            {
+                wkWebView.Configuration.Preferences.ElementFullscreenEnabled = true;
+                wkWebView.Configuration.AllowsInlineMediaPlayback = true; 
+                wkWebView.Configuration.AllowsPictureInPictureMediaPlayback = true;
+            }
+            
+            // Allow Inspection for Debugging
+            wkWebView.Inspectable = true;
+
+            // Optional: User Agent (Might help with login, but Passkeys specifically rely on entitlements)
+            // wkWebView.CustomUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+        }
+    }
+#endif
+
     public void Dispose()
     {
         // Cleanup Native WebView
@@ -185,6 +214,7 @@ public partial class DetailPage : ContentPage, IDisposable
             InternalBrowser.Source = "about:blank";
             InternalBrowser.Handler?.DisconnectHandler();
         }
+// ...
 
         // Cleanup Blazor WebView
         if (blazorWebView != null)

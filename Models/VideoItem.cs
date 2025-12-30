@@ -7,6 +7,7 @@ namespace Daily.Models
         public string ThumbnailUrl { get; set; } = "";
         public string Duration { get; set; } = "";
         public string Url { get; set; } = "";
+        public string Id { get; set; } = ""; // YouTube Video ID
         public string Platform { get; set; } = "YouTube"; // For future Spotify expansion
     }
 }

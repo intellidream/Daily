@@ -153,6 +153,7 @@ namespace Daily.Services
                                 ThumbnailUrl = thumb,
                                 Duration = durationStr, // May be empty for search results, or parsed string
                                 Url = $"https://www.youtube.com/watch?v={id}",
+                                Id = id,
                                 Platform = "YouTube"
                             });
                         }
@@ -255,6 +256,7 @@ namespace Daily.Services
                                         ChannelTitle = channel ?? "Unknown",
                                         ThumbnailUrl = thumb ?? "",
                                         Url = $"https://www.youtube.com/watch?v={videoId}",
+                                        Id = videoId,
                                         Platform = "YouTube",
                                         // Store temporary ID or Published date to sort/fetch details
                                         Duration = videoId // Hack: Store ID in duration temporarily to fetch details later
