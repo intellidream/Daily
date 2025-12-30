@@ -2,6 +2,8 @@
 @using Daily.Models
 @using System.Text
 @inject IHabitsService HabitsService
+@inject ISettingsService SettingsService
+@inject IWindowManagerService WindowManager
 @implements IDisposable
 
 <div class="d-flex align-center mb-1 flex-grow-1" style="width: 100%; gap: 2px;">
@@ -12,8 +14,21 @@
                  <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
                      <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Class="mr-2" Size="Size.Small" Style="color: white;" />
                      <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: white !important;">
-                         Water Tracker
+                         Bubbles
                      </MudText>
+                     
+                     <MudTooltip Text="@(SettingsService.IsAuthenticated ? "Synced" : "Login to Sync")">
+                         <div @onclick="OpenSettings" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1 flex-shrink-0 ml-2">
+                             @if (SettingsService.IsAuthenticated)
+                             {
+                                 <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Style="color: white; opacity: 0.8;" />
+                             }
+                             else
+                             {
+                                 <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Style="color: #FFCC80;" />
+                             }
+                         </div>
+                     </MudTooltip>
                  </div>
              </MudCarouselItem>
         </MudCarousel>
@@ -134,12 +149,19 @@
     protected override async Task OnInitializedAsync()
     {
         HabitsService.OnHabitsUpdated += RefreshData;
+        SettingsService.OnSettingsChanged += RefreshData;
         await LoadData();
     }
 
     public void Dispose()
     {
         HabitsService.OnHabitsUpdated -= RefreshData;
+        SettingsService.OnSettingsChanged -= RefreshData;
+    }
+
+    private void OpenSettings()
+    {
+        WindowManager.OpenDetail("Settings", "Settings");
     }
 
     private async void RefreshData()

@@ -37,14 +37,74 @@ namespace Daily.Services
             {
                 if (IsAuthenticated)
                 {
+                    // Sync any guest data before clearing
+                    await SyncGuestDataAsync();
+                    
                     // Reset guest data on login/refresh to avoid confusion
                     _guestLogs.Clear();
                     _guestGoals.Clear();
+                    // Restore default guest goal for next logout
+                    _guestGoals["water"] = new HabitGoal 
+                    { 
+                        HabitType = "water", 
+                        TargetValue = 2000, 
+                        Unit = "ml" 
+                    };
                 }
                 // Notify UI to refresh
                 OnHabitsUpdated?.Invoke();
-                await Task.CompletedTask;
             };
+        }
+
+        private async Task SyncGuestDataAsync()
+        {
+            if (!IsAuthenticated || !_guestLogs.Any()) return;
+
+            try 
+            {
+                var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
+
+                // 1. Sync Logs
+                var logsToInsert = _guestLogs.Select(l => new HabitLog
+                {
+                    // Use guest ID or new one? Using guest ID might need checking collision, 
+                    // but safer to let server/new GUID handle it or just map explicit fields.
+                    // Let's rely on new IDs to be safe against collisions, or preserve if we assume UUIDs form guest are unique enough.
+                    // Preserving ID is better for idempotency if we had retry logic, but here simple insert.
+                    UserId = userId,
+                    HabitType = l.HabitType,
+                    Value = l.Value,
+                    Unit = l.Unit,
+                    LoggedAt = l.LoggedAt.ToUniversalTime(),
+                    Metadata = l.Metadata
+                }).ToList();
+
+                await _supabase.From<HabitLog>().Insert(logsToInsert);
+
+                // 2. Sync Goals (Only if custom)
+                if (_guestGoals.ContainsKey("water"))
+                {
+                     var guestGoal = _guestGoals["water"];
+                     // Heuristic: If guest goal differs from default, assume user set it and wants to keep it.
+                     if (guestGoal.TargetValue != 2000 || guestGoal.Unit != "ml")
+                     {
+                        var goal = new HabitGoal
+                        {
+                            UserId = userId,
+                            HabitType = guestGoal.HabitType,
+                            TargetValue = guestGoal.TargetValue,
+                            Unit = guestGoal.Unit,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        // Upsert = Insert or Update
+                        await _supabase.From<HabitGoal>().Upsert(goal);
+                     }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HabitsService] Sync Error: {ex.Message}");
+            }
         }
 
         // Robust check: Session exists AND User is populated

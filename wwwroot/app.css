@@ -269,3 +269,21 @@ h1:focus {
         border: none !important;
     }
 }
+
+/* --- UTILITIES --- */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.hover-darken {
+    transition: background-color 0.2s ease;
+}
+
+.hover-darken:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+    /* Slightly darker for better visibility */
+}
+
+[data-theme='dark'] .hover-darken:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
