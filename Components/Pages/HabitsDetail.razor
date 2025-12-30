@@ -4,96 +4,104 @@
 @inject ISnackbar Snackbar
 @implements IDisposable
 
-<div class="d-flex flex-column gap-6" style="height: 100%; overflow-y: auto;">
+<MudGrid Spacing="4" Class="h-100 pb-4">
     <!-- Top Section: Water Glass & Summary -->
-    <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-        <div class="d-flex flex-wrap align-center justify-space-around gap-8">
-            <!-- Glass Visualization -->
-            <div style="position: relative; width: 100px; height: 160px; border: 4px solid rgba(255,255,255,0.3); border-top: 0; border-radius: 0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); overflow: hidden; background: rgba(255,255,255,0.05);">
-                
-                <!-- Stacked Liquid Segments -->
-                <div class="d-flex flex-column-reverse" style="position: absolute; bottom: 0; left: 0; right: 0; height: 100%; width: 100%;">
-                    @foreach (var segment in _liquidSegments)
-                    {
-                        <div style="height: @(segment.Percentage)%; background-color: @segment.Color; width: 100%; opacity: 0.9; transition: height 0.3s ease;"></div>
-                    }
+    <MudItem xs="12">
+        <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+            <div class="d-flex flex-wrap align-center justify-space-around gap-8">
+                <!-- Glass Visualization -->
+                <div style="position: relative; width: 100px; height: 160px; border: 4px solid rgba(255,255,255,0.3); border-top: 0; border-radius: 0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); overflow: hidden; background: rgba(255,255,255,0.05);">
+                    
+                    <!-- Stacked Liquid Segments -->
+                    <div class="d-flex flex-column-reverse" style="position: absolute; bottom: 0; left: 0; right: 0; height: 100%; width: 100%;">
+                        @foreach (var segment in _liquidSegments)
+                        {
+                            <div style="height: @(segment.Percentage)%; background-color: @segment.Color; width: 100%; opacity: 0.9; transition: height 0.3s ease;"></div>
+                        }
+                    </div>
+                    
+                    <!-- Reflections/Glass effect -->
+                    <div style="position: absolute; top:0; left:0; right:0; bottom:0; background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%, rgba(255,255,255,0.1) 100%); pointer-events: none;"></div>
+                    
+                    <!-- Percentage Text -->
+                    <div class="d-flex flex-column align-center justify-center" style="position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none;">
+                         <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">@_progressPercentage%</MudText>
+                    </div>
                 </div>
                 
-                <!-- Reflections/Glass effect -->
-                <div style="position: absolute; top:0; left:0; right:0; bottom:0; background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%, rgba(255,255,255,0.1) 100%); pointer-events: none;"></div>
-                
-                <!-- Percentage Text -->
-                <div class="d-flex flex-column align-center justify-center" style="position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none;">
-                     <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">@_progressPercentage%</MudText>
+                <div class="d-flex flex-column gap-3" style="min-width: 200px;">
+                    <MudText Typo="Typo.h5">@Math.Round(_currentValue) <span style="font-size: 0.7em; opacity: 0.7;">/ @Math.Round(_goalValue) @_unit</span></MudText>
+                    <div class="d-flex align-center gap-2">
+                        <MudText>Daily Goal:</MudText>
+                        <MudNumericField @bind-Value="_goalValue" DebounceInterval="500" OnDebounceIntervalElapsed="UpdateGoal" Variant="Variant.Outlined" Margin="Margin.Dense" Class="rounded-lg" Style="width: 100px;" />
+                        <MudText>@_unit</MudText>
+                    </div>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.7;">@GetEncouragement()</MudText>
                 </div>
             </div>
-            
-            <div class="d-flex flex-column gap-3" style="min-width: 200px;">
-                <MudText Typo="Typo.h5">@Math.Round(_currentValue) <span style="font-size: 0.7em; opacity: 0.7;">/ @Math.Round(_goalValue) @_unit</span></MudText>
-                <div class="d-flex align-center gap-2">
-                    <MudText>Daily Goal:</MudText>
-                    <MudNumericField @bind-Value="_goalValue" DebounceInterval="500" OnDebounceIntervalElapsed="UpdateGoal" Variant="Variant.Outlined" Margin="Margin.Dense" Class="rounded-lg" Style="width: 100px;" />
-                    <MudText>@_unit</MudText>
-                </div>
-                <MudText Typo="Typo.caption" Style="opacity: 0.7;">@GetEncouragement()</MudText>
-            </div>
-        </div>
-    </MudPaper>
+        </MudPaper>
+    </MudItem>
 
     <!-- Quick Add Grid -->
-    <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-         <MudText Typo="Typo.h6" Class="mb-4">Quick Add</MudText>
-         <MudGrid>
-             @foreach (var drink in _drinkTypes)
-             {
-                 <MudItem xs="6" sm="3">
-                     <MudPaper Class="pa-4 d-flex flex-column align-center justify-center cursor-pointer hover-scale rounded-lg" Elevation="0" Style="@($"background-color: {drink.HexColor}20; border: 1px solid {drink.HexColor}40; gap: 8px;")" @onclick="@(() => AddDrink(drink))">
-                         <MudIcon Icon="@drink.Icon" Size="Size.Large" Style="@($"color: {drink.HexColor};")" />
-                         <MudText Typo="Typo.body1" Class="font-weight-bold">@drink.Name</MudText>
-                         <MudText Typo="Typo.caption" Style="opacity: 0.7;">@drink.Amount @_unit</MudText>
-                     </MudPaper>
-                 </MudItem>
-             }
-         </MudGrid>
-    </MudPaper>
+    <MudItem xs="12">
+        <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+             <MudText Typo="Typo.h6" Class="mb-4">Quick Add</MudText>
+             <MudGrid>
+                 @foreach (var drink in _drinkTypes)
+                 {
+                     <MudItem xs="6" sm="3">
+                         <MudPaper Class="pa-4 d-flex flex-column align-center justify-center cursor-pointer hover-scale rounded-lg" Elevation="0" Style="@($"background-color: {drink.HexColor}20; border: 1px solid {drink.HexColor}40; gap: 8px;")" @onclick="@(() => AddDrink(drink))">
+                             <MudIcon Icon="@drink.Icon" Size="Size.Large" Style="@($"color: {drink.HexColor};")" />
+                             <MudText Typo="Typo.body1" Class="font-weight-bold">@drink.Name</MudText>
+                             <MudText Typo="Typo.caption" Style="opacity: 0.7;">@drink.Amount @_unit</MudText>
+                         </MudPaper>
+                     </MudItem>
+                 }
+             </MudGrid>
+        </MudPaper>
+    </MudItem>
 
     <!-- History Chart -->
-    <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-         <MudText Typo="Typo.h6" Class="mb-4">Last 7 Days</MudText>
-         <MudChart ChartType="ChartType.Bar" ChartSeries="@_series" XAxisLabels="@_xAxisLabels" Width="100%" Height="300px" />
-    </MudPaper>
+    <MudItem xs="12">
+        <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+             <MudText Typo="Typo.h6" Class="mb-4">Last 7 Days</MudText>
+             <MudChart ChartType="ChartType.Bar" ChartSeries="@_series" XAxisLabels="@_xAxisLabels" Width="100%" Height="300px" />
+        </MudPaper>
+    </MudItem>
 
     <!-- Today's Log -->
-    <MudPaper Class="pa-6 rounded-xl detail-tile mb-4" Elevation="3">
-         <div class="d-flex justify-space-between align-center mb-4">
-             <MudText Typo="Typo.h6">Today's Log</MudText>
-         </div>
-         
-     <MudList T="HabitLog" Dense="true" DisablePadding="true">
-             @if (_todaysLogs.Any())
-             {
-                 @foreach (var log in _todaysLogs)
+    <MudItem xs="12">
+        <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+             <div class="d-flex justify-space-between align-center mb-4">
+                 <MudText Typo="Typo.h6">Today's Log</MudText>
+             </div>
+             
+             <MudList T="HabitLog" Dense="true" DisablePadding="true">
+                 @if (_todaysLogs.Any())
                  {
-                     var drinkName = GetDrinkName(log);
-                     <MudListItem Icon="@GetIconForType(drinkName)" IconColor="Color.Inherit" Style="@($"color: {GetHexColorForType(drinkName)};")">
-                         <div class="d-flex justify-space-between align-center w-100">
-                             <div class="d-flex flex-column">
-                                 <MudText Color="Color.Default">@log.Value @log.Unit <span style="opacity: 0.6; font-size: 0.9em;">- @drinkName</span></MudText>
-                                 <MudText Typo="Typo.caption" Style="opacity: 0.6;" Color="Color.Default">@log.LoggedAt.ToLocalTime().ToString("t")</MudText>
+                     @foreach (var log in _todaysLogs)
+                     {
+                         var drinkName = GetDrinkName(log);
+                         <MudListItem Icon="@GetIconForType(drinkName)" IconColor="Color.Inherit" Style="@($"color: {GetHexColorForType(drinkName)};")">
+                             <div class="d-flex justify-space-between align-center w-100">
+                                 <div class="d-flex flex-column">
+                                     <MudText Color="Color.Default">@log.Value @log.Unit <span style="opacity: 0.6; font-size: 0.9em;">- @drinkName</span></MudText>
+                                     <MudText Typo="Typo.caption" Style="opacity: 0.6;" Color="Color.Default">@log.LoggedAt.ToLocalTime().ToString("t")</MudText>
+                                 </div>
+                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" Color="Color.Default" />
                              </div>
-                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" Color="Color.Default" />
-                         </div>
-                     </MudListItem>
-                     <MudDivider />
+                         </MudListItem>
+                         <MudDivider />
+                     }
                  }
-             }
-             else
-             {
-                 <MudText Typo="Typo.body2" Style="opacity: 0.6;" Class="py-4">No entries yet today.</MudText>
-             }
-         </MudList>
-    </MudPaper>
-</div>
+                 else
+                 {
+                     <MudText Typo="Typo.body2" Style="opacity: 0.6;" Class="py-4">No entries yet today.</MudText>
+                 }
+             </MudList>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
 
 @code {
     private double _currentValue = 0;
