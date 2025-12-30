@@ -188,7 +188,7 @@
                 _unit = goal.Unit;
             }
 
-            var breakdown = await HabitsService.GetDailyBreakdownAsync("water", DateTime.UtcNow);
+            var breakdown = await HabitsService.GetDailyBreakdownAsync("water", DateTime.Now);
             _currentValue = breakdown.Values.Sum();
             
             _breakdownDict.Clear();
@@ -277,7 +277,7 @@
     {
         try
         {
-            await HabitsService.AddLogAsync("water", amount, unit, DateTime.UtcNow, "{ \"drink\": \"" + name + "\" }");
+            await HabitsService.AddLogAsync("water", amount, unit, DateTime.Now, "{ \"drink\": \"" + name + "\" }");
         }
         catch (Exception ex)
         {

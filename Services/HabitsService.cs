@@ -168,19 +168,27 @@ namespace Daily.Services
 
         public async Task<List<HabitLog>> GetLogsAsync(string habitType, DateTime date)
         {
-            var start = date.Date;
-            var end = start.AddDays(1);
+            // Ensure we work with the full day in Local time first, then convert bounds to UTC for DB query
+            var localStart = date.Date; 
+            var localEnd = localStart.AddDays(1);
+
+            // Convert boundaries to UTC to match stored data (timestamp with time zone)
+            var startUtc = localStart.ToUniversalTime();
+            var endUtc = localEnd.ToUniversalTime();
 
             if (IsAuthenticated)
             {
                 try
                 {
+                    // Fetch recent logs and filter locally to avoid timezone query mismatch issues
                     var result = await _supabase.From<HabitLog>()
-                        .Where(l => l.HabitType == habitType && l.LoggedAt >= start && l.LoggedAt < end)
+                        .Where(l => l.HabitType == habitType)
                         .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending)
+                        .Limit(50)
                         .Get();
 
-                    return result.Models;
+                    // Client-side filtering ensures we match the user's local day concept accurately
+                    return result.Models.Where(l => l.LoggedAt.ToLocalTime().Date == date.Date).ToList();
                 }
                 catch (Exception ex)
                 {
@@ -191,7 +199,7 @@ namespace Daily.Services
             else
             {
                 return _guestLogs
-                    .Where(l => l.HabitType == habitType && l.LoggedAt >= start && l.LoggedAt < end)
+                    .Where(l => l.HabitType == habitType && l.LoggedAt >= localStart && l.LoggedAt < localEnd)
                     .OrderByDescending(l => l.LoggedAt)
                     .ToList();
             }

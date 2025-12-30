@@ -5,6 +5,12 @@
 @implements IDisposable
 
 <MudGrid Spacing="4" Class="h-100 pb-4">
+    @if (_isLoading)
+    {
+        <MudItem xs="12">
+             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="rounded-lg" />
+        </MudItem>
+    }
     <!-- Top Section: Water Glass & Summary -->
     <MudItem xs="12">
         <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
@@ -109,6 +115,7 @@
     private string _unit = "ml";
     private int _progressPercentage => _goalValue > 0 ? (int)((_currentValue / _goalValue) * 100) : 0;
     private List<HabitLog> _todaysLogs = new();
+    private bool _isLoading = false;
     
     // Liquid Visualization Data
     record LiquidSegment(double Percentage, string Color);
@@ -131,8 +138,8 @@
     protected override async Task OnInitializedAsync()
     {
         HabitsService.OnHabitsUpdated += RefreshData;
-        await LoadData();
-        await LoadHistory();
+        // Trigger refresh to show loading state initially
+        RefreshData();
     }
 
     public void Dispose()
@@ -144,13 +151,19 @@
     {
         try
         {
+            _isLoading = true;
+            await InvokeAsync(StateHasChanged);
+            
             await LoadData();
             await LoadHistory();
+            
+            _isLoading = false;
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error refreshing habits detail: {ex}");
+            _isLoading = false;
         }
     }
     
@@ -168,7 +181,7 @@
             _unit = goal.Unit;
         }
 
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         _todaysLogs = await HabitsService.GetLogsAsync("water", now);
         _currentValue = _todaysLogs.Sum(l => l.Value);
         
@@ -214,7 +227,7 @@
         // Simple 7 day history
         var data = new double[7];
         var labels = new string[7];
-        var today = DateTime.UtcNow.Date;
+        var today = DateTime.Now.Date;
 
         for (int i = 0; i < 7; i++)
         {
@@ -232,7 +245,7 @@
 
     private async Task AddDrink(DrinkType drink)
     {
-        await HabitsService.AddLogAsync("water", drink.Amount, _unit, DateTime.UtcNow, "{ \"drink\": \"" + drink.Name + "\" }");
+        await HabitsService.AddLogAsync("water", drink.Amount, _unit, DateTime.Now, "{ \"drink\": \"" + drink.Name + "\" }");
         Snackbar.Add($"Added {drink.Amount}{_unit} of {drink.Name}", Severity.Success);
     }
 
