@@ -153,6 +153,7 @@
     {
         RefreshService.RefreshRequested += OnRefresh;
         YouTubeService.OnCategoryChanged += OnExternalCategoryChanged;
+        _selectedCategory = YouTubeService.SelectedCategory;
     }
 
     protected override async Task OnInitializedAsync()
@@ -179,8 +180,16 @@
 
     private async Task OnRefresh()
     {
-        // Global refresh triggered (e.g. from Settings login)
-        await CheckAuthAndLoad();
+        var token = AuthService.GetProviderToken();
+        if (!string.IsNullOrEmpty(token))
+        {
+            _isAuthenticated = true;
+            await LoadVideos(token, append: false);
+        }
+        else
+        {
+            await CheckAuthAndLoad();
+        }
         await InvokeAsync(StateHasChanged);
     }
 

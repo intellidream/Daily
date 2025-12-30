@@ -124,6 +124,7 @@
     {
         RefreshService.DetailRefreshRequested += OnDetailRefresh;
         YouTubeService.OnCategoryChanged += OnExternalCategoryChanged;
+        _selectedCategory = YouTubeService.SelectedCategory;
 
         if (Application.Current != null)
         {
