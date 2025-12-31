@@ -24,7 +24,9 @@
 
         <!-- App Identifier -->
         <ApplicationId>com.intellidream.daily</ApplicationId>
-
+        <ApplicationIdGuid>CF599689-A512-4217-AB3F-9DA62A197D63</ApplicationIdGuid>
+        <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+        <AndroidFastDeployment>false</AndroidFastDeployment>
         <!-- Versions -->
         <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
         <ApplicationVersion>1</ApplicationVersion>
