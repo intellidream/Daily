@@ -66,10 +66,22 @@ namespace Daily.Services
                 
                 WindowsAuthTcs = null; // Cleanup
 #else
-                var authResult = await WebAuthenticator.Default.AuthenticateAsync(
-                    state.Uri,
-                    new Uri("com.intellidream.daily://callback"));
-
+                WebAuthenticatorResult? authResult = null;
+                try 
+                {
+                    Console.WriteLine($"[AuthService] Attempting to open browser with URI: {state.Uri}");
+                    authResult = await WebAuthenticator.Default.AuthenticateAsync(
+                        state.Uri,
+                        new Uri("com.intellidream.daily://callback"));
+                    Console.WriteLine("[AuthService] Browser authentication completed successfully.");
+                }
+                catch (Exception androidEx)
+                {
+                    Console.WriteLine($"[AuthService] ANDROID OPEN BROWSER FAILED: {androidEx}");
+                    Console.WriteLine($"[AuthService] Stack Trace: {androidEx.StackTrace}");
+                    throw; // Re-throw to be caught by outer catch
+                }
+                
                 // 3. Extract the Access Token & Refresh Token from the callback URL
                 
                 code = authResult?.Properties.TryGetValue("code", out var c) == true ? c : null;
