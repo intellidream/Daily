@@ -92,7 +92,7 @@
                              <div class="d-flex justify-space-between align-center w-100">
                                  <div class="d-flex flex-column">
                                      <MudText Color="Color.Default">@log.Value @log.Unit <span style="opacity: 0.6; font-size: 0.9em;">- @drinkName</span></MudText>
-                                     <MudText Typo="Typo.caption" Style="opacity: 0.6;" Color="Color.Default">@log.LoggedAt.ToLocalTime().ToString("t")</MudText>
+                                     <MudText Typo="Typo.caption" Style="opacity: 0.6;" Color="Color.Default">@GetLocalTime(log.LoggedAt).ToString("t")</MudText>
                                  </div>
                                  <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" Color="Color.Default" />
                              </div>
@@ -287,5 +287,15 @@
         if (drinkName.Contains("Coffee")) return "#FF9800";
         if (drinkName.Contains("Tea")) return "#4CAF50";
         return "#29B6F6";
+    }
+
+    private DateTime GetLocalTime(DateTime date)
+    {
+        if (date.Kind == DateTimeKind.Unspecified)
+        {
+             // Log from DB arrives as Local but Unspecified Kind
+             return DateTime.SpecifyKind(date, DateTimeKind.Local);
+        }
+        return date.ToLocalTime();
     }
 }

@@ -37,19 +37,23 @@ namespace Daily.Services
             {
                 if (IsAuthenticated)
                 {
-                    // Sync any guest data before clearing
-                    await SyncGuestDataAsync();
-                    
-                    // Reset guest data on login/refresh to avoid confusion
-                    _guestLogs.Clear();
-                    _guestGoals.Clear();
-                    // Restore default guest goal for next logout
-                    _guestGoals["water"] = new HabitGoal 
-                    { 
-                        HabitType = "water", 
-                        TargetValue = 2000, 
-                        Unit = "ml" 
-                    };
+                    try {
+                        // Sync any guest data before clearing
+                        await SyncGuestDataAsync();
+                        
+                        // Reset guest data on login/refresh to avoid confusion
+                        _guestLogs.Clear();
+                        _guestGoals.Clear();
+                        // Restore default guest goal for next logout
+                        _guestGoals["water"] = new HabitGoal 
+                        { 
+                            HabitType = "water", 
+                            TargetValue = 2000, 
+                            Unit = "ml" 
+                        };
+                    } catch (Exception ex) {
+                         Console.WriteLine($"[HabitsService] Refresh Sync Error: {ex}");
+                    }
                 }
                 // Notify UI to refresh
                 OnHabitsUpdated?.Invoke();
@@ -188,7 +192,14 @@ namespace Daily.Services
                         .Get();
 
                     // Client-side filtering ensures we match the user's local day concept accurately
-                    return result.Models.Where(l => l.LoggedAt.ToLocalTime().Date == date.Date).ToList();
+                    return result.Models.Where(l => 
+                    {
+                        var localTime = l.LoggedAt.Kind == DateTimeKind.Unspecified 
+                            ? DateTime.SpecifyKind(l.LoggedAt, DateTimeKind.Local) 
+                            : l.LoggedAt.ToLocalTime();
+                            
+                        return localTime.Date == date.Date;
+                    }).ToList();
                 }
                 catch (Exception ex)
                 {

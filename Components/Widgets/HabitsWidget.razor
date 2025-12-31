@@ -2,6 +2,7 @@
 @using Daily.Models
 @using System.Text
 @inject IHabitsService HabitsService
+@inject IRefreshService RefreshService
 @inject ISettingsService SettingsService
 @inject IWindowManagerService WindowManager
 @implements IDisposable
@@ -148,15 +149,17 @@
 
     protected override async Task OnInitializedAsync()
     {
-        HabitsService.OnHabitsUpdated += RefreshData;
-        SettingsService.OnSettingsChanged += RefreshData;
+        HabitsService.OnHabitsUpdated += RefreshDataVoid;
+        SettingsService.OnSettingsChanged += RefreshDataVoid;
+        RefreshService.RefreshRequested += RefreshDataAsync;
         await LoadData();
     }
 
     public void Dispose()
     {
-        HabitsService.OnHabitsUpdated -= RefreshData;
-        SettingsService.OnSettingsChanged -= RefreshData;
+        HabitsService.OnHabitsUpdated -= RefreshDataVoid;
+        SettingsService.OnSettingsChanged -= RefreshDataVoid;
+        RefreshService.RefreshRequested -= RefreshDataAsync;
     }
 
     private void OpenSettings()
@@ -164,7 +167,9 @@
         WindowManager.OpenDetail("Settings", "Settings");
     }
 
-    private async void RefreshData()
+    private async void RefreshDataVoid() => await RefreshDataAsync();
+
+    private async Task RefreshDataAsync()
     {
         try
         {
