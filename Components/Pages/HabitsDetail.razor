@@ -1,6 +1,7 @@
 @using Daily.Models
 @using Daily.Services
 @inject IHabitsService HabitsService
+@inject IRefreshService RefreshService
 @inject ISnackbar Snackbar
 @implements IDisposable
 
@@ -137,17 +138,21 @@
 
     protected override async Task OnInitializedAsync()
     {
-        HabitsService.OnHabitsUpdated += RefreshData;
+        HabitsService.OnHabitsUpdated += RefreshDataVoid;
+        RefreshService.DetailRefreshRequested += RefreshDataAsync;
         // Trigger refresh to show loading state initially
-        RefreshData();
+        await RefreshDataAsync();
     }
 
     public void Dispose()
     {
-        HabitsService.OnHabitsUpdated -= RefreshData;
+        HabitsService.OnHabitsUpdated -= RefreshDataVoid;
+        RefreshService.DetailRefreshRequested -= RefreshDataAsync;
     }
 
-    private async void RefreshData()
+    private async void RefreshDataVoid() => await RefreshDataAsync();
+
+    private async Task RefreshDataAsync()
     {
         try
         {
