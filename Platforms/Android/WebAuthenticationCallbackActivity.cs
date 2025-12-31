@@ -7,7 +7,7 @@ namespace Daily.Platforms.Android
     [IntentFilter(new[] { global::Android.Content.Intent.ActionView },
                   Categories = new[] { global::Android.Content.Intent.CategoryDefault, global::Android.Content.Intent.CategoryBrowsable },
                   DataScheme = "com.intellidream.daily",
-                  DataHost = "callback")]
+                  DataHost = "login-callback")]
     public class WebAuthenticationCallbackActivity : Microsoft.Maui.Authentication.WebAuthenticatorCallbackActivity
     {
     }
