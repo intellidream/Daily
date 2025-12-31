@@ -28,7 +28,7 @@ namespace Daily.Services
                 // 1. Ask Supabase for the Google Login URL - requesting YouTube scopes
                 var state = await _supabase.Auth.SignIn(global::Supabase.Gotrue.Constants.Provider.Google, new SignInOptions
                 {
-                    RedirectTo = "com.intellidream.daily://", 
+                    RedirectTo = "com.intellidream.daily://callback", 
                     FlowType = global::Supabase.Gotrue.Constants.OAuthFlowType.PKCE,
                     Scopes = "https://www.googleapis.com/auth/youtube.readonly"
                 });
@@ -68,7 +68,7 @@ namespace Daily.Services
 #else
                 var authResult = await WebAuthenticator.Default.AuthenticateAsync(
                     state.Uri,
-                    new Uri("com.intellidream.daily://"));
+                    new Uri("com.intellidream.daily://callback"));
 
                 // 3. Extract the Access Token & Refresh Token from the callback URL
                 
