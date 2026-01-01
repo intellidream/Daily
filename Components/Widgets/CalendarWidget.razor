@@ -1,3 +1,103 @@
 @using MudBlazor
- 
-<MudDatePicker PickerVariant="PickerVariant.Static" Orientation="Orientation.Portrait" Elevation="0" Date="@(DateTime.Today)" />
+
+<MudStack Row="true" Spacing="6" Style="flex-wrap: wrap;" AlignItems="AlignItems.Start" Justify="Justify.Center">
+    <!-- Calendar Section - Landscape Mode -->
+    <div class="d-flex justify-center flex-grow-1" style="min-width: 300px;">
+        <MudDatePicker PickerVariant="PickerVariant.Static" Orientation="Orientation.Landscape" Elevation="0" Date="@(DateTime.Today)" Class="wide-calendar" />
+    </div>
+
+    <!-- Agenda Section (Expands to fill space or wraps below) -->
+    <div class="flex-grow-1" style="min-width: 280px; max-width: 100%;">
+        <div class="d-flex align-center gap-2 mb-4 px-2">
+            <MudIcon Icon="@Icons.Material.Filled.EventNote" Color="Color.Primary" />
+            <MudText Typo="Typo.h6" Style="font-weight: 700;">Today's Agenda</MudText>
+        </div>
+
+        <MudPaper Elevation="0" Class="pa-0 transparent-bg">
+            <MudList T="string" Dense="true" DisablePadding="true">
+                <MudListItem Icon="@Icons.Material.Filled.Videocam" IconColor="Color.Info" Class="rounded-lg mb-1 agenda-item">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.subtitle2"><b>10:00 AM</b> - Daily Standup</MudText>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">Sync with team</MudText>
+                    </div>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Code" IconColor="Color.Success" Class="rounded-lg mb-1 agenda-item">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.subtitle2"><b>11:30 AM</b> - Code Review</MudText>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">PR #402 - Auth Flow</MudText>
+                    </div>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Restaurant" IconColor="Color.Warning" Class="rounded-lg mb-1 agenda-item">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.subtitle2"><b>01:00 PM</b> - Lunch Break</MudText>
+                    </div>
+                </MudListItem>
+                 <MudListItem Icon="@Icons.Material.Filled.Work" IconColor="Color.Primary" Class="rounded-lg agenda-item">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.subtitle2"><b>02:00 PM</b> - Deep Work</MudText>
+                         <MudText Typo="Typo.caption" Style="opacity: 0.7;">Feature Implementation</MudText>
+                    </div>
+                </MudListItem>
+            </MudList>
+        </MudPaper>
+    </div>
+</MudStack>
+
+<style>
+    .transparent-bg { background-color: transparent !important; }
+    
+    .agenda-item {
+        transition: background-color 0.2s;
+    }
+    
+    .agenda-item:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+    
+    [data-theme='dark'] .agenda-item:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+    
+    /* WIDE CALENDAR OVERRIDES */
+    .wide-calendar {
+        width: 100%;
+        max-width: none !important;
+        display: block;
+    }
+
+    /* Force the internal picker container to fill width */
+    .wide-calendar .mud-picker-static,
+    .wide-calendar .mud-picker-container,
+    .wide-calendar .mud-picker-content {
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0 !important;
+    }
+
+    /* Expand the month container which holds the days */
+    .wide-calendar .mud-picker-month-container {
+       width: 100% !important;
+       max-width: none !important;
+    }
+
+    /* Make the calendar header (Year/Month) flexible */
+    .wide-calendar .mud-picker-header {
+        width: 100% !important;
+        justify-content: space-between;
+    }
+
+    /* Distribute day cells */
+    .wide-calendar .mud-day-header {
+        justify-content: space-around !important;
+    }
+    
+    /* Ensure the calendar week rows spread out */
+    .wide-calendar .mud-picker-calendar-week {
+        justify-content: space-around !important;
+    }
+
+    /* Ensure transparency for the widget background */
+    .mud-picker-static {
+        background-color: transparent !important;
+    }
+</style>
