@@ -4,21 +4,23 @@ namespace Daily.Configuration
 {
     public static class ReadabilitySettings
     {
-        public static string GetCss(bool isDesktop)
+        public static string GetCss(bool isMobile)
         {
-            if (!isDesktop) return string.Empty;
+            var maxWidth = isMobile ? "100%" : "68ch";
+            var padding = isMobile ? "1rem 0.5rem" : "2rem 1rem";
+            var fontSize = isMobile ? "1.1rem" : "1.25rem";
 
-            return @"
+            return $@"
                 /* Optimal Reading Standards */
-                .reader-content {
-                    max-width: 68ch;         /* 1. Optimal Line Length: ~65-75 characters */
+                .reader-content {{
+                    max-width: {maxWidth};         /* 1. Optimal Line Length: ~65-75 characters (or full width on mobile) */
                     margin: 0 auto;          /* Centering */
-                    font-size: 1.25rem;      /* Larger font for comfort (~20px) */
-                    line-height: 1.75;       /* Generous Leading */
-                    padding: 2rem 1rem;      /* Sufficient Breathing Room */
+                    font-size: {fontSize};      /* Larger font for comfort (~20px) */
+                    line-height: 1.6;       /* Generous Leading */
+                    padding: {padding};      /* Sufficient Breathing Room */
                     font-family: 'Segoe UI', SYSTEM-UI, sans-serif; /* Clean Sans-Serif */
                     /* background-color: transparent; Removed global transparency to allow theme overrides */
-                }
+                }}
                 
                 .reader-content img {
                     border-radius: 8px;

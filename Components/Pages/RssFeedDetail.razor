@@ -74,11 +74,11 @@
             {
                 <!-- Inject Shared Readability CSS (Universal) -->
                 <style>
-                    @((MarkupString)Configuration.ReadabilitySettings.GetCss(true))
+                    @((MarkupString)Configuration.ReadabilitySettings.GetCss(_isMobile))
                 </style>
 
                 <MudSwipeArea OnSwipe="@OnSwipe" Style="flex-grow: 1; overflow: hidden; display: flex; flex-direction: column;">
-                    <MudPaper Class="pa-6 reader-paper rounded-xl mb-4" Elevation="3" Style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
+                    <MudPaper Class="@(_isMobile ? "pa-3 reader-paper rounded-xl mb-4" : "pa-6 reader-paper rounded-xl mb-4")" Elevation="3" Style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
                     <div class="reader-content" data-theme="@(_isDarkMode ? "dark" : "light")">
                         <MudText Typo="Typo.h4" GutterBottom="true" Style="font-weight: 800;">@_selectedItem.Title</MudText>
                         
