@@ -18,6 +18,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <Nullable>enable</Nullable>
+        <NoWarn>$(NoWarn);NU1510</NoWarn>
 
         <!-- Display name -->
         <ApplicationTitle>Daily</ApplicationTitle>
@@ -76,6 +77,7 @@
         <PackageReference Include="SmartReader" Version="0.10.2" />
         <PackageReference Include="Supabase" Version="1.1.1" />
         <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.0" />
+        <PackageReference Include="System.Text.Json" Version="10.0.0" />
     </ItemGroup>
 
     <ItemGroup>

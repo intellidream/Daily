@@ -73,9 +73,23 @@ namespace Daily.WinUI
                 if (protocolArgs != null)
                 {
                     var uri = protocolArgs.Uri.ToString();
-                    if (Daily.Services.AuthService.WindowsAuthTcs != null && !Daily.Services.AuthService.WindowsAuthTcs.Task.IsCompleted)
+                    
+                    // Parse Code from URI (similar to Android logic)
+                    var code = "";
+                    if (protocolArgs.Uri.Query.Contains("code="))
                     {
-                        Daily.Services.AuthService.WindowsAuthTcs.TrySetResult(uri);
+                        var query = System.Web.HttpUtility.ParseQueryString(protocolArgs.Uri.Query);
+                        code = query.Get("code");
+                    }
+                    else if (protocolArgs.Uri.Fragment.Contains("code="))
+                    {
+                         var query = System.Web.HttpUtility.ParseQueryString(protocolArgs.Uri.Fragment.TrimStart('#'));
+                         code = query.Get("code");
+                    }
+
+                    if (!string.IsNullOrEmpty(code) && Daily.Services.AuthService.GoogleAuthTcs != null && !Daily.Services.AuthService.GoogleAuthTcs.Task.IsCompleted)
+                    {
+                        Daily.Services.AuthService.GoogleAuthTcs.TrySetResult(code);
                     }
                     
                     // Bring window to front

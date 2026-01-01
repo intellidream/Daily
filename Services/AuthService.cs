@@ -11,8 +11,7 @@ namespace Daily.Services
         private readonly ISettingsService _settingsService;
         private readonly IRefreshService _refreshService;
 
-        // Static TCS to handle the callback from App.xaml.cs on Windows
-        public static TaskCompletionSource<string>? WindowsAuthTcs;
+
 
         public AuthService(Supabase.Client supabase, ISettingsService settingsService, IRefreshService refreshService)
         {
@@ -35,57 +34,38 @@ namespace Daily.Services
 
                 Console.WriteLine($"[AuthService] Generated Auth URI: {state.Uri}");
 
-
-                if (string.IsNullOrEmpty(state.Uri?.ToString()))
-                    return false;
-
-                // 2. Open the browser (WebAuthenticator)
+                // 2. Open the browser (Manual Flow for ALL Platforms)
                 string? code = null;
+                GoogleAuthTcs = new TaskCompletionSource<string>();
 
-#if WINDOWS
-                // Manual Protocol Activation for Windows (overcoming WebAuthenticator issues)
-                WindowsAuthTcs = new TaskCompletionSource<string>();
-                
-                // Launch System Browser
-                await Launcher.OpenAsync(state.Uri);
-
-                // Wait for the callback (handled in App.xaml.cs)
-                // Timeout after 2 minutes to prevent hanging
-                var completedTask = await Task.WhenAny(WindowsAuthTcs.Task, Task.Delay(TimeSpan.FromMinutes(2)));
-                
-                if (completedTask == WindowsAuthTcs.Task)
-                {
-                    var callbackUrl = await WindowsAuthTcs.Task;
-                    code = string.IsNullOrEmpty(callbackUrl) ? null : System.Web.HttpUtility.ParseQueryString(new Uri(callbackUrl).Query).Get("code");
-                }
-                else
-                {
-                    Console.WriteLine("[AuthService] Windows Auth Timed Out");
-                    WindowsAuthTcs.TrySetCanceled(); 
-                }
-                
-                WindowsAuthTcs = null; // Cleanup
-#else
-                WebAuthenticatorResult? authResult = null;
                 try 
                 {
-                    Console.WriteLine($"[AuthService] Attempting to open browser with URI: {state.Uri}");
-                    authResult = await WebAuthenticator.Default.AuthenticateAsync(
-                        state.Uri,
-                        new Uri("com.intellidream.daily://login-callback"));
-                    Console.WriteLine("[AuthService] Browser authentication completed successfully.");
+                    // Use Launcher instead of WebAuthenticator to bypass Intent checks
+                    await Launcher.OpenAsync(state.Uri);
+                    
+                    // Wait for the callback (handled in WebAuthenticationCallbackActivity or Windows App.xaml.cs)
+                    var completedTask = await Task.WhenAny(GoogleAuthTcs.Task, Task.Delay(TimeSpan.FromMinutes(2)));
+
+                    if (completedTask == GoogleAuthTcs.Task)
+                    {
+                        code = await GoogleAuthTcs.Task;
+                    }
+                    else
+                    {
+                        GoogleAuthTcs.TrySetCanceled();
+                        await CommunityToolkit.Maui.Alerts.Toast.Make("Login Timed Out").Show();
+                    }
                 }
-                catch (Exception androidEx)
+                catch (Exception ex)
                 {
-                    Console.WriteLine($"[AuthService] ANDROID OPEN BROWSER FAILED: {androidEx}");
-                    Console.WriteLine($"[AuthService] Stack Trace: {androidEx.StackTrace}");
-                    throw; // Re-throw to be caught by outer catch
+                    Console.WriteLine($"[AuthService] LAUNCHER FAILED: {ex}");
+                    await CommunityToolkit.Maui.Alerts.Toast.Make($"Launcher Error: {ex.Message}").Show();
+                    throw;
                 }
-                
-                // 3. Extract the Access Token & Refresh Token from the callback URL
-                
-                code = authResult?.Properties.TryGetValue("code", out var c) == true ? c : null;
-#endif
+                finally
+                {
+                    GoogleAuthTcs = null; // Cleanup
+                }
                 
                 if (!string.IsNullOrEmpty(code))
                 {
@@ -94,31 +74,40 @@ namespace Daily.Services
                 }
                 else
                 {
-                    // Fallback or error handling
-                    Console.WriteLine("AuthService: No code received in callback.");
+                    await CommunityToolkit.Maui.Alerts.Toast.Make("Auth Failed: No code received").Show();
                 }
 
                 // 4. Update Settings Service (Triggers UI update)
                 await _settingsService.InitializeAsync();
+                
+                // Allow UI to settle
+                await Task.Delay(500);
 
-                // 5. Trigger Global Refresh (Media Widget, etc.)
+                // 5. Trigger Global Refresh nicely
                 await _refreshService.TriggerRefreshAsync();
+                await Task.Delay(500); 
                 await _refreshService.TriggerDetailRefreshAsync();
                 
+                await CommunityToolkit.Maui.Alerts.Toast.Make("Login Successful!").Show();
                 return _supabase.Auth.CurrentSession != null;
 
             }
             catch (TaskCanceledException)
             {
                 // User closed the window
+                await CommunityToolkit.Maui.Alerts.Toast.Make("Login Canceled").Show();
                 return false;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Login Failed: {ex.Message}");
+                await CommunityToolkit.Maui.Alerts.Toast.Make($"Login Exception: {ex.Message}").Show();
                 return false;
             }
         }
+
+        // Static TCS for manual callback handling
+        public static TaskCompletionSource<string>? GoogleAuthTcs;
 
         public string? GetProviderToken()
         {
