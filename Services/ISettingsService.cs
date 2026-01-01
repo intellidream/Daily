@@ -7,6 +7,7 @@ namespace Daily.Services
         UserPreferences Settings { get; }
         bool IsAuthenticated { get; }
         string? CurrentUserEmail { get; }
+        string? CurrentUserAvatarUrl { get; }
 
         event Action OnSettingsChanged;
 

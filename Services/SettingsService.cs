@@ -11,6 +11,19 @@ namespace Daily.Services
         public UserPreferences Settings => _currentSettings;
         public bool IsAuthenticated => _supabase.Auth.CurrentSession != null;
         public string? CurrentUserEmail => _supabase.Auth.CurrentSession?.User?.Email;
+        public string? CurrentUserAvatarUrl 
+        {
+            get
+            {
+                var metadata = _supabase.Auth.CurrentSession?.User?.UserMetadata;
+                if (metadata != null)
+                {
+                    if (metadata.TryGetValue("avatar_url", out var avatar) && avatar != null) return avatar.ToString();
+                    if (metadata.TryGetValue("picture", out var picture) && picture != null) return picture.ToString();
+                }
+                return null;
+            }
+        }
 
         public event Action OnSettingsChanged;
 
