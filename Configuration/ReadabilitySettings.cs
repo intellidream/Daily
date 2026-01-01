@@ -22,69 +22,69 @@ namespace Daily.Configuration
                     /* background-color: transparent; Removed global transparency to allow theme overrides */
                 }}
                 
-                .reader-content img {
+                .reader-content img {{
                     border-radius: 8px;
                     margin: 2rem auto;
                     display: block;
                     max-width: 100%;
                     height: auto;            /* Prevent vertical distortion */
                     object-fit: contain;     /* fallback */
-                }
+                }}
 
                 /* Prevent overflows for embedded content */
                 .reader-content iframe, 
                 .reader-content video, 
                 .reader-content embed, 
-                .reader-content object {
+                .reader-content object {{
                     max-width: 100%;
                     margin: 2rem auto;
                     display: block;
                     border-radius: 8px;
-                }
+                }}
 
-                .reader-content h1 { font-size: 2.5rem; line-height: 1.2; margin-bottom: 1.5rem; }
-                .reader-content h2 { font-size: 2rem; margin-top: 3rem; margin-bottom: 1rem; }
-                .reader-content h3 { font-size: 1.75rem; margin-top: 2rem; margin-bottom: 1rem; }
-                .reader-content p { margin-bottom: 1.5rem; }
+                .reader-content h1 {{ font-size: 2.5rem; line-height: 1.2; margin-bottom: 1.5rem; }}
+                .reader-content h2 {{ font-size: 2rem; margin-top: 3rem; margin-bottom: 1rem; }}
+                .reader-content h3 {{ font-size: 1.75rem; margin-top: 2rem; margin-bottom: 1rem; }}
+                .reader-content p {{ margin-bottom: 1.5rem; }}
                 
                 /* Dark Mode (High Contrast Text) */
-                @media (prefers-color-scheme: dark) {
-                    .reader-content { color: #E0E0E0; background-color: transparent; }
-                    .reader-content a { color: #8ab4f8; }
-                }
+                @media (prefers-color-scheme: dark) {{
+                    .reader-content {{ color: #E0E0E0; background-color: transparent; }}
+                    .reader-content a {{ color: #8ab4f8; }}
+                }}
                 
                 body[data-theme='dark'] .reader-content,
-                .reader-content[data-theme='dark'] { 
+                .reader-content[data-theme='dark'] {{ 
                     color: #E0E0E0 !important; 
                     background-color: transparent !important; 
-                }
+                }}
                 
                 body[data-theme='dark'] .reader-content a,
-                .reader-content[data-theme='dark'] a { 
+                .reader-content[data-theme='dark'] a {{ 
                     color: #8ab4f8 !important; 
-                }
+                }}
 
                 /* Light Mode (Dark Text) */
-                @media (prefers-color-scheme: light) {
-                    .reader-content { color: #202124; background-color: transparent; }
-                    .reader-content a { color: #1a73e8; }
-                    body.reader-content { background-color: #FAF9F6; }
-                }
+                @media (prefers-color-scheme: light) {{
+                    .reader-content {{ color: #202124; background-color: transparent; }}
+                    .reader-content a {{ color: #1a73e8; }}
+                    body.reader-content {{ background-color: #FAF9F6; }}
+                }}
 
                 body[data-theme='light'] .reader-content, 
-                .reader-content[data-theme='light'] { 
+                .reader-content[data-theme='light'] {{ 
                     color: #202124 !important; 
                     background-color: transparent !important; 
-                }
+                }}
                 
                 body[data-theme='light'] .reader-content a,
-                .reader-content[data-theme='light'] a { 
+                .reader-content[data-theme='light'] a {{ 
                     color: #1a73e8 !important; 
-                }
+                }}
                 
-                body.reader-content[data-theme='light'] {
+                body.reader-content[data-theme='light'] {{
                     background-color: #FAF9F6 !important;
-                }
+                }}
             ";
         }
     }
