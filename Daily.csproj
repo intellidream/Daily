@@ -44,26 +44,26 @@
 
     <ItemGroup>
         <!-- App Icon -->
-        <MauiIcon Condition="$(TargetFramework.Contains('ios'))" Include="Resources\AppIcon\appicon_ios.svg" Color="#512BD4" />
+        <MauiIcon Condition="$(TargetFramework.Contains('ios'))" Include="Resources/AppIcon/appicon_ios.svg" Color="#512BD4" />
         <MauiIcon Condition="$(TargetFramework.Contains('android'))" Include="Resources/AppIcon/appicon_android.svg" ForegroundFile="Resources/AppIcon/appicon_android_foreground.svg" ForegroundScale="0.65" />
         <MauiIcon Condition="$(TargetFramework.Contains('windows'))" Include="Resources/AppIcon/appicon_windows.svg" />
         <MauiIcon Condition="$(TargetFramework.Contains('maccatalyst'))" Include="Resources/AppIcon/appicon_mac.svg" Color="#512BD4" />
         
         <!-- Fallback/Shared (Only if no specific platform target is active in IDE or for general browsing) -->
-        <!-- <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" /> -->
+        <!-- <MauiIcon Include="Resources/AppIcon/appicon.svg" ForegroundFile="Resources/AppIcon/appiconfg.svg" Color="#512BD4" /> -->
 
         <!-- Splash Screen -->
-        <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+        <MauiSplashScreen Include="Resources/Splash/splash.svg" Color="#512BD4" BaseSize="128,128" />
 
         <!-- Images -->
-        <MauiImage Include="Resources\Images\*" />
-        <MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
+        <MauiImage Include="Resources/Images/*" />
+        <MauiImage Update="Resources/Images/dotnet_bot.svg" BaseSize="168,208" />
 
         <!-- Custom Fonts -->
-        <MauiFont Include="Resources\Fonts\*" />
+        <MauiFont Include="Resources/Fonts/*" />
 
         <!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
-        <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+        <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
     <ItemGroup>
