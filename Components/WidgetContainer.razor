@@ -6,7 +6,7 @@
 <div class="masonry-grid">
     @foreach (var widget in _widgets)
     {
-        <div class="masonry-item">
+        <div class="masonry-item @(widget.ComponentType == "CalendarWidget" ? "span-all" : "")">
             <MudPaper Class="pa-4 detail-tile rounded-xl" Elevation="3" Square="false" Style="">
                 @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget" && widget.ComponentType != "HabitsWidget" && widget.ComponentType != "MediaWidget")
                 {

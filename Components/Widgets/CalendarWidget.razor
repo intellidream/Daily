@@ -1,103 +1,201 @@
 @using MudBlazor
+@using System.Globalization
 
-<MudStack Row="true" Spacing="6" Style="flex-wrap: wrap;" AlignItems="AlignItems.Start" Justify="Justify.Center">
-    <!-- Calendar Section - Landscape Mode -->
-    <div class="d-flex justify-center flex-grow-1" style="min-width: 300px;">
-        <MudDatePicker PickerVariant="PickerVariant.Static" Orientation="Orientation.Landscape" Elevation="0" Date="@(DateTime.Today)" Class="wide-calendar" />
-    </div>
-
-    <!-- Agenda Section (Expands to fill space or wraps below) -->
-    <div class="flex-grow-1" style="min-width: 280px; max-width: 100%;">
-        <div class="d-flex align-center gap-2 mb-4 px-2">
-            <MudIcon Icon="@Icons.Material.Filled.EventNote" Color="Color.Primary" />
-            <MudText Typo="Typo.h6" Style="font-weight: 700;">Today's Agenda</MudText>
+<MudStack Row="true" Spacing="6" Style="flex-wrap: wrap;" AlignItems="AlignItems.Stretch" Justify="Justify.FlexStart" Class="fill-height">
+    <!-- Custom Responsive Calendar Section -->
+    <div class="flex-grow-1 d-flex flex-column" style="min-width: 300px;">
+        <!-- Calendar Header -->
+        <div class="d-flex align-center justify-space-between mb-4 px-2">
+            <MudText Typo="Typo.h5" Class="font-weight-bold">@_currentMonthName @_currentYear</MudText>
+            <div class="d-flex gap-2">
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" OnClick="PreviousMonth" Size="Size.Small" />
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" OnClick="NextMonth" Size="Size.Small" />
+            </div>
         </div>
 
-        <MudPaper Elevation="0" Class="pa-0 transparent-bg">
-            <MudList T="string" Dense="true" DisablePadding="true">
-                <MudListItem Icon="@Icons.Material.Filled.Videocam" IconColor="Color.Info" Class="rounded-lg mb-1 agenda-item">
-                    <div class="d-flex flex-column">
-                        <MudText Typo="Typo.subtitle2"><b>10:00 AM</b> - Daily Standup</MudText>
-                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">Sync with team</MudText>
-                    </div>
-                </MudListItem>
-                <MudListItem Icon="@Icons.Material.Filled.Code" IconColor="Color.Success" Class="rounded-lg mb-1 agenda-item">
-                    <div class="d-flex flex-column">
-                        <MudText Typo="Typo.subtitle2"><b>11:30 AM</b> - Code Review</MudText>
-                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">PR #402 - Auth Flow</MudText>
-                    </div>
-                </MudListItem>
-                <MudListItem Icon="@Icons.Material.Filled.Restaurant" IconColor="Color.Warning" Class="rounded-lg mb-1 agenda-item">
-                    <div class="d-flex flex-column">
-                        <MudText Typo="Typo.subtitle2"><b>01:00 PM</b> - Lunch Break</MudText>
-                    </div>
-                </MudListItem>
-                 <MudListItem Icon="@Icons.Material.Filled.Work" IconColor="Color.Primary" Class="rounded-lg agenda-item">
-                    <div class="d-flex flex-column">
-                        <MudText Typo="Typo.subtitle2"><b>02:00 PM</b> - Deep Work</MudText>
-                         <MudText Typo="Typo.caption" Style="opacity: 0.7;">Feature Implementation</MudText>
-                    </div>
-                </MudListItem>
-            </MudList>
+        <!-- Calendar Grid -->
+        <div class="calendar-grid flex-grow-1">
+            <!-- Day Headers -->
+            @foreach (var dayName in _dayNames)
+            {
+                <div class="day-header">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary font-weight-bold">@dayName</MudText>
+                </div>
+            }
+
+            <!-- Empty Cells for Start Offset -->
+            @for (int i = 0; i < _offsetDays; i++)
+            {
+                <div class="calendar-cell empty"></div>
+            }
+
+            <!-- Day Cells -->
+            @for (int day = 1; day <= _daysInMonth; day++)
+            {
+                var dayNumber = day;
+                var currentDay = new DateTime(_currentYear, _currentMonth, dayNumber);
+                var isToday = currentDay.Date == DateTime.Today;
+                
+                <div class="calendar-cell @(isToday ? "today" : "")">
+                    <MudText Typo="Typo.body1" Class="@(isToday ? "font-weight-bold" : "")">@dayNumber</MudText>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Timeline Section (Fixed Width Sidebar) -->
+    <div class="d-flex flex-column gap-2" style="width: 280px; min-width: 260px;">
+        <MudPaper Elevation="0" Class="pa-0 transparent-bg flex-grow-1 d-flex flex-column">
+             <div class="d-flex align-center gap-2 mb-2 px-2 pt-2">
+                <MudIcon Icon="@Icons.Material.Filled.Timeline" Color="Color.Primary" />
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Day Timeline</MudText>
+            </div>
+            
+            <MudTimeline TimelinePosition="TimelinePosition.Start" Class="px-2">
+                <MudTimelineItem Color="Color.Info" Size="Size.Small">
+                    <ItemContent>
+                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">10:00 AM</MudText>
+                        <MudText Typo="Typo.body2" Class="font-weight-bold">Daily Standup</MudText>
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Success" Size="Size.Small">
+                    <ItemContent>
+                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">11:30 AM</MudText>
+                        <MudText Typo="Typo.body2" Class="font-weight-bold">Code Review</MudText>
+                        <MudText Typo="Typo.caption">PR #402 - Auth Flow</MudText>
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Warning" Size="Size.Small">
+                    <ItemContent>
+                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">01:00 PM</MudText>
+                        <MudText Typo="Typo.body2" Class="font-weight-bold">Lunch Break</MudText>
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Primary" Size="Size.Small">
+                    <ItemContent>
+                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">02:00 PM</MudText>
+                        <MudText Typo="Typo.body2" Class="font-weight-bold">Deep Work</MudText>
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="Color.Error" Size="Size.Small" Elevation="25"> 
+                     <ItemContent>
+                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">05:00 PM</MudText>
+                        <MudText Typo="Typo.body2" Class="font-weight-bold">Wrap Up</MudText>
+                    </ItemContent>
+                </MudTimelineItem>
+            </MudTimeline>
         </MudPaper>
     </div>
 </MudStack>
 
+@code {
+    private int _currentMonth = DateTime.Today.Month;
+    private int _currentYear = DateTime.Today.Year;
+    private int _daysInMonth;
+    private int _offsetDays;
+    private string _currentMonthName = "";
+    private List<string> _dayNames = new();
+
+    protected override void OnInitialized()
+    {
+        // Get short day names (Mon, Tue...) starting from Monday or Sunday depending on culture? 
+        // Let's standardise on Monday start for business apps or use current culture.
+        // We'll use CultureInfo.CurrentCulture
+        var culture = CultureInfo.CurrentCulture;
+        _dayNames = culture.DateTimeFormat.AbbreviatedDayNames.ToList();
+        
+        // Rotate if needed to start on Monday? Let's stick to Sunday start (standard US) or modify if user wants.
+        // Standard AbbreviatedDayNames starts at Sunday.
+        
+        CalculateCalendar();
+    }
+
+    private void CalculateCalendar()
+    {
+        _daysInMonth = DateTime.DaysInMonth(_currentYear, _currentMonth);
+        _currentMonthName = CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(_currentMonth);
+        
+        var firstDay = new DateTime(_currentYear, _currentMonth, 1);
+        _offsetDays = (int)firstDay.DayOfWeek; // 0 for Sunday
+    }
+
+    private void PreviousMonth()
+    {
+        var d = new DateTime(_currentYear, _currentMonth, 1).AddMonths(-1);
+        _currentMonth = d.Month;
+        _currentYear = d.Year;
+        CalculateCalendar();
+    }
+
+    private void NextMonth()
+    {
+        var d = new DateTime(_currentYear, _currentMonth, 1).AddMonths(1);
+        _currentMonth = d.Month;
+        _currentYear = d.Year;
+        CalculateCalendar();
+    }
+}
+
 <style>
+    .fill-height {
+        height: 100%;
+    }
+
     .transparent-bg { background-color: transparent !important; }
-    
-    .agenda-item {
-        transition: background-color 0.2s;
+
+    /* Custom Grid Calendar */
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr); /* 7 equal columns that GROW */
+        grid-auto-rows: 1fr; /* Rows grow equally */
+        gap: 8px;
+        width: 100%;
+        height: 100%;
+        min-height: 300px; /* Base height */
+    }
+
+    .day-header {
+        text-align: center;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        margin-bottom: 4px;
     }
     
-    .agenda-item:hover {
+    [data-theme='light'] .day-header {
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+    }
+
+    .calendar-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        aspect-ratio: 1/1; /* Keep them square-ish or remove for rectangular filling */
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+    }
+
+    .calendar-cell:hover:not(.empty) {
+        background-color: rgba(255,255,255,0.1);
+    }
+    
+    [data-theme='light'] .calendar-cell:hover:not(.empty) {
         background-color: rgba(0,0,0,0.05);
     }
-    
-    [data-theme='dark'] .agenda-item:hover {
-        background-color: rgba(255,255,255,0.05);
-    }
-    
-    /* WIDE CALENDAR OVERRIDES */
-    .wide-calendar {
-        width: 100%;
-        max-width: none !important;
-        display: block;
-    }
 
-    /* Force the internal picker container to fill width */
-    .wide-calendar .mud-picker-static,
-    .wide-calendar .mud-picker-container,
-    .wide-calendar .mud-picker-content {
-        width: 100% !important;
-        max-width: none !important;
-        min-width: 0 !important;
-    }
-
-    /* Expand the month container which holds the days */
-    .wide-calendar .mud-picker-month-container {
-       width: 100% !important;
-       max-width: none !important;
-    }
-
-    /* Make the calendar header (Year/Month) flexible */
-    .wide-calendar .mud-picker-header {
-        width: 100% !important;
-        justify-content: space-between;
-    }
-
-    /* Distribute day cells */
-    .wide-calendar .mud-day-header {
-        justify-content: space-around !important;
+    .calendar-cell.today {
+        background-color: var(--mud-palette-primary);
+        color: white;
+        box-shadow: 0 4px 12px rgba(var(--mud-palette-primary-rgb), 0.4);
     }
     
-    /* Ensure the calendar week rows spread out */
-    .wide-calendar .mud-picker-calendar-week {
-        justify-content: space-around !important;
+    .calendar-cell.today:hover {
+        background-color: var(--mud-palette-primary-darken);
     }
-
-    /* Ensure transparency for the widget background */
-    .mud-picker-static {
-        background-color: transparent !important;
+    
+    .calendar-cell.empty {
+        cursor: default;
+        pointer-events: none;
     }
 </style>

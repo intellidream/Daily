@@ -26,3 +26,8 @@
         margin-bottom: 16px;
     }
 }
+
+/* Span All Columns helper */
+.span-all {
+    column-span: all;
+}
