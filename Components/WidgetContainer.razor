@@ -6,7 +6,7 @@
 <div class="masonry-grid">
     @foreach (var widget in _widgets)
     {
-        <div class="masonry-item @(widget.ComponentType == "CalendarWidget" ? "span-all" : "")">
+        <div class="masonry-item @(IsFullWidth(widget) ? "span-all" : "")">
             <MudPaper Class="pa-4 detail-tile rounded-xl" Elevation="3" Square="false" Style="">
                 @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget" && widget.ComponentType != "HabitsWidget" && widget.ComponentType != "MediaWidget")
                 {
@@ -26,7 +26,7 @@
                 }
                 else if (widget.ComponentType == "CalendarWidget")
                 {
-                    <Daily.Components.Widgets.CalendarWidget />
+                    <Daily.Components.Widgets.CalendarWidget OnTimelineToggled="@((show) => OnWidgetToggle(widget.Id, show))" />
                 }
                 else if (widget.ComponentType == "SystemInfoWidget")
                 {
@@ -71,10 +71,30 @@
 
 @code {
     private List<WidgetModel> _widgets = new();
+    private Dictionary<Guid, bool> _fullWidthStates = new();
 
     protected override async Task OnInitializedAsync()
     {
         _widgets = await WidgetService.GetWidgetsAsync();
+        foreach (var w in _widgets)
+        {
+            // Default Calendar to Full Width
+            if (w.ComponentType == "CalendarWidget")
+            {
+                _fullWidthStates[w.Id] = true;
+            }
+        }
+    }
+
+    private bool IsFullWidth(WidgetModel widget)
+    {
+        return _fullWidthStates.ContainsKey(widget.Id) && _fullWidthStates[widget.Id];
+    }
+    
+    private void OnWidgetToggle(Guid widgetId, bool showFullWidth)
+    {
+        _fullWidthStates[widgetId] = showFullWidth;
+        StateHasChanged();
     }
 
     private void UpdateWidgetTitle(WidgetModel widget, string newTitle)

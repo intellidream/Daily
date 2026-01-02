@@ -6,108 +6,130 @@
     <div class="flex-grow-1 d-flex flex-column" style="min-width: 300px;">
         <!-- Calendar Header -->
         <div class="d-flex align-center justify-space-between mb-4 px-2">
-            <MudText Typo="Typo.h5" Class="font-weight-bold">@_currentMonthName @_currentYear</MudText>
+            <div class="d-flex align-center gap-2">
+                <MudText Typo="Typo.h5" Class="font-weight-bold">@_currentMonthName @_currentYear</MudText>
+            </div>
             <div class="d-flex gap-2">
+                 <MudTooltip Text="@(_showTimeline ? "Hide Timeline" : "Show Timeline")">
+                    <MudIconButton Icon="@(_showTimeline ? Icons.Material.Filled.ViewSidebar : Icons.Material.Outlined.ViewSidebar)" 
+                                  OnClick="ToggleTimeline" 
+                                  Color="@(_showTimeline ? Color.Primary : Color.Default)"
+                                  Size="Size.Small" />
+                </MudTooltip>
                 <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" OnClick="PreviousMonth" Size="Size.Small" />
                 <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" OnClick="NextMonth" Size="Size.Small" />
             </div>
         </div>
 
         <!-- Calendar Grid -->
-        <div class="calendar-grid flex-grow-1">
-            <!-- Day Headers -->
-            @foreach (var dayName in _dayNames)
-            {
-                <div class="day-header">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary font-weight-bold">@dayName</MudText>
-                </div>
-            }
+        <MudSwipeArea OnSwipe="OnSwipe" Class="flex-grow-1" Style="width: 100%; height: 100%;">
+            <div class="calendar-grid flex-grow-1">
+                <!-- Day Headers -->
+                @foreach (var dayName in _dayNames)
+                {
+                    <div class="day-header">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary font-weight-bold">@dayName</MudText>
+                    </div>
+                }
 
-            <!-- Empty Cells for Start Offset -->
-            @for (int i = 0; i < _offsetDays; i++)
-            {
-                <div class="calendar-cell empty"></div>
-            }
+                <!-- Empty Cells for Start Offset -->
+                @for (int i = 0; i < _offsetDays; i++)
+                {
+                    <div class="calendar-cell empty"></div>
+                }
 
-            <!-- Day Cells -->
-            @for (int day = 1; day <= _daysInMonth; day++)
-            {
-                var dayNumber = day;
-                var currentDay = new DateTime(_currentYear, _currentMonth, dayNumber);
-                var isToday = currentDay.Date == DateTime.Today;
-                
-                <div class="calendar-cell @(isToday ? "today" : "")">
-                    <MudText Typo="Typo.body1" Class="@(isToday ? "font-weight-bold" : "")">@dayNumber</MudText>
-                </div>
-            }
-        </div>
+                <!-- Day Cells -->
+                @for (int day = 1; day <= _daysInMonth; day++)
+                {
+                    var dayNumber = day;
+                    var currentDate = new DateTime(_currentYear, _currentMonth, dayNumber);
+                    var isSelected = currentDate.Date == _selectedDate.Date;
+                    var isToday = currentDate.Date == DateTime.Today;
+                    
+                    <div class="calendar-cell @(isSelected ? "selected" : (isToday ? "today-outline" : ""))" @onclick="() => SelectDate(dayNumber)">
+                        <MudText Typo="Typo.body1" Class="@(isSelected || isToday ? "font-weight-bold" : "")">@dayNumber</MudText>
+                    </div>
+                }
+            </div>
+        </MudSwipeArea>
     </div>
 
     <!-- Timeline Section (Fixed Width Sidebar) -->
-    <div class="d-flex flex-column gap-2" style="width: 280px; min-width: 260px;">
-        <MudPaper Elevation="0" Class="pa-0 transparent-bg flex-grow-1 d-flex flex-column">
-             <div class="d-flex align-center gap-2 mb-2 px-2 pt-2">
-                <MudIcon Icon="@Icons.Material.Filled.Timeline" Color="Color.Primary" />
-                <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Day Timeline</MudText>
-            </div>
-            
-            <MudTimeline TimelinePosition="TimelinePosition.Start" Class="px-2">
-                <MudTimelineItem Color="Color.Info" Size="Size.Small">
-                    <ItemContent>
-                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">10:00 AM</MudText>
-                        <MudText Typo="Typo.body2" Class="font-weight-bold">Daily Standup</MudText>
-                    </ItemContent>
-                </MudTimelineItem>
-                <MudTimelineItem Color="Color.Success" Size="Size.Small">
-                    <ItemContent>
-                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">11:30 AM</MudText>
-                        <MudText Typo="Typo.body2" Class="font-weight-bold">Code Review</MudText>
-                        <MudText Typo="Typo.caption">PR #402 - Auth Flow</MudText>
-                    </ItemContent>
-                </MudTimelineItem>
-                <MudTimelineItem Color="Color.Warning" Size="Size.Small">
-                    <ItemContent>
-                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">01:00 PM</MudText>
-                        <MudText Typo="Typo.body2" Class="font-weight-bold">Lunch Break</MudText>
-                    </ItemContent>
-                </MudTimelineItem>
-                <MudTimelineItem Color="Color.Primary" Size="Size.Small">
-                    <ItemContent>
-                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">02:00 PM</MudText>
-                        <MudText Typo="Typo.body2" Class="font-weight-bold">Deep Work</MudText>
-                    </ItemContent>
-                </MudTimelineItem>
-                <MudTimelineItem Color="Color.Error" Size="Size.Small" Elevation="25"> 
-                     <ItemContent>
-                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">05:00 PM</MudText>
-                        <MudText Typo="Typo.body2" Class="font-weight-bold">Wrap Up</MudText>
-                    </ItemContent>
-                </MudTimelineItem>
-            </MudTimeline>
-        </MudPaper>
-    </div>
+    @if (_showTimeline)
+    {
+        <div class="d-flex flex-column gap-2" style="width: 280px; min-width: 260px;">
+            <MudPaper Elevation="0" Class="pa-0 transparent-bg flex-grow-1 d-flex flex-column">
+                 <div class="d-flex align-center gap-2 mb-2 px-2 pt-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Timeline" Color="Color.Primary" />
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">@GetDayTimelineTitle()</MudText>
+                </div>
+                
+                <MudTimeline TimelinePosition="TimelinePosition.Start" Class="px-2">
+                    <MudTimelineItem Color="Color.Info" Size="Size.Small">
+                        <ItemContent>
+                            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">10:00 AM</MudText>
+                            <MudText Typo="Typo.body2" Class="font-weight-bold">Daily Standup</MudText>
+                        </ItemContent>
+                    </MudTimelineItem>
+                    <MudTimelineItem Color="Color.Success" Size="Size.Small">
+                        <ItemContent>
+                            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">11:30 AM</MudText>
+                            <MudText Typo="Typo.body2" Class="font-weight-bold">Code Review</MudText>
+                            <MudText Typo="Typo.caption">PR #402 - Auth Flow</MudText>
+                        </ItemContent>
+                    </MudTimelineItem>
+                    <MudTimelineItem Color="Color.Warning" Size="Size.Small">
+                        <ItemContent>
+                            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">01:00 PM</MudText>
+                            <MudText Typo="Typo.body2" Class="font-weight-bold">Lunch Break</MudText>
+                        </ItemContent>
+                    </MudTimelineItem>
+                    <MudTimelineItem Color="Color.Primary" Size="Size.Small">
+                        <ItemContent>
+                            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">02:00 PM</MudText>
+                            <MudText Typo="Typo.body2" Class="font-weight-bold">Deep Work</MudText>
+                        </ItemContent>
+                    </MudTimelineItem>
+                    <MudTimelineItem Color="Color.Error" Size="Size.Small" Elevation="25"> 
+                         <ItemContent>
+                            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-n1">05:00 PM</MudText>
+                            <MudText Typo="Typo.body2" Class="font-weight-bold">Wrap Up</MudText>
+                        </ItemContent>
+                    </MudTimelineItem>
+                </MudTimeline>
+            </MudPaper>
+        </div>
+    }
 </MudStack>
 
 @code {
+    [Parameter] public EventCallback<bool> OnTimelineToggled { get; set; }
+
     private int _currentMonth = DateTime.Today.Month;
     private int _currentYear = DateTime.Today.Year;
     private int _daysInMonth;
     private int _offsetDays;
     private string _currentMonthName = "";
     private List<string> _dayNames = new();
+    
+    // Selection State
+    private DateTime _selectedDate = DateTime.Today;
+    private bool _showTimeline = true;
 
     protected override void OnInitialized()
     {
-        // Get short day names (Mon, Tue...) starting from Monday or Sunday depending on culture? 
-        // Let's standardise on Monday start for business apps or use current culture.
-        // We'll use CultureInfo.CurrentCulture
         var culture = CultureInfo.CurrentCulture;
         _dayNames = culture.DateTimeFormat.AbbreviatedDayNames.ToList();
-        
-        // Rotate if needed to start on Monday? Let's stick to Sunday start (standard US) or modify if user wants.
-        // Standard AbbreviatedDayNames starts at Sunday.
-        
         CalculateCalendar();
+    }
+
+    private async Task ToggleTimeline()
+    {
+        _showTimeline = !_showTimeline;
+        if (OnTimelineToggled.HasDelegate)
+        {
+            await OnTimelineToggled.InvokeAsync(_showTimeline);
+        }
     }
 
     private void CalculateCalendar()
@@ -116,7 +138,7 @@
         _currentMonthName = CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(_currentMonth);
         
         var firstDay = new DateTime(_currentYear, _currentMonth, 1);
-        _offsetDays = (int)firstDay.DayOfWeek; // 0 for Sunday
+        _offsetDays = (int)firstDay.DayOfWeek; 
     }
 
     private void PreviousMonth()
@@ -133,6 +155,31 @@
         _currentMonth = d.Month;
         _currentYear = d.Year;
         CalculateCalendar();
+    }
+
+    private void SelectDate(int day)
+    {
+        _selectedDate = new DateTime(_currentYear, _currentMonth, day);
+    }
+    
+    private void OnSwipe(SwipeDirection direction)
+    {
+        if (direction == SwipeDirection.RightToLeft)
+        {
+            NextMonth();
+        }
+        else if (direction == SwipeDirection.LeftToRight)
+        {
+            PreviousMonth();
+        }
+    }
+    
+    private string GetDayTimelineTitle()
+    {
+        if (_selectedDate.Date == DateTime.Today)
+            return "Today's Timeline";
+            
+        return $"{_selectedDate:MMM dd} Timeline";
     }
 }
 
@@ -186,14 +233,19 @@
         background-color: rgba(0,0,0,0.05);
     }
 
-    .calendar-cell.today {
+    .calendar-cell.selected {
         background-color: var(--mud-palette-primary);
         color: white;
         box-shadow: 0 4px 12px rgba(var(--mud-palette-primary-rgb), 0.4);
     }
     
-    .calendar-cell.today:hover {
+    .calendar-cell.selected:hover {
         background-color: var(--mud-palette-primary-darken);
+    }
+
+    .calendar-cell.today-outline {
+        border: 2px solid var(--mud-palette-primary);
+        font-weight: bold;
     }
     
     .calendar-cell.empty {
