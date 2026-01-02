@@ -64,7 +64,7 @@
     }
 </div>
 
-<div class="d-flex flex-row align-center flex-grow-1 gap-4 px-2 py-4" style="width: 100%; height: 100%; overflow: hidden;">
+<div class="d-flex flex-row align-center flex-grow-1 gap-2 px-0 py-2" style="width: 100%; height: 100%; overflow: hidden;">
     <!-- Left: SVG Chart Section -->
     @if (_currentSlide == 0)
     {
@@ -160,7 +160,7 @@
     }
     else if (_currentSlide == 1)
     {
-        <div class="d-flex align-center justify-space-between flex-grow-1 px-4 gap-3" style="width: 100%; height: 100%;">
+        <div class="d-flex align-center justify-space-between flex-grow-1 px-1 gap-1" style="width: 100%; height: 100%;">
              
              <!-- Circular Progress (Left) - Matching Bubbles SVG Style -->
              <div class="d-flex align-center justify-center position-relative mr-2" style="width: auto; height: 100%; aspect-ratio: 1/1; max-width: 130px; min-width: 40px; flex-shrink: 1;">
@@ -200,10 +200,10 @@
              <!-- Stats (Center) -->
              <div class="d-flex flex-column align-center justify-center flex-grow-1 mx-1" style="min-width: 0;">
                  <div class="d-flex flex-column align-center">
-                     <MudText Class="font-weight-bold" Color="Color.Error" Style="font-size: clamp(0.6rem, 2vw, 1.1rem); line-height: 1; white-space: nowrap;">
+                      <MudText Class="font-weight-bold" Align="Align.Center" Color="Color.Error" Style="font-size: clamp(0.6rem, 2vw, 1.1rem); line-height: 1; white-space: nowrap;">
                         @_smokesCurrentValue smoked
-                     </MudText>
-                     <MudText Typo="Typo.caption" Class="mt-0" Style="opacity: 0.6; text-transform: uppercase; font-size: 0.6rem;">TODAY</MudText>
+                      </MudText>
+                      <MudText Typo="Typo.caption" Align="Align.Center" Class="mt-0" Style="opacity: 0.6; text-transform: uppercase; font-size: 0.6rem;">TODAY</MudText>
                     
                     <!-- Projected Savings this Month -->
                     @{
@@ -211,11 +211,11 @@
                          var costPerCig = _smokesPackCost / Math.Max(1, _smokesPackSize);
                          var monthlySaved = (avoidedDaily * costPerCig) * 30; // Simple projection
                     }
-                    <div class="mt-2 d-flex flex-column align-center">
-                        <MudText Typo="Typo.subtitle2" Class="font-weight-bold" Color="Color.Success">
+                    <div class="mt-2 d-flex flex-column align-center" style="width: 100%;">
+                        <MudText Typo="Typo.subtitle2" Align="Align.Center" Class="font-weight-bold" Color="Color.Success">
                             @monthlySaved.ToString("F0") @_smokesCurrency saved
                         </MudText>
-                         <MudText Typo="Typo.caption" Class="mt-0" Style="opacity: 0.6; text-transform: uppercase; font-size: 0.65rem;">THIS MONTH</MudText>
+                         <MudText Typo="Typo.caption" Align="Align.Center" Class="mt-0" Style="opacity: 0.6; text-transform: uppercase; font-size: 0.65rem;">THIS MONTH</MudText>
                     </div>
                  </div>
              </div>
