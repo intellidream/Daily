@@ -269,7 +269,7 @@
                              <MudNumericField @bind-Value="_smokesPackCost" Label="Cost per Pack" Variant="Variant.Outlined" Min="0" Adornment="Adornment.Start" AdornmentText="@_smokesCurrency" OnBlur="UpdateSmokesSettings" />
                          </MudItem>
                          <MudItem xs="6">
-                             <MudSelect T="string" Value="_smokesCurrency" Label="Currency" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" ValueChanged="OnCurrencyChanged">
+                             <MudSelect T="string" Value="_smokesCurrency" Label="Currency" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" ValueChanged="OnCurrencyChanged" PopoverClass="glass-popover fixed-z-index">
                                  @foreach (var currency in _currencies)
                                  {
                                      <MudSelectItem Value="@currency" />
@@ -278,7 +278,7 @@
                          </MudItem>
                          <MudItem xs="12">
                              <MudDatePicker Label="Quit Start Date" Date="_smokesQuitDate" PickerVariant="PickerVariant.Dialog" 
-                                            Variant="Variant.Outlined" AdornmentColor="Color.Primary" Style="z-index: 2002;" DateChanged="OnDateChanged" />
+                                            Variant="Variant.Outlined" AdornmentColor="Color.Primary" Class="fixed-z-index" Style="z-index: 2002;" DateChanged="OnDateChanged" />
                          </MudItem>
                      </MudGrid>
                  </MudPaper>
@@ -378,6 +378,25 @@
      }
  </div>
  
+<style>
+    .glass-popover {
+        backdrop-filter: blur(20px);
+        background-color: rgba(30, 30, 40, 0.95) !important; /* Force dark opaque background */
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        z-index: 2005 !important;
+    }
+    
+    /* Ensure dialogs are above everything */
+    .mud-dialog-container {
+        z-index: 2010 !important;
+    }
+    
+    .fixed-z-index {
+        position: relative;
+        z-index: 2002;
+    }
+</style>
+
  @code {
      private string _viewType = "water";
      private bool _isLoading = false;
@@ -397,7 +416,21 @@
      private string _smokesCurrency = "USD";
      private DateTime? _smokesQuitDate;
      private List<HabitLog> _smokesLogs = new();
-     private string[] _currencies = new[] { "USD", "EUR", "RON", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "INR" };
+     private string[] _currencies = new[] 
+     { 
+         "USD", "EUR", "GBP", "JPY", "CNY", "INR", "CAD", "AUD", "CHF", "RON", 
+         "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AWG", "AZN", 
+         "BAM", "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD", "BTN", "BWP", "BYN", "BZD", 
+         "CDF", "CLP", "COP", "CRC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD", 
+         "EGP", "ERN", "ETB", "FJD", "FKP", "GEL", "GGP", "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", 
+         "HKD", "HNL", "HRK", "HTG", "HUF", "IDR", "ILS", "IMP", "IQD", "IRR", "ISK", 
+         "JEP", "JMD", "JOD", "KES", "KGS", "KHR", "KMF", "KPW", "KRW", "KWD", "KYD", "KZT", 
+         "LAK", "LBP", "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MYR", "MZN", 
+         "NAD", "NGN", "NIO", "NOK", "NPR", "NZD", "OMR", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "PYG", 
+         "QAR", "RSD", "RUB", "RWF", "SAR", "SBD", "SCR", "SDG", "SEK", "SGD", "SHP", "SLL", "SOS", "SPL", "SRD", "STN", "SVC", "SYP", "SZL", 
+         "THB", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TVD", "TWD", "TZS", 
+         "UAH", "UGX", "UYU", "UZS", "VES", "VND", "VUV", "WST", "XAF", "XCD", "XDR", "XOF", "XPF", "YER", "ZAR", "ZMW", "ZWL"
+     };
      
      // Dynamic Health Status
      private string _lungsHealthStatus = "Healing";

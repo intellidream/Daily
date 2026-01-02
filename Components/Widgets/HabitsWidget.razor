@@ -64,12 +64,12 @@
     }
 </div>
 
-<div class="d-flex flex-row align-center flex-grow-1 gap-4 px-2 py-4" style="width: 100%; height: 100%; overflow: hidden;">
+<div class="d-flex flex-row align-center flex-grow-1 gap-2 px-2 py-4" style="width: 100%; height: 100%; overflow: hidden;">
     <!-- Left: SVG Chart Section -->
     @if (_currentSlide == 0)
     {
-    <div class="d-flex align-center justify-center" style="position: relative; min-width: 130px; height: 130px;">
-        <div style="position: relative; width: 130px; height: 130px;">
+    <div class="d-flex align-center justify-center flex-shrink-0" style="position: relative; width: 30%; max-width: 130px; min-width: 80px; aspect-ratio: 1/1;">
+        <div style="position: relative; width: 100%; height: 100%;">
             <!-- Custom SVG Donut -->
             <svg width="130" height="130" viewBox="0 0 100 100" style="transform: rotate(-90deg);">
                 <!-- Track (Always Visible) -->
@@ -86,7 +86,7 @@
             
             <!-- Center Text -->
             <div class="d-flex flex-column align-center justify-center" style="position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none;">
-                 <MudText Typo="Typo.h6" Class="font-weight-bold" Color="Color.Inherit" Style="line-height: 1;">@Math.Round(_currentValue)</MudText>
+                 <MudText Class="font-weight-bold" Color="Color.Inherit" Style="line-height: 1; font-size: clamp(1rem, 4vw, 1.25rem);">@Math.Round(_currentValue)</MudText>
                  <MudText Typo="Typo.caption" Style="opacity: 0.7; font-size: 0.7rem;">@_unit</MudText>
             </div>
         </div>
@@ -160,11 +160,11 @@
     }
     else if (_currentSlide == 1)
     {
-        <div class="d-flex align-center justify-space-between flex-grow-1 px-4" style="width: 100%; height: 100%;">
+        <div class="d-flex align-center justify-space-between flex-grow-1 px-4 gap-2" style="width: 100%; height: 100%;">
              
              <!-- Circular Progress (Left) - Matching Bubbles SVG Style -->
-             <div class="d-flex align-center justify-center position-relative" style="width: 130px; height: 130px;">
-                 <svg width="130" height="130" viewBox="0 0 100 100" style="transform: rotate(-90deg);">
+             <div class="d-flex align-center justify-center position-relative flex-shrink-0" style="width: 30%; max-width: 130px; min-width: 80px; aspect-ratio: 1/1;">
+                 <svg width="100%" height="100%" viewBox="0 0 100 100" style="transform: rotate(-90deg);">
                     <!-- Background Track -->
                     <circle cx="50" cy="50" r="44" fill="transparent" stroke="var(--mud-palette-action-disabled)" stroke-width="12" opacity="0.2" />
                     
@@ -190,7 +190,7 @@
                  </svg>
 
                  <div class="d-flex flex-column align-center justify-center position-absolute" style="top:0; left:0; right:0; bottom:0;">
-                     <MudText Typo="Typo.h5" Class="font-weight-bold" Style="@(_smokesCurrentValue > _smokesBaseline ? "color: var(--mud-palette-error);" : "color: var(--mud-palette-success);")">
+                     <MudText Class="font-weight-bold" Style="@("font-size: clamp(1rem, 4vw, 1.5rem); " + (_smokesCurrentValue > _smokesBaseline ? "color: var(--mud-palette-error);" : "color: var(--mud-palette-success);"))">
                         @_smokesCurrentValue
                      </MudText>
                      <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 0.7em;">/ @_smokesBaseline</MudText>
@@ -198,9 +198,9 @@
              </div>
 
              <!-- Stats (Center) -->
-             <div class="d-flex flex-column align-center justify-center flex-grow-1 mx-2">
+             <div class="d-flex flex-column align-center justify-center flex-grow-1 mx-2" style="min-width: 0;">
                  <div class="d-flex flex-column align-center">
-                    <MudText Typo="Typo.h5" Class="font-weight-bold" Color="Color.Error">
+                    <MudText Class="font-weight-bold" Color="Color.Error" Style="font-size: clamp(1rem, 4vw, 1.5rem); white-space: nowrap;">
                         @_smokesCurrentValue smoked
                     </MudText>
                     <MudText Typo="Typo.caption" Class="mt-0" Style="opacity: 0.6; text-transform: uppercase;">TODAY</MudText>
@@ -221,11 +221,11 @@
              </div>
 
              <!-- Action (Right) -->
-             <div class="d-flex align-center justify-center pl-2">
+             <div class="d-flex align-center justify-center pl-2 flex-shrink-0" style="width: auto;">
                  <MudIconButton Icon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Error" 
                                 OnClick="AddSmoke" Class="rounded-circle elevation-4" 
-                                Style="width: 72px; height: 72px; min-width: 72px; min-height: 72px;" >
-                     <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Large" Style="font-size: 2.5rem;" />
+                                Style="width: clamp(48px, 15vw, 72px); height: clamp(48px, 15vw, 72px); min-width: 48px; min-height: 48px;" >
+                     <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Large" Style="font-size: clamp(1.5rem, 5vw, 2.5rem);" />
                  </MudIconButton>
              </div>
         </div>
