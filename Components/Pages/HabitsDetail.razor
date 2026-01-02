@@ -277,8 +277,8 @@
                              </MudSelect>
                          </MudItem>
                          <MudItem xs="12">
-                             <MudDatePicker Label="Quit Start Date" Date="_smokesQuitDate" PickerVariant="PickerVariant.Dialog" 
-                                            Variant="Variant.Outlined" AdornmentColor="Color.Primary" Class="fixed-z-index" Style="z-index: 2002;" DateChanged="OnDateChanged" />
+                             <MudDatePicker Label="Quit Start Date" Date="_smokesQuitDate" PickerVariant="PickerVariant.Inline" 
+                                            Variant="Variant.Outlined" AdornmentColor="Color.Primary" PopoverClass="glass-popover" DateChanged="OnDateChanged" />
                          </MudItem>
                      </MudGrid>
                  </MudPaper>
@@ -386,11 +386,26 @@
         z-index: 2005 !important;
     }
     
-    /* Ensure dialogs are above everything */
+    /* Ensure dialogs are above everything and OPAQUE */
     .mud-dialog-container {
         z-index: 2010 !important;
     }
     
+    /* Force the actual picker content to be opaque because it might be transparent by default */
+    .mud-picker-content, .mud-picker-container, .mud-picker-inline-paper {
+        background-color: #1e1e2d !important; /* Dark solid background */
+        backdrop-filter: none !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.5) !important;
+    }
+    
+    .mud-picker-popover-paper {
+        background-color: #1e1e2d !important;
+    }
+    
+    .mud-picker {
+         z-index: 2020 !important;
+    }
+
     .fixed-z-index {
         position: relative;
         z-index: 2002;
