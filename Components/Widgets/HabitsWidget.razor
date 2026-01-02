@@ -299,18 +299,8 @@
 
     private void OpenSettings()
     {
-        // View type is already synced via OnCarouselIndexChanged or binding
-        // But let's be explicit
-        if (_currentSlide == 0)
-        {
-            HabitsService.CurrentViewType = "water";
-            WindowManager.OpenDetail("Settings", "Settings"); 
-        }
-        else
-        {
-             HabitsService.CurrentViewType = "smokes";
-             WindowManager.OpenDetail("Habits", "Smokes Configuration"); 
-        }
+        // Always open Settings (Login/Sync) when clicking the sync icon
+        WindowManager.OpenDetail("Settings", "Settings"); 
     }
 
     private async void RefreshDataVoid() => await RefreshDataAsync();
