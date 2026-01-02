@@ -124,8 +124,11 @@
                  <MudPaper Class="detail-tile rounded-xl pa-6 d-flex flex-column align-center relative" Elevation="3">
                      <!-- Header -->
                      <div class="d-flex justify-space-between w-100 mb-4 align-center">
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">Health Index</MudText>
-                         <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text">Healing</MudChip>
+                         <div class="d-flex align-center gap-2">
+                             <MudText Typo="Typo.h6" Class="font-weight-bold">Health Index</MudText>
+                             <MudChip T="string" Size="Size.Small" Color="@_lungsHealthColor" Variant="Variant.Text">@_lungsHealthStatus</MudChip>
+                         </div>
+                         <MudIconButton Icon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Error" OnClick="AddSmoke" Size="Size.Small" />
                      </div>
 
                      <!-- Lungs SVG -->
@@ -395,6 +398,10 @@
      private DateTime? _smokesQuitDate;
      private List<HabitLog> _smokesLogs = new();
      private string[] _currencies = new[] { "USD", "EUR", "RON", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "INR" };
+     
+     // Dynamic Health Status
+     private string _lungsHealthStatus = "Healing";
+     private Color _lungsHealthColor = Color.Success;
  
      // Shared UI Data
      private List<ChartSeries> _series = new();
@@ -534,12 +541,47 @@
             var now = DateTime.Now;
             _smokesLogs = await HabitsService.GetLogsAsync("smokes", now);
             _smokesCurrentValue = (int)_smokesLogs.Sum(l => l.Value);
+            
+            UpdateHealthStatus();
         }
     }
     
     private async Task AddSmoke()
     {
-         await HabitsService.AddLogAsync("smokes", 1, "cig", DateTime.Now, null);
+          await HabitsService.AddLogAsync("smokes", 1, "cig", DateTime.Now, null);
+          await LoadData(); // Reload to refresh status
+    }
+    
+    private void UpdateHealthStatus()
+    {
+        // 100% Health = 0 Smoked.
+        // 0% Health = Baseline Smoked.
+        double ratio = 0;
+        if (_smokesBaseline > 0)
+            ratio = (double)_smokesCurrentValue / (double)_smokesBaseline;
+            
+        double healthPercent = Math.Max(0, 100 - (ratio * 100)); // 0 smoked = 100% health
+        
+        if (healthPercent >= 100)
+        {
+            _lungsHealthStatus = "Healing";
+            _lungsHealthColor = Color.Success;
+        }
+        else if (healthPercent >= 50)
+        {
+            _lungsHealthStatus = "Recovering";
+            _lungsHealthColor = Color.Info;
+        }
+        else if (healthPercent >= 20)
+        {
+             _lungsHealthStatus = "Warning";
+             _lungsHealthColor = Color.Warning;
+        }
+        else
+        {
+             _lungsHealthStatus = "At Risk";
+             _lungsHealthColor = Color.Error;
+        }
     }
 
     private string GetTodaySavings()
