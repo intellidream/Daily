@@ -160,35 +160,73 @@
     }
     else if (_currentSlide == 1)
     {
-        <div class="d-flex align-center justify-center flex-grow-1" style="width: 100%;">
-             <div class="d-flex flex-column align-center gap-2">
-                 <div class="d-flex align-center gap-4">
-                     <MudText Typo="Typo.h4" Class="font-weight-bold">
-                         <span style="@(_smokesCurrentValue > _smokesBaseline ? "color: var(--mud-palette-error);" : "color: var(--mud-palette-success);")">
-                            @_smokesCurrentValue
-                         </span> 
-                         <span style="font-size: 0.6em; opacity: 0.5;">/ @_smokesBaseline</span>
+        <div class="d-flex align-center justify-space-between flex-grow-1 px-4" style="width: 100%; height: 100%;">
+             
+             <!-- Circular Progress (Left) - Matching Bubbles SVG Style -->
+             <div class="d-flex align-center justify-center position-relative" style="width: 130px; height: 130px;">
+                 <svg width="130" height="130" viewBox="0 0 100 100" style="transform: rotate(-90deg);">
+                    <!-- Background Track -->
+                    <circle cx="50" cy="50" r="44" fill="transparent" stroke="var(--mud-palette-action-disabled)" stroke-width="12" opacity="0.2" />
+                    
+                    <!-- Progress Arc -->
+                    @{
+                        // Logic: Start Full (Green), decrease to 0 (Dark Red)
+                        // User: "start from Full Green and shrink/darken to Dark Red"
+                        // Calculation: Progress 0..1 representing Remaining Allowance.
+                        var remaining = Math.Max(_smokesBaseline - _smokesCurrentValue, 0);
+                        var progress = (double)remaining / Math.Max((double)_smokesBaseline, 1.0);
+                        var dashArray = 2 * Math.PI * 44; // Approx 276
+                        var dashOffset = dashArray * (1 - progress);
+                        
+                        // Color Logic: Interpolate Green -> Dark Red
+                        string strokeColor = "#4CAF50"; // Green
+                        if (progress < 0.25) strokeColor = "#B71C1C"; // Dark Red (Critical)
+                        else if (progress < 0.5) strokeColor = "#F44336"; // Red (Warning)
+                        else if (progress < 0.75) strokeColor = "#FF9800"; // Orange
+                    }
+                    <circle cx="50" cy="50" r="44" fill="transparent" stroke="@strokeColor" stroke-width="12" 
+                            stroke-dasharray="@dashArray" stroke-dashoffset="@dashOffset" 
+                            style="transition: stroke-dashoffset 0.5s ease, stroke 0.5s ease;" />
+                 </svg>
+
+                 <div class="d-flex flex-column align-center justify-center position-absolute" style="top:0; left:0; right:0; bottom:0;">
+                     <MudText Typo="Typo.h5" Class="font-weight-bold" Style="@(_smokesCurrentValue > _smokesBaseline ? "color: var(--mud-palette-error);" : "color: var(--mud-palette-success);")">
+                        @_smokesCurrentValue
                      </MudText>
-                     
-                     <MudIconButton Icon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" 
-                                    OnClick="AddSmoke" Class="rounded-circle" Style="width: 32px; height: 32px; min-width: 32px;" />
+                     <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 0.7em;">/ @_smokesBaseline</MudText>
                  </div>
-                 
-                 <MudText Typo="Typo.caption" Style="opacity: 0.7;">Cigarettes Today</MudText>
-                  
-                 <!-- Simple Progress Bar -->
-                 <div style="width: 120px;">
-                    <MudProgressLinear Value="@((_smokesCurrentValue / Math.Max(_smokesBaseline, 1)) * 100)" 
-                                      Color="@(_smokesCurrentValue > _smokesBaseline ? Color.Error : Color.Success)" 
-                                      Class="rounded-lg" Size="Size.Large" />
+             </div>
+
+             <!-- Stats (Center) -->
+             <div class="d-flex flex-column align-center justify-center flex-grow-1 mx-2">
+                 <div class="d-flex flex-column align-center">
+                    <MudText Typo="Typo.h5" Class="font-weight-bold" Color="Color.Error">
+                        @_smokesCurrentValue smoked
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mt-0" Style="opacity: 0.6; text-transform: uppercase;">TODAY</MudText>
+                    
+                    <!-- Projected Savings this Month -->
+                    @{
+                         var avoidedDaily = Math.Max(0, _smokesBaseline - _smokesCurrentValue);
+                         var costPerCig = _smokesPackCost / Math.Max(1, _smokesPackSize);
+                         var monthlySaved = (avoidedDaily * costPerCig) * 30; // Simple projection
+                    }
+                    <div class="mt-2 d-flex flex-column align-center">
+                        <MudText Typo="Typo.subtitle2" Class="font-weight-bold" Color="Color.Success">
+                            @monthlySaved.ToString("F0") @_smokesCurrency saved
+                        </MudText>
+                         <MudText Typo="Typo.caption" Class="mt-0" Style="opacity: 0.6; text-transform: uppercase; font-size: 0.65rem;">THIS MONTH</MudText>
+                    </div>
                  </div>
-                 
-                 <div class="d-flex align-center gap-4 mt-2">
-                     <div class="d-flex flex-column align-center">
-                        <MudText Typo="Typo.caption" Style="font-weight: bold; color: var(--mud-palette-success);">@(_smokesBaseline - _smokesCurrentValue)</MudText>
-                        <MudText Typo="Typo.caption" Style="font-size: 0.65rem; opacity: 0.7;">AVOIDED</MudText>
-                     </div>
-                 </div>
+             </div>
+
+             <!-- Action (Right) -->
+             <div class="d-flex align-center justify-center pl-2">
+                 <MudIconButton Icon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Error" 
+                                OnClick="AddSmoke" Class="rounded-circle elevation-4" 
+                                Style="width: 72px; height: 72px; min-width: 72px; min-height: 72px;" >
+                     <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Large" Style="font-size: 2.5rem;" />
+                 </MudIconButton>
              </div>
         </div>
     }
@@ -206,6 +244,9 @@
     // Smokes Data
     private double _smokesCurrentValue = 0;
     private int _smokesBaseline = 20;
+    private int _smokesPackSize = 20;
+    private double _smokesPackCost = 10;
+    private string _smokesCurrency = "USD";
     
     // SVG Data
     record SvgSegment(string PathData, string Color);
@@ -346,6 +387,14 @@
         {
             _smokesBaseline = SettingsService.Settings.SmokesBaselineDaily;
             if (_smokesBaseline <= 0) _smokesBaseline = 20; // Default fallback view
+
+            _smokesPackSize = SettingsService.Settings.SmokesPackSize;
+            if (_smokesPackSize <= 0) _smokesPackSize = 20;
+
+            _smokesPackCost = SettingsService.Settings.SmokesPackCost;
+            
+            _smokesCurrency = SettingsService.Settings.SmokesCurrency;
+            if (string.IsNullOrEmpty(_smokesCurrency)) _smokesCurrency = "USD";
             
             _smokesCurrentValue = await HabitsService.GetDailyProgressAsync("smokes", DateTime.Now);
         }

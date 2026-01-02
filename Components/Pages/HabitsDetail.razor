@@ -119,37 +119,85 @@
     else if (_viewType == "smokes")
     {
         <MudGrid Spacing="4">
-            <!-- Summary Card -->
-            <MudItem xs="12" md="6">
-                <MudPaper Class="pa-6 rounded-xl detail-tile d-flex flex-column align-center justify-center" Elevation="3" Style="min-height: 200px;">
-                    <MudText Typo="Typo.h6" Class="mb-2">Today's Progress</MudText>
-                    
-                    <div class="d-flex align-end justify-center gap-2 mb-2">
-                        <MudText Typo="Typo.h2" Class="font-weight-bold" Style="@(_smokesCurrentValue > _smokesBaseline ? "color: var(--mud-palette-error);" : "color: var(--mud-palette-success);")">
-                            @_smokesCurrentValue
-                        </MudText>
-                        <MudText Typo="Typo.h5" Style="opacity: 0.6; padding-bottom: 6px;">/ @_smokesBaseline</MudText>
-                    </div>
-                    
-                    <MudText Typo="Typo.body1" Class="mb-4">Cigarettes Smoked</MudText>
-                    
-                    <div class="d-flex gap-4">
-                        <div class="d-flex flex-column align-center">
-                            <MudText Typo="Typo.h6" Color="@(_smokesBaseline - _smokesCurrentValue >= 0 ? Color.Success : Color.Error)">@(_smokesBaseline - _smokesCurrentValue)</MudText>
-                            <MudText Typo="Typo.caption" Style="opacity: 0.7;">AVOIDED</MudText>
+            <!-- Lungs Visual -->
+            <MudItem xs="12">
+                 <MudPaper Class="detail-tile rounded-xl pa-6 d-flex flex-column align-center relative" Elevation="3">
+                     <!-- Header -->
+                     <div class="d-flex justify-space-between w-100 mb-4 align-center">
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">Health Index</MudText>
+                         <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text">Healing</MudChip>
+                     </div>
+
+                     <!-- Lungs SVG -->
+                     <div class="relative d-flex justify-center align-center my-4" style="height: 220px; width: 220px;">
+                        <svg width="200" height="200" viewBox="0 0 200 200">
+                             <defs>
+                                <!-- Gradient: Pink (Health) rising from Bottom, Grey (Smoke) filling from Top 
+                                     User: "blended and glassy feel between pink and grey"
+                                     Logic: Pink to Grey blend. 
+                                     Instead of hard stop, let's use a transition zone.
+                                     Offset calculated as boundary. 
+                                     Stop 1: Grey at Offset - 20%.
+                                     Stop 2: Pink at Offset + 20%.
+                                -->
+                                <linearGradient id="lungGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+                                    <stop offset="@($"{Math.Max(0, (Math.Min(100, Math.Max(0, (_smokesCurrentValue / Math.Max((double)_smokesBaseline, 1.0)) * 100))) - 20)}%")" 
+                                          style="stop-color: #546E7A; stop-opacity: 1" /> <!-- Grey (Sick) fills from bottom -->
+                                    <stop offset="@($"{Math.Min(100, (Math.Min(100, Math.Max(0, (_smokesCurrentValue / Math.Max((double)_smokesBaseline, 1.0)) * 100))) + 20)}%")" 
+                                          style="stop-color: #F8BBD0; stop-opacity: 1" /> <!-- Pink (Health) rest -->
+                                </linearGradient>
+                                
+                                <!-- Glassy Shine Overlay -->
+                                <linearGradient id="glassShine" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color: white; stop-opacity: 0.5" />
+                                    <stop offset="40%" style="stop-color: white; stop-opacity: 0.15" />
+                                    <stop offset="100%" style="stop-color: white; stop-opacity: 0.0" />
+                                </linearGradient>
+                             </defs>
+                             
+                             <!-- Lung Path -->
+                             <g stroke="rgba(255,255,255,0.4)" stroke-width="1.5">
+                                 <!-- Right Lung -->
+                                 <path d="M60 40 C 30 40, 20 80, 20 110 C 20 150, 40 180, 80 180 C 90 180, 95 150, 95 120 C 95 80, 80 40, 60 40 Z" 
+                                       fill="url(#lungGradient)" />
+                                 <path d="M60 40 C 30 40, 20 80, 20 110 C 20 150, 40 180, 80 180 C 90 180, 95 150, 95 120 C 95 80, 80 40, 60 40 Z" 
+                                       fill="url(#glassShine)" style="mix-blend-mode: overlay;" />
+
+                                 <!-- Left Lung -->
+                                 <path d="M140 40 C 170 40, 180 80, 180 110 C 180 150, 160 180, 120 180 C 110 180, 105 150, 105 120 C 105 80, 120 40, 140 40 Z" 
+                                       fill="url(#lungGradient)" />
+                                 <path d="M140 40 C 170 40, 180 80, 180 110 C 180 150, 160 180, 120 180 C 110 180, 105 150, 105 120 C 105 80, 120 40, 140 40 Z" 
+                                       fill="url(#glassShine)" style="mix-blend-mode: overlay;" />
+                                 
+                                 <!-- Trachea -->
+                                 <rect x="95" y="10" width="10" height="40" rx="5" fill="#CFD8DC" opacity="0.8" />
+                             </g>
+                        </svg>
+                        
+                        <!-- Center Stats Overlay -->
+                        <div class="absolute d-flex flex-column align-center justify-center" style="top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;">
+                            <MudText Typo="Typo.h3" Class="font-weight-bold text-shadow" Style="color: white; text-shadow: 0 2px 10px rgba(0,0,0,0.6);">@_smokesCurrentValue</MudText>
+                            <MudText Typo="Typo.h6" Style="color: white; font-weight: bold; text-shadow: 0 2px 10px rgba(0,0,0,0.6); opacity: 0.9;">/ @_smokesBaseline</MudText>
                         </div>
-                         <div class="d-flex flex-column align-center">
-                            <MudText Typo="Typo.h6" Color="Color.Default">@GetTodaySavings()</MudText>
-                            <MudText Typo="Typo.caption" Style="opacity: 0.7;">SAVED TODAY</MudText>
+                    </div>
+
+                    <div class="d-flex gap-8 justify-center w-100 mt-2">
+                        <div class="d-flex flex-column align-center p-2 rounded-lg" style="background: rgba(255,255,255,0.1); min-width: 100px;">
+                            <MudText Typo="Typo.h5" Class="font-weight-bold" Color="@(_smokesBaseline - _smokesCurrentValue >= 0 ? Color.Success : Color.Error)">@(_smokesBaseline - _smokesCurrentValue)</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.8; font-weight: 600;">AVOIDED</MudText>
+                        </div>
+                         <div class="d-flex flex-column align-center p-2 rounded-lg" style="background: rgba(255,255,255,0.1); min-width: 100px;">
+                            <MudText Typo="Typo.h5" Class="font-weight-bold" Color="Color.Default">@GetTodaySavings()</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.8; font-weight: 600;">SAVED</MudText>
                         </div>
                     </div>
                     
                      <!-- Recent Logs Expander -->
                      @if (_smokesLogs.Any())
                      {
-                         <MudExpansionPanels Elevation="0" Class="mt-2 w-100" Dense="true">
-                             <MudExpansionPanel Text="History (Click to Edit)">
-                                 <MudList T="HabitLog" Dense="true" DisablePadding="true">
+                         <MudExpansionPanels Elevation="0" Class="mt-4 w-100" Dense="true" DisableBorders="true" Style="background: transparent;">
+                             <MudExpansionPanel Text="History (Click to Edit)" Style="background: rgba(255,255,255,0.05); border-radius: 12px;">
+                                 <MudList T="HabitLog" Dense="true" DisablePadding="true" Style="background: transparent;">
                                      @foreach (var log in _smokesLogs)
                                      {
                                          <MudListItem Icon="@Icons.Material.Filled.SmokingRooms" IconColor="Color.Error">
@@ -166,21 +214,10 @@
                 </MudPaper>
             </MudItem>
             
-            <!-- Quick Log Card -->
-            <MudItem xs="12" md="6">
-                <MudPaper Class="pa-6 rounded-xl detail-tile d-flex flex-column align-center justify-center" Elevation="3" Style="min-height: 200px;">
-                    <MudText Typo="Typo.h6" Class="mb-4">Log Cigarette</MudText>
-                     <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Large" Variant="Variant.Filled" Color="Color.Error" 
-                                   Style="width: 80px; height: 80px; border-radius: 50%; box-shadow: 0 4px 15px rgba(244, 67, 54, 0.4);"
-                                   OnClick="AddSmoke" />
-                     <MudText Typo="Typo.caption" Class="mt-4" Style="opacity: 0.7;">Click to log 1 cigarette</MudText>
-                </MudPaper>
-            </MudItem>
-
              <!-- Savings & Stats -->
             <MudItem xs="12">
                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-                    <MudText Typo="Typo.h6" Class="mb-4">Total Savings</MudText>
+                    <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Total Savings</MudText>
                     <MudGrid>
                         <MudItem xs="4">
                              <div class="d-flex flex-column align-center pa-2 rounded-lg" style="background: rgba(255,255,255,0.05);">
@@ -207,15 +244,17 @@
             <!-- Chart -->
             <MudItem xs="12">
                  <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-                     <MudText Typo="Typo.h6" Class="mb-4">Reduction Timeline</MudText>
-                     <MudChart ChartType="ChartType.Bar" ChartSeries="@_series" XAxisLabels="@_xAxisLabels" Width="100%" Height="300px" />
+                     <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Reduction Timeline</MudText>
+                     <!-- Stacked Chart: Series 0 = Smoked (Red), Series 1 = Avoided (Green) -->
+                     <MudChart ChartType="ChartType.StackedBar" ChartSeries="@_series" XAxisLabels="@_xAxisLabels" 
+                               Width="100%" Height="300px" ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#FF5252", "#4CAF50" } })" />
                 </MudPaper>
             </MudItem>
-            
-            <!-- Configuration -->
+
+            <!-- Configuration (Moved Up) -->
             <MudItem xs="12">
                  <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-                     <MudText Typo="Typo.h6" Class="mb-4">Configuration</MudText>
+                     <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Configuration</MudText>
                      <MudGrid>
                          <MudItem xs="6">
                              <MudNumericField @bind-Value="_smokesBaseline" Label="Baseline (Cigs/Day)" Variant="Variant.Outlined" Min="0" OnBlur="UpdateSmokesSettings" />
@@ -227,81 +266,138 @@
                              <MudNumericField @bind-Value="_smokesPackCost" Label="Cost per Pack" Variant="Variant.Outlined" Min="0" Adornment="Adornment.Start" AdornmentText="@_smokesCurrency" OnBlur="UpdateSmokesSettings" />
                          </MudItem>
                          <MudItem xs="6">
-                             <MudTextField @bind-Value="_smokesCurrency" Label="Currency Code" Variant="Variant.Outlined" OnBlur="UpdateSmokesSettings" />
+                             <MudSelect T="string" Value="_smokesCurrency" Label="Currency" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" ValueChanged="OnCurrencyChanged">
+                                 @foreach (var currency in _currencies)
+                                 {
+                                     <MudSelectItem Value="@currency" />
+                                 }
+                             </MudSelect>
                          </MudItem>
                          <MudItem xs="12">
-                             <MudDatePicker Label="Quit Start Date" @bind-Date="_smokesQuitDate" Variant="Variant.Outlined" OnClosed="UpdateSmokesSettings" />
+                             <MudDatePicker Label="Quit Start Date" Date="_smokesQuitDate" PickerVariant="PickerVariant.Dialog" 
+                                            Variant="Variant.Outlined" AdornmentColor="Color.Primary" Style="z-index: 2002;" DateChanged="OnDateChanged" />
                          </MudItem>
                      </MudGrid>
                  </MudPaper>
             </MudItem>
             
-             <!-- Info / Motivation -->
+            <!-- Info Section: Cool Down & Milestones (Moved Down) -->
             <MudItem xs="12">
-                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-                     <div class="d-flex align-center gap-2 mb-2">
-                         <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Info" />
-                         <MudText Typo="Typo.h6">Journey to Quit</MudText>
-                     </div>
-                     <MudText Typo="Typo.body2" Class="mb-2">Reducing your intake allows your lungs to start repairing immediately. Within 2 weeks, circulation improves.</MudText>
-                     <MudExpansionPanels Elevation="0">
-                         <MudExpansionPanel Text="Health Timeline">
+                 <!-- Grid Content -->
+                 <MudGrid Spacing="4">
+                     <MudItem xs="12" md="6">
+                         <MudPaper Class="detail-tile rounded-xl pa-6 h-100" Elevation="3">
+                             <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Recovery Phases (The Cool Down)</MudText>
                              <MudTimeline TimelinePosition="TimelinePosition.Start">
-                                 <MudTimelineItem Color="Color.Success">
+                                 <MudTimelineItem Color="Color.Error" Variant="Variant.Filled">
                                      <ItemContent>
-                                         <MudText Typo="Typo.subtitle2">20 Minutes</MudText>
-                                         <MudText Typo="Typo.body2">Heart rate and blood pressure drop.</MudText>
+                                         <MudText Typo="Typo.subtitle2" Class="font-weight-bold">The "Peak" Phase (Days 1–3)</MudText>
+                                         <MudText Typo="Typo.body2" Class="mt-1">Most intense. Nicotine drops, withdrawals peak. "Nitocine flu" feeling.</MudText>
                                      </ItemContent>
                                  </MudTimelineItem>
-                                 <MudTimelineItem Color="Color.Success">
+                                 <MudTimelineItem Color="Color.Warning" Variant="Variant.Filled">
                                      <ItemContent>
-                                         <MudText Typo="Typo.subtitle2">12 Hours</MudText>
-                                         <MudText Typo="Typo.body2">Carbon monoxide levels in blood normalize.</MudText>
+                                          <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Physical Recovery (Weeks 1–4)</MudText>
+                                          <MudText Typo="Typo.body2" Class="mt-1">Body repairs. 7 days = 9x success rate. Brain fog clears, coughing reduces.</MudText>
                                      </ItemContent>
                                  </MudTimelineItem>
-                                 <MudTimelineItem Color="Color.Info">
+                                 <MudTimelineItem Color="Color.Success" Variant="Variant.Filled">
                                      <ItemContent>
-                                         <MudText Typo="Typo.subtitle2">2 Weeks - 3 Months</MudText>
-                                         <MudText Typo="Typo.body2">Circulation and lung function improve.</MudText>
-                                     </ItemContent>
-                                 </MudTimelineItem>
-                                  <MudTimelineItem Color="Color.Primary">
-                                     <ItemContent>
-                                         <MudText Typo="Typo.subtitle2">1 Year</MudText>
-                                         <MudText Typo="Typo.body2">Risk of heart disease is half that of a smoker.</MudText>
+                                          <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Psychological Cool Down (1–3 Months+)</MudText>
+                                          <MudText Typo="Typo.body2" Class="mt-1">Mental battle settles. Dopamine receptors normalize. Cravings are trigger-based, not physical.</MudText>
                                      </ItemContent>
                                  </MudTimelineItem>
                              </MudTimeline>
-                         </MudExpansionPanel>
-                     </MudExpansionPanels>
-                 </MudPaper>
+                         </MudPaper>
+                     </MudItem>
+                     <MudItem xs="12" md="6">
+                         <MudPaper Class="detail-tile rounded-xl pa-6 h-100" Elevation="3">
+                             <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Recovery Milestones</MudText>
+                             <MudSimpleTable Style="background: transparent;" Hover="true" Dense="true">
+                                 <tbody>
+                                     <tr><td><b>20 Mins</b></td><td>Heart rate & BP drop</td></tr>
+                                     <tr><td><b>12 Hours</b></td><td>CO levels return to normal</td></tr>
+                                     <tr><td><b>48 Hours</b></td><td>Nerve endings regrow; smell/taste improve</td></tr>
+                                     <tr><td><b>72 Hours</b></td><td>Bronchial tubes relax, breathing eases</td></tr>
+                                     <tr><td><b>1 Year</b></td><td>Coronary heart disease risk halved</td></tr>
+                                 </tbody>
+                             </MudSimpleTable>
+                             
+                             <MudAlert Severity="Severity.Info" Class="mt-4" Variant="Variant.Outlined" Dense="true">
+                                 <b>Pro-Tip:</b> Cravings last 5-10 mins. Distract yourself -> Wait 10 mins -> Wave passes.
+                             </MudAlert>
+                         </MudPaper>
+                     </MudItem>
+                 </MudGrid>
             </MudItem>
-        </MudGrid>
-    }
-</div>
-
-@code {
-    private string _viewType = "water";
-    private bool _isLoading = false;
-
-    // Water Data
-    private double _currentValue = 0;
-    private double _goalValue = 2000;
-    private string _unit = "ml";
-    private int _progressPercentage => _goalValue > 0 ? (int)((_currentValue / _goalValue) * 100) : 0;
-    private List<HabitLog> _todaysLogs = new();
-    
-    // Smokes Data
-    private int _smokesCurrentValue = 0;
-    private int _smokesBaseline = 20;
-    private int _smokesPackSize = 20;
-    private double _smokesPackCost = 10;
-    private string _smokesCurrency = "USD";
-    private DateTime? _smokesQuitDate;
-    private List<HabitLog> _smokesLogs = new();
-
-    // Shared UI Data
-    private List<ChartSeries> _series = new();
+            
+             <!-- Journey to Quit Info -->
+            <MudItem xs="12">
+                   <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                       <div class="d-flex align-center gap-2 mb-2">
+                           <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Info" />
+                           <MudText Typo="Typo.h6" Class="font-weight-bold">Journey to Quit</MudText>
+                       </div>
+                       <MudText Typo="Typo.body2" Class="mb-2">Reducing your intake allows your lungs to start repairing immediately. Within 2 weeks, circulation improves.</MudText>
+                       <MudExpansionPanels Elevation="0">
+                           <MudExpansionPanel Text="Health Timeline">
+                               <MudTimeline TimelinePosition="TimelinePosition.Start">
+                                   <MudTimelineItem Color="Color.Success">
+                                       <ItemContent>
+                                           <MudText Typo="Typo.subtitle2">20 Minutes</MudText>
+                                           <MudText Typo="Typo.body2">Heart rate and blood pressure drop.</MudText>
+                                       </ItemContent>
+                                   </MudTimelineItem>
+                                   <MudTimelineItem Color="Color.Success">
+                                       <ItemContent>
+                                           <MudText Typo="Typo.subtitle2">12 Hours</MudText>
+                                           <MudText Typo="Typo.body2">Carbon monoxide levels in blood normalize.</MudText>
+                                       </ItemContent>
+                                   </MudTimelineItem>
+                                   <MudTimelineItem Color="Color.Info">
+                                       <ItemContent>
+                                           <MudText Typo="Typo.subtitle2">2 Weeks - 3 Months</MudText>
+                                           <MudText Typo="Typo.body2">Circulation and lung function improve.</MudText>
+                                       </ItemContent>
+                                   </MudTimelineItem>
+                                    <MudTimelineItem Color="Color.Primary">
+                                       <ItemContent>
+                                           <MudText Typo="Typo.subtitle2">1 Year</MudText>
+                                           <MudText Typo="Typo.body2">Risk of heart disease is half that of a smoker.</MudText>
+                                       </ItemContent>
+                                   </MudTimelineItem>
+                               </MudTimeline>
+                           </MudExpansionPanel>
+                       </MudExpansionPanels>
+                   </MudPaper>
+             </MudItem>
+         </MudGrid>
+     }
+ </div>
+ 
+ @code {
+     private string _viewType = "water";
+     private bool _isLoading = false;
+ 
+     // Water Data
+     private double _currentValue = 0;
+     private double _goalValue = 2000;
+     private string _unit = "ml";
+     private int _progressPercentage => _goalValue > 0 ? (int)((_currentValue / _goalValue) * 100) : 0;
+     private List<HabitLog> _todaysLogs = new();
+     
+     // Smokes Data
+     private int _smokesCurrentValue = 0;
+     private int _smokesBaseline = 20;
+     private int _smokesPackSize = 20;
+     private double _smokesPackCost = 10;
+     private string _smokesCurrency = "USD";
+     private DateTime? _smokesQuitDate;
+     private List<HabitLog> _smokesLogs = new();
+     private string[] _currencies = new[] { "USD", "EUR", "RON", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "INR" };
+ 
+     // Shared UI Data
+     private List<ChartSeries> _series = new();
     private string[] _xAxisLabels = Array.Empty<string>();
     
     // Liquid Visualization Data (Water Only)
@@ -351,25 +447,40 @@
         
         try
         {
-            _isLoading = true;
-            await InvokeAsync(StateHasChanged);
+            // Fix: DONT toggle _isLoading on every refresh to avoid UI shaking/flashing
+            // Only set it if we really need a full reload logic (e.g. view switch), 
+            // but for simple updates like log toggling, keep the UI stable.
+            // _isLoading = true; 
+            // await InvokeAsync(StateHasChanged);
             
             await LoadData();
             await LoadHistory();
             
-            _isLoading = false;
+            // _isLoading = false;
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error refreshing habits detail: {ex}");
-            _isLoading = false;
+            // _isLoading = false;
         }
     }
     
     private void UpdateGoal()
     {
         _ = HabitsService.UpdateGoalAsync("water", _goalValue, _unit);
+    }
+    
+    private void OnCurrencyChanged(string currency)
+    {
+        _smokesCurrency = currency;
+        UpdateSmokesSettings();
+    }
+    
+    private void OnDateChanged(DateTime? date)
+    {
+        _smokesQuitDate = date;
+        UpdateSmokesSettings();
     }
     
     private void UpdateSmokesSettings()
@@ -385,6 +496,7 @@
             
             _ = SettingsService.SaveSettingsAsync();
             StateHasChanged(); // Re-calc savings
+            _ = LoadHistory(); // Re-calc chart if baseline changed
         }
     }
 
@@ -479,24 +591,46 @@
     private async Task LoadHistory()
     {
         // Simple 7 day history
-        var data = new double[7];
-        var labels = new string[7];
         var today = DateTime.Now.Date;
         var type = _viewType == "water" ? "water" : "smokes";
+        var labels = new string[7];
 
-        for (int i = 0; i < 7; i++)
+        if (type == "water")
         {
-            var date = today.AddDays(-6 + i);
-            labels[i] = date.ToString("dd MMM");
-            data[i] = await HabitsService.GetDailyProgressAsync(type, date);
+            var data = new double[7];
+            for (int i = 0; i < 7; i++)
+            {
+                var date = today.AddDays(-6 + i);
+                labels[i] = date.ToString("dd MMM");
+                data[i] = await HabitsService.GetDailyProgressAsync(type, date);
+            }
+            _series = new List<ChartSeries> { new ChartSeries { Name = $"Intake ({_unit})", Data = data } };
+        }
+        else
+        {
+            // Smokes: Stacked Bar (Smoked vs Avoided)
+            var dataSmoked = new double[7];
+            var dataAvoided = new double[7];
+            
+            for (int i = 0; i < 7; i++)
+            {
+                var date = today.AddDays(-6 + i);
+                labels[i] = date.ToString("ddd"); // Short day name
+                
+                var smoked = await HabitsService.GetDailyProgressAsync("smokes", date);
+                var avoided = Math.Max(0, _smokesBaseline - smoked);
+                
+                dataSmoked[i] = smoked;
+                dataAvoided[i] = avoided;
+            }
+            
+            _series = new List<ChartSeries>
+            {
+                new ChartSeries { Name = "Smoked", Data = dataSmoked }, // Red (bottom)
+                new ChartSeries { Name = "Avoided", Data = dataAvoided } // Green (top)
+            };
         }
         
-        var name = type == "water" ? $"Intake ({_unit})" : "Cigarettes";
-        
-        _series = new List<ChartSeries>
-        {
-            new ChartSeries { Name = name, Data = data }
-        };
         _xAxisLabels = labels;
     }
     
