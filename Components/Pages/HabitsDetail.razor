@@ -269,7 +269,7 @@
                              <MudNumericField @bind-Value="_smokesPackCost" Label="Cost per Pack" Variant="Variant.Outlined" Min="0" Adornment="Adornment.Start" AdornmentText="@_smokesCurrency" OnBlur="UpdateSmokesSettings" />
                          </MudItem>
                          <MudItem xs="6">
-                             <MudSelect T="string" Value="_smokesCurrency" Label="Currency" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" ValueChanged="OnCurrencyChanged" PopoverClass="glass-popover fixed-z-index">
+                             <MudSelect T="string" Value="_smokesCurrency" Label="Currency" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" ValueChanged="OnCurrencyChanged" PopoverClass="glass-popover fixed-z-index" LockScroll="true" Dense="true">
                                  @foreach (var currency in _currencies)
                                  {
                                      <MudSelectItem Value="@currency" />
@@ -502,22 +502,19 @@
         
         try
         {
-            // Fix: DONT toggle _isLoading on every refresh to avoid UI shaking/flashing
-            // Only set it if we really need a full reload logic (e.g. view switch), 
-            // but for simple updates like log toggling, keep the UI stable.
-            // _isLoading = true; 
-            // await InvokeAsync(StateHasChanged);
+            _isLoading = true; 
+            await InvokeAsync(StateHasChanged);
             
             await LoadData();
             await LoadHistory();
             
-            // _isLoading = false;
+            _isLoading = false;
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error refreshing habits detail: {ex}");
-            // _isLoading = false;
+            _isLoading = false;
         }
     }
     
@@ -596,8 +593,14 @@
     
     private async Task AddSmoke()
     {
+          _isLoading = true;
+          StateHasChanged();
+          
           await HabitsService.AddLogAsync("smokes", 1, "cig", DateTime.Now, null);
           await LoadData(); // Reload to refresh status
+          
+          _isLoading = false;
+          StateHasChanged();
     }
     
     private void UpdateHealthStatus()
