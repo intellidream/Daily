@@ -8,6 +8,10 @@ namespace Daily.Services
     public interface IHabitsService
     {
         event Action OnHabitsUpdated;
+        
+        // Navigation State
+        string CurrentViewType { get; set; } // "water" or "smokes"
+        event Action OnViewTypeChanged;
 
         Task<HabitGoal> GetGoalAsync(string habitType);
         Task UpdateGoalAsync(string habitType, double target, string unit);

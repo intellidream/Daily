@@ -8,6 +8,7 @@
 @inject IRssFeedService RssService
 @inject IWeatherService WeatherService
 @inject ISettingsService SettingsService
+@inject IHabitsService HabitsService
 @implements IDisposable
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
@@ -120,29 +121,50 @@
          else if (NavService.CurrentView == "Habits")
          {
               <div class="d-flex align-center flex-grow-1 position-relative ml-2 mr-4" style="min-width: 0; height: 100%;">
-                  <MudCarousel TData="object" ShowArrows="false" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                  <MudCarousel TData="object" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                               SelectedIndex="@_selectedHabitIndex" SelectedIndexChanged="@OnHabitCarouselIndexChanged"
                                Class="flex-grow-1 rounded-pill mud-theme-primary">
-                          <MudCarouselItem Transition="Transition.Slide">
-                              <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
-                                  <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Class="mr-2" Size="Size.Small" Style="color: white;" />
-                                  <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
-                                      Bubbles
-                                  </MudText>
-                                  
-                                  <MudTooltip Text="@(SettingsService.IsAuthenticated ? "Synced" : "Login to Sync")">
-                                      <div @onclick="@(() => WindowManager.OpenDetail("Settings", "Settings"))" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1 flex-shrink-0 ml-2">
-                                         @if (SettingsService.IsAuthenticated)
-                                         {
-                                             <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Style="color: white; opacity: 0.8;" />
-                                         }
-                                         else
-                                         {
-                                             <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Style="color: #FFCC80;" />
-                                         }
-                                      </div>
-                                  </MudTooltip>
-                              </div>
-                          </MudCarouselItem>
+                      <MudCarouselItem Transition="Transition.Slide">
+                          <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                              <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                              <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
+                                  Bubbles
+                              </MudText>
+                              
+                              <MudTooltip Text="@(SettingsService.IsAuthenticated ? "Synced" : "Login to Sync")">
+                                  <div @onclick="@(() => WindowManager.OpenDetail("Settings", "Settings"))" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1 flex-shrink-0 ml-2">
+                                     @if (SettingsService.IsAuthenticated)
+                                     {
+                                         <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Style="color: white; opacity: 0.8;" />
+                                     }
+                                     else
+                                     {
+                                         <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Style="color: #FFCC80;" />
+                                     }
+                                  </div>
+                              </MudTooltip>
+                          </div>
+                      </MudCarouselItem>
+                      <MudCarouselItem Transition="Transition.Slide">
+                           <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                               <MudIcon Icon="@Icons.Material.Filled.SmokingRooms" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                               <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
+                                   Smokes
+                               </MudText>
+                                <MudTooltip Text="@(SettingsService.IsAuthenticated ? "Synced" : "Login to Sync")">
+                                   <div @onclick="@(() => WindowManager.OpenDetail("Settings", "Settings"))" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1 flex-shrink-0 ml-2">
+                                      @if (SettingsService.IsAuthenticated)
+                                      {
+                                          <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Style="color: white; opacity: 0.8;" />
+                                      }
+                                      else
+                                      {
+                                          <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Style="color: #FFCC80;" />
+                                      }
+                                   </div>
+                               </MudTooltip>
+                           </div>
+                       </MudCarouselItem>
                   </MudCarousel>
               </div>
          }
@@ -269,7 +291,9 @@
         RssService.OnItemsUpdated += StateHasChanged; // Subscribe for item count updates
         RssService.OnFeedChanged += OnFeedChangedHandler; // Subscribe for active feed changes
         WeatherService.OnLocationChanged += StateHasChanged; // Subscribe for weather location changes
+        WeatherService.OnLocationChanged += StateHasChanged; // Subscribe for weather location changes
         SettingsService.OnSettingsChanged += StateHasChanged; // Subscribe for auth changes
+        HabitsService.OnViewTypeChanged += StateHasChanged; // Subscribe for habit view changes
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
             Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
@@ -345,7 +369,9 @@
         RssService.OnItemsUpdated -= StateHasChanged;
         RssService.OnFeedChanged -= OnFeedChangedHandler;
         WeatherService.OnLocationChanged -= StateHasChanged;
+        WeatherService.OnLocationChanged -= StateHasChanged;
         SettingsService.OnSettingsChanged -= StateHasChanged;
+        HabitsService.OnViewTypeChanged -= StateHasChanged;
         if (Application.Current != null)
         {
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
@@ -428,6 +454,7 @@
 
 
     private int _selectedFeedIndex = 0;
+    private int _selectedHabitIndex = 0;
     
     // Helper to sync carousel with service state
     private void SyncIndexFromService()
@@ -438,6 +465,17 @@
             if (index >= 0 && index != _selectedFeedIndex)
             {
                 _selectedFeedIndex = index;
+                StateHasChanged();
+            }
+        }
+        
+        // Sync Habit Index
+        if (NavService.CurrentView == "Habits")
+        {
+            var targetIndex = HabitsService.CurrentViewType == "smokes" ? 1 : 0;
+            if (_selectedHabitIndex != targetIndex)
+            {
+                _selectedHabitIndex = targetIndex;
                 StateHasChanged();
             }
         }
@@ -454,6 +492,12 @@
                 RssService.SelectFeed(feed);
             }
         }
+    }
+    
+    private void OnHabitCarouselIndexChanged(int index)
+    {
+        _selectedHabitIndex = index;
+        HabitsService.CurrentViewType = index == 1 ? "smokes" : "water";
     }
 
     private async void OnFeedChangedHandler()

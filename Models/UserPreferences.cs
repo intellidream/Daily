@@ -29,5 +29,21 @@ namespace Daily.Models
         public bool NotificationsEnabled { get; set; } = true;
         public bool DailyForecastAlert { get; set; } = true;
         public bool PrecipitationAlert { get; set; } = true;
+
+        // Smokes Configuration (Synced)
+        [Column("smokes_baseline")]
+        public int SmokesBaselineDaily { get; set; } = 0;
+
+        [Column("smokes_pack_size")]
+        public int SmokesPackSize { get; set; } = 20;
+
+        [Column("smokes_pack_cost")]
+        public double SmokesPackCost { get; set; } = 0;
+
+        [Column("smokes_currency")]
+        public string SmokesCurrency { get; set; } = "USD";
+
+        [Column("smokes_quit_date")]
+        public DateTime? SmokesQuitDate { get; set; }
     }
 }

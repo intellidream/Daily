@@ -3,130 +3,312 @@
 @inject IHabitsService HabitsService
 @inject IRefreshService RefreshService
 @inject ISnackbar Snackbar
+@inject ISettingsService SettingsService
 @implements IDisposable
 
-<MudGrid Spacing="4" Class="h-100 pb-4">
+<div class="d-flex flex-column h-100 pb-4" style="overflow-y: auto;">
     @if (_isLoading)
     {
-        <MudItem xs="12">
-             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="rounded-lg" />
-        </MudItem>
+         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="rounded-lg mb-4" />
     }
-    <!-- Top Section: Water Glass & Summary -->
-    <MudItem xs="12">
-        <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-            <div class="d-flex flex-wrap align-center justify-space-around gap-8">
-                <!-- Glass Visualization -->
-                <div style="position: relative; width: 100px; height: 160px; border: 4px solid rgba(255,255,255,0.3); border-top: 0; border-radius: 0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); overflow: hidden; background: rgba(255,255,255,0.05);">
+
+    <!-- VIEW SWITCHER (If header sync fails, we have this backup, but visual only) -->
+    <!-- Ideally header drives this. We just render based on _viewType -->
+
+    @if (_viewType == "water")
+    {
+        <MudGrid Spacing="4">
+            <!-- Top Section: Water Glass & Summary -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                    <div class="d-flex flex-wrap align-center justify-space-around gap-8">
+                        <!-- Glass Visualization -->
+                        <div style="position: relative; width: 100px; height: 160px; border: 4px solid rgba(255,255,255,0.3); border-top: 0; border-radius: 0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); overflow: hidden; background: rgba(255,255,255,0.05);">
+                            
+                            <!-- Stacked Liquid Segments -->
+                            <div class="d-flex flex-column-reverse" style="position: absolute; bottom: 0; left: 0; right: 0; height: 100%; width: 100%;">
+                                @foreach (var segment in _liquidSegments)
+                                {
+                                    <div style="height: @(segment.Percentage)%; background-color: @segment.Color; width: 100%; opacity: 0.9; transition: height 0.3s ease;"></div>
+                                }
+                            </div>
+                            
+                            <!-- Reflections/Glass effect -->
+                            <div style="position: absolute; top:0; left:0; right:0; bottom:0; background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%, rgba(255,255,255,0.1) 100%); pointer-events: none;"></div>
+                            
+                            <!-- Percentage Text -->
+                            <div class="d-flex flex-column align-center justify-center" style="position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none;">
+                                 <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">@_progressPercentage%</MudText>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex flex-column gap-3" style="min-width: 200px;">
+                            <MudText Typo="Typo.h5">@Math.Round(_currentValue) <span style="font-size: 0.7em; opacity: 0.7;">/ @Math.Round(_goalValue) @_unit</span></MudText>
+                            <div class="d-flex align-center gap-2">
+                                <MudText>Daily Goal:</MudText>
+                                <MudNumericField @bind-Value="_goalValue" DebounceInterval="500" OnDebounceIntervalElapsed="UpdateGoal" Variant="Variant.Outlined" Margin="Margin.Dense" Class="rounded-lg" Style="width: 100px;" />
+                                <MudText>@_unit</MudText>
+                            </div>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.7;">@GetEncouragement()</MudText>
+                        </div>
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Quick Add Grid -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                     <MudText Typo="Typo.h6" Class="mb-4">Quick Add</MudText>
+                     <MudGrid>
+                         @foreach (var drink in _drinkTypes)
+                         {
+                             <MudItem xs="6" sm="3">
+                                 <MudPaper Class="pa-4 d-flex flex-column align-center justify-center cursor-pointer hover-scale rounded-lg" Elevation="0" Style="@($"background-color: {drink.HexColor}20; border: 1px solid {drink.HexColor}40; gap: 8px;")" @onclick="@(() => AddDrink(drink))">
+                                     <MudIcon Icon="@drink.Icon" Size="Size.Large" Style="@($"color: {drink.HexColor};")" />
+                                     <MudText Typo="Typo.body1" Class="font-weight-bold">@drink.Name</MudText>
+                                     <MudText Typo="Typo.caption" Style="opacity: 0.7;">@drink.Amount @_unit</MudText>
+                                 </MudPaper>
+                             </MudItem>
+                         }
+                     </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            <!-- History Chart -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                     <MudText Typo="Typo.h6" Class="mb-4">Last 7 Days</MudText>
+                     <MudChart ChartType="ChartType.Bar" ChartSeries="@_series" XAxisLabels="@_xAxisLabels" Width="100%" Height="300px" />
+                </MudPaper>
+            </MudItem>
+
+            <!-- Today's Log -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                     <div class="d-flex justify-space-between align-center mb-4">
+                         <MudText Typo="Typo.h6">Today's Log</MudText>
+                     </div>
+                     
+                     <MudList T="HabitLog" Dense="true" DisablePadding="true">
+                         @if (_todaysLogs.Any())
+                         {
+                             @foreach (var log in _todaysLogs)
+                             {
+                                 var drinkName = GetDrinkName(log);
+                                 <MudListItem Icon="@GetIconForType(drinkName)" IconColor="Color.Inherit" Style="@($"color: {GetHexColorForType(drinkName)};")">
+                                     <div class="d-flex justify-space-between align-center w-100">
+                                         <div class="d-flex flex-column">
+                                             <MudText Color="Color.Default">@log.Value @log.Unit <span style="opacity: 0.6; font-size: 0.9em;">- @drinkName</span></MudText>
+                                             <MudText Typo="Typo.caption" Style="opacity: 0.6;" Color="Color.Default">@GetLocalTime(log.LoggedAt).ToString("t")</MudText>
+                                         </div>
+                                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" Color="Color.Default" />
+                                     </div>
+                                 </MudListItem>
+                                 <MudDivider />
+                             }
+                         }
+                         else
+                         {
+                             <MudText Typo="Typo.body2" Style="opacity: 0.6;" Class="py-4">No entries yet today.</MudText>
+                         }
+                     </MudList>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+    else if (_viewType == "smokes")
+    {
+        <MudGrid Spacing="4">
+            <!-- Summary Card -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-6 rounded-xl detail-tile d-flex flex-column align-center justify-center" Elevation="3" Style="min-height: 200px;">
+                    <MudText Typo="Typo.h6" Class="mb-2">Today's Progress</MudText>
                     
-                    <!-- Stacked Liquid Segments -->
-                    <div class="d-flex flex-column-reverse" style="position: absolute; bottom: 0; left: 0; right: 0; height: 100%; width: 100%;">
-                        @foreach (var segment in _liquidSegments)
-                        {
-                            <div style="height: @(segment.Percentage)%; background-color: @segment.Color; width: 100%; opacity: 0.9; transition: height 0.3s ease;"></div>
-                        }
+                    <div class="d-flex align-end justify-center gap-2 mb-2">
+                        <MudText Typo="Typo.h2" Class="font-weight-bold" Style="@(_smokesCurrentValue > _smokesBaseline ? "color: var(--mud-palette-error);" : "color: var(--mud-palette-success);")">
+                            @_smokesCurrentValue
+                        </MudText>
+                        <MudText Typo="Typo.h5" Style="opacity: 0.6; padding-bottom: 6px;">/ @_smokesBaseline</MudText>
                     </div>
                     
-                    <!-- Reflections/Glass effect -->
-                    <div style="position: absolute; top:0; left:0; right:0; bottom:0; background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%, rgba(255,255,255,0.1) 100%); pointer-events: none;"></div>
+                    <MudText Typo="Typo.body1" Class="mb-4">Cigarettes Smoked</MudText>
                     
-                    <!-- Percentage Text -->
-                    <div class="d-flex flex-column align-center justify-center" style="position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none;">
-                         <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">@_progressPercentage%</MudText>
+                    <div class="d-flex gap-4">
+                        <div class="d-flex flex-column align-center">
+                            <MudText Typo="Typo.h6" Color="@(_smokesBaseline - _smokesCurrentValue >= 0 ? Color.Success : Color.Error)">@(_smokesBaseline - _smokesCurrentValue)</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.7;">AVOIDED</MudText>
+                        </div>
+                         <div class="d-flex flex-column align-center">
+                            <MudText Typo="Typo.h6" Color="Color.Default">@GetTodaySavings()</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.7;">SAVED TODAY</MudText>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="d-flex flex-column gap-3" style="min-width: 200px;">
-                    <MudText Typo="Typo.h5">@Math.Round(_currentValue) <span style="font-size: 0.7em; opacity: 0.7;">/ @Math.Round(_goalValue) @_unit</span></MudText>
-                    <div class="d-flex align-center gap-2">
-                        <MudText>Daily Goal:</MudText>
-                        <MudNumericField @bind-Value="_goalValue" DebounceInterval="500" OnDebounceIntervalElapsed="UpdateGoal" Variant="Variant.Outlined" Margin="Margin.Dense" Class="rounded-lg" Style="width: 100px;" />
-                        <MudText>@_unit</MudText>
-                    </div>
-                    <MudText Typo="Typo.caption" Style="opacity: 0.7;">@GetEncouragement()</MudText>
-                </div>
-            </div>
-        </MudPaper>
-    </MudItem>
-
-    <!-- Quick Add Grid -->
-    <MudItem xs="12">
-        <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-             <MudText Typo="Typo.h6" Class="mb-4">Quick Add</MudText>
-             <MudGrid>
-                 @foreach (var drink in _drinkTypes)
-                 {
-                     <MudItem xs="6" sm="3">
-                         <MudPaper Class="pa-4 d-flex flex-column align-center justify-center cursor-pointer hover-scale rounded-lg" Elevation="0" Style="@($"background-color: {drink.HexColor}20; border: 1px solid {drink.HexColor}40; gap: 8px;")" @onclick="@(() => AddDrink(drink))">
-                             <MudIcon Icon="@drink.Icon" Size="Size.Large" Style="@($"color: {drink.HexColor};")" />
-                             <MudText Typo="Typo.body1" Class="font-weight-bold">@drink.Name</MudText>
-                             <MudText Typo="Typo.caption" Style="opacity: 0.7;">@drink.Amount @_unit</MudText>
-                         </MudPaper>
-                     </MudItem>
-                 }
-             </MudGrid>
-        </MudPaper>
-    </MudItem>
-
-    <!-- History Chart -->
-    <MudItem xs="12">
-        <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-             <MudText Typo="Typo.h6" Class="mb-4">Last 7 Days</MudText>
-             <MudChart ChartType="ChartType.Bar" ChartSeries="@_series" XAxisLabels="@_xAxisLabels" Width="100%" Height="300px" />
-        </MudPaper>
-    </MudItem>
-
-    <!-- Today's Log -->
-    <MudItem xs="12">
-        <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-             <div class="d-flex justify-space-between align-center mb-4">
-                 <MudText Typo="Typo.h6">Today's Log</MudText>
-             </div>
-             
-             <MudList T="HabitLog" Dense="true" DisablePadding="true">
-                 @if (_todaysLogs.Any())
-                 {
-                     @foreach (var log in _todaysLogs)
+                    
+                     <!-- Recent Logs Expander -->
+                     @if (_smokesLogs.Any())
                      {
-                         var drinkName = GetDrinkName(log);
-                         <MudListItem Icon="@GetIconForType(drinkName)" IconColor="Color.Inherit" Style="@($"color: {GetHexColorForType(drinkName)};")">
-                             <div class="d-flex justify-space-between align-center w-100">
-                                 <div class="d-flex flex-column">
-                                     <MudText Color="Color.Default">@log.Value @log.Unit <span style="opacity: 0.6; font-size: 0.9em;">- @drinkName</span></MudText>
-                                     <MudText Typo="Typo.caption" Style="opacity: 0.6;" Color="Color.Default">@GetLocalTime(log.LoggedAt).ToString("t")</MudText>
-                                 </div>
-                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" Color="Color.Default" />
-                             </div>
-                         </MudListItem>
-                         <MudDivider />
+                         <MudExpansionPanels Elevation="0" Class="mt-2 w-100" Dense="true">
+                             <MudExpansionPanel Text="History (Click to Edit)">
+                                 <MudList T="HabitLog" Dense="true" DisablePadding="true">
+                                     @foreach (var log in _smokesLogs)
+                                     {
+                                         <MudListItem Icon="@Icons.Material.Filled.SmokingRooms" IconColor="Color.Error">
+                                             <div class="d-flex justify-space-between align-center w-100">
+                                                 <MudText>@log.Value Cigarette @GetLocalTime(log.LoggedAt).ToString("t")</MudText>
+                                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" />
+                                             </div>
+                                         </MudListItem>
+                                     }
+                                 </MudList>
+                             </MudExpansionPanel>
+                         </MudExpansionPanels>
                      }
-                 }
-                 else
-                 {
-                     <MudText Typo="Typo.body2" Style="opacity: 0.6;" Class="py-4">No entries yet today.</MudText>
-                 }
-             </MudList>
-        </MudPaper>
-    </MudItem>
-</MudGrid>
+                </MudPaper>
+            </MudItem>
+            
+            <!-- Quick Log Card -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-6 rounded-xl detail-tile d-flex flex-column align-center justify-center" Elevation="3" Style="min-height: 200px;">
+                    <MudText Typo="Typo.h6" Class="mb-4">Log Cigarette</MudText>
+                     <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Large" Variant="Variant.Filled" Color="Color.Error" 
+                                   Style="width: 80px; height: 80px; border-radius: 50%; box-shadow: 0 4px 15px rgba(244, 67, 54, 0.4);"
+                                   OnClick="AddSmoke" />
+                     <MudText Typo="Typo.caption" Class="mt-4" Style="opacity: 0.7;">Click to log 1 cigarette</MudText>
+                </MudPaper>
+            </MudItem>
+
+             <!-- Savings & Stats -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                    <MudText Typo="Typo.h6" Class="mb-4">Total Savings</MudText>
+                    <MudGrid>
+                        <MudItem xs="4">
+                             <div class="d-flex flex-column align-center pa-2 rounded-lg" style="background: rgba(255,255,255,0.05);">
+                                 <MudText Typo="Typo.caption" Style="opacity: 0.7;">TOTAL SAVED</MudText>
+                                 <MudText Typo="Typo.h5" Color="Color.Success" Class="font-weight-bold">@GetTotalSavings()</MudText>
+                             </div>
+                        </MudItem>
+                        <MudItem xs="4">
+                             <div class="d-flex flex-column align-center pa-2 rounded-lg" style="background: rgba(255,255,255,0.05);">
+                                 <MudText Typo="Typo.caption" Style="opacity: 0.7;">MONTHLY PROJ.</MudText>
+                                 <MudText Typo="Typo.h5" Color="Color.Info" Class="font-weight-bold">@GetMonthlyProjection()</MudText>
+                             </div>
+                        </MudItem>
+                        <MudItem xs="4">
+                             <div class="d-flex flex-column align-center pa-2 rounded-lg" style="background: rgba(255,255,255,0.05);">
+                                 <MudText Typo="Typo.caption" Style="opacity: 0.7;">YEARLY PROJ.</MudText>
+                                 <MudText Typo="Typo.h5" Color="Color.Warning" Class="font-weight-bold">@GetYearlyProjection()</MudText>
+                             </div>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Chart -->
+            <MudItem xs="12">
+                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                     <MudText Typo="Typo.h6" Class="mb-4">Reduction Timeline</MudText>
+                     <MudChart ChartType="ChartType.Bar" ChartSeries="@_series" XAxisLabels="@_xAxisLabels" Width="100%" Height="300px" />
+                </MudPaper>
+            </MudItem>
+            
+            <!-- Configuration -->
+            <MudItem xs="12">
+                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                     <MudText Typo="Typo.h6" Class="mb-4">Configuration</MudText>
+                     <MudGrid>
+                         <MudItem xs="6">
+                             <MudNumericField @bind-Value="_smokesBaseline" Label="Baseline (Cigs/Day)" Variant="Variant.Outlined" Min="0" OnBlur="UpdateSmokesSettings" />
+                         </MudItem>
+                         <MudItem xs="6">
+                             <MudNumericField @bind-Value="_smokesPackSize" Label="Cigs in Pack" Variant="Variant.Outlined" Min="1" OnBlur="UpdateSmokesSettings" />
+                         </MudItem>
+                         <MudItem xs="6">
+                             <MudNumericField @bind-Value="_smokesPackCost" Label="Cost per Pack" Variant="Variant.Outlined" Min="0" Adornment="Adornment.Start" AdornmentText="@_smokesCurrency" OnBlur="UpdateSmokesSettings" />
+                         </MudItem>
+                         <MudItem xs="6">
+                             <MudTextField @bind-Value="_smokesCurrency" Label="Currency Code" Variant="Variant.Outlined" OnBlur="UpdateSmokesSettings" />
+                         </MudItem>
+                         <MudItem xs="12">
+                             <MudDatePicker Label="Quit Start Date" @bind-Date="_smokesQuitDate" Variant="Variant.Outlined" OnClosed="UpdateSmokesSettings" />
+                         </MudItem>
+                     </MudGrid>
+                 </MudPaper>
+            </MudItem>
+            
+             <!-- Info / Motivation -->
+            <MudItem xs="12">
+                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                     <div class="d-flex align-center gap-2 mb-2">
+                         <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Info" />
+                         <MudText Typo="Typo.h6">Journey to Quit</MudText>
+                     </div>
+                     <MudText Typo="Typo.body2" Class="mb-2">Reducing your intake allows your lungs to start repairing immediately. Within 2 weeks, circulation improves.</MudText>
+                     <MudExpansionPanels Elevation="0">
+                         <MudExpansionPanel Text="Health Timeline">
+                             <MudTimeline TimelinePosition="TimelinePosition.Start">
+                                 <MudTimelineItem Color="Color.Success">
+                                     <ItemContent>
+                                         <MudText Typo="Typo.subtitle2">20 Minutes</MudText>
+                                         <MudText Typo="Typo.body2">Heart rate and blood pressure drop.</MudText>
+                                     </ItemContent>
+                                 </MudTimelineItem>
+                                 <MudTimelineItem Color="Color.Success">
+                                     <ItemContent>
+                                         <MudText Typo="Typo.subtitle2">12 Hours</MudText>
+                                         <MudText Typo="Typo.body2">Carbon monoxide levels in blood normalize.</MudText>
+                                     </ItemContent>
+                                 </MudTimelineItem>
+                                 <MudTimelineItem Color="Color.Info">
+                                     <ItemContent>
+                                         <MudText Typo="Typo.subtitle2">2 Weeks - 3 Months</MudText>
+                                         <MudText Typo="Typo.body2">Circulation and lung function improve.</MudText>
+                                     </ItemContent>
+                                 </MudTimelineItem>
+                                  <MudTimelineItem Color="Color.Primary">
+                                     <ItemContent>
+                                         <MudText Typo="Typo.subtitle2">1 Year</MudText>
+                                         <MudText Typo="Typo.body2">Risk of heart disease is half that of a smoker.</MudText>
+                                     </ItemContent>
+                                 </MudTimelineItem>
+                             </MudTimeline>
+                         </MudExpansionPanel>
+                     </MudExpansionPanels>
+                 </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</div>
 
 @code {
+    private string _viewType = "water";
+    private bool _isLoading = false;
+
+    // Water Data
     private double _currentValue = 0;
     private double _goalValue = 2000;
     private string _unit = "ml";
     private int _progressPercentage => _goalValue > 0 ? (int)((_currentValue / _goalValue) * 100) : 0;
     private List<HabitLog> _todaysLogs = new();
-    private bool _isLoading = false;
     
-    // Liquid Visualization Data
+    // Smokes Data
+    private int _smokesCurrentValue = 0;
+    private int _smokesBaseline = 20;
+    private int _smokesPackSize = 20;
+    private double _smokesPackCost = 10;
+    private string _smokesCurrency = "USD";
+    private DateTime? _smokesQuitDate;
+    private List<HabitLog> _smokesLogs = new();
+
+    // Shared UI Data
+    private List<ChartSeries> _series = new();
+    private string[] _xAxisLabels = Array.Empty<string>();
+    
+    // Liquid Visualization Data (Water Only)
     record LiquidSegment(double Percentage, string Color);
     private List<LiquidSegment> _liquidSegments = new();
 
-    // Chart Data
-    private List<ChartSeries> _series = new();
-    private string[] _xAxisLabels = Array.Empty<string>();
-
-    // Drink Types Configuration
+    // Drink Types Configuration (Water Only)
     record DrinkType(string Name, double Amount, string Icon, string HexColor);
     private List<DrinkType> _drinkTypes = new()
     {
@@ -139,21 +321,34 @@
     protected override async Task OnInitializedAsync()
     {
         HabitsService.OnHabitsUpdated += RefreshDataVoid;
+        HabitsService.OnViewTypeChanged += OnViewTypeChanged;
         RefreshService.DetailRefreshRequested += RefreshDataAsync;
-        // Trigger refresh to show loading state initially
+        
+        // Sync initial view type sync
+        _viewType = HabitsService.CurrentViewType;
+        
         await RefreshDataAsync();
     }
 
     public void Dispose()
     {
         HabitsService.OnHabitsUpdated -= RefreshDataVoid;
+        HabitsService.OnViewTypeChanged -= OnViewTypeChanged;
         RefreshService.DetailRefreshRequested -= RefreshDataAsync;
+    }
+
+    private void OnViewTypeChanged()
+    {
+        _viewType = HabitsService.CurrentViewType;
+        _ = RefreshDataAsync();
     }
 
     private async void RefreshDataVoid() => await RefreshDataAsync();
 
     private async Task RefreshDataAsync()
     {
+        if (string.IsNullOrEmpty(_viewType)) _viewType = "water";
+        
         try
         {
             _isLoading = true;
@@ -176,23 +371,136 @@
     {
         _ = HabitsService.UpdateGoalAsync("water", _goalValue, _unit);
     }
+    
+    private void UpdateSmokesSettings()
+    {
+        // Save Settings
+        if (SettingsService.Settings != null)
+        {
+            SettingsService.Settings.SmokesBaselineDaily = _smokesBaseline;
+            SettingsService.Settings.SmokesPackSize = _smokesPackSize;
+            SettingsService.Settings.SmokesPackCost = _smokesPackCost;
+            SettingsService.Settings.SmokesCurrency = _smokesCurrency;
+            SettingsService.Settings.SmokesQuitDate = _smokesQuitDate;
+            
+            _ = SettingsService.SaveSettingsAsync();
+            StateHasChanged(); // Re-calc savings
+        }
+    }
 
     private async Task LoadData()
     {
-        var goal = await HabitsService.GetGoalAsync("water");
-        if (goal != null)
+        if (_viewType == "water")
         {
-            _goalValue = goal.TargetValue;
-            _unit = goal.Unit;
-        }
+            // --- WATER LOGIC ---
+            var goal = await HabitsService.GetGoalAsync("water");
+            if (goal != null)
+            {
+                _goalValue = goal.TargetValue;
+                _unit = goal.Unit;
+            }
 
-        var now = DateTime.Now;
-        _todaysLogs = await HabitsService.GetLogsAsync("water", now);
-        _currentValue = _todaysLogs.Sum(l => l.Value);
-        
-        CalculateLiquidSegments();
+            var now = DateTime.Now;
+            _todaysLogs = await HabitsService.GetLogsAsync("water", now);
+            _currentValue = _todaysLogs.Sum(l => l.Value);
+            
+            CalculateLiquidSegments();
+        }
+        else
+        {
+            // --- SMOKES LOGIC ---
+            // Load Settings
+            _smokesBaseline = SettingsService.Settings.SmokesBaselineDaily;
+            if (_smokesBaseline == 0) _smokesBaseline = 20; // Default
+            _smokesPackSize = SettingsService.Settings.SmokesPackSize;
+            if (_smokesPackSize == 0) _smokesPackSize = 20;
+            _smokesPackCost = SettingsService.Settings.SmokesPackCost;
+            _smokesCurrency = SettingsService.Settings.SmokesCurrency;
+            if (string.IsNullOrEmpty(_smokesCurrency)) _smokesCurrency = "USD";
+            _smokesQuitDate = SettingsService.Settings.SmokesQuitDate ?? DateTime.Today;
+
+            var now = DateTime.Now;
+            _smokesLogs = await HabitsService.GetLogsAsync("smokes", now);
+            _smokesCurrentValue = (int)_smokesLogs.Sum(l => l.Value);
+        }
     }
     
+    private async Task AddSmoke()
+    {
+         await HabitsService.AddLogAsync("smokes", 1, "cig", DateTime.Now, null);
+    }
+
+    private string GetTodaySavings()
+    {
+        var avoided = _smokesBaseline - _smokesCurrentValue;
+        if (avoided < 0) avoided = 0; // Negative savings? No, just 0.
+        var costPerCig = _smokesPackCost / Math.Max(1, _smokesPackSize);
+        var saved = avoided * costPerCig;
+        return $"{_smokesCurrency} {saved:F2}";
+    }
+    
+    private string GetTotalSavings()
+    {
+        // Simple Approximation: (Days Since Quit * Baseline) - (Total Smoked Since Quit?)
+        // Fetching "Total Smoked" is expensive if we don't have an aggregate endpoint.
+        // For now, let's use a simpler heuristic or just TODAYs accumulation if history is limited.
+        // To be accurate, we really need the total sum.
+        // Let's assume the user was smoking BASELINE every day before. 
+        // We can just calculate "Potential Spent" vs "Actual Spent".
+        // But "Actual Spent" requires sum of all logs.
+        
+        // TODO: Implement aggregate query in HabitsService for "Total Smoked Since X"
+        // For MVP: We return "Estimated" based on today's reduction extrapolated? No that's bad.
+        // Let's settle for Today's calculation for now, or "This Week".
+        // Or just leave it as placeholder "Coming Soon" or simple calc based on Days * Baseline if they quit cold turkey (0 logs).
+        // Let's assume 0 logs for past days (Optimistic) if we don't fetch them, OR
+        // calculate based on (Days * Baseline) * Cost - (Logged * Cost).
+        
+        // Let's show "Projected Annual Savings" based on *Current Baseline* vs 0? No, vs today's rate?
+        return GetTodaySavings(); // Temporary placeholder till we aggregate
+    }
+    
+    private string GetMonthlyProjection()
+    {
+         var avoidedDaily = Math.Max(0, _smokesBaseline - _smokesCurrentValue);
+         var costPerCig = _smokesPackCost / Math.Max(1, _smokesPackSize);
+         var dailySaved = avoidedDaily * costPerCig;
+         return $"{_smokesCurrency} {(dailySaved * 30):F0}";
+    }
+    
+    private string GetYearlyProjection()
+    {
+         var avoidedDaily = Math.Max(0, _smokesBaseline - _smokesCurrentValue);
+         var costPerCig = _smokesPackCost / Math.Max(1, _smokesPackSize);
+         var dailySaved = avoidedDaily * costPerCig;
+         return $"{_smokesCurrency} {(dailySaved * 365):F0}";
+    }
+
+    private async Task LoadHistory()
+    {
+        // Simple 7 day history
+        var data = new double[7];
+        var labels = new string[7];
+        var today = DateTime.Now.Date;
+        var type = _viewType == "water" ? "water" : "smokes";
+
+        for (int i = 0; i < 7; i++)
+        {
+            var date = today.AddDays(-6 + i);
+            labels[i] = date.ToString("dd MMM");
+            data[i] = await HabitsService.GetDailyProgressAsync(type, date);
+        }
+        
+        var name = type == "water" ? $"Intake ({_unit})" : "Cigarettes";
+        
+        _series = new List<ChartSeries>
+        {
+            new ChartSeries { Name = name, Data = data }
+        };
+        _xAxisLabels = labels;
+    }
+    
+    // --- WATER HELPERS ---
     private void CalculateLiquidSegments()
     {
         _liquidSegments.Clear();
@@ -226,28 +534,7 @@
         }
         return name;
     }
-
-    private async Task LoadHistory()
-    {
-        // Simple 7 day history
-        var data = new double[7];
-        var labels = new string[7];
-        var today = DateTime.Now.Date;
-
-        for (int i = 0; i < 7; i++)
-        {
-            var date = today.AddDays(-6 + i);
-            labels[i] = date.ToString("dd MMM");
-            data[i] = await HabitsService.GetDailyProgressAsync("water", date);
-        }
-
-        _series = new List<ChartSeries>
-        {
-            new ChartSeries { Name = "Intake (" + _unit + ")", Data = data }
-        };
-        _xAxisLabels = labels;
-    }
-
+    
     private async Task AddDrink(DrinkType drink)
     {
         await HabitsService.AddLogAsync("water", drink.Amount, _unit, DateTime.Now, "{ \"drink\": \"" + drink.Name + "\" }");
@@ -276,15 +563,6 @@
         return Icons.Material.Filled.LocalDrink;
     }
 
-    private Color GetColorForType(string drinkName)
-    {
-        // MudBlazor Color enum doesn't support custom hex easily in IconColor, 
-        // using style instead in the markup or mapping to closest theme color
-        // For simplicity, let's return a Color enum if possible, or use Style in razor
-        return Color.Default; 
-    }
-    
-    // Helper to get hex color string for style binding
     private string GetHexColorForType(string drinkName)
     {
         var type = _drinkTypes.FirstOrDefault(d => d.Name == drinkName);
@@ -293,12 +571,11 @@
         if (drinkName.Contains("Tea")) return "#4CAF50";
         return "#29B6F6";
     }
-
+    
     private DateTime GetLocalTime(DateTime date)
     {
         if (date.Kind == DateTimeKind.Unspecified)
         {
-             // Log from DB arrives as Local but Unspecified Kind
              return DateTime.SpecifyKind(date, DateTimeKind.Local);
         }
         return date.ToLocalTime();

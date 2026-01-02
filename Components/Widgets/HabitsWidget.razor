@@ -9,13 +9,34 @@
 
 <div class="d-flex align-center mb-1 flex-grow-1" style="width: 100%; gap: 2px;">
     <div class="flex-grow-1" style="min-width: 0;">
-        <MudCarousel TData="object" ShowArrows="false" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+        <MudCarousel TData="object" SelectedIndex="@_currentSlide" SelectedIndexChanged="@OnCarouselIndexChanged" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
                      Class="flex-grow-1 rounded-pill mud-theme-primary">
              <MudCarouselItem Transition="Transition.Slide">
                  <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
                      <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Class="mr-2" Size="Size.Small" Style="color: white;" />
                      <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
                          Bubbles
+                     </MudText>
+                     
+                     <MudTooltip Text="@(SettingsService.IsAuthenticated ? "Synced" : "Login to Sync")">
+                         <div @onclick="OpenSettings" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1 flex-shrink-0 ml-2">
+                             @if (SettingsService.IsAuthenticated)
+                             {
+                                 <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Style="color: white; opacity: 0.8;" />
+                             }
+                             else
+                             {
+                                 <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Style="color: #FFCC80;" />
+                             }
+                         </div>
+                     </MudTooltip>
+                 </div>
+             </MudCarouselItem>
+             <MudCarouselItem Transition="Transition.Slide">
+                 <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                     <MudIcon Icon="@Icons.Material.Filled.SmokingRooms" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                     <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
+                         Smokes
                      </MudText>
                      
                      <MudTooltip Text="@(SettingsService.IsAuthenticated ? "Synced" : "Login to Sync")">
@@ -45,6 +66,8 @@
 
 <div class="d-flex flex-row align-center flex-grow-1 gap-4 px-2 py-4" style="width: 100%; height: 100%; overflow: hidden;">
     <!-- Left: SVG Chart Section -->
+    @if (_currentSlide == 0)
+    {
     <div class="d-flex align-center justify-center" style="position: relative; min-width: 130px; height: 130px;">
         <div style="position: relative; width: 130px; height: 130px;">
             <!-- Custom SVG Donut -->
@@ -132,6 +155,43 @@
             </div>
         </div>
     </div>
+    
+    <!-- SMOKES VIEW -->
+    }
+    else if (_currentSlide == 1)
+    {
+        <div class="d-flex align-center justify-center flex-grow-1" style="width: 100%;">
+             <div class="d-flex flex-column align-center gap-2">
+                 <div class="d-flex align-center gap-4">
+                     <MudText Typo="Typo.h4" Class="font-weight-bold">
+                         <span style="@(_smokesCurrentValue > _smokesBaseline ? "color: var(--mud-palette-error);" : "color: var(--mud-palette-success);")">
+                            @_smokesCurrentValue
+                         </span> 
+                         <span style="font-size: 0.6em; opacity: 0.5;">/ @_smokesBaseline</span>
+                     </MudText>
+                     
+                     <MudIconButton Icon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" 
+                                    OnClick="AddSmoke" Class="rounded-circle" Style="width: 32px; height: 32px; min-width: 32px;" />
+                 </div>
+                 
+                 <MudText Typo="Typo.caption" Style="opacity: 0.7;">Cigarettes Today</MudText>
+                  
+                 <!-- Simple Progress Bar -->
+                 <div style="width: 120px;">
+                    <MudProgressLinear Value="@((_smokesCurrentValue / Math.Max(_smokesBaseline, 1)) * 100)" 
+                                      Color="@(_smokesCurrentValue > _smokesBaseline ? Color.Error : Color.Success)" 
+                                      Class="rounded-lg" Size="Size.Large" />
+                 </div>
+                 
+                 <div class="d-flex align-center gap-4 mt-2">
+                     <div class="d-flex flex-column align-center">
+                        <MudText Typo="Typo.caption" Style="font-weight: bold; color: var(--mud-palette-success);">@(_smokesBaseline - _smokesCurrentValue)</MudText>
+                        <MudText Typo="Typo.caption" Style="font-size: 0.65rem; opacity: 0.7;">AVOIDED</MudText>
+                     </div>
+                 </div>
+             </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -140,6 +200,12 @@
     private double _currentValue = 0;
     private double _goalValue = 2000;
     private string _unit = "ml";
+    
+    private int _currentSlide = 0;
+    
+    // Smokes Data
+    private double _smokesCurrentValue = 0;
+    private int _smokesBaseline = 20;
     
     // SVG Data
     record SvgSegment(string PathData, string Color);
@@ -150,21 +216,60 @@
     protected override async Task OnInitializedAsync()
     {
         HabitsService.OnHabitsUpdated += RefreshDataVoid;
+        HabitsService.OnViewTypeChanged += OnViewTypeChanged;
         SettingsService.OnSettingsChanged += RefreshDataVoid;
         RefreshService.RefreshRequested += RefreshDataAsync;
+        
+        // Initial Sync
+        OnViewTypeChanged();
+        
         await LoadData();
     }
 
     public void Dispose()
     {
         HabitsService.OnHabitsUpdated -= RefreshDataVoid;
+        HabitsService.OnViewTypeChanged -= OnViewTypeChanged;
         SettingsService.OnSettingsChanged -= RefreshDataVoid;
         RefreshService.RefreshRequested -= RefreshDataAsync;
     }
 
+    private void OnCarouselIndexChanged(int index)
+    {
+        _currentSlide = index;
+        HabitsService.CurrentViewType = index == 0 ? "water" : "smokes";
+    }
+
+    private void OnViewTypeChanged()
+    {
+        var newIndex = HabitsService.CurrentViewType == "water" ? 0 : 1;
+        if (_currentSlide != newIndex)
+        {
+            _currentSlide = newIndex;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddSmoke()
+    {
+         await HabitsService.AddLogAsync("smokes", 1, "cig", DateTime.Now, null);
+         _smokesCurrentValue = await HabitsService.GetDailyProgressAsync("smokes", DateTime.Now);
+    }
+
     private void OpenSettings()
     {
-        WindowManager.OpenDetail("Settings", "Settings");
+        // View type is already synced via OnCarouselIndexChanged or binding
+        // But let's be explicit
+        if (_currentSlide == 0)
+        {
+            HabitsService.CurrentViewType = "water";
+            WindowManager.OpenDetail("Settings", "Settings"); 
+        }
+        else
+        {
+             HabitsService.CurrentViewType = "smokes";
+             WindowManager.OpenDetail("Habits", "Smokes Configuration"); 
+        }
     }
 
     private async void RefreshDataVoid() => await RefreshDataAsync();
@@ -233,6 +338,20 @@
         catch (Exception ex)
         {
              Console.WriteLine($"Error loading habits data: {ex}");
+        }
+
+        
+        // Load Smokes Data
+        try 
+        {
+            _smokesBaseline = SettingsService.Settings.SmokesBaselineDaily;
+            if (_smokesBaseline <= 0) _smokesBaseline = 20; // Default fallback view
+            
+            _smokesCurrentValue = await HabitsService.GetDailyProgressAsync("smokes", DateTime.Now);
+        }
+        catch (Exception ex)
+        {
+             Console.WriteLine($"Error loading smokes data: {ex}");
         }
     }
 

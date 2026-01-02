@@ -13,6 +13,21 @@ namespace Daily.Services
         private readonly IRefreshService _refreshService;
         
         public event Action OnHabitsUpdated;
+        public event Action OnViewTypeChanged;
+
+        private string _currentViewType = "water";
+        public string CurrentViewType
+        {
+            get => _currentViewType;
+            set
+            {
+                if (_currentViewType != value)
+                {
+                    _currentViewType = value;
+                    OnViewTypeChanged?.Invoke();
+                }
+            }
+        }
 
         // In-memory fallback for Guest mode
         private readonly Dictionary<string, HabitGoal> _guestGoals = new();
