@@ -269,12 +269,9 @@
                              <MudNumericField @bind-Value="_smokesPackCost" Label="Cost per Pack" Variant="Variant.Outlined" Min="0" Adornment="Adornment.Start" AdornmentText="@_smokesCurrency" OnBlur="UpdateSmokesSettings" />
                          </MudItem>
                          <MudItem xs="6">
-                             <MudSelect T="string" Value="_smokesCurrency" Label="Currency" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" ValueChanged="OnCurrencyChanged" PopoverClass="glass-popover fixed-z-index" LockScroll="true" Dense="true">
-                                 @foreach (var currency in _currencies)
-                                 {
-                                     <MudSelectItem Value="@currency" />
-                                 }
-                             </MudSelect>
+                             <MudAutocomplete T="string" Label="Currency" Value="_smokesCurrency" ValueChanged="OnCurrencyChanged"
+                                              SearchFunc="@SearchCurrencies" ResetValueOnEmptyText="true" CoerceValue="true" AdornmentIcon="@Icons.Material.Filled.Search"
+                                              Variant="Variant.Outlined" Dense="true" PopoverClass="glass-popover fixed-z-index" MaxHeight="300" />
                          </MudItem>
                          <MudItem xs="12">
                              <MudDatePicker Label="Quit Start Date" Date="_smokesQuitDate" PickerVariant="PickerVariant.Inline" 
@@ -529,6 +526,15 @@
         UpdateSmokesSettings();
     }
     
+    private async Task<IEnumerable<string>> SearchCurrencies(string value, CancellationToken token)
+    {
+        // if text is null or empty, show full list or a subset
+        if (string.IsNullOrEmpty(value))
+            return await Task.FromResult(_currencies);
+
+        return await Task.FromResult(_currencies.Where(x => x.Contains(value, StringComparison.InvariantCultureIgnoreCase)));
+    }
+
     private void OnDateChanged(DateTime? date)
     {
         _smokesQuitDate = date;
