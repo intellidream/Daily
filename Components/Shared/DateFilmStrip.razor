@@ -1,0 +1,243 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<div class="film-strip-wrapper my-4" style="position: relative; width: 100%; height: 100px; user-select: none; -webkit-user-select: none;">
+    <!-- Left Blur Gradient -->
+    <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 15%; background: linear-gradient(to right, rgba(30,30,40,1) 0%, rgba(30,30,40,0) 100%); z-index: 10; pointer-events: none;"></div>
+
+    <!-- Scroll Track -->
+    <div @ref="_scrollContainer" 
+         class="d-flex align-center overflow-x-auto hide-scrollbar h-100"
+         style="cursor: grab; scroll-behavior: smooth; white-space: nowrap; padding-left: 40%; padding-right: 40%; touch-action: pan-x;"
+         id="@_componentId"
+         @onmousedown="OnMouseDown"
+         @onmousemove="OnMouseMove"
+         @onmouseup="OnMouseUp"
+         @onmouseleave="OnMouseUp">
+        
+        @foreach (var date in _dates)
+        {
+            var isSelected = date.Date == SelectedDate.Date;
+            var isToday = date.Date == DateTime.Today;
+            
+            <div @key="date"
+                 class="d-flex flex-column justify-center align-center flex-shrink-0 date-item mx-1 rounded-lg @(isSelected ? "selected" : "")" 
+                 style="width: 20%; min-width: 70px; height: 80px; transition: all 0.2s ease-out; opacity: @(isSelected ? 1 : 0.5); transform: scale(@(isSelected ? 1.05 : 0.9)); position: relative;"
+                 @onclick="@(() => SelectDate(date))"
+                 @onclick:stopPropagation="true">
+                 
+                 @if(isToday)
+                 {
+                     <div style="position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; background-color: #29B6F6; border-radius: 50%;"></div>
+                 }
+                 
+                <MudText Typo="Typo.caption" Class="font-weight-bold" Style="letter-spacing: 1px;" Color="@(isSelected ? Color.Inherit : Color.Default)">
+                    @date.ToString("MMM").ToUpper()
+                </MudText>
+                <MudText Typo="Typo.h5" Class="font-weight-bold my-1" Color="@(isSelected ? Color.Inherit : Color.Default)">
+                    @date.Day
+                </MudText>
+                <MudText Typo="Typo.caption" Color="@(isSelected ? Color.Inherit : Color.Default)">
+                     @date.ToString("ddd")
+                </MudText>
+            </div>
+        }
+    </div>
+
+    <!-- Right Blur Gradient -->
+    <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 15%; background: linear-gradient(to left, rgba(30,30,40,1) 0%, rgba(30,30,40,0) 100%); z-index: 10; pointer-events: none;"></div>
+</div>
+
+<style>
+    .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+    .hide-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+    .date-item.selected {
+        background-color: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .date-item:hover {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+    .date-item:active {
+        cursor: grabbing;
+    }
+    /* Prevent default drag ghost image */
+    .date-item, .film-strip-wrapper {
+        -webkit-user-drag: none;
+    }
+</style>
+
+@code {
+    [Parameter] public DateTime StartDate { get; set; }
+    [Parameter] public DateTime EndDate { get; set; } = DateTime.Today;
+    [Parameter] public DateTime SelectedDate { get; set; }
+    [Parameter] public EventCallback<DateTime> SelectedDateChanged { get; set; }
+
+    private ElementReference _scrollContainer;
+    private string _componentId = "filmstrip-" + Guid.NewGuid().ToString("N");
+    private List<DateTime> _dates = new();
+    
+    // Drag State
+    private bool _isDown = false;
+    private double _startX;
+    private double _scrollLeft;
+    private bool _isDragging = false;
+
+    protected override void OnParametersSet()
+    {
+        _dates.Clear();
+        // Ensure robust date range
+        var start = StartDate;
+        var end = EndDate;
+        
+        // Safety: If start is invalid or future, default to 30 days back
+        if (start == DateTime.MinValue || start > end) start = end.AddDays(-30);
+        
+        // If range is suspiciously small (e.g. < 5 days), maybe User just started? 
+        // We stick to the request: "from started date... up to current date".
+        // But if started date IS today, we should probably show at least a few empty slots or history?
+        // Current logic in Parent forces 30 days if QuitDate is Today. So we strictly follow parameters here.
+
+        var current = start.Date;
+        while (current <= end.Date)
+        {
+            _dates.Add(current);
+            current = current.AddDays(1);
+        }
+    }
+
+
+    
+    private async Task ScrollToSelected()
+    {
+       var index = _dates.FindIndex(d => d.Date == SelectedDate.Date);
+       if(index >= 0)
+       {
+           // Center the selected item
+           await JSRuntime.InvokeVoidAsync("eval", $@"
+                var el = document.getElementById('{_componentId}');
+                if(el) {{
+                    var children = el.children;
+                    if(children && children[{index}]) {{
+                        var child = children[{index}];
+                        var center = child.offsetLeft + child.offsetWidth / 2;
+                        var scroll = center - el.offsetWidth / 2;
+                        el.scrollTo({{ left: scroll, behavior: 'smooth' }});
+                    }}
+                }}
+           ");
+       }
+    }
+
+    // --- MOUSE DRAG LOGIC (C# Hybrid) ---
+    // We use JS for the heavy lifting normally, but C# event handlers are fine for state flags
+    // actually, for smooth high-frequency drag, JS is better. 
+    // The previous implementation had 'window shake', possibly due to event bubbling. 
+    // We will use a stricter JS implementation here that stops propagation.
+    
+    private void OnMouseDown(MouseEventArgs e)
+    {
+        // Handled in JS now to prevent bubbling issues more reliably
+    }
+    
+    // Re-inject the JS with stopPropagation and careful handling
+    protected override async Task OnInitializedAsync()
+    {
+         await base.OnInitializedAsync();
+         // We do this in OnAfterRender normally, but defining the script string here:
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+             await JSRuntime.InvokeVoidAsync("eval", @"
+                window.initFilmStripDragRobust = function(id) {
+                    const el = document.getElementById(id);
+                    if(!el) return;
+                    
+                    let isDown = false;
+                    let startX;
+                    let scrollLeft;
+                    let isDragging = false;
+                    
+                    el.addEventListener('mousedown', (e) => {
+                        isDown = true;
+                        isDragging = false;
+                        el.style.cursor = 'grabbing';
+                        el.style.scrollBehavior = 'auto'; // Disable smooth scroll while dragging
+                        startX = e.pageX - el.offsetLeft;
+                        scrollLeft = el.scrollLeft;
+                        
+                        // CRITICAL: Stop propagation to prevent window drag
+                        e.stopPropagation();
+                        e.preventDefault(); 
+                    });
+                    
+                    el.addEventListener('mouseleave', () => {
+                        isDown = false;
+                        el.style.cursor = 'grab';
+                        el.style.scrollBehavior = 'smooth';
+                    });
+                    
+                    el.addEventListener('mouseup', (e) => {
+                        isDown = false;
+                        el.style.cursor = 'grab';
+                        el.style.scrollBehavior = 'smooth';
+                        
+                        if (isDragging) {
+                             el.setAttribute('data-dragged', 'true');
+                             setTimeout(() => el.removeAttribute('data-dragged'), 50);
+                        }
+                        e.stopPropagation();
+                    });
+                    
+                    el.addEventListener('mousemove', (e) => {
+                        if(!isDown) return;
+                        e.preventDefault();
+                        e.stopPropagation(); // Stop window shake?
+                        
+                        const x = e.pageX - el.offsetLeft;
+                        const walk = (x - startX) * 2; 
+                        if(Math.abs(walk) > 5) isDragging = true;
+                        el.scrollLeft = scrollLeft - walk;
+                    });
+                    
+                    // Add touch support just in case
+                     el.addEventListener('touchstart', (e) => {
+                         // touch usually handled by overflow-auto, but we might want to stop propagation
+                         e.stopPropagation();
+                     }, { passive: false });
+                     
+                     el.addEventListener('touchmove', (e) => {
+                         e.stopPropagation();
+                     }, { passive: false });
+                }
+            ");
+            
+            await JSRuntime.InvokeVoidAsync("initFilmStripDragRobust", _componentId);
+            await ScrollToSelected();
+        }
+    }
+
+    private void OnMouseMove(MouseEventArgs e) {}
+    private void OnMouseUp(MouseEventArgs e) {}
+
+    private async Task SelectDate(DateTime date)
+    {
+        // Check dragging flag from JS
+        var isDragged = await JSRuntime.InvokeAsync<string>("eval", $"document.getElementById('{_componentId}').getAttribute('data-dragged')");
+        if (isDragged == "true") return;
+
+        SelectedDate = date;
+        await SelectedDateChanged.InvokeAsync(date);
+        await ScrollToSelected();
+    }
+}

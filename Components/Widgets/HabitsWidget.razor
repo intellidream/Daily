@@ -213,16 +213,19 @@
                     }
                     <div class="mt-2 d-flex flex-column align-center" style="width: 100%;">
                         <MudText Typo="Typo.subtitle2" Align="Align.Center" Class="font-weight-bold" Color="Color.Success">
-                            @monthlySaved.ToString("F0") @_smokesCurrency saved
+                            @monthlySaved.ToString("F0") @_smokesCurrency
                         </MudText>
                          <MudText Typo="Typo.caption" Align="Align.Center" Class="mt-0" Style="opacity: 0.6; text-transform: uppercase; font-size: 0.65rem;">THIS MONTH</MudText>
                     </div>
+                    
+                    <!-- Projected Savings this Month -->
+
                  </div>
              </div>
 
              <div class="d-flex align-center justify-center pl-2 flex-shrink-0" style="width: auto;">
                  <!-- Quadrant Pie Button -->
-                 <div style="width: clamp(56px, 15vw, 84px); height: clamp(56px, 15vw, 84px); min-width: 56px; min-height: 56px; position: relative;">
+                 <div style="width: clamp(64px, 18vw, 100px); height: clamp(64px, 18vw, 100px); min-width: 64px; min-height: 64px; position: relative;">
                      <!-- Icons Overlay - Interactive Tooltips -->
                      <!-- CIGARETTE (Top Left) -->
                      <div style="position: absolute; top: 0%; left: 0%; width: 50%; height: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; pointer-events: none;">

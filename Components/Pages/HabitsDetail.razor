@@ -1,4 +1,5 @@
 @using Daily.Models
+@using Daily.Components.Shared
 @using Daily.Services
 @using System.Text.Json
 @inject IHabitsService HabitsService
@@ -205,19 +206,12 @@
                     </div>
                     
                     <!-- Moved Date Picker Here per user request for bigger size & centering -->
+                    <!-- Custom Film Strip Date Selector -->
                     <div class="d-flex justify-center w-100 mt-4">
-                            <MudDatePicker Date="@_viewDate" DateChanged="OnViewDateChanged" 
-                                          Variant="Variant.Outlined" 
-                                          PickerVariant="PickerVariant.Inline"
-                                          Margin="Margin.Normal"
-                                          Rounded="true"
-                                          Adornment="Adornment.Start"
-                                          AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
-                                          AdornmentColor="Color.Primary"
-                                          Class="mx-auto"
-                                          InputClass="text-center"
-                                          Style="background: rgba(30,30,40,0.5); width: 100%; max-width: 300px; margin: 0 auto;" 
-                                          PopoverClass="glass-popover" />
+                        <DateFilmStrip StartDate="@((_smokesQuitDate.HasValue && _smokesQuitDate.Value < DateTime.Today ? _smokesQuitDate.Value : DateTime.Today.AddDays(-30)))" 
+                                      EndDate="@DateTime.Today"
+                                      SelectedDate="@(_viewDate ?? DateTime.Today)"
+                                      SelectedDateChanged="@(d => OnViewDateChanged(d))" />
                     </div>
                     
                      <!-- Recent Logs Expander -->
