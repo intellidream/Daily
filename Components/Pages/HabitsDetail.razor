@@ -131,22 +131,8 @@
                              <MudChip T="string" Size="Size.Small" Color="@_lungsHealthColor" Variant="Variant.Text">@_lungsHealthStatus</MudChip>
                          </div>
                          
-                         <div class="d-flex align-center gap-2">
-                               <!-- Calendar Date Picker (Hidden Input, Icon Trigger) -->
-                               <!-- NOTE: We use opacity 0 and absolute positioning to hide it visually but keep it in DOM. 
-                                    Using d-none removes it from render tree. -->
-                               <MudDatePicker @ref="_datePicker" Date="@_viewDate" DateChanged="OnViewDateChanged" 
-                                              PickerVariant="PickerVariant.Dialog" DisableToolbar="true" 
-                                              PopoverClass="glass-popover"
-                                              Style="opacity: 0; position: absolute; width: 1px; height: 1px; overflow: hidden; pointer-events: none; top: -1000px;" />
-                               
-                               <MudTooltip Text="Select Date">
-                                 <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" 
-                                                Color="@(_viewDate?.Date == DateTime.Now.Date ? Color.Default : Color.Primary)" 
-                                                Variant="Variant.Text" 
-                                                OnClick="@(() => _datePicker.OpenAsync())" />
-                               </MudTooltip>
-                         </div>
+                         <!-- Removed Date Picker from here -->
+                         <div style="width: 24px;"></div> <!-- Spacer -->
                      </div>
 
                      <div class="d-flex justify-space-between align-center w-100 my-4" style="height: 220px;">
@@ -216,6 +202,22 @@
                             <MudText Typo="Typo.h5" Class="font-weight-bold" Color="Color.Default">@GetTodaySavings()</MudText>
                             <MudText Typo="Typo.caption" Style="opacity: 0.8; font-weight: 600;">SAVED</MudText>
                         </div>
+                    </div>
+                    
+                    <!-- Moved Date Picker Here per user request for bigger size & centering -->
+                    <div class="d-flex justify-center w-100 mt-4">
+                            <MudDatePicker Date="@_viewDate" DateChanged="OnViewDateChanged" 
+                                          Variant="Variant.Outlined" 
+                                          PickerVariant="PickerVariant.Inline"
+                                          Margin="Margin.Normal"
+                                          Rounded="true"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Filled.CalendarMonth"
+                                          AdornmentColor="Color.Primary"
+                                          Class="mx-auto"
+                                          InputClass="text-center"
+                                          Style="background: rgba(30,30,40,0.5); width: 100%; max-width: 300px; margin: 0 auto;" 
+                                          PopoverClass="glass-popover" />
                     </div>
                     
                      <!-- Recent Logs Expander -->
@@ -408,7 +410,7 @@
     
     /* Ensure dialogs are above everything and OPAQUE */
     .mud-dialog-container {
-        z-index: 2010 !important;
+        z-index: 99999 !important;
     }
     
     /* Force the actual picker content to be opaque because it might be transparent by default */
@@ -416,14 +418,24 @@
         background-color: #1e1e2d !important; /* Dark solid background */
         backdrop-filter: none !important;
         box-shadow: 0 4px 6px rgba(0,0,0,0.5) !important;
+        z-index: 99999 !important;
     }
     
     .mud-picker-popover-paper {
         background-color: #1e1e2d !important;
+        z-index: 99999 !important;
     }
     
     .mud-picker {
-         z-index: 2020 !important;
+         z-index: 99999 !important;
+    }
+
+    .mud-popover-provider {
+        z-index: 99999 !important;
+    }
+
+    .mud-overlay {
+        z-index: 99998 !important;
     }
 
     .fixed-z-index {
