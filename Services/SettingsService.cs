@@ -78,6 +78,22 @@ namespace Daily.Services
                     _currentSettings.UnitSystem = remoteSettings.UnitSystem;
                     _currentSettings.PressureUnit = remoteSettings.PressureUnit;
                     _currentSettings.Interests = remoteSettings.Interests;
+                    
+                    // Sync General Config
+                    _currentSettings.WindUnit = remoteSettings.WindUnit;
+                    _currentSettings.VisibilityUnit = remoteSettings.VisibilityUnit;
+                    _currentSettings.PrecipitationUnit = remoteSettings.PrecipitationUnit;
+                    _currentSettings.NotificationsEnabled = remoteSettings.NotificationsEnabled;
+                    _currentSettings.DailyForecastAlert = remoteSettings.DailyForecastAlert;
+                    _currentSettings.PrecipitationAlert = remoteSettings.PrecipitationAlert;
+
+                    // Sync Smokes Config
+                    _currentSettings.SmokesBaselineDaily = remoteSettings.SmokesBaselineDaily;
+                    _currentSettings.SmokesPackSize = remoteSettings.SmokesPackSize;
+                    _currentSettings.SmokesPackCost = remoteSettings.SmokesPackCost;
+                    _currentSettings.SmokesCurrency = remoteSettings.SmokesCurrency;
+                    _currentSettings.SmokesQuitDate = remoteSettings.SmokesQuitDate;
+
                     // Do NOT overwrite local-only properties (WindUnit, etc) with remote defaults
                 }
                 else

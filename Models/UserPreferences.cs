@@ -22,12 +22,18 @@ namespace Daily.Models
         public List<string> Interests { get; set; } = new();
 
         // New Preferences (Local Only until DB Schema Updated)
+        [Column("wind_unit")]
         public string WindUnit { get; set; } = "km/h"; // m/s, km/h, mph
+        [Column("visibility_unit")]
         public string VisibilityUnit { get; set; } = "km"; // km, mi
+        [Column("precipitation_unit")]
         public string PrecipitationUnit { get; set; } = "mm"; // mm, in
         
+        [Column("notifications_enabled")]
         public bool NotificationsEnabled { get; set; } = true;
+        [Column("daily_forecast_alert")]
         public bool DailyForecastAlert { get; set; } = true;
+        [Column("precipitation_alert")]
         public bool PrecipitationAlert { get; set; } = true;
 
         // Smokes Configuration (Synced)
