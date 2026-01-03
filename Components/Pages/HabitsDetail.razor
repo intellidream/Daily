@@ -123,66 +123,85 @@
             <MudItem xs="12">
                  <MudPaper Class="detail-tile rounded-xl pa-6 d-flex flex-column align-center relative" Elevation="3">
                      <!-- Header -->
-                     <div class="d-flex justify-space-between w-100 mb-4 align-center">
+                     <!-- Header -->
+                     <div class="d-flex justify-space-between w-100 mb-2 align-center">
                          <div class="d-flex align-center gap-2">
                              <MudText Typo="Typo.h6" Class="font-weight-bold">Health Index</MudText>
                              <MudChip T="string" Size="Size.Small" Color="@_lungsHealthColor" Variant="Variant.Text">@_lungsHealthStatus</MudChip>
                          </div>
-                         <MudIconButton Icon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Error" OnClick="AddSmoke" Size="Size.Small" />
+                         
+                         <div class="d-flex align-center gap-2">
+                              <!-- Calendar Date Picker (Hidden Input, Icon Trigger) -->
+                              <MudDatePicker @ref="_datePicker" Date="@_viewDate" DateChanged="OnViewDateChanged" 
+                                             PickerVariant="PickerVariant.Dialog" DisableToolbar="true" 
+                                             Style="display: none;" />
+                              
+                              <MudTooltip Text="Select Date">
+                                <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" 
+                                               Color="@(_viewDate?.Date == DateTime.Now.Date ? Color.Default : Color.Primary)" 
+                                               Variant="Variant.Text" 
+                                               OnClick="@(() => _datePicker.OpenAsync())" />
+                              </MudTooltip>
+                         </div>
                      </div>
 
-                     <!-- Lungs SVG -->
-                     <div class="relative d-flex justify-center align-center my-4" style="height: 220px; width: 220px;">
-                        <svg width="200" height="200" viewBox="0 0 200 200">
-                             <defs>
-                                <!-- Gradient: Pink (Health) rising from Bottom, Grey (Smoke) filling from Top 
-                                     User: "blended and glassy feel between pink and grey"
-                                     Logic: Pink to Grey blend. 
-                                     Instead of hard stop, let's use a transition zone.
-                                     Offset calculated as boundary. 
-                                     Stop 1: Grey at Offset - 20%.
-                                     Stop 2: Pink at Offset + 20%.
-                                -->
-                                <linearGradient id="lungGradient" x1="0%" y1="100%" x2="0%" y2="0%">
-                                    <stop offset="@($"{Math.Max(0, (Math.Min(100, Math.Max(0, (_smokesCurrentValue / Math.Max((double)_smokesBaseline, 1.0)) * 100))) - 20)}%")" 
-                                          style="stop-color: #546E7A; stop-opacity: 1" /> <!-- Grey (Sick) fills from bottom -->
-                                    <stop offset="@($"{Math.Min(100, (Math.Min(100, Math.Max(0, (_smokesCurrentValue / Math.Max((double)_smokesBaseline, 1.0)) * 100))) + 20)}%")" 
-                                          style="stop-color: #F8BBD0; stop-opacity: 1" /> <!-- Pink (Health) rest -->
-                                </linearGradient>
-                                
-                                <!-- Glassy Shine Overlay -->
-                                <linearGradient id="glassShine" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color: white; stop-opacity: 0.5" />
-                                    <stop offset="40%" style="stop-color: white; stop-opacity: 0.15" />
-                                    <stop offset="100%" style="stop-color: white; stop-opacity: 0.0" />
-                                </linearGradient>
-                             </defs>
-                             
-                             <!-- Lung Path -->
-                             <g stroke="rgba(255,255,255,0.4)" stroke-width="1.5">
-                                 <!-- Right Lung -->
-                                 <path d="M60 40 C 30 40, 20 80, 20 110 C 20 150, 40 180, 80 180 C 90 180, 95 150, 95 120 C 95 80, 80 40, 60 40 Z" 
-                                       fill="url(#lungGradient)" />
-                                 <path d="M60 40 C 30 40, 20 80, 20 110 C 20 150, 40 180, 80 180 C 90 180, 95 150, 95 120 C 95 80, 80 40, 60 40 Z" 
-                                       fill="url(#glassShine)" style="mix-blend-mode: overlay;" />
-
-                                 <!-- Left Lung -->
-                                 <path d="M140 40 C 170 40, 180 80, 180 110 C 180 150, 160 180, 120 180 C 110 180, 105 150, 105 120 C 105 80, 120 40, 140 40 Z" 
-                                       fill="url(#lungGradient)" />
-                                 <path d="M140 40 C 170 40, 180 80, 180 110 C 180 150, 160 180, 120 180 C 110 180, 105 150, 105 120 C 105 80, 120 40, 140 40 Z" 
-                                       fill="url(#glassShine)" style="mix-blend-mode: overlay;" />
-                                 
-                                 <!-- Trachea -->
-                                 <rect x="95" y="10" width="10" height="40" rx="5" fill="#CFD8DC" opacity="0.8" />
-                             </g>
-                        </svg>
+                     <div class="d-flex justify-space-between align-center w-100 my-4" style="height: 220px;">
                         
-                        <!-- Center Stats Overlay -->
-                        <div class="absolute d-flex flex-column align-center justify-center" style="top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;">
-                            <MudText Typo="Typo.h3" Class="font-weight-bold text-shadow" Style="color: white; text-shadow: 0 2px 10px rgba(0,0,0,0.6);">@_smokesCurrentValue</MudText>
-                            <MudText Typo="Typo.h6" Style="color: white; font-weight: bold; text-shadow: 0 2px 10px rgba(0,0,0,0.6); opacity: 0.9;">/ @_smokesBaseline</MudText>
+                        <!-- Lungs SVG Centered -->
+                        <div class="relative d-flex justify-center align-center mx-auto" style="height: 220px; width: 220px;">
+                             <svg width="200" height="200" viewBox="0 0 200 200">
+                                  <defs>
+                                     <linearGradient id="lungGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+                                         <stop offset="@($"{Math.Max(0, (Math.Min(100, Math.Max(0, (_smokesCurrentValue / Math.Max((double)_smokesBaseline, 1.0)) * 100))) - 20)}%")" 
+                                               style="stop-color: #546E7A; stop-opacity: 1" /> <!-- Grey (Sick) fills from bottom -->
+                                         <stop offset="@($"{Math.Min(100, (Math.Min(100, Math.Max(0, (_smokesCurrentValue / Math.Max((double)_smokesBaseline, 1.0)) * 100))) + 20)}%")" 
+                                               style="stop-color: #F8BBD0; stop-opacity: 1" /> <!-- Pink (Health) rest -->
+                                     </linearGradient>
+                                     
+                                     <linearGradient id="glassShine" x1="0%" y1="0%" x2="100%" y2="100%">
+                                         <stop offset="0%" style="stop-color: white; stop-opacity: 0.5" />
+                                         <stop offset="40%" style="stop-color: white; stop-opacity: 0.15" />
+                                         <stop offset="100%" style="stop-color: white; stop-opacity: 0.0" />
+                                     </linearGradient>
+                                  </defs>
+                                  
+                                  <g stroke="rgba(255,255,255,0.4)" stroke-width="1.5">
+                                      <path d="M60 40 C 30 40, 20 80, 20 110 C 20 150, 40 180, 80 180 C 90 180, 95 150, 95 120 C 95 80, 80 40, 60 40 Z" 
+                                            fill="url(#lungGradient)" />
+                                      <path d="M60 40 C 30 40, 20 80, 20 110 C 20 150, 40 180, 80 180 C 90 180, 95 150, 95 120 C 95 80, 80 40, 60 40 Z" 
+                                            fill="url(#glassShine)" style="mix-blend-mode: overlay;" />
+
+                                      <path d="M140 40 C 170 40, 180 80, 180 110 C 180 150, 160 180, 120 180 C 110 180, 105 150, 105 120 C 105 80, 120 40, 140 40 Z" 
+                                            fill="url(#lungGradient)" />
+                                      <path d="M140 40 C 170 40, 180 80, 180 110 C 180 150, 160 180, 120 180 C 110 180, 105 150, 105 120 C 105 80, 120 40, 140 40 Z" 
+                                            fill="url(#glassShine)" style="mix-blend-mode: overlay;" />
+                                      
+                                      <rect x="95" y="10" width="10" height="40" rx="5" fill="#CFD8DC" opacity="0.8" />
+                                  </g>
+                             </svg>
+                             
+                             <div class="absolute d-flex flex-column align-center justify-center" style="top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;">
+                                 <MudText Typo="Typo.h3" Class="font-weight-bold text-shadow" Style="color: white; text-shadow: 0 2px 10px rgba(0,0,0,0.6);">@_smokesCurrentValue</MudText>
+                                 <MudText Typo="Typo.h6" Style="color: white; font-weight: bold; text-shadow: 0 2px 10px rgba(0,0,0,0.6); opacity: 0.9;">/ @_smokesBaseline</MudText>
+                             </div>
                         </div>
-                    </div>
+
+                        <!-- Vertical Buttons Stack -->
+                        <div class="d-flex flex-column gap-2 justify-center mr-2">
+                             <MudTooltip Text="Cigarette" Placement="Placement.Left">
+                                <MudIconButton Icon="@Icons.Material.Filled.SmokingRooms" Variant="Variant.Filled" Color="Color.Error" Size="Size.Medium" OnClick="@(() => AddSmoke("Cigarette"))" Class="rounded-circle" Style="box-shadow: 0 4px 8px rgba(0,0,0,0.3);" />
+                             </MudTooltip>
+                             <MudTooltip Text="Heated Tobacco" Placement="Placement.Left">
+                                <MudIconButton Icon="@Icons.Material.Filled.VapeFree" Variant="Variant.Filled" Color="Color.Info" Size="Size.Medium" OnClick="@(() => AddSmoke("Heated Tobacco"))" Class="rounded-circle" Style="box-shadow: 0 4px 8px rgba(0,0,0,0.3);" />
+                             </MudTooltip>
+                             <MudTooltip Text="Rolled" Placement="Placement.Left">
+                                <MudIconButton Icon="@Icons.Material.Filled.Create" Variant="Variant.Filled" Color="Color.Warning" Size="Size.Medium" OnClick="@(() => AddSmoke("Rolled"))" Class="rounded-circle" Style="box-shadow: 0 4px 8px rgba(0,0,0,0.3);" />
+                             </MudTooltip>
+                              <MudTooltip Text="Cigarillo" Placement="Placement.Left">
+                                <MudIconButton Icon="@Icons.Material.Filled.JoinInner" Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Medium" OnClick="@(() => AddSmoke("Cigarillo"))" Class="rounded-circle" Style="box-shadow: 0 4px 8px rgba(0,0,0,0.3);" />
+                             </MudTooltip>
+                        </div>
+                     </div>
 
                     <div class="d-flex gap-8 justify-center w-100 mt-2">
                         <div class="d-flex flex-column align-center p-2 rounded-lg" style="background: rgba(255,255,255,0.1); min-width: 100px;">
@@ -205,7 +224,7 @@
                                      {
                                          <MudListItem Icon="@Icons.Material.Filled.SmokingRooms" IconColor="Color.Error">
                                              <div class="d-flex justify-space-between align-center w-100">
-                                                 <MudText>@log.Value Cigarette @GetLocalTime(log.LoggedAt).ToString("t")</MudText>
+                                                  <MudText>@GetLogDisplay(log)</MudText>
                                                  <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" />
                                              </div>
                                          </MudListItem>
@@ -427,7 +446,10 @@
      private double _smokesPackCost = 10;
      private string _smokesCurrency = "USD";
      private DateTime? _smokesQuitDate;
+
      private List<HabitLog> _smokesLogs = new();
+     private DateTime? _viewDate = DateTime.Now;
+     private MudDatePicker _datePicker;
      private string[] _currencies = new[] 
      { 
          "USD", "EUR", "GBP", "JPY", "CNY", "INR", "CAD", "AUD", "CHF", "RON", 
@@ -541,6 +563,12 @@
         UpdateSmokesSettings();
     }
     
+    private async Task OnViewDateChanged(DateTime? date)
+    {
+        _viewDate = date ?? DateTime.Now;
+        await RefreshDataAsync();
+    }
+    
     private void UpdateSmokesSettings()
     {
         // Save Settings
@@ -590,19 +618,27 @@
             _smokesQuitDate = SettingsService.Settings.SmokesQuitDate ?? DateTime.Today;
 
             var now = DateTime.Now;
-            _smokesLogs = await HabitsService.GetLogsAsync("smokes", now);
+            var dateToUse = _viewDate ?? now;
+            _smokesLogs = await HabitsService.GetLogsAsync("smokes", dateToUse);
             _smokesCurrentValue = (int)_smokesLogs.Sum(l => l.Value);
             
             UpdateHealthStatus();
         }
     }
     
-    private async Task AddSmoke()
+    private async Task AddSmoke(string type = "Cigarette")
     {
           _isLoading = true;
           StateHasChanged();
           
-          await HabitsService.AddLogAsync("smokes", 1, "cig", DateTime.Now, null);
+          var date = _viewDate ?? DateTime.Now;
+          // If view date is not today, default to noon to ensure it lands in that day
+          if (date.Date != DateTime.Now.Date) date = date.Date.AddHours(12);
+          else date = DateTime.Now;
+          
+          string metadata = "{ \"type\": \"" + type + "\" }";
+
+          await HabitsService.AddLogAsync("smokes", 1, "cig", date, metadata);
           await LoadData(); // Reload to refresh status
           
           _isLoading = false;
@@ -689,8 +725,8 @@
 
     private async Task LoadHistory()
     {
-        // Simple 7 day history
-        var today = DateTime.Now.Date;
+        // Simple 7 day history ending on VIEW DATE
+        var anchorDate = _viewDate?.Date ?? DateTime.Now.Date;
         var type = _viewType == "water" ? "water" : "smokes";
         var labels = new string[7];
 
@@ -699,7 +735,7 @@
             var data = new double[7];
             for (int i = 0; i < 7; i++)
             {
-                var date = today.AddDays(-6 + i);
+                var date = anchorDate.AddDays(-6 + i);
                 labels[i] = date.ToString("dd MMM");
                 data[i] = await HabitsService.GetDailyProgressAsync(type, date);
             }
@@ -713,11 +749,18 @@
             
             for (int i = 0; i < 7; i++)
             {
-                var date = today.AddDays(-6 + i);
+                var date = anchorDate.AddDays(-6 + i);
                 labels[i] = date.ToString("ddd"); // Short day name
                 
                 var smoked = await HabitsService.GetDailyProgressAsync("smokes", date);
-                var avoided = Math.Max(0, _smokesBaseline - smoked);
+                
+                // Logic: Only show "avoided" if we are AFTER the quit date (or on it)
+                // If date < QuitDate, Avoided = 0 (we weren't trying to save then)
+                double avoided = 0;
+                if (date >= (_smokesQuitDate?.Date ?? DateTime.MinValue))
+                {
+                     avoided = Math.Max(0, _smokesBaseline - smoked);
+                }
                 
                 dataSmoked[i] = smoked;
                 dataAvoided[i] = avoided;
@@ -812,5 +855,22 @@
              return DateTime.SpecifyKind(date, DateTimeKind.Local);
         }
         return date.ToLocalTime();
+    }
+
+    private string GetLogDisplay(HabitLog log)
+    {
+        var type = "Cigarette";
+        if (!string.IsNullOrEmpty(log.Metadata) && log.Metadata.Contains("type"))
+        {
+            try 
+            {
+               var parts = log.Metadata.Split(new[] { ":", "\"" }, StringSplitOptions.RemoveEmptyEntries);
+               for(int i=0; i<parts.Length-1; i++) {
+                   if(parts[i].Trim() == "type") { type = parts[i+1].Trim(); break; }
+               }
+            } 
+            catch {}
+        }
+        return $"{log.Value} {type} {GetLocalTime(log.LoggedAt):t}";
     }
 }
