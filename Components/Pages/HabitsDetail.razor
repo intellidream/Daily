@@ -1,5 +1,6 @@
 @using Daily.Models
 @using Daily.Services
+@using System.Text.Json
 @inject IHabitsService HabitsService
 @inject IRefreshService RefreshService
 @inject ISnackbar Snackbar
@@ -131,17 +132,20 @@
                          </div>
                          
                          <div class="d-flex align-center gap-2">
-                              <!-- Calendar Date Picker (Hidden Input, Icon Trigger) -->
-                              <MudDatePicker @ref="_datePicker" Date="@_viewDate" DateChanged="OnViewDateChanged" 
-                                             PickerVariant="PickerVariant.Dialog" DisableToolbar="true" 
-                                             Style="display: none;" />
-                              
-                              <MudTooltip Text="Select Date">
-                                <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" 
-                                               Color="@(_viewDate?.Date == DateTime.Now.Date ? Color.Default : Color.Primary)" 
-                                               Variant="Variant.Text" 
-                                               OnClick="@(() => _datePicker.OpenAsync())" />
-                              </MudTooltip>
+                               <!-- Calendar Date Picker (Hidden Input, Icon Trigger) -->
+                               <!-- NOTE: We use opacity 0 and absolute positioning to hide it visually but keep it in DOM. 
+                                    Using d-none removes it from render tree. -->
+                               <MudDatePicker @ref="_datePicker" Date="@_viewDate" DateChanged="OnViewDateChanged" 
+                                              PickerVariant="PickerVariant.Dialog" DisableToolbar="true" 
+                                              PopoverClass="glass-popover"
+                                              Style="opacity: 0; position: absolute; width: 1px; height: 1px; overflow: hidden; pointer-events: none; top: -1000px;" />
+                               
+                               <MudTooltip Text="Select Date">
+                                 <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" 
+                                                Color="@(_viewDate?.Date == DateTime.Now.Date ? Color.Default : Color.Primary)" 
+                                                Variant="Variant.Text" 
+                                                OnClick="@(() => _datePicker.OpenAsync())" />
+                               </MudTooltip>
                          </div>
                      </div>
 
@@ -222,7 +226,7 @@
                                  <MudList T="HabitLog" Dense="true" DisablePadding="true" Style="background: transparent;">
                                      @foreach (var log in _smokesLogs)
                                      {
-                                         <MudListItem Icon="@Icons.Material.Filled.SmokingRooms" IconColor="Color.Error">
+                                         <MudListItem Icon="@GetSmokeIcon(log)" IconColor="@GetSmokeColor(log)">
                                              <div class="d-flex justify-space-between align-center w-100">
                                                   <MudText>@GetLogDisplay(log)</MudText>
                                                  <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" />
@@ -688,22 +692,6 @@
     
     private string GetTotalSavings()
     {
-        // Simple Approximation: (Days Since Quit * Baseline) - (Total Smoked Since Quit?)
-        // Fetching "Total Smoked" is expensive if we don't have an aggregate endpoint.
-        // For now, let's use a simpler heuristic or just TODAYs accumulation if history is limited.
-        // To be accurate, we really need the total sum.
-        // Let's assume the user was smoking BASELINE every day before. 
-        // We can just calculate "Potential Spent" vs "Actual Spent".
-        // But "Actual Spent" requires sum of all logs.
-        
-        // TODO: Implement aggregate query in HabitsService for "Total Smoked Since X"
-        // For MVP: We return "Estimated" based on today's reduction extrapolated? No that's bad.
-        // Let's settle for Today's calculation for now, or "This Week".
-        // Or just leave it as placeholder "Coming Soon" or simple calc based on Days * Baseline if they quit cold turkey (0 logs).
-        // Let's assume 0 logs for past days (Optimistic) if we don't fetch them, OR
-        // calculate based on (Days * Baseline) * Cost - (Logged * Cost).
-        
-        // Let's show "Projected Annual Savings" based on *Current Baseline* vs 0? No, vs today's rate?
         return GetTodaySavings(); // Temporary placeholder till we aggregate
     }
     
@@ -798,14 +786,18 @@
         }
     }
     
+    // Replaced manual parsing with JSON parsing for robustness
     private string GetDrinkName(HabitLog log)
     {
         string name = "Water";
-        if (!string.IsNullOrEmpty(log.Metadata) && log.Metadata.Contains("\"drink\":"))
+        if (!string.IsNullOrEmpty(log.Metadata))
         {
             try {
-                var parts = log.Metadata.Split(new[] { "\"drink\":" }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length > 1) name = parts[1].Trim().Trim(new[] { ' ', '}', '"' });
+                using var doc = JsonDocument.Parse(log.Metadata);
+                if(doc.RootElement.TryGetProperty("drink", out var el))
+                {
+                    name = el.GetString() ?? "Water";
+                }
             } catch {}
         }
         return name;
@@ -860,17 +852,68 @@
     private string GetLogDisplay(HabitLog log)
     {
         var type = "Cigarette";
-        if (!string.IsNullOrEmpty(log.Metadata) && log.Metadata.Contains("type"))
+        if (!string.IsNullOrEmpty(log.Metadata))
         {
             try 
             {
-               var parts = log.Metadata.Split(new[] { ":", "\"" }, StringSplitOptions.RemoveEmptyEntries);
-               for(int i=0; i<parts.Length-1; i++) {
-                   if(parts[i].Trim() == "type") { type = parts[i+1].Trim(); break; }
+               using var doc = JsonDocument.Parse(log.Metadata);
+               if(doc.RootElement.TryGetProperty("type", out var el))
+               {
+                   type = el.GetString() ?? "Cigarette";
                }
             } 
             catch {}
         }
         return $"{log.Value} {type} {GetLocalTime(log.LoggedAt):t}";
+    }
+
+    private string GetSmokeIcon(HabitLog log)
+    {
+        var type = "Cigarette";
+        if (!string.IsNullOrEmpty(log.Metadata))
+        {
+            try 
+            {
+               using var doc = JsonDocument.Parse(log.Metadata);
+               if(doc.RootElement.TryGetProperty("type", out var el))
+               {
+                   type = el.GetString() ?? "Cigarette";
+               }
+            } 
+            catch {}
+        }
+
+        return type switch
+        {
+            "Heated Tobacco" => Icons.Material.Filled.VapeFree,
+            "Rolled" => Icons.Material.Filled.Create,
+            "Cigarillo" => Icons.Material.Filled.JoinInner,
+            _ => Icons.Material.Filled.SmokingRooms
+        };
+    }
+
+    private Color GetSmokeColor(HabitLog log)
+    {
+        var type = "Cigarette";
+        if (!string.IsNullOrEmpty(log.Metadata))
+        {
+            try 
+            {
+               using var doc = JsonDocument.Parse(log.Metadata);
+               if(doc.RootElement.TryGetProperty("type", out var el))
+               {
+                   type = el.GetString() ?? "Cigarette";
+               }
+            } 
+            catch {}
+        }
+
+        return type switch
+        {
+            "Heated Tobacco" => Color.Info,
+            "Rolled" => Color.Warning,
+            "Cigarillo" => Color.Secondary,
+            _ => Color.Error
+        };
     }
 }

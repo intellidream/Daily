@@ -223,6 +223,24 @@
              <div class="d-flex align-center justify-center pl-2 flex-shrink-0" style="width: auto;">
                  <!-- Quadrant Pie Button -->
                  <div style="width: clamp(56px, 15vw, 84px); height: clamp(56px, 15vw, 84px); min-width: 56px; min-height: 56px; position: relative;">
+                     <!-- Icons Overlay - Positioned Absolutely over the SVG -->
+                     <!-- CIGARETTE (Top Left) -->
+                     <div style="position: absolute; top: 15%; left: 15%; pointer-events: none; z-index: 2;">
+                         <MudIcon Icon="@Icons.Material.Filled.SmokingRooms" Size="Size.Small" Style="color: white; width: 16px; height: 16px;" />
+                     </div>
+                     <!-- HEATED (Top Right) -->
+                     <div style="position: absolute; top: 15%; right: 15%; pointer-events: none; z-index: 2;">
+                         <MudIcon Icon="@Icons.Material.Filled.VapeFree" Size="Size.Small" Style="color: white; width: 16px; height: 16px;" />
+                     </div>
+                     <!-- ROLLED (Bottom Right) -->
+                     <div style="position: absolute; bottom: 15%; right: 15%; pointer-events: none; z-index: 2;">
+                         <MudIcon Icon="@Icons.Material.Filled.Create" Size="Size.Small" Style="color: white; width: 16px; height: 16px;" />
+                     </div>
+                     <!-- CIGARILLO (Bottom Left) -->
+                     <div style="position: absolute; bottom: 15%; left: 15%; pointer-events: none; z-index: 2;">
+                         <MudIcon Icon="@Icons.Material.Filled.JoinInner" Size="Size.Small" Style="color: white; width: 16px; height: 16px;" />
+                     </div>
+
                      <svg width="100%" height="100%" viewBox="0 0 100 100" style="filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.3));">
                          <!-- Slice 1: Top Left (270-360/0-90 logic depending on ref, let's use path commands) -->
                          <!-- Center is 50,50. R=48. Gap=2 -->
@@ -231,25 +249,33 @@
                          <path d="M 48 48 L 2 48 A 46 46 0 0 1 48 2 Z" fill="#F44336" 
                                style="cursor: pointer; transition: opacity 0.2s;" 
                                @onclick="@(() => AddSmoke("Cigarette"))"
-                               onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1" />
+                               onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
+                               <title>Add Cigarette</title>
+                         </path>
                                
                          <!-- Top Right: Heated (Blue) -->
                          <path d="M 52 48 L 52 2 A 46 46 0 0 1 98 48 Z" fill="#29B6F6" 
                                style="cursor: pointer; transition: opacity 0.2s;" 
                                @onclick="@(() => AddSmoke("Heated Tobacco"))"
-                               onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1" />
+                               onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
+                               <title>Add Heated Tobacco</title>
+                         </path>
                                
                          <!-- Bottom Right: Rolled (Orange) -->
                          <path d="M 52 52 L 98 52 A 46 46 0 0 1 52 98 Z" fill="#FF9800" 
                                style="cursor: pointer; transition: opacity 0.2s;" 
                                @onclick="@(() => AddSmoke("Rolled"))"
-                               onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1" />
+                               onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
+                               <title>Add Rolled</title>
+                         </path>
                                
                          <!-- Bottom Left: Cigarillo (Pusple/Secondary) -->
                          <path d="M 48 52 L 48 98 A 46 46 0 0 1 2 52 Z" fill="#9C27B0" 
                                style="cursor: pointer; transition: opacity 0.2s;" 
                                @onclick="@(() => AddSmoke("Cigarillo"))"
-                               onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1" />
+                               onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
+                               <title>Add Cigarillo</title>
+                         </path>
                                
                          <!-- Center Icon/Hole -->
                          <circle cx="50" cy="50" r="14" fill="#1e1e2d" />
