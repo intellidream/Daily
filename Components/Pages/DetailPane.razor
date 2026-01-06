@@ -290,10 +290,10 @@
         NavService.OnReaderModeChanged += OnReaderModeChanged;
         RssService.OnItemsUpdated += StateHasChanged; // Subscribe for item count updates
         RssService.OnFeedChanged += OnFeedChangedHandler; // Subscribe for active feed changes
-        WeatherService.OnLocationChanged += StateHasChanged; // Subscribe for weather location changes
-        WeatherService.OnLocationChanged += StateHasChanged; // Subscribe for weather location changes
-        SettingsService.OnSettingsChanged += StateHasChanged; // Subscribe for auth changes
-        HabitsService.OnViewTypeChanged += StateHasChanged; // Subscribe for habit view changes
+        WeatherService.OnLocationChanged += AsyncStateHasChanged; // Subscribe for weather location changes
+        WeatherService.OnLocationChanged += AsyncStateHasChanged; // Subscribe for weather location changes
+        SettingsService.OnSettingsChanged += AsyncStateHasChanged; // Subscribe for auth changes
+        HabitsService.OnViewTypeChanged += AsyncStateHasChanged; // Subscribe for habit view changes
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
             Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
@@ -310,10 +310,12 @@
         }
     }
 
+    private async void AsyncStateHasChanged() => await InvokeAsync(StateHasChanged);
+
     private async void OnThemeChanged(object? sender, AppThemeChangedEventArgs e)
     {
         _isDarkMode = e.RequestedTheme == AppTheme.Dark;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
         // Update Theme JS is now less critical for startup but still useful for body listeners if any
         await UpdateThemeJs();
     }

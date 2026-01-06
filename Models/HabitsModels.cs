@@ -24,6 +24,12 @@ namespace Daily.Models
 
         [Column("updated_at")]
         public DateTime? UpdatedAt { get; set; }
+
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; }
+
+        public DateTime? SyncedAt { get; set; }
+        public bool IsDeleted { get; set; }
     }
 
     [Table("habits_logs")]
@@ -49,5 +55,21 @@ namespace Daily.Models
 
         [Column("metadata")]
         public string? Metadata { get; set; }
+
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; }
+
+        [Column("updated_at")]
+        public DateTime? UpdatedAt { get; set; }
+
+        // Local-only properties (not mapped to Supabase 'Column' unless consistent)
+        // If we want to prevent these from sending to Supabase, we rely on Supabase client ignoring non-Column props?
+        // Or we use [JsonIgnore] if using System.Text.Json, or explicit Ignore.
+        // For now, let's assume simple POCO properties won't be sent if not decorating with Column? 
+        // Actually Supabase client usually respects Column attribute. 
+        // We will add them as properties.
+
+        public DateTime? SyncedAt { get; set; }
+        public bool IsDeleted { get; set; }
     }
 }

@@ -40,6 +40,7 @@
                                 <div class="d-flex align-center gap-1">
                                      <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Color="Color.Success" />
                                      <MudText Typo="Typo.body2" Style="opacity: 0.7; white-space: nowrap;">Synced to Cloud</MudText>
+                                     <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 0.7em;">(@SettingsService.CurrentUserId)</MudText>
                                 </div>
                             }
                             else
@@ -213,24 +214,67 @@
                         <MudText Typo="Typo.caption" Style="opacity: 0.6;">Version 1.0.0 (Build 2025.1)</MudText>
                      </div>
                      <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small">Check for Updates</MudButton>
+                     @if (SettingsService.IsAuthenticated)
+                     {
+                         <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small" OnClick="@DebugSync" Disabled="@_isSyncing">Force Sync (Debug)</MudButton>
+                     }
                  </div>
              </MudPaper>
         </MudItem>
     </MudGrid>
 </div>
 
+@inject ISyncService SyncService
+
 @code {
+    private bool _isSyncing = false;
+
+    private async Task DebugSync()
+    {
+        _isSyncing = true;
+        StateHasChanged();
+
+        try 
+        {
+            Snackbar.Add("Starting Debug Sync...", Severity.Info);
+            await SyncService.SyncAsync();
+            
+            if (!string.IsNullOrEmpty(SyncService.LastSyncError))
+            {
+                Snackbar.Add($"Warning: {SyncService.LastSyncError}", Severity.Warning);
+            }
+            else
+            {
+                 Snackbar.Add($"Sync Success: {SyncService.LastSyncMessage}", Severity.Success);
+            }
+        }
+        catch(Exception ex)
+        {
+            Snackbar.Add($"Sync Failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSyncing = false;
+            StateHasChanged();
+        }
+    }
+
     private bool _isSaving;
+
+    private void OnSettingsChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await SettingsService.InitializeAsync();
-        SettingsService.OnSettingsChanged += StateHasChanged;
+        SettingsService.OnSettingsChanged += OnSettingsChanged;
     }
     
     public void Dispose()
     {
-        SettingsService.OnSettingsChanged -= StateHasChanged;
+        SettingsService.OnSettingsChanged -= OnSettingsChanged;
     }
 
     private async Task SaveSettings()

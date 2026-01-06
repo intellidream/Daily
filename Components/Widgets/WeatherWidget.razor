@@ -289,7 +289,7 @@
     private async void HandleUpdate()
     {
         // When updated from another source, just fetch cached data (forceRefresh=false)
-        await LoadWeatherData(forceRefresh: false);
+        await InvokeAsync(async () => await LoadWeatherData(forceRefresh: false));
     }
 
     private void CloseForecast()

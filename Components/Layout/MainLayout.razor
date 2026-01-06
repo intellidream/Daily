@@ -141,6 +141,14 @@
                 }
                 catch (Exception) { /* Ignore */ }
             }
+
+            // Trigger initial data sync
+            // This ensures logic like HabitsService.SyncAsync runs on startup
+            _ = Task.Run(async () => 
+            {
+                await Task.Delay(1000); // Slight delay to allow other services to spin up
+                await RefreshService.TriggerRefreshAsync();
+            });
         }
     }
 

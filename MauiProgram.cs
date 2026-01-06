@@ -21,6 +21,22 @@ namespace Daily
                 })
                 .ConfigureLifecycleEvents(events =>
                 {
+#if MACCATALYST
+                    events.AddiOS(ios => ios.FinishedLaunching((app, launchOptions) => 
+                    {
+                         AppDomain.CurrentDomain.UnhandledException += (sender, error) => 
+                         {
+                             var path = Path.Combine(FileSystem.AppDataDirectory, "crash_log.txt");
+                             File.AppendAllText(path, $"[CRASH] {DateTime.Now}: {error.ExceptionObject}\n");
+                         };
+                         TaskScheduler.UnobservedTaskException += (sender, error) => 
+                         {
+                             var path = Path.Combine(FileSystem.AppDataDirectory, "crash_log.txt");
+                             File.AppendAllText(path, $"[TASK ICON] {DateTime.Now}: {error.Exception}\n");
+                         };
+                         return true;
+                    }));
+#endif
 #if WINDOWS
                     events.AddWindows(windows => windows
                         .OnLaunched((window, args) =>
@@ -81,7 +97,10 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();
             builder.Services.AddSingleton<Daily.Services.ISystemMonitorService, Daily.Services.SystemMonitorService>();
             builder.Services.AddSingleton<Daily.Services.IHabitsService, Daily.Services.HabitsService>();
-
+            builder.Services.AddSingleton<Daily.Services.IDatabaseService, Daily.Services.DatabaseService>();
+            builder.Services.AddSingleton<Daily.Services.IHabitsRepository, Daily.Services.HabitsRepository>();
+            builder.Services.AddSingleton<Daily.Services.ISyncService, Daily.Services.SyncService>();
+            
             builder.Services.AddSingleton<Daily.Services.IYouTubeService, Daily.Services.YouTubeService>();
             builder.Services.AddSingleton<Daily.Services.IWindowManagerService, Daily.Services.WindowManagerService>();
             builder.Services.AddSingleton<Daily.Services.IDetailNavigationService, Daily.Services.DetailNavigationService>();

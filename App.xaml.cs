@@ -19,16 +19,28 @@ namespace Daily
         private readonly ITrayService _trayService;
         private readonly IRefreshService _refreshService;
         private readonly IBackButtonService _backButtonService;
+        private readonly Supabase.Client _supabase;
+        private readonly IDatabaseService _databaseService;
 
-        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService)
+        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService)
         {
             InitializeComponent();
             _trayService = trayService;
+            _supabase = supabase;
+            _databaseService = databaseService;
 #if MACCATALYST
             // Daily.Platforms.MacCatalyst.MacTrayService.Log("App Constructor Called");
 #endif
             _refreshService = refreshService;
             _backButtonService = backButtonService;
+
+            // Initialize Data Layer
+            Task.Run(async () => 
+            {
+                await _databaseService.InitializeAsync();
+                await _supabase.InitializeAsync();
+            });
+
             _trayService.Initialize();
             _trayService.ClickHandler = () => 
             {

@@ -11,11 +11,13 @@ namespace Daily.Services
         private readonly Supabase.Client _supabase;
         private readonly ISettingsService _settingsService;
         private readonly IRefreshService _refreshService;
+        private readonly IHabitsRepository _repository;
+        private readonly ISyncService _syncService;
         
         public event Action OnHabitsUpdated;
         public event Action OnViewTypeChanged;
 
-        private string _currentViewType = "water";
+        private string _currentViewType = "water"; // Default to "water"
         public string CurrentViewType
         {
             get => _currentViewType;
@@ -29,269 +31,129 @@ namespace Daily.Services
             }
         }
 
-        // In-memory fallback for Guest mode
-        private readonly Dictionary<string, HabitGoal> _guestGoals = new();
-        private readonly List<HabitLog> _guestLogs = new();
-
-        public HabitsService(Supabase.Client supabase, ISettingsService settingsService, IRefreshService refreshService)
+        public HabitsService(Supabase.Client supabase, ISettingsService settingsService, IRefreshService refreshService, IHabitsRepository repository, ISyncService syncService)
         {
             _supabase = supabase;
             _settingsService = settingsService;
             _refreshService = refreshService;
+            _repository = repository;
+            _syncService = syncService;
 
-            // Default guest goal for Water
-            _guestGoals["water"] = new HabitGoal 
-            { 
-                HabitType = "water", 
-                TargetValue = 2000, 
-                Unit = "ml" 
-            };
+            // Listen for Auth Changes to Trigger Migration
+            _supabase.Auth.AddStateChangedListener((sender, state) =>
+            {
+               if (state == Supabase.Gotrue.Constants.AuthState.SignedIn)
+               {
+                   Task.Run(async () => 
+                   {
+                       try
+                       {
+                           Console.WriteLine($"[HabitsService] User Signed In: {CurrentUserId}. Check for migration...");
+                           await _repository.MigrateGuestDataAsync(CurrentUserId.ToString());
+                           await _syncService.SyncAsync();
+                           OnHabitsUpdated?.Invoke();
+                       }
+                       catch(Exception ex)
+                       {
+                           Console.WriteLine($"[HabitsService] Migration Error: {ex}");
+                       }
+                   });
+               }
+            });
 
             // Listen for global refresh (triggered by Auth/Settings changes)
             _refreshService.RefreshRequested += async () =>
             {
+                // Trigger Full Sync on refresh/login if online
                 if (IsAuthenticated)
                 {
-                    try {
-                        // Sync any guest data before clearing
-                        await SyncGuestDataAsync();
-                        
-                        // Reset guest data on login/refresh to avoid confusion
-                        _guestLogs.Clear();
-                        _guestGoals.Clear();
-                        // Restore default guest goal for next logout
-                        _guestGoals["water"] = new HabitGoal 
-                        { 
-                            HabitType = "water", 
-                            TargetValue = 2000, 
-                            Unit = "ml" 
-                        };
-                    } catch (Exception ex) {
-                         Console.WriteLine($"[HabitsService] Refresh Sync Error: {ex}");
-                    }
+                    _ = _syncService.SyncAsync();
                 }
-                // Notify UI to refresh
                 OnHabitsUpdated?.Invoke();
             };
         }
 
-        private async Task SyncGuestDataAsync()
-        {
-            if (!IsAuthenticated || !_guestLogs.Any()) return;
-
-            try 
-            {
-                var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
-
-                // 1. Sync Logs
-                var logsToInsert = _guestLogs.Select(l => new HabitLog
-                {
-                    // Use guest ID or new one? Using guest ID might need checking collision, 
-                    // but safer to let server/new GUID handle it or just map explicit fields.
-                    // Let's rely on new IDs to be safe against collisions, or preserve if we assume UUIDs form guest are unique enough.
-                    // Preserving ID is better for idempotency if we had retry logic, but here simple insert.
-                    UserId = userId,
-                    HabitType = l.HabitType,
-                    Value = l.Value,
-                    Unit = l.Unit,
-                    LoggedAt = l.LoggedAt.ToUniversalTime(),
-                    Metadata = l.Metadata
-                }).ToList();
-
-                await _supabase.From<HabitLog>().Insert(logsToInsert);
-
-                // 2. Sync Goals (Only if custom)
-                if (_guestGoals.ContainsKey("water"))
-                {
-                     var guestGoal = _guestGoals["water"];
-                     // Heuristic: If guest goal differs from default, assume user set it and wants to keep it.
-                     if (guestGoal.TargetValue != 2000 || guestGoal.Unit != "ml")
-                     {
-                        var goal = new HabitGoal
-                        {
-                            UserId = userId,
-                            HabitType = guestGoal.HabitType,
-                            TargetValue = guestGoal.TargetValue,
-                            Unit = guestGoal.Unit,
-                            UpdatedAt = DateTime.UtcNow
-                        };
-                        // Upsert = Insert or Update
-                        await _supabase.From<HabitGoal>().Upsert(goal);
-                     }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[HabitsService] Sync Error: {ex.Message}");
-            }
-        }
-
-        // Robust check: Session exists AND User is populated
         private bool IsAuthenticated => _supabase.Auth.CurrentSession != null && _supabase.Auth.CurrentUser != null;
+        private Guid CurrentUserId => IsAuthenticated ? Guid.Parse(_supabase.Auth.CurrentUser.Id) : Guid.Empty; 
+        
+        // Fix: Use Guid.Empty string for guest to match Write logic
+        private string CurrentUserIdString => IsAuthenticated ? _supabase.Auth.CurrentUser.Id : Guid.Empty.ToString();
 
         public async Task<HabitGoal> GetGoalAsync(string habitType)
         {
-            if (IsAuthenticated)
+            var goal = await _repository.GetGoalAsync(habitType, CurrentUserIdString);
+            if (goal == null)
             {
-                try
-                {
-                    var result = await _supabase.From<HabitGoal>()
-                        .Where(g => g.HabitType == habitType)
-                        .Single();
-                    
-                    if (result != null) return result;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[HabitsService] GetGoal Error: {ex.Message}");
-                    // Fallback to default if fetch fails
-                }
-
-                // If no goal found or error, return default
-                return new HabitGoal { HabitType = habitType, TargetValue = 2000, Unit = "ml" };
+                return new HabitGoal 
+                { 
+                    HabitType = habitType, 
+                    TargetValue = 2000, 
+                    Unit = "ml",
+                    UserId = CurrentUserId // Even if empty
+                };
             }
-            else
-            {
-                return _guestGoals.ContainsKey(habitType) ? _guestGoals[habitType] : new HabitGoal { HabitType = habitType, TargetValue = 2000, Unit = "ml" };
-            }
+            return goal;
         }
 
         public async Task UpdateGoalAsync(string habitType, double target, string unit)
         {
-            if (IsAuthenticated)
-            {
-                try
-                {
-                    var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
-                    var goal = new HabitGoal
-                    {
-                        UserId = userId,
-                        HabitType = habitType,
-                        TargetValue = target,
-                        Unit = unit,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    await _supabase.From<HabitGoal>().Upsert(goal);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[HabitsService] UpdateGoal Error: {ex.Message}");
-                }
-            }
-            else
-            {
-                _guestGoals[habitType] = new HabitGoal { HabitType = habitType, TargetValue = target, Unit = unit };
-            }
-            OnHabitsUpdated?.Invoke();
+             var goal = await _repository.GetGoalAsync(habitType, CurrentUserIdString);
+             if (goal == null)
+             {
+                 goal = new HabitGoal 
+                 { 
+                     HabitType = habitType,
+                     Id = Guid.NewGuid(),
+                     UserId = CurrentUserId, 
+                     CreatedAt = DateTime.UtcNow 
+                 };
+             }
+             
+             // Update fields
+             goal.UserId = CurrentUserId; 
+             goal.TargetValue = target;
+             goal.Unit = unit;
+             goal.UpdatedAt = DateTime.UtcNow;
+             goal.SyncedAt = null; // Mark dirty
+
+             await _repository.SaveGoalAsync(goal);
+             _ = _syncService.PushAsync(); // Background
+             OnHabitsUpdated?.Invoke();
         }
 
         public async Task<List<HabitLog>> GetLogsAsync(string habitType, DateTime date)
         {
-            // Ensure we work with the full day in Local time first, then convert bounds to UTC for DB query
-            var localStart = date.Date; 
-            var localEnd = localStart.AddDays(1);
-
-            // Convert boundaries to UTC to match stored data (timestamp with time zone)
-            var startUtc = localStart.ToUniversalTime();
-            var endUtc = localEnd.ToUniversalTime();
-
-            if (IsAuthenticated)
-            {
-                try
-                {
-                    // Fetch recent logs and filter locally to avoid timezone query mismatch issues
-                    var result = await _supabase.From<HabitLog>()
-                        .Where(l => l.HabitType == habitType)
-                        .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending)
-                        .Limit(50)
-                        .Get();
-
-                    // Client-side filtering ensures we match the user's local day concept accurately
-                    return result.Models.Where(l => 
-                    {
-                        var localTime = l.LoggedAt.Kind == DateTimeKind.Unspecified 
-                            ? DateTime.SpecifyKind(l.LoggedAt, DateTimeKind.Local) 
-                            : l.LoggedAt.ToLocalTime();
-                            
-                        return localTime.Date == date.Date;
-                    }).ToList();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[HabitsService] GetLogs Error: {ex.Message}");
-                    return new List<HabitLog>();
-                }
-            }
-            else
-            {
-                return _guestLogs
-                    .Where(l => l.HabitType == habitType && l.LoggedAt >= localStart && l.LoggedAt < localEnd)
-                    .OrderByDescending(l => l.LoggedAt)
-                    .ToList();
-            }
+            return await _repository.GetLogsAsync(habitType, date, CurrentUserIdString);
         }
 
         public async Task AddLogAsync(string habitType, double value, string unit, DateTime loggedAt, string? metadata = null)
         {
-            if (IsAuthenticated)
-            {
-                try
-                {
-                    var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
-                    var log = new HabitLog
-                    {
-                        UserId = userId,
-                        HabitType = habitType,
-                        Value = value,
-                        Unit = unit,
-                        LoggedAt = loggedAt.ToUniversalTime(),
-                        Metadata = metadata
-                    };
-                    await _supabase.From<HabitLog>().Insert(log);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[HabitsService] AddLog Error: {ex.Message}");
-                }
-            }
-            else
-            {
-                _guestLogs.Add(new HabitLog
-                {
-                    Id = Guid.NewGuid(),
-                    HabitType = habitType,
-                    Value = value,
-                    Unit = unit,
-                    LoggedAt = loggedAt,
-                    Metadata = metadata
-                });
-            }
-            OnHabitsUpdated?.Invoke();
+             var log = new HabitLog
+             {
+                 Id = Guid.NewGuid(),
+                 UserId = CurrentUserId,
+                 HabitType = habitType,
+                 Value = value,
+                 Unit = unit,
+                 LoggedAt = loggedAt.ToUniversalTime(),
+                 Metadata = metadata,
+                 CreatedAt = DateTime.UtcNow,
+                 SyncedAt = null // Mark dirty
+             };
+
+             await _repository.SaveLogAsync(log);
+             _ = _syncService.PushAsync(); // Background
+             OnHabitsUpdated?.Invoke();
         }
 
         public async Task DeleteLogAsync(Guid logId)
         {
-            if (IsAuthenticated)
-            {
-                try
-                {
-                    await _supabase.From<HabitLog>()
-                        .Where(l => l.Id == logId)
-                        .Delete();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[HabitsService] DeleteLog Error: {ex.Message}");
-                }
-            }
-            else
-            {
-                var item = _guestLogs.FirstOrDefault(l => l.Id == logId);
-                if (item != null) _guestLogs.Remove(item);
-            }
+            await _repository.DeleteLogAsync(logId);
+            _ = _syncService.PushAsync(); // Background
             OnHabitsUpdated?.Invoke();
         }
 
+        // Helper methods (kept compatible with interface)
         public async Task<double> GetDailyProgressAsync(string habitType, DateTime date)
         {
             var logs = await GetLogsAsync(habitType, date);
@@ -301,7 +163,6 @@ namespace Daily.Services
         public async Task<Dictionary<string, double>> GetDailyBreakdownAsync(string habitType, DateTime date)
         {
             var logs = await GetLogsAsync(habitType, date);
-            // ... (rest of logic same as before, no Supabase call here)
             var breakdown = new Dictionary<string, double>();
 
             foreach (var log in logs)
