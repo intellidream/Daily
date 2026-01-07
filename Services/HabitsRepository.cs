@@ -28,7 +28,7 @@ namespace Daily.Services
             
             return localLogs
                 .Where(l => l.LoggedAt >= startUtc && l.LoggedAt < endUtc)
-                .Select(ToDomain)
+                .Select(l => l.ToDomain())
                 .OrderByDescending(l => l.LoggedAt)
                 .ToList();
         }
@@ -37,7 +37,7 @@ namespace Daily.Services
         {
              await _databaseService.InitializeAsync();
              
-             var local = ToLocal(log);
+             var local = log.ToLocal();
              // Ensure ID is set
              if (string.IsNullOrEmpty(local.Id)) local.Id = Guid.NewGuid().ToString();
              
@@ -62,13 +62,13 @@ namespace Daily.Services
                             .Where(g => g.HabitType == habitType && g.UserId == userId)
                             .FirstOrDefaultAsync();
 
-            return local == null ? null : ToDomain(local);
+            return local == null ? null : local.ToDomain();
         }
 
         public async Task SaveGoalAsync(HabitGoal goal)
         {
             await _databaseService.InitializeAsync();
-            var local = ToLocal(goal);
+            var local = goal.ToLocal();
             await _databaseService.Connection.InsertOrReplaceAsync(local);
         }
 
@@ -125,75 +125,6 @@ namespace Daily.Services
                 Console.WriteLine($"[HabitsRepository] Processed migration for {guestGoals.Count} guest goals.");
             }
         }
-
-        // Mappers
-        private HabitLog ToDomain(LocalHabitLog local)
-        {
-            return new HabitLog
-            {
-                Id = Guid.Parse(local.Id),
-                UserId = Guid.Parse(local.UserId),
-                HabitType = local.HabitType,
-                Value = local.Value,
-                Unit = local.Unit,
-                LoggedAt = local.LoggedAt,
-                Metadata = local.Metadata,
-                CreatedAt = local.CreatedAt,
-                UpdatedAt = local.UpdatedAt,
-                SyncedAt = local.SyncedAt,
-                IsDeleted = local.IsDeleted
-            };
-        }
-
-        private LocalHabitLog ToLocal(HabitLog domain)
-        {
-            return new LocalHabitLog
-            {
-                Id = domain.Id.ToString(),
-                UserId = domain.UserId.ToString(),
-                HabitType = domain.HabitType,
-                Value = domain.Value,
-                Unit = domain.Unit,
-                LoggedAt = domain.LoggedAt,
-                Metadata = domain.Metadata,
-                CreatedAt = domain.CreatedAt,
-                UpdatedAt = domain.UpdatedAt,
-                SyncedAt = domain.SyncedAt, // Usually null on save
-                IsDeleted = domain.IsDeleted
-            };
-        }
-
-        private HabitGoal ToDomain(LocalHabitGoal local)
-        {
-            return new HabitGoal
-            {
-                Id = Guid.Parse(local.Id),
-                UserId = Guid.Parse(local.UserId),
-                HabitType = local.HabitType,
-                TargetValue = local.TargetValue,
-                Unit = local.Unit,
-                CreatedAt = local.CreatedAt,
-                UpdatedAt = local.UpdatedAt,
-                SyncedAt = local.SyncedAt,
-                IsDeleted = local.IsDeleted
-            };
-        }
-
-        private LocalHabitGoal ToLocal(HabitGoal domain)
-        {
-            return new LocalHabitGoal
-            {
-                Id = domain.Id.ToString(),
-                UserId = domain.UserId.ToString(),
-                HabitType = domain.HabitType,
-                TargetValue = domain.TargetValue,
-                Unit = domain.Unit,
-                CreatedAt = domain.CreatedAt,
-                UpdatedAt = domain.UpdatedAt,
-                SyncedAt = domain.SyncedAt,
-                IsDeleted = domain.IsDeleted
-            };
-        }
         // Aggregation Methods
         public async Task<List<DailySummary>> GetDailyTotalsAsync(string habitType, DateTime startDate, DateTime endDate, string userId)
         {
@@ -222,7 +153,7 @@ namespace Daily.Services
                                 .Where(l => l.HabitType == habitType && l.UserId == userId && l.IsDeleted == false && l.LoggedAt >= sDate && l.LoggedAt < eDate)
                                 .ToListAsync();
 
-             // 3. Merge: Pivot on Date
+            // 3. Merge: Pivot on Date
              // We want a list of DailySummary objects covering the range where data exists.
              var resultMap = new Dictionary<DateTime, DailySummary>();
 
@@ -231,7 +162,7 @@ namespace Daily.Services
              {
                  if (!resultMap.ContainsKey(s.Date.Date))
                  {
-                     resultMap[s.Date.Date] = ToDomain(s);
+                     resultMap[s.Date.Date] = s.ToDomain();
                  }
              }
 
@@ -309,24 +240,6 @@ namespace Daily.Services
                 TotalValue = totalValue,
                 LogCount = totalCount,
                 Date = DateTime.MinValue // Meaningless for Global
-            };
-        }
-        
-        // Ensure to include Mapper for DailySummary
-        private DailySummary ToDomain(LocalDailySummary local)
-        {
-            return new DailySummary
-            {
-                // Id can be Guid generic here since it's read-only for charts
-                 Id = Guid.Empty, 
-                 UserId = Guid.Parse(local.UserId),
-                 HabitType = local.HabitType,
-                 Date = local.Date,
-                 TotalValue = local.TotalValue,
-                 LogCount = local.LogCount,
-                 Metadata = local.Metadata,
-                 CreatedAt = local.CreatedAt,
-                 UpdatedAt = local.UpdatedAt
             };
         }
     }
