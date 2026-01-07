@@ -57,10 +57,10 @@ namespace Daily
             _trayService.Initialize();
             _trayService.ClickHandler = () => 
             {
-                MainPage?.Dispatcher.Dispatch(() => 
+                var window = Application.Current?.Windows.FirstOrDefault();
+                if (window != null)
                 {
-                    var window = Application.Current?.Windows.FirstOrDefault();
-                    if (window != null)
+                    window.Dispatcher.Dispatch(() => 
                     {
                         #if WINDOWS
                         var nativeWindow = window.Handler?.PlatformView as Microsoft.UI.Xaml.Window;
@@ -72,8 +72,8 @@ namespace Daily
                             appWindow.Show();
                         }
                         #endif
-                    }
-                });
+                    });
+                }
             };
         }
 

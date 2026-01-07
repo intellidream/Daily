@@ -382,7 +382,7 @@ namespace Daily.Services
             detailPage.Disappearing += (s, e) => _detailModal = null;
 
             // Push without animation to avoid "tremble"/clumsiness
-            Application.Current?.MainPage?.Navigation.PushModalAsync(detailPage, false);
+            Application.Current?.Windows.FirstOrDefault()?.Page?.Navigation.PushModalAsync(detailPage, false);
 #elif MACCATALYST
             detailPage.Opacity = 1;
             _activeMacDetailPage = detailPage; // Track for disposal
@@ -475,7 +475,7 @@ namespace Daily.Services
 #if ANDROID || IOS
             if (_detailModal != null)
             {
-                Application.Current?.MainPage?.Navigation.PopModalAsync();
+                Application.Current?.Windows.FirstOrDefault()?.Page?.Navigation.PopModalAsync();
                 _detailModal = null;
             }
 #elif MACCATALYST
