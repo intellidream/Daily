@@ -192,6 +192,11 @@ namespace Daily.Services
             return breakdown;
         }
 
+        public async Task<List<DailySummary>> GetHistoryAsync(string habitType, DateTime startDate, DateTime endDate)
+        {
+            return await _repository.GetDailyTotalsAsync(habitType, startDate, endDate, CurrentUserIdString);
+        }
+
         public async Task InitializeAsync()
         {
              // Force check auth state and sync if needed

@@ -162,6 +162,10 @@ namespace Daily.Services
 
             // 3. Push Preferences
             await PushPreferencesAsync(userId);
+
+            // 4. Consolidate & Push Summaries (New Protocol)
+            await ConsolidateHistoryAsync(userId); 
+            await PushSummariesAsync(userId);
         }
 
         public async Task<int> PullAsync()
@@ -221,6 +225,9 @@ namespace Daily.Services
 
             // 3. Pull Preferences
             totalPulled += await PullPreferencesAsync(userId);
+
+            // 4. Pull Summaries
+            totalPulled += await PullSummariesAsync(userId);
 
             return totalPulled;
         }
@@ -433,6 +440,167 @@ namespace Daily.Services
                 
                 InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests)
             };
+        }
+        
+        // --- Daily Summary Logic ---
+
+        private async Task ConsolidateHistoryAsync(string userId)
+        {
+            // 90 Day Retention Policy
+            var threshold = DateTime.UtcNow.AddDays(-90);
+            
+            // 1. Find candidates for consolidation (Old logs)
+            // Note: SQLite doesn't natively support Date grouping easily in LINQ without strict models, 
+            // so we pull key data first. Performance is fine for <100k rows.
+            var oldLogs = await _databaseService.Connection.Table<LocalHabitLog>()
+                            .Where(l => l.LoggedAt < threshold && l.UserId == userId) 
+                            .ToListAsync();
+
+            if (!oldLogs.Any()) return;
+
+            // 2. Group locally
+            var grouped = oldLogs.GroupBy(l => new { l.HabitType, Date = l.LoggedAt.Date });
+
+            int newSummaries = 0;
+            foreach (var group in grouped)
+            {
+                var summaryId = $"{userId}_{group.Key.HabitType}_{group.Key.Date:yyyyMMdd}";
+                
+                // Check if exists
+                var existing = await _databaseService.Connection.FindWithQueryAsync<LocalDailySummary>(
+                    "SELECT * FROM habits_daily_summaries WHERE Id = ?", summaryId);
+
+                if (existing == null)
+                {
+                    // Create Summary
+                    var summary = new LocalDailySummary
+                    {
+                        Id = summaryId,
+                        UserId = userId,
+                        HabitType = group.Key.HabitType,
+                        Date = group.Key.Date, // Midnight UTC
+                        TotalValue = group.Sum(x => x.Value),
+                        LogCount = group.Count(),
+                        Metadata = null, 
+                        CreatedAt = DateTime.UtcNow,
+                        SyncedAt = null // Mark Dirty -> Push
+                    };
+
+                    await _databaseService.Connection.InsertAsync(summary);
+                    newSummaries++;
+                }
+            }
+
+            if (newSummaries > 0)
+            {
+                Console.WriteLine($"[SyncService] Consolidation: Created {newSummaries} daily summaries.");
+            }
+        }
+
+        private async Task PushSummariesAsync(string userId)
+        {
+             var dirty = await _databaseService.Connection.Table<LocalDailySummary>()
+                                .Where(s => s.SyncedAt == null && s.UserId == userId)
+                                .ToListAsync();
+
+             if (dirty.Any())
+             {
+                 Console.WriteLine($"[SyncService] Pushing {dirty.Count} daily summaries...");
+                 var remoteList = dirty.Select(ToDomain).ToList();
+                 
+                 try 
+                 {
+                     await _supabase.From<DailySummary>().Upsert(remoteList);
+                     
+                     foreach(var s in dirty)
+                     {
+                         s.SyncedAt = DateTime.UtcNow;
+                         await _databaseService.Connection.UpdateAsync(s);
+                     }
+                     Console.WriteLine("[SyncService] Push Summaries Success.");
+                     
+                     // TODO: Trigger PruneRemoteLogsAsync(userId) here to delete raw logs from Cloud
+                 }
+                 catch(Exception ex)
+                 {
+                     Console.WriteLine($"[SyncService] Push Summaries Failed: {ex.Message}");
+                 }
+             }
+        }
+
+        private async Task<int> PullSummariesAsync(string userId)
+        {
+             try 
+             {
+                 // Pull everything? Or just last year? For now all history (lightweight).
+                 var response = await _supabase.From<DailySummary>()
+                    .Where(x => x.UserId == Guid.Parse(userId))
+                    .Get();
+
+                 if (response.Models.Any())
+                 {
+                     Console.WriteLine($"[SyncService] Pulled {response.Models.Count} summaries.");
+                     foreach(var r in response.Models)
+                     {
+                         var local = ToLocal(r);
+                         local.SyncedAt = DateTime.UtcNow;
+                         await _databaseService.Connection.InsertOrReplaceAsync(local);
+                     }
+                     return response.Models.Count;
+                 }
+             }
+             catch(Exception ex)
+             {
+                 Console.WriteLine($"[SyncService] Pull Summaries Error: {ex.Message}");
+             }
+             return 0;
+        }
+
+        // --- Summary Mappers ---
+
+        private DailySummary ToDomain(LocalDailySummary local)
+        {
+            return new DailySummary
+            {
+                Id = GenerateGuid(local.Id),
+                
+                UserId = Guid.Parse(local.UserId),
+                HabitType = local.HabitType,
+                Date = local.Date,
+                TotalValue = local.TotalValue,
+                LogCount = local.LogCount,
+                Metadata = local.Metadata,
+                CreatedAt = local.CreatedAt,
+                UpdatedAt = local.UpdatedAt
+            };
+        }
+
+        private LocalDailySummary ToLocal(DailySummary domain)
+        {
+            // Reconstruct the stable String ID
+            var strId = $"{domain.UserId}_{domain.HabitType}_{domain.Date:yyyyMMdd}";
+            return new LocalDailySummary
+            {
+                Id = strId,
+                UserId = domain.UserId.ToString(),
+                HabitType = domain.HabitType,
+                Date = domain.Date,
+                TotalValue = domain.TotalValue,
+                LogCount = domain.LogCount,
+                Metadata = domain.Metadata,
+                CreatedAt = domain.CreatedAt,
+                UpdatedAt = domain.UpdatedAt,
+                SyncedAt = DateTime.UtcNow // If pulling, it's synced
+            };
+        }
+
+        private Guid GenerateGuid(string input)
+        {
+            using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
+            {
+                byte[] hash = md5.ComputeHash(System.Text.Encoding.Default.GetBytes(input));
+                return new Guid(hash);
+            }
         }
     }
 }

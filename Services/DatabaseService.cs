@@ -36,7 +36,8 @@ namespace Daily.Services
                 var res1 = await _connection.CreateTableAsync<LocalHabitLog>();
                 var res2 = await _connection.CreateTableAsync<LocalHabitGoal>();
                 var res3 = await _connection.CreateTableAsync<LocalUserPreferences>();
-                Console.WriteLine($"[DatabaseService] Tables Created results: {res1}, {res2}, {res3}");
+                var res4 = await _connection.CreateTableAsync<LocalDailySummary>();
+                Console.WriteLine($"[DatabaseService] Tables Created results: {res1}, {res2}, {res3}, {res4}");
                 
                 _initialized = true;
             }

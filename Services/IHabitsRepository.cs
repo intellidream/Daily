@@ -12,6 +12,9 @@ namespace Daily.Services
         Task SaveGoalAsync(HabitGoal goal);
 
         Task MigrateGuestDataAsync(string newUserId);
-        // For now, let's keep Repo focused on Domain <-> Local mapping for the UI/Service layer.
+
+        // Aggregation Methods
+        Task<List<DailySummary>> GetDailyTotalsAsync(string habitType, DateTime startDate, DateTime endDate, string userId);
+        Task<DailySummary> GetGlobalTotalsAsync(string habitType, string userId);
     }
 }

@@ -82,4 +82,29 @@ namespace Daily.Models
 
         public DateTime? SyncedAt { get; set; }
     }
+
+    [Table("habits_daily_summaries")]
+    public class LocalDailySummary
+    {
+        [PrimaryKey]
+        public string Id { get; set; } // UUID String
+
+        [Indexed]
+        public string UserId { get; set; }
+
+        [Indexed]
+        public string HabitType { get; set; }
+
+        public DateTime Date { get; set; } // Stored as midnight UTC
+        
+        public double TotalValue { get; set; }
+        public int LogCount { get; set; }
+        public string? Metadata { get; set; } 
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+
+        [Indexed]
+        public DateTime? SyncedAt { get; set; } // Null = Dirty
+    }
 }

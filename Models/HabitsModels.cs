@@ -78,4 +78,35 @@ namespace Daily.Models
         [Column("is_deleted")]
         public bool IsDeleted { get; set; }
     }
+
+    [Table("habits_daily_summaries")]
+    public class DailySummary : BaseModel
+    {
+        [PrimaryKey("id")]
+        public Guid Id { get; set; }
+
+        [Column("user_id")]
+        public Guid UserId { get; set; }
+
+        [Column("habit_type")]
+        public string HabitType { get; set; }
+
+        [Column("date")]
+        public DateTime Date { get; set; }
+
+        [Column("total_value")]
+        public double TotalValue { get; set; }
+
+        [Column("log_count")]
+        public int LogCount { get; set; }
+
+        [Column("metadata")]
+        public string? Metadata { get; set; }
+
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; }
+
+        [Column("updated_at")]
+        public DateTime? UpdatedAt { get; set; }
+    }
 }

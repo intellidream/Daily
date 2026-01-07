@@ -21,7 +21,10 @@ namespace Daily.Services
         Task DeleteLogAsync(Guid logId);
         
         Task<double> GetDailyProgressAsync(string habitType, DateTime date);
+
         Task<Dictionary<string, double>> GetDailyBreakdownAsync(string habitType, DateTime date);
+        
+        Task<List<DailySummary>> GetHistoryAsync(string habitType, DateTime startDate, DateTime endDate);
         
         Task InitializeAsync();
     }

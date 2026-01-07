@@ -194,5 +194,140 @@ namespace Daily.Services
                 IsDeleted = domain.IsDeleted
             };
         }
+        // Aggregation Methods
+        public async Task<List<DailySummary>> GetDailyTotalsAsync(string habitType, DateTime startDate, DateTime endDate, string userId)
+        {
+             await _databaseService.InitializeAsync();
+             
+             // 1. Fetch Local Summaries
+             // SQLite doesn't support Date range directly on DateTime columns stored as string unless we use Ticks or careful String Comp.
+             // We configured "storeDateTimeAsTicks: false", so ISO strings.
+             // ISO Strings are sortable/comparable directly.
+             
+             // Note: startDate and endDate should be Midnight UTC for reliable query.
+             var sDate = startDate.ToUniversalTime().Date;
+             var eDate = endDate.ToUniversalTime().Date.AddDays(1); // Include end date
+
+             // Need strict string format for comparison if underlying is string
+             // But sqlite-net-pcl handles DateTime mappings if configured.
+             // Let's assume standard Linq Works:
+             var summaries = await _databaseService.Connection.Table<LocalDailySummary>()
+                                .Where(s => s.HabitType == habitType && s.UserId == userId && s.Date >= sDate && s.Date < eDate)
+                                .ToListAsync();
+
+             // 2. Fetch Raw Logs (for the same period)
+             // We assume raw logs only exist for the last 90 days, but we query whatever is there.
+             // If raw logs exist, they are "Verified Truth" and supersede summaries.
+             var rawLogs = await _databaseService.Connection.Table<LocalHabitLog>()
+                                .Where(l => l.HabitType == habitType && l.UserId == userId && l.IsDeleted == false && l.LoggedAt >= sDate && l.LoggedAt < eDate)
+                                .ToListAsync();
+
+             // 3. Merge: Pivot on Date
+             // We want a list of DailySummary objects covering the range where data exists.
+             var resultMap = new Dictionary<DateTime, DailySummary>();
+
+             // A. Fill from Summaries
+             foreach(var s in summaries)
+             {
+                 if (!resultMap.ContainsKey(s.Date.Date))
+                 {
+                     resultMap[s.Date.Date] = ToDomain(s);
+                 }
+             }
+
+             // B. Fill/Overwrite from Raw Logs (Hybrid Logic)
+             if (rawLogs.Any())
+             {
+                 var groupedRaw = rawLogs.GroupBy(x => x.LoggedAt.Date);
+                 foreach(var g in groupedRaw)
+                 {
+                     // Re-calculate Summary from Raw
+                     var freshSummary = new DailySummary
+                     {
+                         Id = Guid.Empty, // Ephemeral
+                         UserId = Guid.Parse(userId),
+                         HabitType = habitType,
+                         Date = g.Key,
+                         TotalValue = g.Sum(x => x.Value),
+                         LogCount = g.Count(),
+                         Metadata = "Realtime" // Flag logic
+                     };
+
+                     // Overwrite or Add
+                     resultMap[g.Key] = freshSummary;
+                 }
+             }
+
+             return resultMap.Values.OrderBy(x => x.Date).ToList();
+        }
+
+        public async Task<DailySummary> GetGlobalTotalsAsync(string habitType, string userId)
+        {
+            await _databaseService.InitializeAsync();
+            
+            // This is trickier if we have overlap.
+            // Strategy: Get All Summaries + Get All Logs. 
+            // Calculate Dates present in Logs -> Use Log Total.
+            // Calculate Dates NOT present in Logs but in Summaries -> Use Summary Total.
+            
+            // Performance: If 20 years of data, getting all logs is bad.
+            // But we know Logs are < 90 Days. So getting all logs is 90 days * 20 = 1800 rows. Fast.
+            // Getting all Summaries is 20 * 365 = 7300 rows. Fast.
+            
+            var allSummaries = await _databaseService.Connection.Table<LocalDailySummary>()
+                                .Where(s => s.HabitType == habitType && s.UserId == userId)
+                                .ToListAsync();
+
+            var allLogs = await _databaseService.Connection.Table<LocalHabitLog>()
+                                .Where(l => l.HabitType == habitType && l.UserId == userId && l.IsDeleted == false)
+                                .ToListAsync();
+
+            var logDates = allLogs.Select(l => l.LoggedAt.Date).ToHashSet();
+            
+            double totalValue = 0;
+            int totalCount = 0;
+
+            // 1. Sum up Logs (The verified truth)
+            totalValue += allLogs.Sum(l => l.Value);
+            totalCount += allLogs.Count;
+
+            // 2. Sum up Summaries (Only for days NOT in logs)
+            foreach(var s in allSummaries)
+            {
+                 if (!logDates.Contains(s.Date.Date))
+                 {
+                     totalValue += s.TotalValue;
+                     totalCount += s.LogCount;
+                 }
+            }
+            
+            return new DailySummary
+            {
+                Id = Guid.Empty,
+                UserId = Guid.Parse(userId),
+                HabitType = habitType,
+                TotalValue = totalValue,
+                LogCount = totalCount,
+                Date = DateTime.MinValue // Meaningless for Global
+            };
+        }
+        
+        // Ensure to include Mapper for DailySummary
+        private DailySummary ToDomain(LocalDailySummary local)
+        {
+            return new DailySummary
+            {
+                // Id can be Guid generic here since it's read-only for charts
+                 Id = Guid.Empty, 
+                 UserId = Guid.Parse(local.UserId),
+                 HabitType = local.HabitType,
+                 Date = local.Date,
+                 TotalValue = local.TotalValue,
+                 LogCount = local.LogCount,
+                 Metadata = local.Metadata,
+                 CreatedAt = local.CreatedAt,
+                 UpdatedAt = local.UpdatedAt
+            };
+        }
     }
 }

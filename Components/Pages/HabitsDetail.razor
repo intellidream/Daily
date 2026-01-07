@@ -83,6 +83,34 @@
                      <MudChart ChartType="ChartType.Bar" ChartSeries="@_series" XAxisLabels="@_xAxisLabels" Width="100%" Height="300px" />
                 </MudPaper>
             </MudItem>
+            
+            <!-- Heatmap -->
+            @if (_viewType == "water" && _heatmapItems.Any())
+            {
+                <MudItem xs="12">
+                    <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                         <MudText Typo="Typo.h6" Class="mb-4">Consistency (Last 4 Months)</MudText>
+                         
+                         <div class="d-flex flex-wrap gap-1 justify-center">
+                             @foreach (var item in _heatmapItems)
+                             {
+                                 <MudTooltip Text="@($"{item.Date:MMM dd}: {item.Value} {_unit}")">
+                                     <div style="width: 12px; height: 12px; border-radius: 2px; background-color: @item.Color; opacity: 0.9;" 
+                                          class="hover-scale-small"></div>
+                                 </MudTooltip>
+                             }
+                         </div>
+                         <div class="d-flex align-center gap-2 mt-2 justify-end">
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">Less</MudText>
+                             <div style="width: 10px; height: 10px; background-color: #263238; border-radius: 2px;"></div>
+                             <div style="width: 10px; height: 10px; background-color: #01579B; border-radius: 2px;"></div>
+                             <div style="width: 10px; height: 10px; background-color: #0288D1; border-radius: 2px;"></div>
+                             <div style="width: 10px; height: 10px; background-color: #4FC3F7; border-radius: 2px;"></div>
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">More</MudText>
+                         </div>
+                    </MudPaper>
+                </MudItem>
+            }
 
             <!-- Today's Log -->
             <MudItem xs="12">
@@ -272,6 +300,34 @@
                                Width="100%" Height="300px" ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#FF5252", "#4CAF50" } })" />
                 </MudPaper>
             </MudItem>
+            
+            <!-- Heatmap (Smokes) -->
+            @if (_viewType == "smokes" && _heatmapItems.Any())
+            {
+                <MudItem xs="12">
+                    <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                         <MudText Typo="Typo.h6" Class="mb-4">Consistency (Last 4 Months)</MudText>
+                         
+                         <div class="d-flex flex-wrap gap-1 justify-center">
+                             @foreach (var item in _heatmapItems)
+                             {
+                                 <MudTooltip Text="@($"{item.Date:MMM dd}: {item.Value} Smokes")">
+                                     <div style="width: 12px; height: 12px; border-radius: 2px; background-color: @item.Color; opacity: 0.9;" 
+                                          class="hover-scale-small"></div>
+                                 </MudTooltip>
+                             }
+                         </div>
+                         <div class="d-flex align-center gap-2 mt-2 justify-end">
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">Good</MudText>
+                             <div style="width: 10px; height: 10px; background-color: #1B5E20; border-radius: 2px;"></div> <!-- 0 -->
+                             <div style="width: 10px; height: 10px; background-color: #FF8A65; border-radius: 2px;"></div> <!-- Low -->
+                             <div style="width: 10px; height: 10px; background-color: #EF5350; border-radius: 2px;"></div> <!-- Med -->
+                             <div style="width: 10px; height: 10px; background-color: #D32F2F; border-radius: 2px;"></div> <!-- High -->
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">Bad</MudText>
+                         </div>
+                    </MudPaper>
+                </MudItem>
+            }
 
             <!-- Configuration (Moved Up) -->
             <MudItem xs="12">
@@ -395,6 +451,16 @@
  </div>
  
 <style>
+    .hover-scale-small {
+        transition: transform 0.2s;
+    }
+    .hover-scale-small:hover {
+        transform: scale(1.5);
+        z-index: 10;
+        box-shadow: 0 0 4px rgba(255,255,255,0.5);
+    }
+    /* ... existing styles ... */
+
     .glass-popover {
         backdrop-filter: blur(20px);
         background-color: rgba(30, 30, 40, 0.95) !important; /* Force dark opaque background */
@@ -717,39 +783,88 @@
          return $"{_smokesCurrency} {(dailySaved * 365):F0}";
     }
 
+    // Heatmap Data
+    record HeatmapItem(DateTime Date, double Value, string Color);
+    private List<HeatmapItem> _heatmapItems = new();
+
     private async Task LoadHistory()
     {
-        // Simple 7 day history ending on VIEW DATE
+        // View Date
         var anchorDate = _viewDate?.Date ?? DateTime.Now.Date;
+        
+        // 1. Fetch 120 Days for Heatmap & Charts (Efficiency: One Call)
+        var startDate = anchorDate.AddDays(-120); 
+        var endDate = anchorDate;
+        
         var type = _viewType == "water" ? "water" : "smokes";
         var labels = new string[7];
 
+        var historyList = await HabitsService.GetHistoryAsync(type, startDate, endDate);
+        var historyMap = historyList.ToDictionary(h => h.Date.Date, h => h);
+
         if (type == "water")
         {
+            // --- A. BAR CHART (Last 7 Days) ---
             var data = new double[7];
             for (int i = 0; i < 7; i++)
             {
-                var date = anchorDate.AddDays(-6 + i);
+                var date = anchorDate.AddDays(-6 + i); // 7 days ending at anchor
                 labels[i] = date.ToString("dd MMM");
-                data[i] = await HabitsService.GetDailyProgressAsync(type, date);
+                
+                if (historyMap.TryGetValue(date.Date, out var summary))
+                {
+                    data[i] = summary.TotalValue;
+                }
+                else
+                {
+                    data[i] = 0;
+                }
             }
             _series = new List<ChartSeries> { new ChartSeries { Name = $"Intake ({_unit})", Data = data } };
+            
+            // --- B. HEATMAP (Last 120 Days) ---
+            _heatmapItems.Clear();
+            var currentDate = startDate;
+            while(currentDate <= endDate)
+            {
+                double val = 0;
+                if (historyMap.TryGetValue(currentDate.Date, out var summary))
+                {
+                    val = summary.TotalValue;
+                }
+                
+                // Color Logic
+                string color = "#263238"; // Empty (Dark Grey match theme)
+                if (val > 0)
+                {
+                    double ratio = val / (_goalValue > 0 ? _goalValue : 1);
+                    if (ratio >= 1.0) color = "#4FC3F7"; // Goal Met (Bright Blue)
+                    else if (ratio >= 0.5) color = "#0288D1"; // Halfway (Medium Blue)
+                    else color = "#01579B"; // Some (Dark Blue)
+                }
+                
+                _heatmapItems.Add(new HeatmapItem(currentDate, val, color));
+                currentDate = currentDate.AddDays(1);
+            }
         }
         else
         {
+            // Smokes chart logic (unchanged range mostly, just using map)
             // Smokes: Stacked Bar (Smoked vs Avoided)
             var dataSmoked = new double[7];
             var dataAvoided = new double[7];
             
             for (int i = 0; i < 7; i++)
             {
-                var date = anchorDate.AddDays(-6 + i);
-                labels[i] = date.ToString("ddd"); // Short day name
+                var date = anchorDate.AddDays(-6 + i); // 7 days ending at anchor
+                labels[i] = date.ToString("ddd"); 
                 
-                var smoked = await HabitsService.GetDailyProgressAsync("smokes", date);
+                double smoked = 0;
+                if (historyMap.TryGetValue(date.Date, out var summary))
+                {
+                    smoked = summary.TotalValue; 
+                }
                 
-                // Logic: Only show "avoided" if we are AFTER the quit date (or on it)
-                // If date < QuitDate, Avoided = 0 (we weren't trying to save then)
                 double avoided = 0;
                 if (date >= (_smokesQuitDate?.Date ?? DateTime.MinValue))
                 {
@@ -762,9 +877,37 @@
             
             _series = new List<ChartSeries>
             {
-                new ChartSeries { Name = "Smoked", Data = dataSmoked }, // Red (bottom)
-                new ChartSeries { Name = "Avoided", Data = dataAvoided } // Green (top)
+                new ChartSeries { Name = "Smoked", Data = dataSmoked }, 
+                new ChartSeries { Name = "Avoided", Data = dataAvoided } 
             };
+            
+            // --- B. HEATMAP (Last 120 Days) ---
+            _heatmapItems.Clear();
+            var currentDate = startDate;
+            while(currentDate <= endDate)
+            {
+                double val = 0;
+                if (historyMap.TryGetValue(currentDate.Date, out var summary))
+                {
+                    val = summary.TotalValue;
+                }
+                
+                // Color Logic for SMOKES (Less is Better, so Colors indicate Intensity/Badness)
+                string color = "#1B5E20"; // Empty/Good (Dark Green)
+                if (val > 0)
+                {
+                    // If Baseline is 0, treat any smoke as max bad
+                    double baseline = _smokesBaseline > 0 ? _smokesBaseline : 1; 
+                    double ratio = val / baseline;
+                    
+                    if (ratio >= 1.0) color = "#D32F2F"; // > Baseline (Dark Red - Danger)
+                    else if (ratio >= 0.5) color = "#EF5350"; // > 50% (Red)
+                    else color = "#FF8A65"; // Some (Light Orange/Red)
+                }
+                
+                _heatmapItems.Add(new HeatmapItem(currentDate, val, color));
+                currentDate = currentDate.AddDays(1);
+            }
         }
         
         _xAxisLabels = labels;
