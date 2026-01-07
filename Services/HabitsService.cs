@@ -191,5 +191,19 @@ namespace Daily.Services
 
             return breakdown;
         }
+
+        public async Task InitializeAsync()
+        {
+             // Force check auth state and sync if needed
+             if (IsAuthenticated)
+             {
+                 Console.WriteLine($"[HabitsService] Initialize: User {CurrentUserId} detected. Triggering Sync...");
+                 await _syncService.SyncAsync();
+             }
+             else
+             {
+                 Console.WriteLine("[HabitsService] Initialize: Guest mode.");
+             }
+        }
     }
 }

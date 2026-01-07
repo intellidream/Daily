@@ -22,5 +22,7 @@ namespace Daily.Services
         
         Task<double> GetDailyProgressAsync(string habitType, DateTime date);
         Task<Dictionary<string, double>> GetDailyBreakdownAsync(string habitType, DateTime date);
+        
+        Task InitializeAsync();
     }
 }

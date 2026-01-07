@@ -115,7 +115,10 @@ namespace Daily.Services
                              localTarget.SyncedAt = null; // Mark Dirty for Push
                              
                              await _databaseService.Connection.InsertOrReplaceAsync(localTarget);
-                             await _databaseService.Connection.DeleteAsync<LocalUserPreferences>(oldId);
+                             // FIX: Do NOT delete old Guest data. 
+                             // Use Case: User logs out. We want them to fall back to the "Device Settings" (Guest), not empty defaults.
+                             // So we COPY guest settings to User, but keep Guest intact.
+                             // await _databaseService.Connection.DeleteAsync<LocalUserPreferences>(oldId);
 
                              // Trigger Push of migrated data
                              Task.Run(async () => await _syncService.PushAsync());

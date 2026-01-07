@@ -21,24 +21,37 @@ namespace Daily
         private readonly IBackButtonService _backButtonService;
         private readonly Supabase.Client _supabase;
         private readonly IDatabaseService _databaseService;
+        private readonly ISettingsService _settingsService;
+        private readonly IHabitsService _habitsService;
+        private readonly ISyncService _syncService;
 
-        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService)
+        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService)
         {
             InitializeComponent();
             _trayService = trayService;
             _supabase = supabase;
             _databaseService = databaseService;
+            _settingsService = settingsService;
+            _habitsService = habitsService;
+            _syncService = syncService;
+            _refreshService = refreshService;
+            _backButtonService = backButtonService;
 #if MACCATALYST
             // Daily.Platforms.MacCatalyst.MacTrayService.Log("App Constructor Called");
 #endif
-            _refreshService = refreshService;
-            _backButtonService = backButtonService;
 
-            // Initialize Data Layer
+            // Initialize Data Layer & Services
             Task.Run(async () => 
             {
                 await _databaseService.InitializeAsync();
                 await _supabase.InitializeAsync();
+                
+                // Trigger Services Init (Check Auth & Sync)
+                await _settingsService.InitializeAsync();
+                await _habitsService.InitializeAsync();
+                
+                // Start Timer (Robustness)
+                _syncService.StartBackgroundSync();
             });
 
             _trayService.Initialize();

@@ -28,7 +28,10 @@ namespace Daily.Models
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
+        [Newtonsoft.Json.JsonIgnore]
         public DateTime? SyncedAt { get; set; }
+
+        [Column("is_deleted")]
         public bool IsDeleted { get; set; }
     }
 
@@ -69,7 +72,10 @@ namespace Daily.Models
         // Actually Supabase client usually respects Column attribute. 
         // We will add them as properties.
 
+        [Newtonsoft.Json.JsonIgnore]
         public DateTime? SyncedAt { get; set; }
+
+        [Column("is_deleted")]
         public bool IsDeleted { get; set; }
     }
 }

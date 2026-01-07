@@ -17,6 +17,8 @@ namespace Daily.Services
         public string? LastSyncError { get; private set; }
         public string LastSyncMessage { get; private set; } = "";
 
+        private System.Threading.Timer? _syncTimer;
+
         public async Task SyncAsync()
         {
             LastSyncError = null;
@@ -32,6 +34,22 @@ namespace Daily.Services
             {
                 LastSyncError = ex.Message;
                 Debug.WriteLine($"[SyncService] Sync Error: {ex}");
+            }
+        }
+
+        public void StartBackgroundSync()
+        {
+            if (_syncTimer == null)
+            {
+                // Sync every 60 seconds
+                _syncTimer = new System.Threading.Timer(async _ => 
+                {
+                    if (_supabase.Auth.CurrentSession != null)
+                    {
+                        await SyncAsync();
+                    }
+                }, null, 10000, 60000); 
+                Console.WriteLine("[SyncService] Background Sync Started.");
             }
         }
 
@@ -51,28 +69,60 @@ namespace Daily.Services
                                 .Where(l => l.SyncedAt == null && l.UserId == userId)
                                 .ToListAsync();
 
+            Console.WriteLine($"[SyncService] Found {dirtyLogs.Count} dirty logs for User {userId}.");
+            
             if (dirtyLogs.Any())
             {
-                Console.WriteLine($"[SyncService] Pushing {dirtyLogs.Count} dirty logs...");
-                var remoteLogs = dirtyLogs.Select(ToDomain).ToList();
-                
+                foreach(var d in dirtyLogs) Console.WriteLine($"   -> Dirty Log: {d.Id} ({d.HabitType} - {d.LoggedAt})");
+
                 try 
                 {
-                    // Supabase Bulk Insert/Upsert
-                    await _supabase.From<HabitLog>().Upsert(remoteLogs);
-
-                    // Mark local as synced
-                    foreach (var l in dirtyLogs)
+                    var remoteLogs = new List<HabitLog>();
+                    foreach(var d in dirtyLogs)
                     {
-                        l.SyncedAt = DateTime.UtcNow;
-                        await _databaseService.Connection.UpdateAsync(l);
+                        try { remoteLogs.Add(ToDomain(d)); }
+                        catch { Console.WriteLine($"[SyncService] SKIP Bad Log ID: {d.Id}"); }
                     }
-                    Console.WriteLine("[SyncService] Push Logs Success");
+
+                    if (remoteLogs.Any())
+                    {
+                        Console.WriteLine($"[SyncService] Uploading {remoteLogs.Count} logs to Supabase...");
+                        
+                        // Supabase Bulk Insert/Upsert
+                        var result = await _supabase.From<HabitLog>().Upsert(remoteLogs);
+                        
+                        // Check result if possible (Make sure Supabase client returns the list)
+                        var insertedCount = result.Models.Count;
+                        Console.WriteLine($"[SyncService] Supabase returned {insertedCount} models.");
+
+                        if (insertedCount > 0 || remoteLogs.Count > 0) // Assume success if no exception, but ideally check insertedCount
+                        {
+                            // Mark local as synced
+                            foreach (var l in dirtyLogs)
+                            {
+                                l.SyncedAt = DateTime.UtcNow;
+                                await _databaseService.Connection.UpdateAsync(l);
+                            }
+                            Console.WriteLine("[SyncService] Push Logs Success. Marked local as synced.");
+                        }
+                        else
+                        {
+                             Console.WriteLine("[SyncService] WARNING: Supabase returned 0 models active. RLS might be blocking insert?");
+                        }
+                    }
                 }
                 catch(Exception ex)
                 {
-                     Console.WriteLine($"[SyncService] Push Logs Failed: {ex.Message}");
+                     Console.WriteLine($"[SyncService] Push Logs FAILED EXCEPTION: {ex.Message}");
+                     Console.WriteLine($"[SyncService] Stack: {ex.StackTrace}");
                 }
+            }
+            else
+            {
+                // Debug: Why 0?
+                var total = await _databaseService.Connection.Table<LocalHabitLog>().CountAsync();
+                var userTotal = await _databaseService.Connection.Table<LocalHabitLog>().Where(l => l.UserId == userId).CountAsync();
+                Console.WriteLine($"[SyncService] DEBUG: Total Logs: {total}, User Logs: {userTotal}, Dirty: 0.");
             }
 
             // 2. Push Goals
@@ -83,17 +133,26 @@ namespace Daily.Services
             if (dirtyGoals.Any())
             {
                 Console.WriteLine($"[SyncService] Pushing {dirtyGoals.Count} dirty goals...");
-                var remoteGoals = dirtyGoals.Select(ToDomain).ToList();
                 try 
                 {
-                    await _supabase.From<HabitGoal>().Upsert(remoteGoals);
-
-                    foreach (var g in dirtyGoals)
+                    var remoteGoals = new List<HabitGoal>();
+                    foreach(var d in dirtyGoals)
                     {
-                        g.SyncedAt = DateTime.UtcNow;
-                        await _databaseService.Connection.UpdateAsync(g);
+                        try { remoteGoals.Add(ToDomain(d)); }
+                        catch { Console.WriteLine($"[SyncService] SKIP Bad Goal ID: {d.Id}"); }
                     }
-                     Console.WriteLine("[SyncService] Push Goals Success");
+                    
+                    if (remoteGoals.Any())
+                    {
+                        await _supabase.From<HabitGoal>().Upsert(remoteGoals);
+
+                        foreach (var g in dirtyGoals)
+                        {
+                            g.SyncedAt = DateTime.UtcNow;
+                            await _databaseService.Connection.UpdateAsync(g);
+                        }
+                         Console.WriteLine("[SyncService] Push Goals Success");
+                    }
                 }
                  catch(Exception ex)
                 {

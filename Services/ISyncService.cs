@@ -5,6 +5,7 @@ namespace Daily.Services
         Task SyncAsync();
         Task PushAsync();
         Task<int> PullAsync();
+        void StartBackgroundSync(); // New
         string? LastSyncError { get; }
         string LastSyncMessage { get; }
     }
