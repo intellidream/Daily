@@ -186,11 +186,11 @@ namespace Daily.Services
 
         private UserPreferences ToDomain(LocalUserPreferences local)
         {
-            return new UserPreferences
+            var userPrefs = new UserPreferences
             {
                 Id = local.Id,
                 Theme = local.Theme,
-                UnitSystem = local.UnitSystem,
+                UnitSystem = (local.UnitSystem == "imperial") ? "imperial" : "metric",
                 PressureUnit = local.PressureUnit,
                 Interests = string.IsNullOrEmpty(local.InterestsJson) 
                             ? new List<string>() 
@@ -209,6 +209,9 @@ namespace Daily.Services
                 SmokesCurrency = local.SmokesCurrency,
                 SmokesQuitDate = local.SmokesQuitDate
             };
+
+            Console.WriteLine($"[SettingsService] ToDomain Raw: '{local.UnitSystem}' -> Sanitized: '{userPrefs.UnitSystem}'");
+            return userPrefs;
         }
 
         private LocalUserPreferences ToLocal(UserPreferences domain)

@@ -69,7 +69,7 @@ namespace Daily.Services
 
                 if (status == PermissionStatus.Granted)
                 {
-                    // 2. Try Last Known
+                    // 2. Try Last Known (Very Fast)
                     var location = await _geolocation.GetLastKnownLocationAsync();
                     if (location != null) 
                     {
@@ -78,48 +78,11 @@ namespace Daily.Services
                         return location;
                     }
 
-                    // 3. Try Accuracies from Best to Lowest
-                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Best, 3));
-                    if (location != null) 
-                    {
-                        _cachedUserLocation = location;
-                        _lastUserLocationTime = DateTime.Now;
-                        return location;
-                    }
-
-                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.High, 3));
-                    if (location != null) 
-                    {
-                        _cachedUserLocation = location;
-                        _lastUserLocationTime = DateTime.Now;
-                        return location;
-                    }
-
-                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Medium, 5));
-                    if (location != null) 
-                    {
-                        _cachedUserLocation = location;
-                        _lastUserLocationTime = DateTime.Now;
-                        return location;
-                    }
+                    // 3. Single Robust Attempt (Fast Timeout)
+                    // Instead of trying every accuracy level sequentially (which takes forever),
+                    // we try Default accuracy with a reasonable timeout.
+                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Default, 4));
                     
-                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Default, 5));
-                    if (location != null) 
-                    {
-                        _cachedUserLocation = location;
-                        _lastUserLocationTime = DateTime.Now;
-                        return location;
-                    }
-
-                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Low, 5));
-                    if (location != null) 
-                    {
-                        _cachedUserLocation = location;
-                        _lastUserLocationTime = DateTime.Now;
-                        return location;
-                    }
-
-                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Lowest, 5));
                     if (location != null) 
                     {
                         _cachedUserLocation = location;
@@ -166,6 +129,7 @@ namespace Daily.Services
             try
             {
                 // Using ip-api.com (free, no key required for non-commercial)
+                // Note: HTTP only for free tier. iOS/Mac ATS might block this if not configured.
                 var ipInfo = await _httpClient.GetFromJsonAsync<IpLocationInfo>("http://ip-api.com/json/");
                 if (ipInfo != null && ipInfo.Status == "success")
                 {
@@ -201,12 +165,20 @@ namespace Daily.Services
 
             try
             {
-                var units = _settingsService.Settings.UnitSystem; // "metric" or "imperial"
+                // Sanitize units: Default to metric if missing, ensure lowercase
+                var rawSetting = _settingsService.Settings.UnitSystem;
+                var units = (rawSetting ?? "metric").ToLower();
+                
                 var url = $"{BaseUrl}/weather?lat={latitude}&lon={longitude}&appid={ApiKey}&units={units}";
+                
+                Console.WriteLine($"[WeatherService] Fetching Weather. RawSetting: '{rawSetting}' | UnitsParam: '{units}'");
+                Console.WriteLine($"[WeatherService] URL: {url.Replace(ApiKey, "APIKEY")}");
+
                 var result = await _httpClient.GetFromJsonAsync<WeatherResponse>(url);
                 
                 if (result != null)
                 {
+                    Console.WriteLine($"[WeatherService] Result Temp: {result.Main.Temp}");
                     _cachedCurrentWeather = result;
                     _lastCurrentLocation = (latitude, longitude);
                     _lastCurrentFetchTime = DateTime.Now;
@@ -237,7 +209,7 @@ namespace Daily.Services
 
             try
             {
-                var units = _settingsService.Settings.UnitSystem;
+                var units = (_settingsService.Settings.UnitSystem ?? "metric").ToLower();
                 var url = $"{BaseUrl}/forecast?lat={latitude}&lon={longitude}&appid={ApiKey}&units={units}";
                 var result = await _httpClient.GetFromJsonAsync<ForecastResponse>(url);
 

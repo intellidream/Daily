@@ -382,7 +382,7 @@ namespace Daily.Services
             {
                 Id = local.Id, // String ID
                 Theme = local.Theme,
-                UnitSystem = local.UnitSystem,
+                UnitSystem = (local.UnitSystem == "imperial") ? "imperial" : "metric", // SANITIZE
                 PressureUnit = local.PressureUnit,
                 Interests = string.IsNullOrEmpty(local.InterestsJson) 
                             ? new List<string>() 
@@ -414,7 +414,7 @@ namespace Daily.Services
             {
                 Id = domain.Id,
                 Theme = domain.Theme,
-                UnitSystem = domain.UnitSystem,
+                UnitSystem = (domain.UnitSystem == "imperial") ? "imperial" : "metric", // SANITIZE
                 
                 PressureUnit = domain.PressureUnit,
                 WindUnit = domain.WindUnit,
