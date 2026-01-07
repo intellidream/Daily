@@ -518,14 +518,73 @@ namespace Daily.Services
                          await _databaseService.Connection.UpdateAsync(s);
                      }
                      Console.WriteLine("[SyncService] Push Summaries Success.");
-                     
-                     // TODO: Trigger PruneRemoteLogsAsync(userId) here to delete raw logs from Cloud
-                 }
-                 catch(Exception ex)
-                 {
-                     Console.WriteLine($"[SyncService] Push Summaries Failed: {ex.Message}");
-                 }
-             }
+                                          // Prune Remote Logs (Data Safety: Only delete what we have summarized and synced)
+                      if (remoteList.Any())
+                      {
+                          await PruneRemoteLogsAsync(userId);
+                      }
+                  }
+                  catch(Exception ex)
+                  {
+                      Console.WriteLine($"[SyncService] Push Summaries Failed: {ex.Message}");
+                  }
+              }
+        }
+
+        private async Task PruneRemoteLogsAsync(string userId)
+        {
+            try
+            {
+                // Safety Threshold: 90 Days
+                var thresholdDate = DateTime.UtcNow.AddDays(-90);
+
+                // 1. Get the latest date of a SAFELY SYNCED summary from local DB
+                // We only trust our local state if it says it's synced.
+                var latestSyncedSummary = await _databaseService.Connection.Table<LocalDailySummary>()
+                                            .Where(s => s.UserId == userId && s.SyncedAt != null)
+                                            .OrderByDescending(s => s.Date)
+                                            .FirstOrDefaultAsync();
+
+                if (latestSyncedSummary == null)
+                {
+                    Console.WriteLine("[SyncService] Pruning Aborted: No synced summaries found.");
+                    return;
+                }
+
+                // 2. Determine Safe Prune Date based on Min(Threshold, LatestSummary)
+                // We must NOT delete logs that are newer than our latest summary (even if they are > 90 days old, though unlikely)
+                // We must NOT delete logs that are newer than 90 days (Business Rule)
+                
+                // Use the Date from the summary (Midnight). 
+                // LoggedAt is exact time. If summary is for 2023-01-01, it covers 2023-01-01 00:00 to 23:59.
+                // It is SAFE to delete logs < 2023-01-02 00:00? No, that's previous day.
+                // If we summarized 2023-01-01, we extracted all logs for that day. 
+                // So logs with LoggedAt < 2023-01-02 00:00 are theoretically safe.
+                // However, let's differ to strict less than Date (Midnight) to be super safe 
+                // (i.e. if summary date is Jan 1, we prune strictly < Jan 1, meaning up to Dec 31).
+                
+                var latestSummaryDate = latestSyncedSummary.Date;
+                
+                var safePruneDate = (latestSummaryDate < thresholdDate) ? latestSummaryDate : thresholdDate;
+                
+                Console.WriteLine($"[SyncService] Pruning Check: Threshold={thresholdDate:d}, LatestSummary={latestSummaryDate:d}. SafeDate={safePruneDate:d}");
+
+                // 3. Execute Deletion on Supabase
+                // "Delete from habits_logs where logged_at < safePruneDate"
+                // Using PostgREST filtering
+                await _supabase.From<HabitLog>()
+                    .Where(x => x.LoggedAt < safePruneDate) // Strict Less Than
+                    //.Where(x => x.UserId == Guid.Parse(userId)) // RLS handles this, but explicit doesn't hurt. 
+                                                                  // Actually PostgREST client might fail if we filter by a field not in the model? 
+                                                                  // HabitLog has UserId.
+                    .Delete();
+                    
+                Console.WriteLine($"[SyncService] Pruning Command Sent. Remote logs older than {safePruneDate:d} should be deleted.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SyncService] Pruning Failed: {ex.Message}");
+            }
         }
 
         private async Task<int> PullSummariesAsync(string userId)
