@@ -100,6 +100,7 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.IDatabaseService, Daily.Services.DatabaseService>();
             builder.Services.AddSingleton<Daily.Services.IHabitsRepository, Daily.Services.HabitsRepository>();
             builder.Services.AddSingleton<Daily.Services.ISyncService, Daily.Services.SyncService>();
+            builder.Services.AddSingleton<Daily.Services.ISeederService, Daily.Services.SeederService>();
             
             builder.Services.AddSingleton<Daily.Services.IYouTubeService, Daily.Services.YouTubeService>();
             builder.Services.AddSingleton<Daily.Services.IWindowManagerService, Daily.Services.WindowManagerService>();

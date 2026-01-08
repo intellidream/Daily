@@ -166,6 +166,9 @@ namespace Daily.Services
             // 4. Consolidate & Push Summaries (New Protocol)
             await ConsolidateHistoryAsync(userId); 
             await PushSummariesAsync(userId);
+
+            // 5. Data Safety / Cost Management: Always check if we can prune old remote logs
+            await PruneRemoteLogsAsync(userId);
         }
 
         public async Task<int> PullAsync()
@@ -390,11 +393,6 @@ namespace Daily.Services
                          await _databaseService.Connection.UpdateAsync(s);
                      }
                      Console.WriteLine("[SyncService] Push Summaries Success.");
-                                          // Prune Remote Logs (Data Safety: Only delete what we have summarized and synced)
-                      if (remoteList.Any())
-                      {
-                          await PruneRemoteLogsAsync(userId);
-                      }
                   }
                   catch(Exception ex)
                   {
