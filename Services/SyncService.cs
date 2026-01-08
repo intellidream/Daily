@@ -461,23 +461,46 @@ namespace Daily.Services
         {
              try 
              {
-                 // Pull everything? Or just last year? For now all history (lightweight).
-                 var userGuid = Guid.Parse(userId);
-                 var response = await _supabase.From<DailySummary>()
-                    .Where(x => x.UserId == userGuid)
-                    .Get();
+                 // Pagination loop to fetch all summaries (likely > 1000)
+                 int rangeStart = 0;
+                 int rangeEnd = 999;
+                 int totalPulled = 0;
+                 bool hasMore = true;
 
-                 if (response.Models.Any())
+                 while (hasMore)
                  {
-                     Console.WriteLine($"[SyncService] Pulled {response.Models.Count} summaries.");
-                     foreach(var r in response.Models)
+                     Console.WriteLine($"[SyncService] Pulling Summaries range {rangeStart}-{rangeEnd}...");
+                     
+                     var userGuid = Guid.Parse(userId);
+                     var response = await _supabase.From<DailySummary>()
+                        .Where(x => x.UserId == userGuid)
+                        .Range(rangeStart, rangeEnd)
+                        .Get();
+
+                     var count = response.Models.Count;
+                     if (count > 0)
                      {
-                         var local = r.ToLocal();
-                         local.SyncedAt = DateTime.UtcNow;
-                         await _databaseService.Connection.InsertOrReplaceAsync(local);
+                         Console.WriteLine($"[SyncService] Pulled {count} summaries (Batch).");
+                         foreach(var r in response.Models)
+                         {
+                             var local = r.ToLocal();
+                             local.SyncedAt = DateTime.UtcNow;
+                             await _databaseService.Connection.InsertOrReplaceAsync(local);
+                         }
+                         totalPulled += count;
+                         
+                         // Prepare next batch
+                         rangeStart += 1000;
+                         rangeEnd += 1000;
                      }
-                     return response.Models.Count;
+                     
+                     if (count < 1000)
+                     {
+                         hasMore = false; // Less than full batch means we are done
+                     }
                  }
+                 
+                 return totalPulled;
              }
              catch(Exception ex)
              {
