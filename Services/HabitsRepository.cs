@@ -50,7 +50,7 @@ namespace Daily.Services
             
             // Soft Delete using ID only (ID is PK)
             await _databaseService.Connection.ExecuteAsync(
-                "UPDATE local_habit_logs SET IsDeleted = 1, SyncedAt = NULL WHERE Id = ?", 
+                "UPDATE habits_logs SET IsDeleted = 1, SyncedAt = NULL WHERE Id = ?", 
                 logId.ToString());
         }
 

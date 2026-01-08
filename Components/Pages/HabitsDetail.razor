@@ -1013,7 +1013,17 @@
 
     private async Task DeleteLog(HabitLog log)
     {
-        await HabitsService.DeleteLogAsync(log.Id);
+        if (log == null) return;
+        try
+        {
+            await HabitsService.DeleteLogAsync(log.Id);
+            Snackbar.Add("Entry deleted", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[HabitsDetail] Delete Error: {ex}");
+            Snackbar.Add("Failed to delete entry", Severity.Error);
+        }
     }
 
     private string GetEncouragement()
