@@ -54,6 +54,39 @@
                             <MudText Typo="Typo.caption" Style="opacity: 0.7;">@GetEncouragement()</MudText>
                         </div>
                     </div>
+                    
+                    <!-- Date Selector Moved Here -->
+                    <div class="d-flex justify-center w-100 mt-6">
+                        <DateFilmStrip StartDate="@DateTime.Today.AddDays(-60)" 
+                                      EndDate="@DateTime.Today"
+                                      SelectedDate="@(_viewDate ?? DateTime.Today)"
+                                      SelectedDateChanged="@(d => OnViewDateChanged(d))" />
+                    </div>
+
+                    <!-- Logs Expansion -->
+                    @if (_todaysLogs.Any())
+                    {
+                        <MudExpansionPanels Elevation="0" Class="mt-4 w-100" Dense="true" DisableBorders="true" Style="background: transparent;">
+                            <MudExpansionPanel Text="@($"Log - {(_viewDate?.ToString("MMM dd") ?? "Today")}")" Style="background: rgba(255,255,255,0.05); border-radius: 12px;">
+                                <MudList T="HabitLog" Dense="true" DisablePadding="true" Style="background: transparent;">
+                                     @foreach (var log in _todaysLogs)
+                                     {
+                                         var drinkName = GetDrinkName(log);
+                                         <MudListItem Icon="@GetIconForType(drinkName)" IconColor="Color.Inherit" Style="@($"color: {GetHexColorForType(drinkName)};")">
+                                             <div class="d-flex justify-space-between align-center w-100">
+                                                 <div class="d-flex flex-column">
+                                                     <MudText Color="Color.Default">@log.Value @log.Unit <span style="opacity: 0.6; font-size: 0.9em;">- @drinkName</span></MudText>
+                                                     <MudText Typo="Typo.caption" Style="opacity: 0.6;" Color="Color.Default">@GetLocalTime(log.LoggedAt).ToString("t")</MudText>
+                                                 </div>
+                                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" Color="Color.Default" />
+                                             </div>
+                                         </MudListItem>
+                                         <MudDivider />
+                                     }
+                                </MudList>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
                 </MudPaper>
             </MudItem>
 
@@ -112,38 +145,9 @@
                 </MudItem>
             }
 
-            <!-- Today's Log -->
-            <MudItem xs="12">
-                <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-                     <div class="d-flex justify-space-between align-center mb-4">
-                         <MudText Typo="Typo.h6">Today's Log</MudText>
-                     </div>
-                     
-                     <MudList T="HabitLog" Dense="true" DisablePadding="true">
-                         @if (_todaysLogs.Any())
-                         {
-                             @foreach (var log in _todaysLogs)
-                             {
-                                 var drinkName = GetDrinkName(log);
-                                 <MudListItem Icon="@GetIconForType(drinkName)" IconColor="Color.Inherit" Style="@($"color: {GetHexColorForType(drinkName)};")">
-                                     <div class="d-flex justify-space-between align-center w-100">
-                                         <div class="d-flex flex-column">
-                                             <MudText Color="Color.Default">@log.Value @log.Unit <span style="opacity: 0.6; font-size: 0.9em;">- @drinkName</span></MudText>
-                                             <MudText Typo="Typo.caption" Style="opacity: 0.6;" Color="Color.Default">@GetLocalTime(log.LoggedAt).ToString("t")</MudText>
-                                         </div>
-                                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteLog(log))" Color="Color.Default" />
-                                     </div>
-                                 </MudListItem>
-                                 <MudDivider />
-                             }
-                         }
-                         else
-                         {
-                             <MudText Typo="Typo.body2" Style="opacity: 0.6;" Class="py-4">No entries yet today.</MudText>
-                         }
-                     </MudList>
-                </MudPaper>
-            </MudItem>
+
+
+
         </MudGrid>
     }
     else if (_viewType == "smokes")
@@ -674,7 +678,7 @@
                 _unit = goal.Unit;
             }
 
-            var now = DateTime.Now;
+            var now = _viewDate ?? DateTime.Now;
             _todaysLogs = await HabitsService.GetLogsAsync("water", now);
             _currentValue = _todaysLogs.Sum(l => l.Value);
             
@@ -954,7 +958,11 @@
     
     private async Task AddDrink(DrinkType drink)
     {
-        await HabitsService.AddLogAsync("water", drink.Amount, _unit, DateTime.Now, "{ \"drink\": \"" + drink.Name + "\" }");
+        var date = _viewDate ?? DateTime.Now;
+        if (date.Date != DateTime.Now.Date) date = date.Date.AddHours(12); // Noon for past dates
+        else date = DateTime.Now;
+
+        await HabitsService.AddLogAsync("water", drink.Amount, _unit, date, "{ \"drink\": \"" + drink.Name + "\" }");
         Snackbar.Add($"Added {drink.Amount}{_unit} of {drink.Name}", Severity.Success);
     }
 
