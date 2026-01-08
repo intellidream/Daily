@@ -40,8 +40,9 @@ namespace Daily.Services
              _supabase.Auth.AddStateChangedListener((sender, state) => 
             {
                 Console.WriteLine($"[SettingsService] Auth State Changed: {state}");
-                if (state == Supabase.Gotrue.Constants.AuthState.SignedIn)
+                if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || state == Supabase.Gotrue.Constants.AuthState.SignedOut)
                 {
+                     Console.WriteLine($"[SettingsService] Handling Auth Change ({state}). Reloading...");
                      // Use robust fire-and-forget with extensive logging
                      Task.Run(async () => 
                      {

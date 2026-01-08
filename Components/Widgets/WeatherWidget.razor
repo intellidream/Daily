@@ -225,7 +225,7 @@
                         <div class="d-flex flex-column align-center justify-space-between" style="height: 100%;">
                             <MudIcon Icon="@Icons.Material.Outlined.Air" Size="Size.Medium" Style="opacity: 0.4; font-size: 1.5rem;" />
                             <div class="d-flex flex-column align-center">
-                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@Math.Round(_currentWeather?.Wind.Speed ?? 0) m/s</MudText>
+                                <MudText Typo="Typo.body1" Style="font-weight: 800; line-height: 1; opacity: 0.6;">@GetWindString(_currentWeather?.Wind.Speed ?? 0)</MudText>
                                 <MudText Typo="Typo.caption" Style="opacity: 0.4; font-size: 0.75rem;">Wind</MudText>
                             </div>
                         </div>
@@ -412,5 +412,51 @@
             _isLoading = false;
             StateHasChanged();
         }
+    }
+
+    private string GetWindString(double speed)
+    {
+        // 1. Determine Source Unit (API Data)
+        var unitSystem = SettingsService.Settings.UnitSystem;
+        var isImperialBase = unitSystem == "imperial";
+        
+        // 2. Normalize to M/S for easier conversion
+        double speedMs = isImperialBase ? speed * 0.44704 : speed;
+
+        // 3. Convert to Target Unit
+        var targetUnit = SettingsService.Settings.WindUnit?.ToLower() ?? "m/s";
+        
+        double finalSpeed;
+        string unitLabel;
+
+        switch (targetUnit)
+        {
+            case "km/h":
+            case "kmh":
+                finalSpeed = speedMs * 3.6;
+                unitLabel = "km/h";
+                break;
+            case "mph":
+                finalSpeed = speedMs * 2.23694;
+                unitLabel = "mph";
+                break;
+            case "kn": // Knots
+                finalSpeed = speedMs * 1.94384;
+                unitLabel = "kn";
+                break;
+            case "bft": // Beaufort
+                finalSpeed = Math.Pow(speedMs / 0.836, 2.0/3.0);
+                if (finalSpeed > 12) finalSpeed = 12;
+                unitLabel = "Bft";
+                break;
+            case "m/s":
+            case "ms":
+            default:
+                finalSpeed = speedMs;
+                unitLabel = "m/s";
+                break;
+        }
+
+        return $"{Math.Round(finalSpeed)} {unitLabel}";
     }
 }

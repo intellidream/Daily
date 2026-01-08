@@ -207,12 +207,21 @@ namespace Daily.Services
                          Console.Error.WriteLine($"[SyncService] Pulled {count} logs (Batch).");
                          totalPulled += count;
 
-                         foreach (var remote in response.Models)
+                         // Prepare data in memory first
+                         var localBatch = response.Models.Select(m => {
+                             var l = m.ToLocal();
+                             l.SyncedAt = DateTime.UtcNow;
+                             return l;
+                         }).ToList();
+
+                         // Batch Insert (High Performance)
+                         await _databaseService.Connection.RunInTransactionAsync(tran => 
                          {
-                             var local = remote.ToLocal();
-                             local.SyncedAt = DateTime.UtcNow; 
-                             await _databaseService.Connection.InsertOrReplaceAsync(local);
-                         }
+                             foreach(var item in localBatch)
+                             {
+                                 tran.InsertOrReplace(item);
+                             }
+                         });
 
                          // Prepare next batch
                          rangeStart += 1000;
@@ -503,12 +512,20 @@ namespace Daily.Services
                      if (count > 0)
                      {
                          Console.WriteLine($"[SyncService] Pulled {count} summaries (Batch).");
-                         foreach(var r in response.Models)
+                         
+                         var localBatch = response.Models.Select(m => {
+                             var l = m.ToLocal();
+                             l.SyncedAt = DateTime.UtcNow;
+                             return l;
+                         }).ToList();
+
+                         await _databaseService.Connection.RunInTransactionAsync(tran => 
                          {
-                             var local = r.ToLocal();
-                             local.SyncedAt = DateTime.UtcNow;
-                             await _databaseService.Connection.InsertOrReplaceAsync(local);
-                         }
+                             foreach(var item in localBatch)
+                             {
+                                 tran.InsertOrReplace(item);
+                             }
+                         });
                          totalPulled += count;
                          
                          // Prepare next batch

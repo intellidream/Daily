@@ -61,7 +61,7 @@
                         <MudPaper Class="detail-tile rounded-xl pa-4 d-flex flex-column align-center justify-center" Elevation="3" Style="height: 160px;">
                              <MudIcon Icon="@Icons.Material.Outlined.Air" Class="mb-2" Style="opacity: 0.7;" />
                              <MudText Typo="Typo.caption" Style="opacity: 0.6;">WIND</MudText>
-                             <MudText Typo="Typo.h6">@Math.Round(_currentWeather.Wind.Speed) m/s</MudText>
+                             <MudText Typo="Typo.h6">@GetWindString(_currentWeather.Wind.Speed)</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="6">
@@ -316,6 +316,52 @@
                 Icon = icon
             });
         }
+    }
+
+    private string GetWindString(double speed)
+    {
+        // 1. Determine Source Unit (API Data)
+        var unitSystem = SettingsService.Settings.UnitSystem;
+        var isImperialBase = unitSystem == "imperial";
+        
+        // 2. Normalize to M/S for easier conversion
+        double speedMs = isImperialBase ? speed * 0.44704 : speed;
+
+        // 3. Convert to Target Unit
+        var targetUnit = SettingsService.Settings.WindUnit?.ToLower() ?? "m/s";
+        
+        double finalSpeed;
+        string unitLabel;
+
+        switch (targetUnit)
+        {
+            case "km/h":
+            case "kmh":
+                finalSpeed = speedMs * 3.6;
+                unitLabel = "km/h";
+                break;
+            case "mph":
+                finalSpeed = speedMs * 2.23694;
+                unitLabel = "mph";
+                break;
+            case "kn": // Knots
+                finalSpeed = speedMs * 1.94384;
+                unitLabel = "kn";
+                break;
+            case "bft": // Beaufort
+                finalSpeed = Math.Pow(speedMs / 0.836, 2.0/3.0);
+                if (finalSpeed > 12) finalSpeed = 12;
+                unitLabel = "Bft";
+                break;
+            case "m/s":
+            case "ms":
+            default:
+                finalSpeed = speedMs;
+                unitLabel = "m/s";
+                break;
+        }
+
+        return $"{Math.Round(finalSpeed)} {unitLabel}";
     }
 
     private class DailySummary
