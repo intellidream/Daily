@@ -22,12 +22,22 @@
         <MudGrid Spacing="4">
             <!-- Top Section: Water Glass & Summary -->
             <MudItem xs="12">
-                <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-                    <div class="d-flex flex-wrap align-center justify-space-around gap-8">
-                        <!-- Glass Visualization -->
-                        <div style="position: relative; width: 100px; height: 160px; border: 4px solid rgba(255,255,255,0.3); border-top: 0; border-radius: 0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); overflow: hidden; background: rgba(255,255,255,0.05);">
+                <MudPaper Class="detail-tile rounded-xl pa-6 d-flex flex-column align-center relative" Elevation="3">
+                    
+                    <!-- Header -->
+                    <div class="d-flex justify-space-between w-100 mb-2 align-center">
+                         <div class="d-flex align-center gap-2">
+                             <MudText Typo="Typo.h6" Class="font-weight-bold">Water Intake</MudText>
+                             <MudChip T="string" Size="Size.Small" Color="@_waterHealthColor" Variant="Variant.Text">@_waterHealthStatus</MudChip>
+                         </div>
+                         <div style="width: 24px;"></div> <!-- Spacer -->
+                    </div>
+                    
+                    <div class="d-flex justify-space-between align-center w-100 my-4" style="height: 220px;">
+                        <!-- Glass Visualization (Centered) -->
+                        <div class="relative d-flex justify-center align-end mx-auto" style="height: 220px; width: 140px; border: 4px solid rgba(255,255,255,0.3); border-top: 0; border-radius: 0 0 30px 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); overflow: hidden; background: rgba(255,255,255,0.05);">
                             
-                            <!-- Stacked Liquid Segments -->
+                             <!-- Stacked Liquid Segments -->
                             <div class="d-flex flex-column-reverse" style="position: absolute; bottom: 0; left: 0; right: 0; height: 100%; width: 100%;">
                                 @foreach (var segment in _liquidSegments)
                                 {
@@ -40,21 +50,32 @@
                             
                             <!-- Percentage Text -->
                             <div class="d-flex flex-column align-center justify-center" style="position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none;">
-                                 <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">@_progressPercentage%</MudText>
+                                 <MudText Typo="Typo.h3" Class="font-weight-bold" Style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">@_progressPercentage%</MudText>
                             </div>
                         </div>
                         
-                        <div class="d-flex flex-column gap-3" style="min-width: 200px;">
-                            <MudText Typo="Typo.h5">@Math.Round(_currentValue) <span style="font-size: 0.7em; opacity: 0.7;">/ @Math.Round(_goalValue) @_unit</span></MudText>
-                            <div class="d-flex align-center gap-2">
-                                <MudText>Daily Goal:</MudText>
-                                <MudNumericField @bind-Value="_goalValue" DebounceInterval="500" OnDebounceIntervalElapsed="UpdateGoal" Variant="Variant.Outlined" Margin="Margin.Dense" Class="rounded-lg" Style="width: 100px;" />
-                                <MudText>@_unit</MudText>
-                            </div>
-                            <MudText Typo="Typo.caption" Style="opacity: 0.7;">@GetEncouragement()</MudText>
+                        <!-- Quick Add Buttons (Vertical Stack) -->
+                         <div class="d-flex flex-column gap-2 justify-center mr-2">
+                             @foreach (var drink in _drinkTypes)
+                             {
+                                  <MudTooltip Text="@($"{drink.Name} ({drink.Amount}{_unit})")" Placement="Placement.Left">
+                                    <MudIconButton Icon="@drink.Icon" Variant="Variant.Filled" Size="Size.Medium" OnClick="@(() => AddDrink(drink))" Class="rounded-circle" Style="@($"background-color: {drink.HexColor}; color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.3);")" />
+                                 </MudTooltip>
+                             }
                         </div>
                     </div>
                     
+                    <!-- Stats Containers -->
+                    <div class="d-flex gap-4 justify-center w-100 mt-4">
+                        <div class="d-flex flex-column align-center p-2 rounded-lg" style="background: rgba(255,255,255,0.1); min-width: 120px;">
+                            <MudText Typo="Typo.h5" Class="font-weight-bold" Color="@_waterHealthColor">@Math.Round(_currentValue) / @Math.Round(_goalValue)</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.8; font-weight: 600;">@_unit.ToUpper() TODAY</MudText>
+                        </div>
+                         <div class="d-flex flex-column align-center justify-center p-2 rounded-lg" style="background: rgba(255,255,255,0.1); flex-grow: 1; max-width: 300px;">
+                            <MudText Typo="Typo.body2" Class="font-weight-bold text-center" Style="line-height: 1.2;">@GetEncouragement()</MudText>
+                        </div>
+                    </div>
+
                     <!-- Date Selector Moved Here -->
                     <div class="d-flex justify-center w-100 mt-6">
                         <DateFilmStrip StartDate="@DateTime.Today.AddDays(-60)" 
@@ -90,23 +111,18 @@
                 </MudPaper>
             </MudItem>
 
-            <!-- Quick Add Grid -->
+            <!-- Configuration Tile -->
             <MudItem xs="12">
-                <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-                     <MudText Typo="Typo.h6" Class="mb-4">Quick Add</MudText>
+                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                     <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Configuration</MudText>
                      <MudGrid>
-                         @foreach (var drink in _drinkTypes)
-                         {
-                             <MudItem xs="6" sm="3">
-                                 <MudPaper Class="pa-4 d-flex flex-column align-center justify-center cursor-pointer hover-scale rounded-lg" Elevation="0" Style="@($"background-color: {drink.HexColor}20; border: 1px solid {drink.HexColor}40; gap: 8px;")" @onclick="@(() => AddDrink(drink))">
-                                     <MudIcon Icon="@drink.Icon" Size="Size.Large" Style="@($"color: {drink.HexColor};")" />
-                                     <MudText Typo="Typo.body1" Class="font-weight-bold">@drink.Name</MudText>
-                                     <MudText Typo="Typo.caption" Style="opacity: 0.7;">@drink.Amount @_unit</MudText>
-                                 </MudPaper>
-                             </MudItem>
-                         }
+                         <MudItem xs="12" sm="6">
+                            <div class="d-flex align-center gap-2">
+                                <MudNumericField @bind-Value="_goalValue" Label="Daily Goal" DebounceInterval="500" OnDebounceIntervalElapsed="UpdateGoal" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="@_unit" />
+                            </div>
+                         </MudItem>
                      </MudGrid>
-                </MudPaper>
+                 </MudPaper>
             </MudItem>
 
             <!-- History Chart -->
@@ -549,6 +565,10 @@
      // Dynamic Health Status
      private string _lungsHealthStatus = "Healing";
      private Color _lungsHealthColor = Color.Success;
+     
+     // Dynamic Water Status
+     private string _waterHealthStatus = "Parched";
+     private Color _waterHealthColor = Color.Error;
  
      // Shared UI Data
      private List<ChartSeries> _series = new();
@@ -683,6 +703,7 @@
             _currentValue = _todaysLogs.Sum(l => l.Value);
             
             CalculateLiquidSegments();
+            UpdateWaterStatus();
         }
         else
         {
@@ -754,6 +775,30 @@
         {
              _lungsHealthStatus = "At Risk";
              _lungsHealthColor = Color.Error;
+        }
+    }
+    
+    private void UpdateWaterStatus()
+    {
+        if (_progressPercentage >= 100)
+        {
+            _waterHealthStatus = "Hydrated";
+            _waterHealthColor = Color.Success; // Blue-ish in theme
+        }
+        else if (_progressPercentage >= 75)
+        {
+            _waterHealthStatus = "Refreshing";
+            _waterHealthColor = Color.Info;
+        }
+        else if (_progressPercentage >= 25)
+        {
+             _waterHealthStatus = "Thirsty";
+             _waterHealthColor = Color.Warning;
+        }
+        else
+        {
+             _waterHealthStatus = "Parched";
+             _waterHealthColor = Color.Error;
         }
     }
 
