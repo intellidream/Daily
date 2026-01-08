@@ -462,8 +462,9 @@ namespace Daily.Services
              try 
              {
                  // Pull everything? Or just last year? For now all history (lightweight).
+                 var userGuid = Guid.Parse(userId);
                  var response = await _supabase.From<DailySummary>()
-                    .Where(x => x.UserId == Guid.Parse(userId))
+                    .Where(x => x.UserId == userGuid)
                     .Get();
 
                  if (response.Models.Any())
