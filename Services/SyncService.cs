@@ -184,23 +184,45 @@ namespace Daily.Services
 
             int totalPulled = 0;
 
-            // 1. Pull Logs
+            // 1. Pull Logs (Paginated to get all ~90 days of history ~2000 items)
             try {
                 Console.Error.WriteLine($"[SyncService] Pulling Logs for User: {userId}...");
-                var response = await _supabase.From<HabitLog>()
-                    //.Where(x => x.UserId == Guid.Parse(userId)) // REMOVED: Rely on RLS
-                    .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending)
-                    .Limit(100)
-                    .Get();
+                
+                int rangeStart = 0;
+                int rangeEnd = 999;
+                bool hasMore = true;
 
-                Console.Error.WriteLine($"[SyncService] Pulled {response.Models.Count} logs from Cloud.");
-                totalPulled += response.Models.Count;
-
-                foreach (var remote in response.Models)
+                while(hasMore)
                 {
-                    var local = remote.ToLocal();
-                    local.SyncedAt = DateTime.UtcNow; 
-                    await _databaseService.Connection.InsertOrReplaceAsync(local);
+                    Console.Error.WriteLine($"[SyncService] Pulling Logs range {rangeStart}-{rangeEnd}...");
+                    
+                    var response = await _supabase.From<HabitLog>()
+                        .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending)
+                        .Range(rangeStart, rangeEnd)
+                        .Get();
+
+                    int count = response.Models.Count;
+                    if (count > 0)
+                    {
+                         Console.Error.WriteLine($"[SyncService] Pulled {count} logs (Batch).");
+                         totalPulled += count;
+
+                         foreach (var remote in response.Models)
+                         {
+                             var local = remote.ToLocal();
+                             local.SyncedAt = DateTime.UtcNow; 
+                             await _databaseService.Connection.InsertOrReplaceAsync(local);
+                         }
+
+                         // Prepare next batch
+                         rangeStart += 1000;
+                         rangeEnd += 1000;
+                    }
+
+                    if (count < 1000)
+                    {
+                        hasMore = false;
+                    }
                 }
                 Console.Error.WriteLine("[SyncService] Pull Logs Local Save Complete.");
             } 
