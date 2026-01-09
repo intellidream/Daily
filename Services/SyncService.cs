@@ -271,22 +271,50 @@ namespace Daily.Services
 
         // --- Preferences Sync Logic ---
 
+        // --- Helper for Debugging ---
+        // --- Helper for Debugging ---
+        public string DebugLog { get; private set; } = "";
+        public event Action? OnDebugLogUpdated;
+
+        private void LogDebug(string message)
+        {
+            var logLine = $"{DateTime.Now:O}: {message}";
+            Console.WriteLine(message);
+            
+            // In-Memory Log (Last 10 KB to avoid overflow)
+            DebugLog += logLine + "\n";
+            if (DebugLog.Length > 20000) 
+            {
+                DebugLog = DebugLog.Substring(DebugLog.Length - 20000);
+            }
+            
+            OnDebugLogUpdated?.Invoke();
+
+            try
+            {
+                var path = Path.Combine(FileSystem.CacheDirectory, "sync_debug.log");
+                File.AppendAllText(path, logLine + "\n");
+            }
+            catch { /* Ignore logging errors */ }
+        }
+
         private async Task PushPreferencesAsync(string userId)
         {
+            LogDebug($"[SyncService] PushPreferencesAsync Started for {userId}");
             // DEBUG: Check all local prefs
             var allPrefs = await _databaseService.Connection.Table<LocalUserPreferences>().ToListAsync();
-            Console.WriteLine($"[SyncService] Total Local Prefs: {allPrefs.Count}. IDs: {string.Join(", ", allPrefs.Select(x => $"{x.Id} (Synced: {x.SyncedAt})"))}");
+            LogDebug($"[SyncService] Total Local Prefs: {allPrefs.Count}. IDs: {string.Join(", ", allPrefs.Select(x => $"{x.Id} (Synced: {x.SyncedAt}, Updated: {x.UpdatedAt})"))}");
 
             var dirtyPrefs = await _databaseService.Connection.Table<LocalUserPreferences>()
                                 .Where(p => p.SyncedAt == null && p.Id == userId)
                                 .ToListAsync();
 
-            Console.WriteLine($"[SyncService] Dirty Prefs for {userId}: {dirtyPrefs.Count}");
+            LogDebug($"[SyncService] Dirty Prefs for {userId}: {dirtyPrefs.Count}");
 
             if (dirtyPrefs.Any())
             {
                 LastSyncMessage += $"Found {dirtyPrefs.Count} dirty prefs. ";
-                Console.WriteLine($"[SyncService] Pushing {dirtyPrefs.Count} dirty preferences...");
+                LogDebug($"[SyncService] Pushing {dirtyPrefs.Count} dirty preferences...");
                 
                 int pushedCount = 0;
                 foreach (var local in dirtyPrefs)
@@ -294,24 +322,87 @@ namespace Daily.Services
                     try
                     {
                         var remote = local.ToDomain();
-                        // Upsert individually to match reliable test behavior
-                        var response = await _supabase.From<UserPreferences>().Upsert(remote);
+                        
+                        // --- CONFLICT RESOLUTION ---
+                        // Check Remote State before Overwriting
+                        bool skipPush = false;
+                        try 
+                        {
+                            var existing = await _supabase.From<UserPreferences>()
+                                .Select("updated_at")
+                                .Where(x => x.Id == userId)
+                                .Single();
+                            
+                            if (existing != null)
+                            {
+                                // Remote exists. Compare timestamps.
+                                // If Remote UpdatedAt > Local UpdatedAt (w/ 1s Buffer for precision errors), Server Wins.
+                                
+                                // FIX: Local UpdatedAt is STORED as UTC but retrieved as Unspecified.
+                                // Do NOT call ToUniversalTime() on it, or it will double-convert (Local->UTC).
+                                var localTime = DateTime.SpecifyKind(local.UpdatedAt, DateTimeKind.Utc);
+                                
+                                // Remote is usually ISO8601 UTC, but ensure Kind is UTC.
+                                var remoteTime = existing.UpdatedAt.ToUniversalTime();
 
-                        if (response.Models.Count > 0)
-                        {
-                            local.SyncedAt = DateTime.UtcNow;
-                            await _databaseService.Connection.UpdateAsync(local);
-                            pushedCount++;
+                                LogDebug($"[SyncService] CONFLICT CHECK:");
+                                LogDebug($"   Local ID: {local.Id} | UpdatedAt: {localTime:O} (Ticks: {localTime.Ticks})");
+                                LogDebug($"   Remote ID: {existing.Id} | UpdatedAt: {remoteTime:O} (Ticks: {remoteTime.Ticks})");
+                                var diff = remoteTime - localTime;
+                                LogDebug($"   Diff (Remote - Local): {diff.TotalSeconds} seconds");
+
+                                if (remoteTime > localTime.AddSeconds(1)) // 1s buffer for SQLite trunc
+                                {
+                                    LogDebug($"[SyncService] DECISION: REMOTE WIN. Remote is newer by {diff.TotalSeconds:F2}s. Skipping Push & Pulling.");
+                                    skipPush = true;
+                                    
+                                    var fullRemote = await _supabase.From<UserPreferences>().Where(x => x.Id == userId).Single();
+                                    if (fullRemote != null)
+                                    {
+                                        var updatedLocal = fullRemote.ToLocal();
+                                        updatedLocal.SyncedAt = DateTime.UtcNow;
+                                        await _databaseService.Connection.InsertOrReplaceAsync(updatedLocal);
+                                        LogDebug($"[SyncService] Conflict Resolved: Pulled Remote Version.");
+                                    }
+                                }
+                                else
+                                {
+                                    LogDebug($"[SyncService] DECISION: LOCAL WIN. Local is Newer or Equal. Proceeding with Push.");
+                                }
+                            }
                         }
-                        else
+                        catch (InvalidOperationException) 
+                        { 
+                            // .Single() throws if no elements. This means no remote record.
+                            // Safe to Push.
+                        }
+                        catch (Exception checkEx)
                         {
-                             LastSyncError = $"Push Warning: 0 rows written for ID {local.Id}";
+                            LogDebug($"[SyncService] Conflict Check Warning: {checkEx.Message}. Proceeding with push.");
+                        }
+
+                        if (!skipPush)
+                        {
+                            // Create or Overwrite (We are newer or new)
+                            var response = await _supabase.From<UserPreferences>().Upsert(remote);
+
+                            if (response.Models.Count > 0)
+                            {
+                                local.SyncedAt = DateTime.UtcNow;
+                                await _databaseService.Connection.UpdateAsync(local);
+                                pushedCount++;
+                            }
+                            else
+                            {
+                                 LastSyncError = $"Push Warning: 0 rows written for ID {local.Id}";
+                                 LogDebug(LastSyncError);
+                            }
                         }
                     }
                     catch (Exception ex)
                     {
                         LastSyncError = $"Push Error for {local.Id}: {ex.Message}";
-                        Console.WriteLine($"[SyncService] {LastSyncError}");
+                        LogDebug($"[SyncService] {LastSyncError}");
                     }
                 }
                 LastSyncMessage += $"Pushed {pushedCount}/{dirtyPrefs.Count}. ";
@@ -321,7 +412,6 @@ namespace Daily.Services
                 LastSyncMessage += "No changes to push. ";
             }
         }
-
         private async Task<int> PullPreferencesAsync(string userId)
         {
              try {
@@ -332,14 +422,42 @@ namespace Daily.Services
 
                 Console.WriteLine($"[SyncService] Pulled {response.Models.Count} preferences from Cloud.");
                 
+                int successfulMergess = 0;
                 foreach (var remote in response.Models)
                 {
-                    var local = remote.ToLocal();
-                    local.SyncedAt = DateTime.UtcNow;
-                    await _databaseService.Connection.InsertOrReplaceAsync(local);
+                    // Check Local State
+                    var local = await _databaseService.Connection.Table<LocalUserPreferences>()
+                                    .Where(x => x.Id == userId)
+                                    .FirstOrDefaultAsync();
+
+                    bool shouldOverwrite = true;
+                    if (local != null)
+                    {
+                        // 1. If Local is Dirty, we generally trust local unless conflict resolution says otherwise.
+                        // However, conflict resolution usually happens on Push. 
+                        // If we are strictly Pulling, and find a conflict (Remote Newer vs Local Dirty), 
+                        // usually Server Wins if we want eventual consistency, OR we keep local if we assume Push will happen later.
+                        
+                        // But here's the specific fix for "Settings not saving":
+                        // If Local.UpdatedAt is NEWER than Remote.UpdatedAt, DO NOT OVERWRITE.
+                        
+                        if (local.UpdatedAt >= remote.UpdatedAt)
+                        {
+                            Console.WriteLine($"[SyncService] Pull Ignored: Local ({local.UpdatedAt}) is newer/equal to Remote ({remote.UpdatedAt}).");
+                            shouldOverwrite = false;
+                        }
+                    }
+
+                    if (shouldOverwrite)
+                    {
+                        var newLocal = remote.ToLocal();
+                        newLocal.SyncedAt = DateTime.UtcNow;
+                        await _databaseService.Connection.InsertOrReplaceAsync(newLocal);
+                        successfulMergess++;
+                    }
                 }
-                Console.WriteLine("[SyncService] Pull Preferences Local Save Complete.");
-                return response.Models.Count;
+                Console.WriteLine($"[SyncService] Pull Preferences Complete. Merged {successfulMergess} records.");
+                return successfulMergess;
             }
             catch(Exception e) 
             { 

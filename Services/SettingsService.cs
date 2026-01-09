@@ -169,9 +169,20 @@ namespace Daily.Services
 
                 var local = ToLocal(_currentSettings);
                 local.SyncedAt = null; // Dirty
+                local.UpdatedAt = DateTime.UtcNow; // Set Update Time
                 
+                // CRITICAL: Update in-memory state so subsequent saves/UI calls have valid timestamp
+                _currentSettings.UpdatedAt = local.UpdatedAt;
+                
+                var allPrefs = await _databaseService.Connection.Table<LocalUserPreferences>().ToListAsync();
+                Console.WriteLine($"[SyncService] Total Local Prefs: {allPrefs.Count}. IDs: {string.Join(", ", allPrefs.Select(x => $"{x.Id} (Synced: {x.SyncedAt}, Updated: {x.UpdatedAt})"))}");
+
                 var result = await _databaseService.Connection.InsertOrReplaceAsync(local);
-                Console.WriteLine($"[SettingsService] Save Result: {result}"); // Should be 1 (rows affected)
+                Console.WriteLine($"[SettingsService] Save Result: {result}. Saved UpdatedAt: {local.UpdatedAt}");
+
+                // Verify Verification
+                var verify = await _databaseService.Connection.Table<LocalUserPreferences>().Where(x => x.Id == userId).FirstOrDefaultAsync();
+                Console.WriteLine($"[SettingsService] Verification Read: UpdatedAt in DB = {verify?.UpdatedAt}");
 
                 // Trigger Background Sync
                 if (IsAuthenticated)
@@ -212,6 +223,7 @@ namespace Daily.Services
             };
 
             Console.WriteLine($"[SettingsService] ToDomain Raw: '{local.UnitSystem}' -> Sanitized: '{userPrefs.UnitSystem}'");
+            userPrefs.UpdatedAt = local.UpdatedAt;
             return userPrefs;
         }
 
@@ -238,7 +250,8 @@ namespace Daily.Services
                 SmokesCurrency = domain.SmokesCurrency,
                 SmokesQuitDate = domain.SmokesQuitDate,
                 
-                InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests)
+                InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests),
+                UpdatedAt = domain.UpdatedAt
             };
         }
     }

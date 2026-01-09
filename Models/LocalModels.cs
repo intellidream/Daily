@@ -80,6 +80,7 @@ namespace Daily.Models
         // Serialized JSON
         public string InterestsJson { get; set; }
 
+        public DateTime UpdatedAt { get; set; }
         public DateTime? SyncedAt { get; set; }
     }
 

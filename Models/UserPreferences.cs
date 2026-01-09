@@ -51,5 +51,8 @@ namespace Daily.Models
 
         [Column("smokes_quit_date")]
         public DateTime? SmokesQuitDate { get; set; }
+
+        [Column("updated_at")]
+        public DateTime UpdatedAt { get; set; }
     }
 }

@@ -215,7 +215,23 @@
                         <MudText Typo="Typo.caption" Style="opacity: 0.6;">Version 1.0.0 (Build 2025.1)</MudText>
                      </div>
                      <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small">Check for Updates</MudButton>
-                     <!-- <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small" OnClick="@PopulateHistory" Disabled="@_isSeeding">Populate History (2023-2025)</MudButton> -->
+                 </div>
+             </MudPaper>
+        </MudItem>
+        
+        <!-- Debug Log Section (New) -->
+        <MudItem xs="12">
+             <MudPaper Class="detail-tile rounded-xl pa-4" Elevation="3">
+                 <MudText Typo="Typo.h6" Class="mb-2 font-weight-bold">Debug Log</MudText>
+                 <MudTextField T="string" 
+                               Value="@SyncService.DebugLog" 
+                               Label="Sync Diagnostics" 
+                               Variant="Variant.Outlined" 
+                               Lines="10" 
+                               ReadOnly="true"
+                               Style="font-family: monospace; font-size: 12px;" />
+                 <div class="d-flex justify-end mt-2">
+                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="@(() => StateHasChanged())">Refresh Log</MudButton>
                  </div>
              </MudPaper>
         </MudItem>

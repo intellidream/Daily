@@ -37,6 +37,10 @@ namespace Daily.Services
                 var res2 = await _connection.CreateTableAsync<LocalHabitGoal>();
                 var res3 = await _connection.CreateTableAsync<LocalUserPreferences>();
                 var res4 = await _connection.CreateTableAsync<LocalDailySummary>();
+                
+                // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
+                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar"); } catch { /* Ignore if exists */ }
+                
                 Console.WriteLine($"[DatabaseService] Tables Created results: {res1}, {res2}, {res3}, {res4}");
                 
                 _initialized = true;

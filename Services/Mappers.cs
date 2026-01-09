@@ -140,7 +140,9 @@ namespace Daily.Services
                 
                 Interests = string.IsNullOrEmpty(local.InterestsJson) 
                             ? new List<string>() 
-                            : System.Text.Json.JsonSerializer.Deserialize<List<string>>(local.InterestsJson) ?? new List<string>()
+                            : System.Text.Json.JsonSerializer.Deserialize<List<string>>(local.InterestsJson) ?? new List<string>(),
+                // Ensure UTC Kind for correct serialization
+                UpdatedAt = DateTime.SpecifyKind(local.UpdatedAt, DateTimeKind.Utc) 
             };
         }
 
@@ -167,7 +169,8 @@ namespace Daily.Services
                 SmokesCurrency = domain.SmokesCurrency,
                 SmokesQuitDate = domain.SmokesQuitDate,
                 
-                InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests)
+                InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests),
+                UpdatedAt = domain.UpdatedAt
             };
         }
 

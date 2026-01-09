@@ -8,5 +8,7 @@ namespace Daily.Services
         void StartBackgroundSync(); // New
         string? LastSyncError { get; }
         string LastSyncMessage { get; }
+        string DebugLog { get; }
+        event Action? OnDebugLogUpdated;
     }
 }
