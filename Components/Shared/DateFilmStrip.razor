@@ -1,10 +1,8 @@
 @using Microsoft.JSInterop
 @inject IJSRuntime JSRuntime
 
-<div class="film-strip-wrapper my-4" style="position: relative; width: 100%; height: 100px; user-select: none; -webkit-user-select: none;">
-    <!-- Left Blur Gradient -->
-    <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 15%; background: linear-gradient(to right, rgba(30,30,40,1) 0%, rgba(30,30,40,0) 100%); z-index: 10; pointer-events: none;"></div>
-
+<div class="film-strip-wrapper my-4" style="position: relative; width: 100%; height: 100px; user-select: none; -webkit-user-select: none; -webkit-mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%); mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);">
+    
     <!-- Scroll Track -->
     <div @ref="_scrollContainer" 
          class="d-flex align-center overflow-x-auto hide-scrollbar h-100"
@@ -21,31 +19,35 @@
             var isToday = date.Date == DateTime.Today;
             
             <div @key="date"
-                 class="d-flex flex-column justify-center align-center flex-shrink-0 date-item mx-1 rounded-lg @(isSelected ? "selected" : "")" 
-                 style="width: 20%; min-width: 70px; height: 80px; transition: all 0.2s ease-out; opacity: @(isSelected ? 1 : 0.5); transform: scale(@(isSelected ? 1.05 : 0.9)); position: relative;"
+                 class="d-flex flex-column justify-center align-center flex-shrink-0 date-item mx-1 rounded-lg @(isSelected ? "selected shadow-lg" : "")" 
+                 style="width: 20%; min-width: 70px; height: 80px; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: @(isSelected ? 1 : 0.4); transform: scale(@(isSelected ? 1.15 : 0.9)); position: relative;"
                  @onclick="@(() => SelectDate(date))"
                  @onclick:stopPropagation="true">
                  
                  @if(isToday)
                  {
-                     <div style="position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; background-color: #29B6F6; border-radius: 50%;"></div>
+                     <div style="position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; background-color: var(--mud-palette-info); border-radius: 50%; box-shadow: 0 0 5px var(--mud-palette-info);"></div>
                  }
                  
-                <MudText Typo="Typo.caption" Class="font-weight-bold" Style="letter-spacing: 1px;" Color="@(isSelected ? Color.Inherit : Color.Default)">
+                 <!-- Year (Vertical Left, Subtle) -->
+                 <MudText Typo="Typo.caption" 
+                          Style="position: absolute; left: 4px; top: 50%; transform: translateY(-50%) rotate(-180deg); writing-mode: vertical-rl; font-size: 0.6rem; opacity: 0.25; letter-spacing: 1px; pointer-events: none;" 
+                          Color="@(isSelected ? Color.Primary : Color.Inherit)">
+                     @date.ToString("yyyy")
+                 </MudText>
+
+                <MudText Typo="Typo.caption" Class="font-weight-bold" Style="letter-spacing: 1px; opacity: 0.8;" Color="@(isSelected ? Color.Primary : Color.Inherit)">
                     @date.ToString("MMM").ToUpper()
                 </MudText>
-                <MudText Typo="Typo.h5" Class="font-weight-bold my-1" Color="@(isSelected ? Color.Inherit : Color.Default)">
+                <MudText Typo="Typo.h5" Class="font-weight-bold my-0" Color="@(isSelected ? Color.Primary : Color.Inherit)">
                     @date.Day
                 </MudText>
-                <MudText Typo="Typo.caption" Color="@(isSelected ? Color.Inherit : Color.Default)">
+                <MudText Typo="Typo.caption" Color="@(isSelected ? Color.Primary : Color.Inherit)" Style="opacity: 0.8;">
                      @date.ToString("ddd")
                 </MudText>
             </div>
         }
     </div>
-
-    <!-- Right Blur Gradient -->
-    <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 15%; background: linear-gradient(to left, rgba(30,30,40,1) 0%, rgba(30,30,40,0) 100%); z-index: 10; pointer-events: none;"></div>
 </div>
 
 <style>
@@ -57,13 +59,16 @@
         scrollbar-width: none;
     }
     .date-item.selected {
-        background-color: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        color: white;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        background-color: var(--mud-palette-surface);
+        border: 1px solid var(--mud-palette-lines-default);
+        /* Theme aware color */
+        color: var(--mud-palette-text-primary); 
     }
+    
+    /* Dark Mode Override if needed, but Mud variables usually handle it. 
+       Let's ensure it pops. */
     .date-item:hover {
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: var(--mud-palette-action-hover);
     }
     .date-item:active {
         cursor: grabbing;
