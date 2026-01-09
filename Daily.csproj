@@ -41,11 +41,16 @@
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
         <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
+        
+        <!-- iOS Provisioning: Automatic with Specific Team -->
+        <CodesignKey Condition="$(TargetFramework.Contains('ios'))">iPhone Developer</CodesignKey>
+        <CodesignProvision Condition="$(TargetFramework.Contains('ios'))">Automatic</CodesignProvision>
+        <DevelopmentTeam Condition="$(TargetFramework.Contains('ios'))">46P99RQF56</DevelopmentTeam>
     </PropertyGroup>
 
     <ItemGroup>
         <!-- App Icon -->
-        <MauiIcon Condition="$(TargetFramework.Contains('ios'))" Include="Resources/AppIcon/appicon_ios.svg" Color="#512BD4" />
+        <MauiIcon Condition="$(TargetFramework.Contains('ios'))" Include="Resources/AppIcon/appicon.svg" Color="#512BD4" />
         <MauiIcon Condition="$(TargetFramework.Contains('android'))" Include="Resources/AppIcon/appicon_android.svg" ForegroundFile="Resources/AppIcon/appicon_android_foreground.svg" ForegroundScale="0.65" />
         <MauiIcon Condition="$(TargetFramework.Contains('windows'))" Include="Resources/AppIcon/appicon_windows.svg" />
         <MauiIcon Condition="$(TargetFramework.Contains('maccatalyst'))" Include="Resources/AppIcon/appicon_mac.svg" Color="#512BD4" />
