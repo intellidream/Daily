@@ -77,9 +77,9 @@ namespace Daily
                     };
                 }
             });
-#elif MACCATALYST
-            // Configure Mac Catalyst BlazorWebView to be transparent/opaque-aware
-            Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebViewHandler.BlazorWebViewMapper.AppendToMapping("BlazorWebViewMacTransparent", (handler, view) =>
+#elif MACCATALYST || IOS
+            // Configure Mac Catalyst and iOS BlazorWebView to be transparent/opaque-aware
+            Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebViewHandler.BlazorWebViewMapper.AppendToMapping("BlazorWebViewTransparentMobile", (handler, view) =>
             {
                  if (view is Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebView)
                  {

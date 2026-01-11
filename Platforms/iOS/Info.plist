@@ -28,5 +28,7 @@
     </array>
     <key>XSAppIconAssets</key>
     <string>Assets.xcassets/appicon.appiconset</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>We use your location to show local weather forecasts.</string>
 </dict>
 </plist>

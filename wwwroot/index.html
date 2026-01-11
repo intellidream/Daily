@@ -22,7 +22,11 @@
         // Critical: OS Detection for Background Strategy
         // Mac Catalyst: Needs Opaque Background to prevent White Flash.
         // Windows WebView2: Needs Transparent Background to respect App Theme (showing XAML Window Color).
-        var isMac = navigator.userAgent.indexOf('Mac') !== -1 || navigator.userAgent.indexOf('iPhone') !== -1 || navigator.userAgent.indexOf('iPad') !== -1;
+
+        // Fix: Ensure iOS (iPhone/iPad) is NOT treated as Mac, so it stays transparent for XAML gradient.
+        var ua = navigator.userAgent;
+        var isIOS = ua.indexOf('iPhone') !== -1 || ua.indexOf('iPad') !== -1;
+        var isMac = (ua.indexOf('Mac') !== -1) && !isIOS;
 
         if (isMac) {
             document.documentElement.classList.add('platform-mac');

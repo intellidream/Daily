@@ -10,5 +10,6 @@ namespace Daily.Services
         string LastSyncMessage { get; }
         string DebugLog { get; }
         event Action? OnDebugLogUpdated;
+        void Log(string message);
     }
 }

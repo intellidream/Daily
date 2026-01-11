@@ -22,14 +22,15 @@ namespace Daily.Services
         private readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
 
         private readonly ISettingsService _settingsService;
-
+        private readonly ISyncService _syncService;
         private readonly IGeolocation _geolocation;
 
-        public WeatherService(ISettingsService settingsService, IGeolocation geolocation)
+        public WeatherService(ISettingsService settingsService, IGeolocation geolocation, ISyncService syncService)
         {
             _httpClient = new HttpClient();
             _settingsService = settingsService;
             _geolocation = geolocation;
+            _syncService = syncService;
             
             // Re-fetch weather if units change
             _settingsService.OnSettingsChanged += async () => 
@@ -60,12 +61,17 @@ namespace Daily.Services
 
             try
             {
-                // 1. Check Permissions
+                _syncService.Log("[WeatherService] Checking Permissions...");
                 var status = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
+                
                 if (status != PermissionStatus.Granted)
                 {
-                    status = await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
+                    _syncService.Log("[WeatherService] Requesting Permission (MainThread)...");
+                    status = await MainThread.InvokeOnMainThreadAsync(async () => 
+                        await Permissions.RequestAsync<Permissions.LocationWhenInUse>());
                 }
+
+                _syncService.Log($"[WeatherService] Permission Status: {status}");
 
                 if (status == PermissionStatus.Granted)
                 {
@@ -73,26 +79,29 @@ namespace Daily.Services
                     var location = await _geolocation.GetLastKnownLocationAsync();
                     if (location != null) 
                     {
+                        _syncService.Log("[WeatherService] cache hit (LastKnown).");
                         _cachedUserLocation = location;
                         _lastUserLocationTime = DateTime.Now;
                         return location;
                     }
 
                     // 3. Single Robust Attempt (Fast Timeout)
-                    // Instead of trying every accuracy level sequentially (which takes forever),
-                    // we try Default accuracy with a reasonable timeout.
+                    _syncService.Log("[WeatherService] Requesting GPS Location...");
                     location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Default, 4));
                     
                     if (location != null) 
                     {
+                        _syncService.Log($"[WeatherService] GPS Location found: {location.Latitude}, {location.Longitude}");
                         _cachedUserLocation = location;
                         _lastUserLocationTime = DateTime.Now;
                         return location;
                     }
+                    _syncService.Log("[WeatherService] GPS Location returned null.");
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _syncService.Log($"[WeatherService] Location Exception: {ex}");
                 // Ignore errors to fall through to IP
             }
 

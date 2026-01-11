@@ -17,15 +17,20 @@ body {
 }
 
 /* Hybrid Theming Classes */
-.transparent-background {
+.transparent-background,
+.transparent-background body,
+.transparent-background .mud-layout,
+.transparent-background .mud-main-content,
+.transparent-background #app {
     background-color: transparent !important;
+    background: transparent !important;
 }
 
 /* --- LIGHT MODE (Default) --- */
 .mesh-background {
     /* Light Mode Gradient: Darker Pastel Purple -> Off-White -> Darker Pastel Cyan */
-    background: linear-gradient(135deg, #CAC7E4 0%, #E6E6E6 50%, #C1D8E4 100%);
-    background-attachment: fixed;
+    background: linear-gradient(135deg, #CAC7E4 0%, #E6E6E6 50%, #C1D8E4 100%) !important;
+    background-attachment: fixed !important;
     background-size: cover;
 }
 

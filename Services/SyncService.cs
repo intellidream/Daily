@@ -276,6 +276,8 @@ namespace Daily.Services
         public string DebugLog { get; private set; } = "";
         public event Action? OnDebugLogUpdated;
 
+        public void Log(string message) => LogDebug(message);
+
         private void LogDebug(string message)
         {
             var logLine = $"{DateTime.Now:O}: {message}";

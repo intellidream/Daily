@@ -230,7 +230,8 @@
                                Lines="10" 
                                ReadOnly="true"
                                Style="font-family: monospace; font-size: 12px;" />
-                 <div class="d-flex justify-end mt-2">
+                 <div class="d-flex justify-end mt-2 gap-2">
+                     <MudButton Variant="Variant.Outlined" Color="Color.Info" OnClick="@(() => SyncService.Log("Test Log Entry " + DateTime.Now.ToLongTimeString()))">Test Log</MudButton>
                      <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="@(() => StateHasChanged())">Refresh Log</MudButton>
                  </div>
              </MudPaper>
@@ -275,15 +276,29 @@
         InvokeAsync(StateHasChanged);
     }
 
+    public void Dispose()
+    {
+        SettingsService.OnSettingsChanged -= OnSettingsChanged;
+        if (SyncService != null)
+        {
+            SyncService.OnDebugLogUpdated -= OnLogUpdated;
+        }
+    }
+
+    private void OnLogUpdated()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await SettingsService.InitializeAsync();
         SettingsService.OnSettingsChanged += OnSettingsChanged;
-    }
-    
-    public void Dispose()
-    {
-        SettingsService.OnSettingsChanged -= OnSettingsChanged;
+        
+        if (SyncService != null)
+        {
+            SyncService.OnDebugLogUpdated += OnLogUpdated;
+        }
     }
 
     private async Task SaveSettings()
