@@ -18,6 +18,9 @@ namespace Daily.Services
         private (double Lat, double Lon)? _lastCurrentLocation;
         private (double Lat, double Lon)? _lastForecastLocation;
         
+        public WeatherResponse? CachedWeather => _cachedCurrentWeather;
+        public ForecastResponse? CachedForecast => _cachedForecast;
+
         private const double LocationTolerance = 0.01; // Roughly 1km
         private readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
 

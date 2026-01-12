@@ -12,6 +12,11 @@ namespace Daily.Services
         bool IsAutoLocation { get; }
         event Action OnLocationChanged;
         event Action OnWeatherUpdated;
+        
+        // Expose cached data for instant UI loading
+        WeatherResponse? CachedWeather { get; }
+        ForecastResponse? CachedForecast { get; }
+
         void SetCurrentLocation(string name, bool isAuto);
         Task<Location?> GetResilientLocationAsync();
     }

@@ -271,9 +271,19 @@
         RefreshService.RefreshRequested += HandleRefresh;
         WeatherService.OnWeatherUpdated += HandleUpdate;
         BackButtonService.Register(OnBackNative);
+        
+        // Optimistic Load: If cache exists, show it immediately
+        if (WeatherService.CachedWeather != null)
+        {
+            _currentWeather = WeatherService.CachedWeather;
+            _forecast = WeatherService.CachedForecast;
+            _isLoading = false;
+        }
+
+        // Background update check
         await LoadWeatherData(forceRefresh: false);
     }
-
+    
     public void Dispose()
     {
         BackButtonService.Unregister(OnBackNative);
@@ -366,9 +376,13 @@
 
     private async Task LoadWeatherData(bool forceRefresh = false)
     {
-        _isLoading = true;
-        _errorMessage = null;
-        StateHasChanged();
+        // Only show spinner if we have NO data to show
+        if (_currentWeather == null)
+        {
+            _isLoading = true;
+            _errorMessage = null;
+            StateHasChanged();
+        }
 
         try
         {
