@@ -292,3 +292,71 @@ h1:focus {
 [data-theme='dark'] .hover-darken:hover {
     background-color: rgba(255, 255, 255, 0.08);
 }
+
+/* Collapsible App Bar (Blinds Effect) */
+.blinds-appbar {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: fixed;
+    /* Force fixed to ensure transform works relative to viewport */
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--mud-zindex-appbar);
+    overflow: visible !important;
+    /* CRITICAL: Allow handle to hang out */
+}
+
+.blinds-appbar.collapsed {
+    transform: translateY(-100%);
+}
+
+.appbar-handle {
+    position: absolute;
+    top: 100%;
+    /* Hangs off the bottom */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 64px;
+    height: 24px;
+    background-color: rgba(255, 255, 255, 0.4);
+    /* Reduced opacity as requested */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-top: none;
+    z-index: 1200;
+    transition: background-color 0.2s ease;
+}
+
+.appbar-handle:hover {
+    background-color: rgba(255, 255, 255, 0.6);
+}
+
+[data-theme='dark'] .appbar-handle {
+    background-color: rgba(30, 30, 30, 0.4);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Content Roll-up Logic */
+.appbar-collapsed .mud-main-content {
+    /* Override MudBlazor's padding-top (normally 64px+) */
+    padding-top: env(safe-area-inset-top) !important;
+    transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mud-main-content {
+    /* Ensure transition on expand too */
+    transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme='dark'] .appbar-handle:hover {
+    background-color: rgba(50, 50, 50, 0.85);
+}

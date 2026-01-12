@@ -11,8 +11,15 @@
 @inject IWindowManagerService WindowManagerService
 @inject IDetailNavigationService NavService
 
-<MudLayout Style="background-color: transparent;">
-<MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@($"glassy-appbar {AppBarClass}")" Style="">
+<MudLayout Style="background-color: transparent;" Class="@(_isAppBarExpanded ? "" : "appbar-collapsed")">
+    <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@($"glassy-appbar blinds-appbar {AppBarClass} {(_isAppBarExpanded ? "" : "collapsed")}")" Style="">
+        
+        <!-- Toggle Handle -->
+        <div class="appbar-handle" @onclick="ToggleAppBar">
+            <MudIcon Icon="@(_isAppBarExpanded ? Icons.Material.Filled.KeyboardArrowUp : Icons.Material.Filled.KeyboardArrowDown)" 
+                     Size="Size.Small" Color="Color.Inherit" Style="opacity: 0.7;" />
+        </div>
+
         <MudIconButton Icon="@AppIconPath"
                        Color="Color.Inherit"
                        Class="@(_isRefreshing ? "spin-animation" : "")"
@@ -60,6 +67,14 @@
 @code {
     private bool _isRefreshing;
     private bool _isDarkMode = true;
+    private bool _isAppBarExpanded = true;
+
+    private void ToggleAppBar()
+    {
+        _isAppBarExpanded = !_isAppBarExpanded;
+        UpdateLayoutClasses();
+        StateHasChanged();
+    }
 
     private async Task TriggerLocalRefresh()
     {
@@ -167,19 +182,26 @@
             _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
         }
 
+        UpdateLayoutClasses();
+    }
+
+    private void UpdateLayoutClasses()
+    {
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.MacCatalyst)
         {
             // MacOS (Keep "Perfect" Original)
             AppBarClass = "pt-20 pb-2";
-            ContainerClass = "mt-20 pt-6 px-4 pb-0";
         }
         else
         {
-            // Windows & Mobile (Android/iOS)
-            // Reduce horizontal padding to match Detail Views better (px-6 -> px-4)
+            // Windows & Mobile
             AppBarClass = "pt-20 pb-2";
-            ContainerClass = "mt-20 pt-6 px-4 pb-0";
         }
+
+        // Dynamic Container Spacing
+        // If Expanded: mt-20 (80px)
+        // If Collapsed: mt-0 pt-5 (20px) - Tighter fit for "blinds" effect
+        ContainerClass = _isAppBarExpanded ? "mt-20 pt-6 px-4 pb-0" : "mt-0 pt-5 px-4 pb-0";
     }
 
     private async void OnThemeChanged(object? sender, AppThemeChangedEventArgs e)
