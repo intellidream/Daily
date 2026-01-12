@@ -11,12 +11,12 @@
 <div class="d-flex flex-column" style="height: 100%; position: relative;">
     
     <!-- List View (Always rendered, hidden via CSS when reading) -->
-    <div class="@(_selectedItem == null ? "d-flex flex-column" : "d-none") mx-n4" style="height: 100%; overflow: hidden;">
+    <div class="@(_selectedItem == null ? "d-flex flex-column" : "d-none") @(_isMobile ? "mx-n4" : "mx-auto w-100")" style="height: 100%; overflow: hidden; max-width: @(_isMobile ? "none" : "960px");">
         @if (RssService.IsLoading)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2 flex-shrink-0" />
         }
-        <div style="flex-grow: 1; overflow-y: auto;" class="px-4">
+        <div style="flex-grow: 1; overflow-y: auto;" class="@(_isMobile ? "px-4" : "px-4 py-4")">
             <MudGrid Spacing="4">
                 @if (RssService.Items != null)
                 {

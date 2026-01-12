@@ -48,7 +48,7 @@
             </div>
 
             <!-- Video Grid -->
-            <div style="flex-grow: 1; overflow-y: auto;" class="mx-n4 px-4 py-4">
+            <div style="flex-grow: 1; overflow-y: auto; max-width: @(_isMobile ? "none" : "1280px");" class="@(_isMobile ? "mx-n4 px-4 py-4" : "mx-auto w-100 px-4 py-4")">
                 @if (_videos == null)
                 {
                     <div class="d-flex justify-center align-center pt-10">
@@ -132,9 +132,11 @@
     private bool _isLoadingMore = false;
     private string? _selectedCategory = null;
     private bool _isDarkMode = false;
+    private bool _isMobile = false;
 
     protected override void OnInitialized()
     {
+        _isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone;
         RefreshService.DetailRefreshRequested += OnDetailRefresh;
         YouTubeService.OnCategoryChanged += OnExternalCategoryChanged;
         NavService.OnBrowserStateChanged += OnBrowserStateChanged;
