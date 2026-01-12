@@ -204,7 +204,8 @@ public partial class DetailPage : ContentPage, IDisposable
             wkWebView.Inspectable = true;
 
             // Optional: User Agent (Might help with login, but Passkeys specifically rely on entitlements)
-            // wkWebView.CustomUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+            // Fixes YouTube 360p issue by masquerading as full Desktop Safari
+            wkWebView.CustomUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15";
         }
     }
 #endif
