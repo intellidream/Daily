@@ -6,6 +6,7 @@
 @inject IAuthService AuthService
 @inject IYouTubeService YouTubeService
 @inject IRefreshService RefreshService
+@inject IWindowManagerService WindowManager
 @implements IDisposable
 
 <div class="d-flex flex-column" style="height: 100%;">
@@ -309,7 +310,10 @@
 
     private async Task OpenVideo(string url)
     {
-        await Browser.OpenAsync(url, BrowserLaunchMode.SystemPreferred);
+        // Route to internal Detail Pane for YouTube/Video playback
+        // This triggers the WindowManager's expansion logic on Mac
+        WindowManager.OpenDetail("Media", "Video Player", url);
+        await Task.CompletedTask;
     }
 
     public void Dispose()

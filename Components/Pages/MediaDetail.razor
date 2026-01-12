@@ -153,6 +153,14 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Check for direct video link from Widget
+        if (NavService.CurrentData is string url && !string.IsNullOrEmpty(url))
+        {
+            // Auto-play
+            NavService.SetCurrentArticle(url, "Video Player");
+            NavService.RequestOpenUrl(url);
+        }
+
         var token = AuthService.GetProviderToken();
         if (!string.IsNullOrEmpty(token))
         {

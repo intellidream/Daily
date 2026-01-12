@@ -1,4 +1,6 @@
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Platform;
+using Microsoft.Maui.Devices;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -387,22 +389,37 @@ namespace Daily.Services
             detailPage.Opacity = 1;
             _activeMacDetailPage = detailPage; // Track for disposal
             
-            // SINGLE WINDOW STRATEGY (Mac Agent)
-            // Use Overlay on MainPage to prevent Main WebView reload (Caching)
+            // SINGLE WINDOW STRATEGY (Dynamic Resize)
             var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow);
             if (mainWindow?.Page is MainPage mainPage)
             {
                  // 1. Inject content into Overlay
                  mainPage.MacDetailOverlay.Content = detailPage.Content;
-                 
-                 // 2. Show Overlay
                  mainPage.MacDetailOverlay.IsVisible = true;
                  
-                 // 3. Keep sidebar size (Implicit)
+                 // 2. Animate Expansion or Contraction (Simplified)
+                 var targetView = _detailNavigationService.CurrentView;
+                 var isWide = targetView == "Media" || targetView == "RssFeed";
+                 
+                 MainThread.BeginInvokeOnMainThread(async () => 
+                 {
+                     // Optimization: check if we need to resize
+                     // If standard view and already small, skip resize
+                     if (!isWide && mainPage.Window.Width < 600)
+                     {
+                         // Just show content, no window animation
+                         mainPage.MacDetailOverlay.Opacity = 1;
+                     }
+                     else
+                     {
+                         if (isWide) await ResizeMacWindow(true);
+                         else await ResizeMacWindow(false);
+                     }
+                 });
             }
             else if (mainWindow != null)
             {
-                 // Fallback if Page is not MainPage (Shouldn't happen in this architecture)
+                 // Fallback
                  _previousMacPage = mainWindow.Page;
                  mainWindow.Page = detailPage;
             }
@@ -482,17 +499,30 @@ namespace Daily.Services
             // Restore Mac Main Window (Hide Overlay)
             var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow);
             
-            if (mainWindow?.Page is MainPage mainPage && mainPage.MacDetailOverlay.IsVisible)
+            if (mainWindow?.Page is MainPage mainPage)
             {
-                mainPage.MacDetailOverlay.IsVisible = false;
-                mainPage.MacDetailOverlay.Content = null; // Clean up Visual Tree
-                
-                // CRITICAL: Dispose the DetailPage to kill background Blazor/WebView processes
-                if (_activeMacDetailPage != null)
+                // Force Clean Up always
+                var wasVisible = mainPage.MacDetailOverlay.IsVisible;
+
+                // Restore Window Size FIRST (Curtain Effect)
+                MainThread.BeginInvokeOnMainThread(async () => 
                 {
-                    _activeMacDetailPage.Dispose();
-                    _activeMacDetailPage = null;
-                }
+                    // Always try to restore size to Sidebar when closing detail
+                    await ResizeMacWindow(false);
+                    
+                    if (wasVisible)
+                    {
+                        // Reveal Main Page AFTER resize
+                        mainPage.MacDetailOverlay.IsVisible = false;
+                        mainPage.MacDetailOverlay.Content = null; 
+                        
+                        if (_activeMacDetailPage != null)
+                        {
+                            _activeMacDetailPage.Dispose();
+                            _activeMacDetailPage = null;
+                        }
+                    }
+                });
             }
             else if (mainWindow != null && _previousMacPage != null)
             {
@@ -583,14 +613,112 @@ namespace Daily.Services
                 titleBar.ButtonInactiveForegroundColor = buttonColor;
 
                 titleBar.ButtonBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0); // Transparent
-                titleBar.ButtonInactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
             }
         }
 #endif
 
+
+
 #if MACCATALYST
-        [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
-        static extern IntPtr IntPtr_objc_msgSend(IntPtr receiver, IntPtr selector);
+        // Anchor Strategy: Capture the EXACT frame of the sidebar just before expanding
+        private CoreGraphics.CGRect _sidebarAnchor = CoreGraphics.CGRect.Empty;
+        
+        private async Task ResizeMacWindow(bool expanded)
+        {
+            try 
+            {
+                 // Small delay to allow UI to settle before resizing start
+                 await Task.Delay(10);
+                 
+                 // Robust Window Retrieval
+                 var nsWindow = (Application.Current as Daily.App)?.GetMainNSWindow();
+                 
+                 if (nsWindow == null) return;
+
+                 // Get Current Frame & Screen
+                 var nsWindowFrameVal = nsWindow.ValueForKey(new Foundation.NSString("frame")) as NSValue;
+                 if (nsWindowFrameVal == null) return;
+                 var appKitWindowFrame = nsWindowFrameVal.CGRectValue;
+                 
+                 double targetWidth = 0;
+                 CoreGraphics.CGRect targetRect;
+                 
+                 var nsScreen = nsWindow.ValueForKey(new Foundation.NSString("screen"));
+                 var appKitScreenFrame = new CoreGraphics.CGRect(0,0,1920,1080);
+                 double screenWidth = 1920;
+                 if (nsScreen != null)
+                 {
+                     var visibleFrameObj = nsScreen.ValueForKey(new Foundation.NSString("visibleFrame"));
+                     if (visibleFrameObj is NSValue nsFrameValue)
+                     {
+                         appKitScreenFrame = nsFrameValue.CGRectValue;
+                         screenWidth = appKitScreenFrame.Width;
+                     }
+                 }
+
+                 if (expanded)
+                 {
+                     // Capture Anchor if small (Logic V11: Only capture if we look "Small")
+                     // 50% threshold handles both 1920 and smaller screens
+                     if (appKitWindowFrame.Width < screenWidth * 0.5)
+                     {
+                         _sidebarAnchor = appKitWindowFrame;
+                     }
+
+                     // LOGIC V11: Relative Sizing (90% of Active Screen)
+                     targetWidth = screenWidth * 0.90;
+                     // Cap at 1500 points (effectively 3000px on Retina)
+                     if (targetWidth > 1500) targetWidth = 1500;
+
+                     // Center Logic
+                     var screenCenterX = appKitScreenFrame.X + (appKitScreenFrame.Width / 2);
+                     var newX = screenCenterX - (targetWidth / 2);
+                     targetRect = new CoreGraphics.CGRect(newX, appKitWindowFrame.Y, targetWidth, appKitWindowFrame.Height);
+                 }
+                 else
+                 {
+                     // Shrink Logic V11: Relative Sidebar
+                     // If Screen > 1200, we assume 450 points is safe.
+                     // If Screen < 1200 (e.g. iPad size), we take 35% 
+                     if (screenWidth > 1200)
+                     {
+                         targetWidth = 450;
+                     }
+                     else
+                     {
+                         targetWidth = screenWidth * 0.35; // Fallback for smaller screens
+                         if (targetWidth < 320) targetWidth = 320; // Absolute min
+                     }
+                     
+                     if (!_sidebarAnchor.IsEmpty)
+                     {
+                         // Restore Position from Anchor (Anti-Drift)
+                         targetRect = new CoreGraphics.CGRect(_sidebarAnchor.X, _sidebarAnchor.Y, targetWidth, _sidebarAnchor.Height);
+                     }
+                     else
+                     {
+                         // Fallback Maintain LEFT edge
+                         targetRect = new CoreGraphics.CGRect(appKitWindowFrame.X, appKitWindowFrame.Y, targetWidth, appKitWindowFrame.Height);
+                     }
+                 }
+
+                 Console.WriteLine($"[ResizeMacWindow] Resizing {appKitWindowFrame.Width} -> {targetWidth}");
+
+                 // DIRECT SNAP (Logic V11 Final)
+                 // Based on detailed debugging, the Animator causes "staged shrinking" and "bouncing".
+                 // Direct frame setting works reliably.
+                 var rectVal = NSValue.FromCGRect(targetRect);
+                 nsWindow.SetValueForKey(rectVal, new Foundation.NSString("frame"));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ResizeMacWindow] Error: {ex.Message}");
+            }
+            
+            // Wait for Layout to catch up
+            await Task.Delay(300);
+        }
 #endif
     }
 }
+

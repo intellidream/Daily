@@ -205,6 +205,7 @@
         </MudItem>
     </MudGrid>
 
+
     <!-- About / System - Sticky Bottom -->
     <MudGrid Spacing="4" Class="mt-auto pb-4">
         <MudItem xs="12">
@@ -240,8 +241,11 @@
 </div>
 
 @inject ISyncService SyncService
+@inject IWindowManagerService WindowManagerService
 
 @code {
+
+
     private bool _isSeeding = false;
 
     private async Task PopulateHistory()
