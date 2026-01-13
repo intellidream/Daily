@@ -43,6 +43,7 @@ namespace Daily.Services
         private Page? _previousMacPage;
         private CoreGraphics.CGRect _previousMacFrame;
         private DetailPage? _activeMacDetailPage;
+        private DetailPage? _cachedMacDetailPage; // Cache to avoid recreating BlazorWebView
 #endif
 
         // Mobile Modal Reference
@@ -374,8 +375,20 @@ namespace Daily.Services
         public void OpenDetailWindow()
         {
             if (_detailWindow != null || _detailModal != null) return;
+            // Note: _activeMacDetailPage might be non-null if Mac, but that's handled in Mac block
 
-            var detailPage = new DetailPage(_refreshService, _detailNavigationService, _rssFeedService);
+            DetailPage detailPage;
+            
+#if MACCATALYST
+            // Reuse cached instance if available
+            if (_cachedMacDetailPage == null)
+            {
+                _cachedMacDetailPage = new DetailPage(_refreshService, _detailNavigationService, _rssFeedService);
+            }
+            detailPage = _cachedMacDetailPage;
+#else
+            detailPage = new DetailPage(_refreshService, _detailNavigationService, _rssFeedService);
+#endif
 
 #if ANDROID || IOS
             detailPage.Opacity = 1;
@@ -393,28 +406,32 @@ namespace Daily.Services
             var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow);
             if (mainWindow?.Page is MainPage mainPage)
             {
-                 // 1. Inject content into Overlay
-                 mainPage.MacDetailOverlay.Content = detailPage.Content;
+                 // 1. Inject content into Overlay (Only if needed)
+                 if (mainPage.MacDetailOverlay.Content != detailPage.Content)
+                 {
+                     mainPage.MacDetailOverlay.Content = detailPage.Content;
+                 }
+            // 2. Animate Appearance (Fade Out Main -> Resize -> Fade In Detail)
+                 mainPage.MacDetailOverlay.Opacity = 0;
                  mainPage.MacDetailOverlay.IsVisible = true;
                  
-                 // 2. Animate Expansion or Contraction (Simplified)
                  var targetView = _detailNavigationService.CurrentView;
                  var isWide = targetView == "Media" || targetView == "RssFeed";
-                 
+
                  MainThread.BeginInvokeOnMainThread(async () => 
                  {
-                     // Optimization: check if we need to resize
-                     // If standard view and already small, skip resize
-                     if (!isWide && mainPage.Window.Width < 600)
+                     // A. Instant Fade Out (Reset Opacity)
+                     mainPage.MainWebView.Opacity = 0;
+
+                     // B. Snap Window Size (if needed)
+                     // If moving to Wide, OR if we need to shrink back but haven't yet
+                     if (isWide || mainPage.Window.Width > 600) 
                      {
-                         // Just show content, no window animation
-                         mainPage.MacDetailOverlay.Opacity = 1;
+                        await ResizeMacWindow(isWide);
                      }
-                     else
-                     {
-                         if (isWide) await ResizeMacWindow(true);
-                         else await ResizeMacWindow(false);
-                     }
+                     
+                     // C. Show Detail Content Immediately
+                     mainPage.MacDetailOverlay.Opacity = 1;
                  });
             }
             else if (mainWindow != null)
@@ -504,21 +521,33 @@ namespace Daily.Services
                 // Force Clean Up always
                 var wasVisible = mainPage.MacDetailOverlay.IsVisible;
 
-                // Restore Window Size FIRST (Curtain Effect)
+                // Restore Mac Main Window (Fade Out Detail -> Resize -> Fade In Main)
                 MainThread.BeginInvokeOnMainThread(async () => 
                 {
-                    // Always try to restore size to Sidebar when closing detail
-                    await ResizeMacWindow(false);
-                    
                     if (wasVisible)
                     {
-                        // Reveal Main Page AFTER resize
+                        // A. Hide Detail Content
+                        mainPage.MacDetailOverlay.Opacity = 0;
+                        
                         mainPage.MacDetailOverlay.IsVisible = false;
-                        mainPage.MacDetailOverlay.Content = null; 
+                        mainPage.MacDetailOverlay.IsVisible = false;
+                        // mainPage.MacDetailOverlay.Content = null; // PERSISTENT CACHE: Do not detach!
+                        mainPage.MacDetailOverlay.Opacity = 1; 
+
+                        // B. Snap Window Size Back (Restore)
+                        await ResizeMacWindow(false);
+
+                        // C. Show Main Content
+                        mainPage.MainWebView.Opacity = 1;
                         
                         if (_activeMacDetailPage != null)
                         {
-                            _activeMacDetailPage.Dispose();
+                            // CACHING STRATEGY: Do NOT Dispose. Just Reset.
+                            _activeMacDetailPage.Reset();
+                            
+                            // _activeMacDetailPage = null; // We keep the reference in _cachedMacDetailPage, but _active tracks "current open". 
+                            // Actually _activeMacDetailPage IS _cachedMacDetailPage.
+                            // We can set active to null to indicate closed state.
                             _activeMacDetailPage = null;
                         }
                     }
@@ -529,10 +558,11 @@ namespace Daily.Services
                 // Fallback for Page Swap
                 mainWindow.Page = _previousMacPage;
                 _previousMacPage = null;
-                 if (_activeMacDetailPage != null)
+                    if (_activeMacDetailPage != null)
                 {
-                    _activeMacDetailPage.Dispose();
-                    _activeMacDetailPage = null;
+                     // CACHING STRATEGY: Do NOT Dispose. Just Reset.
+                     _activeMacDetailPage.Reset();
+                     _activeMacDetailPage = null;
                 }
             }
 #else
@@ -716,7 +746,7 @@ namespace Daily.Services
             }
             
             // Wait for Layout to catch up
-            await Task.Delay(300);
+            await Task.Delay(50);
         }
 #endif
     }

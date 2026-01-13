@@ -55,5 +55,6 @@ namespace Daily
 
         // Expose Overlay for Mac Catalyst WindowManager
         public ContentView MacDetailOverlay => DetailOverlay;
+        public Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebView MainWebView => blazorWebView;
     }
 }

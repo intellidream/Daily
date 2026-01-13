@@ -115,14 +115,12 @@ public partial class DetailPage : ContentPage, IDisposable
     // We kept the field _isReaderMode just for local state tracking if needed, 
     // but the heavy lifting is gone.
 
-    protected override void OnDisappearing()
-    {
-        base.OnDisappearing();
-        _detailNavigationService.OnOpenUrlRequest -= OnOpenUrlRequest;
-        _detailNavigationService.OnBrowserStateChanged -= OnBrowserStateChanged;
-        _detailNavigationService.OnReaderModeChanged -= OnReaderModeChanged;
-        _detailNavigationService.OnToolbarHeightChanged -= OnToolbarHeightChanged;
-    }
+    // OnDisappearing removed to support Caching strategy. 
+    // Events are now unsubscribed only in Dispose().
+    // protected override void OnDisappearing()
+    // {
+    //     base.OnDisappearing();
+    // }
 
     protected override void OnAppearing()
     {
@@ -231,6 +229,21 @@ public partial class DetailPage : ContentPage, IDisposable
         }
     }
 #endif
+
+    public void Reset()
+    {
+        // Reset Browser
+        if (InternalBrowser != null)
+        {
+            InternalBrowser.Source = "about:blank";
+            InternalBrowser.IsVisible = false;
+        }
+        
+        // Reset Reader Mode local state
+        _isReaderMode = false;
+        
+        // Note: Blazor state is reactive to NavService, so it should update itself on next NavigateTo
+    }
     
     public void Dispose()
     {
@@ -247,5 +260,11 @@ public partial class DetailPage : ContentPage, IDisposable
         {
             blazorWebView.Handler?.DisconnectHandler();
         }
+
+        // Unsubscribe Events
+        _detailNavigationService.OnOpenUrlRequest -= OnOpenUrlRequest;
+        _detailNavigationService.OnBrowserStateChanged -= OnBrowserStateChanged;
+        _detailNavigationService.OnReaderModeChanged -= OnReaderModeChanged;
+        _detailNavigationService.OnToolbarHeightChanged -= OnToolbarHeightChanged;
     }
 }
