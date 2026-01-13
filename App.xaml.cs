@@ -25,9 +25,12 @@ namespace Daily
         private readonly IHabitsService _habitsService;
         private readonly ISyncService _syncService;
 
-        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService)
+        private readonly WindowManagerService _windowManagerService;
+
+        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService, WindowManagerService windowManagerService)
         {
             InitializeComponent();
+            _windowManagerService = windowManagerService;
             _trayService = trayService;
             _supabase = supabase;
             _databaseService = databaseService;
@@ -110,6 +113,18 @@ namespace Daily
                 #endif
 
             };
+            
+            #if MACCATALYST
+            // Pre-Warm Detail View (avoid 5s cold start latency on first open)
+            window.Created += async (s, e) => 
+            {
+                await Task.Delay(500); // Wait for Main Page to fully render
+                MainThread.BeginInvokeOnMainThread(() => 
+                {
+                   (Application.Current as App)?.GetWindowManager()?.PreWarmMacDetail();
+                });
+            };
+            #endif
 
             return window;
         }
@@ -119,16 +134,13 @@ namespace Daily
         {
             try
             {
-                var nsAppClass = new ObjCRuntime.Class("NSApplication");
-                var sharedAppSelector = new ObjCRuntime.Selector("sharedApplication");
                 var sharedApp = ObjCRuntime.Runtime.GetNSObject(
-                    IntPtr_objc_msgSend(nsAppClass.Handle, sharedAppSelector.Handle)
+                    IntPtr_objc_msgSend(_clsNSApplication, _selSharedApp)
                 );
                 
                 if (sharedApp == null) return null;
 
-                var windowsSelector = new ObjCRuntime.Selector("windows");
-                var windowsArrayPtr = IntPtr_objc_msgSend(sharedApp.Handle, windowsSelector.Handle);
+                var windowsArrayPtr = IntPtr_objc_msgSend(sharedApp.Handle, _selWindows);
                 var windowsArray = ObjCRuntime.Runtime.GetNSObject<Foundation.NSArray>(windowsArrayPtr);
                 
                 if (windowsArray != null)
@@ -137,8 +149,9 @@ namespace Daily
                     {
                         var win = windowsArray.GetItem<NSObject>(i);
                         // Skip NSStatusBarWindow and Popups
-                        if (win.Description.Contains("StatusBar")) continue;
-                        if (win.Description.Contains("PopupMenu")) continue;
+                        var desc = win.Description;
+                        if (desc.Contains("StatusBar")) continue;
+                        if (desc.Contains("PopupMenu")) continue;
                         
                         return win; // Return first candidate
                     }
@@ -295,6 +308,26 @@ namespace Daily
             });
         }
 
+
+        // Interop Cache
+        private static readonly IntPtr _clsNSApplication = ObjCRuntime.Class.GetHandle("NSApplication");
+        private static readonly IntPtr _clsNSScreen = ObjCRuntime.Class.GetHandle("NSScreen");
+        private static readonly IntPtr _clsNSColor = ObjCRuntime.Class.GetHandle("NSColor");
+        
+        private static readonly IntPtr _selSharedApp = ObjCRuntime.Selector.GetHandle("sharedApplication");
+        private static readonly IntPtr _selWindows = ObjCRuntime.Selector.GetHandle("windows");
+        private static readonly IntPtr _selActivateIgnoring = ObjCRuntime.Selector.GetHandle("activateIgnoringOtherApps:");
+        private static readonly IntPtr _selOrderOut = ObjCRuntime.Selector.GetHandle("orderOut:");
+        private static readonly IntPtr _selIsVisible = ObjCRuntime.Selector.GetHandle("isVisible");
+        private static readonly IntPtr _selMainScreen = ObjCRuntime.Selector.GetHandle("mainScreen");
+        private static readonly IntPtr _selVisibleFrame = ObjCRuntime.Selector.GetHandle("visibleFrame");
+        private static readonly IntPtr _selFrame = ObjCRuntime.Selector.GetHandle("frame");
+        private static readonly IntPtr _selSetFrame = ObjCRuntime.Selector.GetHandle("setFrame:"); // Setter selector usually generated, but KeyValueCoding uses keys.
+        // For KeyValueCoding, we use NSStrings. Cache those too.
+        private static readonly Foundation.NSString _keyFrame = new Foundation.NSString("frame");
+        private static readonly Foundation.NSString _keyScreen = new Foundation.NSString("screen");
+        private static readonly Foundation.NSString _keyVisibleFrame = new Foundation.NSString("visibleFrame");
+
         // Clean P/Invokes
         [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
         static extern IntPtr IntPtr_objc_msgSend(IntPtr receiver, IntPtr selector);
@@ -359,5 +392,8 @@ namespace Daily
 
 
         #endif
+
+        
+        public WindowManagerService? GetWindowManager() => _windowManagerService;
     }
 }

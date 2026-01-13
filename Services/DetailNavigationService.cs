@@ -13,6 +13,7 @@ namespace Daily.Services
         
         bool IsBrowserOpen { get; }
         bool IsReaderMode { get; }
+        bool IsDetailVisible { get; } // Gate for Pre-Heating
         
         event Action OnViewChanged;
         event Action<string> OnOpenUrlRequest;
@@ -21,6 +22,7 @@ namespace Daily.Services
         event Action<bool> OnReaderModeChanged;
         event Action OnReaderModeToggleRequest;
         event Action<double> OnToolbarHeightChanged;
+        event Action<bool> OnDetailVisibilityChanged;
 
         void NavigateTo(string view, string title = "Detail View", object? data = null);
         void RequestOpenUrl(string url);
@@ -28,7 +30,9 @@ namespace Daily.Services
         void SetBrowserState(bool isOpen);
         void SetReaderMode(bool isEnabled);
         void ToggleReaderMode();
+
         void SetToolbarHeight(double height);
+        void SetDetailVisibility(bool isVisible);
     }
 
     public class DetailNavigationService : IDetailNavigationService
@@ -42,6 +46,7 @@ namespace Daily.Services
         
         public bool IsBrowserOpen { get; private set; }
         public bool IsReaderMode { get; private set; }
+        public bool IsDetailVisible { get; private set; }
 
         public event Action OnViewChanged;
         public event Action<string> OnOpenUrlRequest;
@@ -50,6 +55,7 @@ namespace Daily.Services
         public event Action<bool> OnReaderModeChanged;
         public event Action OnReaderModeToggleRequest;
         public event Action<double> OnToolbarHeightChanged;
+        public event Action<bool> OnDetailVisibilityChanged;
 
         public void NavigateTo(string view, string title = "Detail View", object? data = null)
         {
@@ -119,6 +125,15 @@ namespace Daily.Services
         public void SetToolbarHeight(double height)
         {
             OnToolbarHeightChanged?.Invoke(height);
+        }
+
+
+        public void SetDetailVisibility(bool isVisible)
+        {
+            if (IsDetailVisible == isVisible) return;
+            IsDetailVisible = isVisible;
+            System.Console.WriteLine($"[DetailNavigation] Visibility Changed to {isVisible}");
+            OnDetailVisibilityChanged?.Invoke(isVisible);
         }
     }
 }

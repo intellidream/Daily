@@ -17,6 +17,8 @@
 <MudPopoverProvider />
 
 <MudLayout Style="background-color: transparent; min-height: 100vh; display: flex; flex-direction: column;" Class="mesh-background" UserAttributes="@(new Dictionary<string, object> { { "data-theme", _isDarkMode ? "dark" : "light" } })">
+    @if (NavService.IsDetailVisible)
+    {
     <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@AppBarClass" Style="backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1);">
         @if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
         {
@@ -230,6 +232,14 @@
             }
         </MudContainer>
     </MudMainContent>
+
+    }
+    else
+    {
+        <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+             <!-- Zombie State for Pre-Heating -->
+        </div>
+    }
 </MudLayout>
 
 <style>
@@ -288,12 +298,14 @@
         NavService.OnArticleLinkChanged += OnArticleLinkChanged;
         NavService.OnBrowserStateChanged += OnBrowserStateChanged;
         NavService.OnReaderModeChanged += OnReaderModeChanged;
-        RssService.OnItemsUpdated += StateHasChanged; // Subscribe for item count updates
+        RssService.OnItemsUpdated += AsyncStateHasChanged; // Subscribe for item count updates (Async for safe thread dispatch)
         RssService.OnFeedChanged += OnFeedChangedHandler; // Subscribe for active feed changes
         WeatherService.OnLocationChanged += AsyncStateHasChanged; // Subscribe for weather location changes
         WeatherService.OnLocationChanged += AsyncStateHasChanged; // Subscribe for weather location changes
         SettingsService.OnSettingsChanged += AsyncStateHasChanged; // Subscribe for auth changes
+        SettingsService.OnSettingsChanged += AsyncStateHasChanged; // Subscribe for auth changes
         HabitsService.OnViewTypeChanged += AsyncStateHasChanged; // Subscribe for habit view changes
+        NavService.OnDetailVisibilityChanged += OnDetailVisibilityChanged;
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
             Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
@@ -368,7 +380,7 @@
         NavService.OnArticleLinkChanged -= StateHasChanged;
         NavService.OnBrowserStateChanged -= OnBrowserStateChanged;
         NavService.OnReaderModeChanged -= OnReaderModeChanged;
-        RssService.OnItemsUpdated -= StateHasChanged;
+        RssService.OnItemsUpdated -= AsyncStateHasChanged;
         RssService.OnFeedChanged -= OnFeedChangedHandler;
         WeatherService.OnLocationChanged -= StateHasChanged;
         WeatherService.OnLocationChanged -= StateHasChanged;
@@ -376,7 +388,18 @@
         HabitsService.OnViewTypeChanged -= StateHasChanged;
         if (Application.Current != null)
         {
-            Application.Current.RequestedThemeChanged -= OnThemeChanged;
+        }
+        NavService.OnDetailVisibilityChanged -= OnDetailVisibilityChanged;
+    }
+
+    private async void OnDetailVisibilityChanged(bool isVisible)
+    {
+        await InvokeAsync(StateHasChanged);
+        if (isVisible)
+        {
+             // When becoming visible, sync everything just in case
+             SyncIndexFromService();
+             _ = UpdateToolbarHeight();
         }
     }
 
@@ -491,7 +514,12 @@
             var feed = RssService.Feeds[index];
             if (RssService.CurrentFeed != feed)
             {
-                RssService.SelectFeed(feed);
+                // Guard: Only allow selection if we are actually the active view that user is interacting with
+                // This prevents the Hidden Detail Pane from overriding the Main View's selection
+                if (NavService.CurrentView == "RssFeed")
+                {
+                    RssService.SelectFeed(feed);
+                }
             }
         }
     }

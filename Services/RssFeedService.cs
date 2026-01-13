@@ -31,9 +31,11 @@ namespace Daily.Services
         public event Action? OnItemsUpdated;
 
         private readonly HttpClient _httpClient;
+        private readonly Guid _instanceId = Guid.NewGuid();
 
         public RssFeedService()
         {
+            Console.WriteLine($"[RssFeedService] Constructor called. InstanceId: {_instanceId}");
             CurrentFeed = Feeds.First();
             
             var handler = new HttpClientHandler
@@ -67,20 +69,19 @@ namespace Daily.Services
         public async Task LoadFeedAsync(FeedSource feed, bool forceRefresh = false)
         {
             // If already loading and not forcing, skip
+            // If already loading and not forcing, skip
             if (IsLoading && !forceRefresh) return;
-            // If we have items for this feed (checked by reference or some cache key if we want) 
-            // and not forcing, theoretically we could skip, but simpler to just load.
             
-            IsLoading = true;
-            Error = null;
-            if (!forceRefresh)
-            {
-                Items = new List<RssItem>();
-            }
-            OnItemsUpdated?.Invoke(); // Notify loading state
-
             try
             {
+                IsLoading = true;
+                Error = null;
+                // ATOMIC UPDATE: Do NOT clear items here. Wait for fetch to complete.
+                // if (!forceRefresh) Items = new List<RssItem>(); 
+                
+                Console.WriteLine($"[RssFeedService] LoadFeedAsync called for {feed.Name}. Force: {forceRefresh}. Instance: {_instanceId}");
+                OnItemsUpdated?.Invoke(); // Notify loading state
+
                 if (feed.Type == FeedType.Rss)
                 {
                     await LoadRssFeedAsync(feed);
@@ -94,7 +95,7 @@ namespace Daily.Services
             {
                 Console.WriteLine($"Error loading feed: {ex.Message}");
                 Error = $"Error loading feed: {ex.Message}";
-                Items = new List<RssItem>();
+                // Items = new List<RssItem>(); // GUARD: Keep stale items to prevent Widget Loop
             }
             finally
             {
@@ -112,6 +113,7 @@ namespace Daily.Services
 
             var channelImage = doc.Descendants("channel").Elements().FirstOrDefault(e => e.Name.LocalName == "image")?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value;
 
+            // Atomic Swap
             Items = doc.Descendants("item").Select(item =>
             {
                 var title = item.Element("title")?.Value ?? "No Title";
@@ -195,11 +197,11 @@ namespace Daily.Services
 
             if (posts == null) 
             {
-                Items = new List<RssItem>();
+                // Items = new List<RssItem>(); // Do not clear on error
                 return;
             }
 
-            Items = new List<RssItem>();
+            var newList = new List<RssItem>();
 
             foreach (var post in posts)
             {
@@ -241,7 +243,7 @@ namespace Daily.Services
                     }
                 }
                 
-                Items.Add(new RssItem
+                newList.Add(new RssItem
                 {
                      Title = title ?? "No Title",
                      Link = link,
@@ -252,13 +254,17 @@ namespace Daily.Services
                      Author = author
                 });
             }
+            // Atomic Swap
+            Items = newList;
         }
         public async Task<RssItem> FetchFullArticleAsync(string url)
         {
             try
             {
-                var reader = new SmartReader.Reader(url);
-                var article = await reader.GetArticleAsync();
+                // OPTIMIZATION: Use shared HttpClient for fetching to ensure Handler/DNS reuse and speed
+                var html = await _httpClient.GetStringAsync(url);
+                var reader = new SmartReader.Reader(url, html);
+                var article = reader.GetArticle(); // Synchronous parse of provided content
 
                 if (article.IsReadable)
                 {

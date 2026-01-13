@@ -103,10 +103,16 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.ISeederService, Daily.Services.SeederService>();
             
             builder.Services.AddSingleton<Daily.Services.IYouTubeService, Daily.Services.YouTubeService>();
-            builder.Services.AddSingleton<Daily.Services.IWindowManagerService, Daily.Services.WindowManagerService>();
+            
+            // Register as Concrete to allow App.xaml.cs to resolve it for PreWarmMacDetail
+            builder.Services.AddSingleton<Daily.Services.WindowManagerService>();
+            builder.Services.AddSingleton<Daily.Services.IWindowManagerService>(sp => sp.GetRequiredService<Daily.Services.WindowManagerService>());
+            
             builder.Services.AddSingleton<Daily.Services.IDetailNavigationService, Daily.Services.DetailNavigationService>();
             builder.Services.AddSingleton<Daily.Services.IBackButtonService, Daily.Services.BackButtonService>();
             builder.Services.AddSingleton<Daily.Services.IRssFeedService, Daily.Services.RssFeedService>();
+            // Register Concrete execution to use the SAME instance (prevent split singleton)
+            builder.Services.AddSingleton<Daily.Services.RssFeedService>(sp => (Daily.Services.RssFeedService)sp.GetRequiredService<Daily.Services.IRssFeedService>());
             builder.Services.AddSingleton<Daily.Services.ISettingsService, Daily.Services.SettingsService>();
             builder.Services.AddSingleton<Daily.Services.IAuthService, Daily.Services.AuthService>();
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);

@@ -245,6 +245,32 @@ namespace Daily.Services
 #endif
         }
 
+#if MACCATALYST
+        public void PreWarmMacDetail()
+        {
+             MainThread.BeginInvokeOnMainThread(() => 
+             {
+                 // Trigger Lazy Load
+                 if (_cachedMacDetailPage == null)
+                 {
+                     _cachedMacDetailPage = new DetailPage(_refreshService, _detailNavigationService, _rssFeedService);
+                 }
+                 
+                 // Trigger Attach (Hidden)
+                 var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow);
+                 if (mainWindow?.Page is MainPage mainPage)
+                 {
+                     // Attach content but keep overlay hidden/transparent
+                     mainPage.MacDetailOverlay.Content = _cachedMacDetailPage.Content;
+                     mainPage.MacDetailOverlay.IsVisible = false; 
+                     // Ensure Logic Gate is Closed
+                     _detailNavigationService.SetDetailVisibility(false);
+                     Console.WriteLine("[WindowManagerService] PreWarmed Mac Detail View. Visibility: False");
+                 }
+             });
+        }
+#endif
+
 #if WINDOWS
         // P/Invoke Definitions for Atomic Move
         [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
@@ -407,6 +433,7 @@ namespace Daily.Services
             if (mainWindow?.Page is MainPage mainPage)
             {
                  // 1. Inject content into Overlay (Only if needed)
+                 // NOTE: PreWarm might have already done this.
                  if (mainPage.MacDetailOverlay.Content != detailPage.Content)
                  {
                      mainPage.MacDetailOverlay.Content = detailPage.Content;
@@ -415,6 +442,11 @@ namespace Daily.Services
                  mainPage.MacDetailOverlay.Opacity = 0;
                  mainPage.MacDetailOverlay.IsVisible = true;
                  
+                 mainPage.MacDetailOverlay.IsVisible = true;
+                 
+                 // ENABLE LOGIC GATE - Allows Carousel/heavy components to render
+                 _detailNavigationService.SetDetailVisibility(true);
+
                  var targetView = _detailNavigationService.CurrentView;
                  var isWide = targetView == "Media" || targetView == "RssFeed";
 
@@ -520,6 +552,9 @@ namespace Daily.Services
             {
                 // Force Clean Up always
                 var wasVisible = mainPage.MacDetailOverlay.IsVisible;
+                
+                // DISABLE LOGIC GATE - Stops Carousel immediately
+                _detailNavigationService.SetDetailVisibility(false);
 
                 // Restore Mac Main Window (Fade Out Detail -> Resize -> Fade In Main)
                 MainThread.BeginInvokeOnMainThread(async () => 
@@ -653,6 +688,11 @@ namespace Daily.Services
         // Anchor Strategy: Capture the EXACT frame of the sidebar just before expanding
         private CoreGraphics.CGRect _sidebarAnchor = CoreGraphics.CGRect.Empty;
         
+        // KVC Cache
+        private static readonly Foundation.NSString _keyFrame = new Foundation.NSString("frame");
+        private static readonly Foundation.NSString _keyScreen = new Foundation.NSString("screen");
+        private static readonly Foundation.NSString _keyVisibleFrame = new Foundation.NSString("visibleFrame");
+        
         private async Task ResizeMacWindow(bool expanded)
         {
             try 
@@ -660,25 +700,26 @@ namespace Daily.Services
                  // Small delay to allow UI to settle before resizing start
                  await Task.Delay(10);
                  
-                 // Robust Window Retrieval
+                 // Robust Window Retrieval (Now Optimized in App.xaml.cs)
                  var nsWindow = (Application.Current as Daily.App)?.GetMainNSWindow();
                  
                  if (nsWindow == null) return;
 
                  // Get Current Frame & Screen
-                 var nsWindowFrameVal = nsWindow.ValueForKey(new Foundation.NSString("frame")) as NSValue;
+                 var nsWindowFrameVal = nsWindow.ValueForKey(_keyFrame) as NSValue;
+                 
                  if (nsWindowFrameVal == null) return;
                  var appKitWindowFrame = nsWindowFrameVal.CGRectValue;
                  
                  double targetWidth = 0;
                  CoreGraphics.CGRect targetRect;
                  
-                 var nsScreen = nsWindow.ValueForKey(new Foundation.NSString("screen"));
+                 var nsScreen = nsWindow.ValueForKey(_keyScreen);
                  var appKitScreenFrame = new CoreGraphics.CGRect(0,0,1920,1080);
                  double screenWidth = 1920;
                  if (nsScreen != null)
                  {
-                     var visibleFrameObj = nsScreen.ValueForKey(new Foundation.NSString("visibleFrame"));
+                     var visibleFrameObj = nsScreen.ValueForKey(_keyVisibleFrame);
                      if (visibleFrameObj is NSValue nsFrameValue)
                      {
                          appKitScreenFrame = nsFrameValue.CGRectValue;
@@ -734,11 +775,10 @@ namespace Daily.Services
 
                  Console.WriteLine($"[ResizeMacWindow] Resizing {appKitWindowFrame.Width} -> {targetWidth}");
 
-                 // DIRECT SNAP (Logic V11 Final)
-                 // Based on detailed debugging, the Animator causes "staged shrinking" and "bouncing".
                  // Direct frame setting works reliably.
                  var rectVal = NSValue.FromCGRect(targetRect);
-                 nsWindow.SetValueForKey(rectVal, new Foundation.NSString("frame"));
+                 
+                 nsWindow.SetValueForKey(rectVal, _keyFrame);
             }
             catch (Exception ex)
             {

@@ -131,25 +131,33 @@
 
     protected override async Task OnInitializedAsync()
     {
-        RssService.OnItemsUpdated += async () => await InvokeAsync(StateHasChanged);
+        RssService.OnItemsUpdated += OnItemsUpdatedHandler;
         RssService.OnFeedChanged += OnFeedChanged;
         RefreshService.RefreshRequested += OnRefreshRequested;
 
+
         // Initial sync
         SyncIndexFromService();
-
+        
         // If service is empty (first load), trigger load
-        if (RssService.Items.Count == 0 && RssService.CurrentFeed != null)
+        // GUARD: Do not auto-reload if already loading OR if in error state (prevents infinite retry loop)
+        if (RssService.Items.Count == 0 && RssService.CurrentFeed != null && !RssService.IsLoading && string.IsNullOrEmpty(RssService.Error))
         {
              await RssService.ReloadCurrentFeedAsync();
         }
+
     }
 
     public void Dispose()
     {
-        RssService.OnItemsUpdated -= StateHasChanged;
+        RssService.OnItemsUpdated -= OnItemsUpdatedHandler;
         RssService.OnFeedChanged -= OnFeedChanged;
         RefreshService.RefreshRequested -= OnRefreshRequested;
+    }
+
+    private async void OnItemsUpdatedHandler()
+    {
+        await InvokeAsync(StateHasChanged);
     }
 
     private async void OnFeedChanged()
