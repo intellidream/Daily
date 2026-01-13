@@ -419,6 +419,11 @@ namespace Daily.Services
 #if ANDROID || IOS
             detailPage.Opacity = 1;
             _detailModal = detailPage;
+            
+            // ENABLE LOGIC GATE for Mobile
+            // Essential to unlock the rendering
+            _detailNavigationService.SetDetailVisibility(true);
+
             // Handle native back/swipe closing
             detailPage.Disappearing += (s, e) => _detailModal = null;
 
@@ -548,6 +553,7 @@ namespace Daily.Services
             {
                 Application.Current?.Windows.FirstOrDefault()?.Page?.Navigation.PopModalAsync();
                 _detailModal = null;
+                _detailNavigationService.SetDetailVisibility(false); // Clean up
             }
 #elif MACCATALYST
             // Restore Mac Main Window (Hide Overlay)
