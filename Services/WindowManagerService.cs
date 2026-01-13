@@ -474,6 +474,11 @@ namespace Daily.Services
             }
 #else
             detailPage.Opacity = 0; // Start invisible for fade-in
+            
+            // ENABLE LOGIC GATE for Windowed Platforms (Windows)
+            // Essential: DetailPane is wrapped in @if(IsDetailVisible), so we MUST set this to true.
+            _detailNavigationService.SetDetailVisibility(true);
+
             _detailWindow = new Window(detailPage)
             {
                 Title = "Daily - Reading Pane"
@@ -605,6 +610,7 @@ namespace Daily.Services
             {
                 Application.Current?.CloseWindow(_detailWindow);
                 _detailWindow = null;
+                _detailNavigationService.SetDetailVisibility(false); // Clean up state
                 SetMainWindowEnabled(true); // Safety re-enable
             }
 #endif
