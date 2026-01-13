@@ -1,33 +1,32 @@
 .masonry-grid {
-    column-count: 1;
-    column-gap: 16px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: start;
+    /* Prevents stretching height weirdly */
+    padding-bottom: 24px;
+    /* Restore bottom spacing */
 }
 
 @media (min-width: 600px) {
     .masonry-grid {
-        column-count: 2;
-        column-gap: 16px;
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 
 @media (min-width: 960px) {
     .masonry-grid {
-        column-count: 3;
+        grid-template-columns: repeat(3, 1fr);
     }
 }
 
 .masonry-item {
-    break-inside: avoid;
-    margin-bottom: 16px;
-}
-
-@media (min-width: 600px) {
-    .masonry-item {
-        margin-bottom: 16px;
-    }
+    /* No longer need break-inside: avoid */
+    min-width: 0;
+    /* Prevents overflow in grid items */
 }
 
 /* Span All Columns helper */
 .span-all {
-    column-span: all;
+    grid-column: 1 / -1;
 }
