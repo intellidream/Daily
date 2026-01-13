@@ -7,6 +7,9 @@
         <!-- Calendar Header -->
         <div class="d-flex align-center justify-space-between mb-4 px-2">
             <div class="d-flex align-center gap-2">
+                 <MudTooltip Text="Go to Today">
+                    <MudIconButton Icon="@Icons.Material.Filled.Today" OnClick="GoToToday" Size="Size.Small" />
+                </MudTooltip>
                 <MudText Typo="Typo.h5" Class="font-weight-bold">@_currentMonthName @_currentYear</MudText>
             </div>
             <div class="d-flex gap-2">
@@ -154,6 +157,14 @@
         var d = new DateTime(_currentYear, _currentMonth, 1).AddMonths(1);
         _currentMonth = d.Month;
         _currentYear = d.Year;
+        CalculateCalendar();
+    }
+
+    private void GoToToday()
+    {
+        _selectedDate = DateTime.Today;
+        _currentMonth = _selectedDate.Month;
+        _currentYear = _selectedDate.Year;
         CalculateCalendar();
     }
 
