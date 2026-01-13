@@ -4,8 +4,8 @@
     gap: 16px;
     align-items: start;
     /* Prevents stretching height weirdly */
-    padding-bottom: 24px;
-    /* Restore bottom spacing */
+    padding-bottom: 16px;
+    /* Match usage of gap: 16px */
 }
 
 @media (min-width: 600px) {
