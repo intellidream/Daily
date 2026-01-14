@@ -374,6 +374,8 @@ body.mesh-background .blinds-appbar.collapsed .mud-toolbar {
 /* Keep Handle Visible and Functional */
 body.mesh-background .blinds-appbar.collapsed .appbar-handle {
     visibility: visible;
+    /* TUCK IT UP: Move it up by 25% (less aggressive) so just the top edge is hidden */
+    transform: translateX(-50%) translateY(-25%) !important;
     /* Ensure it positions correctly at the new '0' bottom edge */
 }
 
