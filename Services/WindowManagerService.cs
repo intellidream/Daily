@@ -216,15 +216,7 @@ namespace Daily.Services
                          
                          EndDeferWindowPos(hDefer);
                      }
-                 }
-                 else
-                 {
-                     // Single screen - toggle side? Or do nothing.
-                 }
-            }
-#endif
 
-#if WINDOWS
                      // 4. Sync MAUI Properties (Post-Move) to keep framework happy
                      double targetX_Dip = targetX_Px / scale;
                      double targetY_Dip = targetY_Px / scale;
@@ -235,7 +227,6 @@ namespace Daily.Services
                      {
                          mainWindow.X = targetX_Dip;
                          mainWindow.Y = targetY_Dip;
-                         // W/H might need update too, but usually X/Y is enough for tracking
                          mainWindow.Width = targetW_Dip;
                          mainWindow.Height = targetH_Dip;
                      });
@@ -252,8 +243,13 @@ namespace Daily.Services
                          });
                      }
                  }
+                 else
+                 {
+                     // Single screen - toggle side? Or do nothing.
+                 }
             }
 #endif
+
 #if MACCATALYST
             MoveWindowMacCatalyst();
 #endif
