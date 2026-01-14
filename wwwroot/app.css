@@ -306,6 +306,77 @@ h1:focus {
     /* CRITICAL: Allow handle to hang out */
 }
 
+/* DESKTOP TWEAKS (When mesh-background is active) */
+/* Force horizontal scroll if < 450px */
+body.mesh-background {
+    min-width: 450px;
+    overflow-x: auto;
+}
+
+/* On Desktop, make AppBar sticky so it scrolls horizontally with content but stays fixed vertically */
+body.mesh-background .blinds-appbar {
+    position: sticky !important;
+    top: 0;
+    min-width: 450px;
+    /* Ensure it spans the full scrolled width */
+}
+
+/* Fix for Sticky App Bar Gap: Remove the double-spacing */
+/* 1. Remove MudBlazor's auto-padding (since Sticky takes up space) */
+body.mesh-background .mud-main-content {
+    padding-top: 0 !important;
+}
+
+/* 2. Remove the manual margin-top meant for Fixed layout AND Normalize Top Padding */
+body.mesh-background .mud-container.mt-20 {
+    margin-top: 0 !important;
+    padding-top: 16px !important;
+    /* Match the 16px grid gap exactly */
+}
+
+/* 3. Enable Roll-up for Sticky Header */
+/* Transition height so content slides up when appbar collapses */
+body.mesh-background .blinds-appbar {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    height: auto;
+    /* Default open state */
+}
+
+body.mesh-background .blinds-appbar.collapsed {
+    height: 0 !important;
+    /* Collapsed state: removes space from flow */
+    min-height: 0 !important;
+    /* CRITICAL: Override MudBlazor default min-height */
+    padding: 0 !important;
+    /* Ensure no internal padding keeps it open */
+    border: none !important;
+    /* Remove border in 0-height state */
+    transform: none !important;
+    /* Disable translateY since height:0 handles the movement on Sticky */
+
+    /* HIDE CONTENT (Buttons, Title, etc) that overflows due to visible overflow */
+    visibility: hidden;
+    background-color: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Aggressively collapse the inner Toolbar to prevent it from propping open the height
+   BUT allow overflow so the Handle (which is absolutely positioned or hanging out) remains visible */
+body.mesh-background .blinds-appbar.collapsed .mud-toolbar {
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    /* CRITICAL: Must be visible to let the Handle show */
+    padding: 0 !important;
+}
+
+/* Keep Handle Visible and Functional */
+body.mesh-background .blinds-appbar.collapsed .appbar-handle {
+    visibility: visible;
+    /* Ensure it positions correctly at the new '0' bottom edge */
+}
+
 .blinds-appbar.collapsed {
     transform: translateY(-100%);
 }
