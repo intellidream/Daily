@@ -16,6 +16,7 @@ using UIKit;
 using ObjCRuntime;
 using System.Runtime.InteropServices;
 using CoreGraphics;
+using Daily.Platforms.MacCatalyst;
 #endif
 
 namespace Daily.Services
@@ -199,21 +200,31 @@ namespace Daily.Services
                      int numWindows = moveDetail ? 2 : 1;
                      IntPtr hDefer = BeginDeferWindowPos(numWindows);
                      
-                     const uint SWP_NOZORDER = 0x0004;
-                     const uint SWP_NOACTIVATE = 0x0010;
-                     
-                     // 1. Queue Main Window
-                     hDefer = DeferWindowPos(hDefer, mainHandle, IntPtr.Zero, targetX_Px, targetY_Px, targetW_Px, targetH_Px, SWP_NOZORDER | SWP_NOACTIVATE);
-                     
-                     // 2. Queue Detail Window
-                     if (moveDetail)
+                     if (hDefer != IntPtr.Zero)
                      {
-                         hDefer = DeferWindowPos(hDefer, detailHandle, IntPtr.Zero, dX, dY, dW, dH, SWP_NOZORDER | SWP_NOACTIVATE);
+                         const uint SWP_NOZORDER = 0x0004;
+                         const uint SWP_NOACTIVATE = 0x0010;
+                         
+                         // Move Main
+                         hDefer = DeferWindowPos(hDefer, mainHandle, IntPtr.Zero, targetX_Px, targetY_Px, targetW_Px, targetH_Px, SWP_NOZORDER | SWP_NOACTIVATE);
+                         
+                         // Move Detail
+                         if (moveDetail)
+                         {
+                             hDefer = DeferWindowPos(hDefer, detailHandle, IntPtr.Zero, dX, dY, dW, dH, SWP_NOZORDER | SWP_NOACTIVATE);
+                         }
+                         
+                         EndDeferWindowPos(hDefer);
                      }
-                     
-                     // 3. Commit Transaction
-                     EndDeferWindowPos(hDefer);
+                 }
+                 else
+                 {
+                     // Single screen - toggle side? Or do nothing.
+                 }
+            }
+#endif
 
+#if WINDOWS
                      // 4. Sync MAUI Properties (Post-Move) to keep framework happy
                      double targetX_Dip = targetX_Px / scale;
                      double targetY_Dip = targetY_Px / scale;
@@ -243,10 +254,120 @@ namespace Daily.Services
                  }
             }
 #endif
+#if MACCATALYST
+            MoveWindowMacCatalyst();
+#endif
         }
 
 #if MACCATALYST
+        private void MoveWindowMacCatalyst()
+        {
+            var nsWindow = (Application.Current as Daily.App)?.GetMainNSWindow();
+            if (nsWindow == null) return;
+
+            try
+            {
+                 // 1. Get All Screens
+                 var nsScreenClass = new ObjCRuntime.Class("NSScreen");
+                 var screensSelector = new ObjCRuntime.Selector("screens");
+                 var screensArrayPtr = IntPtr_objc_msgSend(nsScreenClass.Handle, screensSelector.Handle);
+                 var screensArray = ObjCRuntime.Runtime.GetNSObject<Foundation.NSArray>(screensArrayPtr);
+                 
+                 if (screensArray == null || screensArray.Count <= 1) return;
+
+                 // 2. Find Current Screen Index
+                 var currentScreen = nsWindow.ValueForKey(new Foundation.NSString("screen"));
+                 if (currentScreen == null) return;
+                 
+                 int currentIndex = 0;
+                 for (nuint i = 0; i < screensArray.Count; i++)
+                 {
+                     var s = screensArray.GetItem<Foundation.NSObject>(i);
+                     if (s.Handle == currentScreen.Handle)
+                     {
+                         currentIndex = (int)i;
+                         break;
+                     }
+                 }
+
+                 // 3. Get Next Screen
+                 int nextIndex = (currentIndex + 1) % (int)screensArray.Count;
+                 var targetScreen = screensArray.GetItem<Foundation.NSObject>((nuint)nextIndex);
+
+                 // 4. Calculate Frame
+                 var visibleFrameVal = targetScreen.ValueForKey(new Foundation.NSString("visibleFrame")) as Foundation.NSValue;
+                 var visibleFrame = visibleFrameVal?.CGRectValue ?? new CoreGraphics.CGRect(0,0,1920,1080);
+                 
+                 double width = 450;
+                 double height = visibleFrame.Height;
+                 double y = visibleFrame.Y;
+                 double x = 0;
+
+                 // Logic V12: Relative to Tray Icon (Simulate "Icon Click" on next monitor)
+                 var lastTray = MacTrayService.LastTrayFrame;
+                 double offsetFromRight = 0;
+                 bool foundTrayScreen = false;
+
+                 if (lastTray.Width > 0)
+                 {
+                     double trayCenterX = lastTray.X + (lastTray.Width / 2);
+                     
+                     // Find which screen the tray is on to calculate relative offset
+                     for (nuint i = 0; i < screensArray.Count; i++)
+                     {
+                         var s = screensArray.GetItem<Foundation.NSObject>(i);
+                         var sFrameVal = s.ValueForKey(new Foundation.NSString("visibleFrame")) as Foundation.NSValue;
+                         if (sFrameVal != null)
+                         {
+                             var sFrame = sFrameVal.CGRectValue;
+                             // Check if tray center is within this screen's horizontal bounds
+                             if (trayCenterX >= sFrame.X && trayCenterX <= sFrame.X + sFrame.Width)
+                             {
+                                 offsetFromRight = (sFrame.X + sFrame.Width) - trayCenterX;
+                                 foundTrayScreen = true;
+                                 break;
+                             }
+                         }
+                     }
+                 }
+
+                 if (!foundTrayScreen)
+                 {
+                     // Fallback: If we assume standard macOS spacing, icon is usually ~20-50px from right + width/2
+                     // Let's default to centering roughly where the first icon would be (e.g. 40px from right)
+                     offsetFromRight = 40; 
+                 }
+
+                 // Apply Offset to Target Screen
+                 double targetRight = visibleFrame.X + visibleFrame.Width;
+                 double targetCenterX = targetRight - offsetFromRight;
+                 
+                 x = targetCenterX - (width / 2);
+                 
+                 // Clamp to Screen Boundaries
+                 if (x < visibleFrame.X) x = visibleFrame.X;
+                 if (x + width > visibleFrame.X + visibleFrame.Width) x = visibleFrame.X + visibleFrame.Width - width;
+
+                 
+                 var newRect = new CoreGraphics.CGRect(x, y, width, height);
+
+                 // 5. Apply Frame
+                 nsWindow.SetValueForKey(
+                     Foundation.NSValue.FromCGRect(newRect), 
+                     new Foundation.NSString("frame")
+                 );
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MoveWindow] Error: {ex}");
+            }
+        }
+
+        [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+        static extern IntPtr IntPtr_objc_msgSend(IntPtr receiver, IntPtr selector);
+
         public void PreWarmMacDetail()
+
         {
              MainThread.BeginInvokeOnMainThread(() => 
              {
