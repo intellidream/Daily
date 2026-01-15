@@ -371,7 +371,7 @@ namespace Daily
                     var displayArea = DisplayArea.GetFromWindowId(id, DisplayAreaFallback.Primary);
                     var workArea = displayArea.WorkArea;
                     
-                    int width = 800; // Sidebar width
+                    int width = 950; // Increased Sidebar width for Windows (scaling)
                     int height = workArea.Height;
                     int x = workArea.X + workArea.Width - width;
                     int y = workArea.Y;

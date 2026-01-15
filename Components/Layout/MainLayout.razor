@@ -154,11 +154,6 @@
                 try
                 {
                     await JSRuntime.InvokeVoidAsync("dailyInterop.addClassToBody", "mesh-background");
-                    
-                    if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.WinUI)
-                    {
-                        await JSRuntime.InvokeVoidAsync("dailyInterop.addClassToBody", "platform-windows");
-                    }
                 }
                 catch (Exception) { /* Ignore */ }
             }

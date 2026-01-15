@@ -321,15 +321,6 @@ body.mesh-background .blinds-appbar {
     /* Ensure it spans the full scrolled width */
 }
 
-/* WINDOWS SPECIFIC: Larger min-width due to UI scaling */
-body.mesh-background.platform-windows {
-    min-width: 600px;
-}
-
-body.mesh-background.platform-windows .blinds-appbar {
-    min-width: 600px;
-}
-
 /* Fix for Sticky App Bar Gap: Remove the double-spacing */
 /* 1. Remove MudBlazor's auto-padding (since Sticky takes up space) */
 body.mesh-background .mud-main-content {
