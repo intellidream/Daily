@@ -222,6 +222,10 @@
             {
                 <Settings />
             }
+            else if (NavService.CurrentView == "vitals")
+            {
+                <HealthDetail />
+            }
             else
             {
                 <MudPaper Class="pa-8 glass-panel rounded-xl" Elevation="0" Style="min-height: 80vh;">

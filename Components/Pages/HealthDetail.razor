@@ -1,0 +1,33 @@
+@page "/vitals"
+@using Daily.Services.Health
+@inject IHealthService HealthService
+
+<div class="h-100 d-flex flex-column pa-6">
+    <div class="d-flex align-center gap-4 mb-6">
+        <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Large" Color="Color.Error" />
+        <MudText Typo="Typo.h3" Class="font-weight-bold">Health & Vitals</MudText>
+    </div>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 rounded-xl" Elevation="0" Style="background: rgba(255,255,255,0.05);">
+                <MudText Typo="Typo.h6" Class="mb-4">Heart Rate Trend</MudText>
+                <div class="d-flex align-center justify-center" style="height: 200px;">
+                    <MudText>Chart Placeholder</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+         <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 rounded-xl" Elevation="0" Style="background: rgba(255,255,255,0.05);">
+                <MudText Typo="Typo.h6" Class="mb-4">Activity (Steps)</MudText>
+                <div class="d-flex align-center justify-center" style="height: 200px;">
+                    <MudText>Chart Placeholder</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</div>
+
+@code {
+    
+}

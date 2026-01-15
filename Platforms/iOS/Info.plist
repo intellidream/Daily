@@ -43,5 +43,9 @@
     </array>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>We use your location to show local weather forecasts.</string>
+    <key>NSHealthShareUsageDescription</key>
+    <string>We use your health data (Steps, Heart Rate, Sleep) to display vitals in your dashboard.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>We use this permission to sync your vitals across your devices.</string>
 </dict>
 </plist>

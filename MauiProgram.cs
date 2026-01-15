@@ -98,9 +98,31 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.ISystemMonitorService, Daily.Services.SystemMonitorService>();
             builder.Services.AddSingleton<Daily.Services.IHabitsService, Daily.Services.HabitsService>();
             builder.Services.AddSingleton<Daily.Services.IDatabaseService, Daily.Services.DatabaseService>();
+            builder.Services.AddSingleton<Daily.Services.IRssFeedService, Daily.Services.RssFeedService>();
+            
+            Console.WriteLine("[MauiProgram] Registering Health Services...");
+            // Health Services
+//#if IOS && !MACCATALYST
+//            Console.WriteLine("[MauiProgram] Registering iOS HealthKitService...");
+//            builder.Services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Platforms.iOS.Services.Health.HealthKitService>();
+//#else
+            // iOS Safe Mode (Mock) until Entitlements are fixed
+#if IOS
+            Console.WriteLine("[MauiProgram] Registering MockNativeHealthStore (SAFE MODE)...");
+            builder.Services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Services.Health.MockNativeHealthStore>();
+#elif ANDROID
+            Console.WriteLine("[MauiProgram] Registering Android HealthConnectService...");
+            builder.Services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Platforms.Android.HealthConnectService>();
+#else
+            Console.WriteLine("[MauiProgram] Registering MockNativeHealthStore (Default)...");
+            builder.Services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Services.Health.MockNativeHealthStore>();
+#endif
+            Console.WriteLine("[MauiProgram] Registering SupabaseHealthService...");
+            builder.Services.AddSingleton<Daily.Services.Health.IHealthService, Daily.Services.Health.SupabaseHealthService>();
             builder.Services.AddSingleton<Daily.Services.IHabitsRepository, Daily.Services.HabitsRepository>();
             builder.Services.AddSingleton<Daily.Services.ISyncService, Daily.Services.SyncService>();
             builder.Services.AddSingleton<Daily.Services.ISeederService, Daily.Services.SeederService>();
+            Console.WriteLine("[MauiProgram] Health Services Registered.");
             
             builder.Services.AddSingleton<Daily.Services.IYouTubeService, Daily.Services.YouTubeService>();
             

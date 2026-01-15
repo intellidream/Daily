@@ -8,7 +8,7 @@
     {
         <div class="masonry-item @(IsFullWidth(widget) ? "span-all" : "")">
             <MudPaper Class="pa-4 detail-tile rounded-xl" Elevation="3" Square="false" Style="">
-                @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget" && widget.ComponentType != "HabitsWidget" && widget.ComponentType != "MediaWidget")
+                @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget" && widget.ComponentType != "HabitsWidget" && widget.ComponentType != "MediaWidget" && widget.ComponentType != "HealthWidget")
                 {
                     <div class="d-flex align-center justify-space-between">
                          <MudText Typo="Typo.h6">@widget.Title</MudText>
@@ -51,6 +51,14 @@
                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => OpenWidgetDetail(widget))" Color="Color.Primary" Style="transform: scaleX(-1);" />
                         </HeaderAction>
                     </Daily.Components.Widgets.MediaWidget>
+                }
+                else if (widget.ComponentType == "HealthWidget")
+                {
+                    <Daily.Components.Widgets.HealthWidget>
+                         <HeaderAction>
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => OpenWidgetDetail(widget))" Color="Color.Primary" Style="transform: scaleX(-1);" />
+                        </HeaderAction>
+                    </Daily.Components.Widgets.HealthWidget>
                 }
                 else if (widget.ComponentType == "HabitsWidget")
                 {
@@ -120,6 +128,10 @@
         else if (widget.ComponentType == "WeatherWidget")
         {
             WindowManager.OpenDetail("Weather", "Weather Detail");
+        }
+        else if (widget.ComponentType == "HealthWidget")
+        {
+            WindowManager.OpenDetail("Vitals", "Vitals");
         }
         else if (widget.ComponentType == "HabitsWidget")
         {

@@ -10,6 +10,7 @@
 
 @inject IWindowManagerService WindowManagerService
 @inject IDetailNavigationService NavService
+@inject Daily.Services.Health.IHealthService HealthService
 
 <MudLayout Style="background-color: transparent;" Class="@(_isAppBarExpanded ? "" : "appbar-collapsed")">
     <MudAppBar Elevation="0" Dense="true" Fixed="true" Color="Color.Transparent" Class="@($"glassy-appbar blinds-appbar {AppBarClass} {(_isAppBarExpanded ? "" : "collapsed")}")" Style="">
@@ -25,7 +26,7 @@
                        Class="@(_isRefreshing ? "spin-animation" : "")"
                        OnClick="@(async () => await TriggerLocalRefresh())" />
         <MudText Class="pl-2" Typo="Typo.h5"><b>DayOne</b></MudText>
-        <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="ml-2">V1</MudChip>
+        <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">V29</MudChip>
         <MudSpacer />
         
         <MudTooltip Text="@(_isDarkMode ? "Switch to Light Theme" : "Switch to Dark Theme")">
@@ -82,6 +83,14 @@
         _isRefreshing = true;
         StateHasChanged();
         
+        // 1. Sync Health Data (Push Native -> Cloud)
+        await InvokeAsync(async () => 
+        {
+            try { await HealthService.SyncNativeHealthDataAsync(); } 
+            catch(Exception ex) { Console.WriteLine($"Manual Refresh Health Sync Failed: {ex}"); }
+        });
+
+        // 2. Trigger UI Refresh (which will pull)
         await RefreshService.TriggerRefreshAsync();
         
         _isRefreshing = false;
@@ -159,11 +168,27 @@
             }
 
             // Trigger initial data sync
-            // This ensures logic like HabitsService.SyncAsync runs on startup
             _ = Task.Run(async () => 
             {
-                await Task.Delay(1000); // Slight delay to allow other services to spin up
+                await Task.Delay(1000); 
                 await RefreshService.TriggerRefreshAsync();
+
+                // Trigger Health Sync (Mobile Only) - Detached
+                _ = Task.Run(async () => 
+                {
+                    try {
+                        Console.WriteLine("[MainLayout] Triggering Health Sync (Detached)...");
+                        await MainThread.InvokeOnMainThreadAsync(async () => 
+                        {
+                            Console.WriteLine("[MainLayout] Running Sync on MainThread...");
+                            await HealthService.SyncNativeHealthDataAsync();
+                        });
+                        Console.WriteLine("[MainLayout] Health Sync Triggered Successfully.");
+                    } catch (Exception ex) {
+                        Console.WriteLine($"[MainLayout] Health Sync FAULT: {ex}");
+                        // Do not rethrow
+                    }
+                });
             });
         }
     }
@@ -173,6 +198,7 @@
 
     protected override void OnInitialized()
     {
+        Console.WriteLine("[MainLayout] OnInitialized Called.");
         if (Application.Current != null)
         {
             // Subscribe to system theme changes
