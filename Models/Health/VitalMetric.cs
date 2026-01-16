@@ -18,10 +18,10 @@ namespace Daily.Models.Health
     public class VitalMetric : BaseModel
     {
         [PrimaryKey("id")]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public Guid Id { get; set; } = Guid.NewGuid();
 
         [Column("user_id")]
-        public string UserId { get; set; }
+        public Guid UserId { get; set; }
 
         [Column("type")]
         public string TypeString { get; set; } // Stored as string for Postgrest compatibility
@@ -45,6 +45,7 @@ namespace Daily.Models.Health
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         // Helper property for Enum handling
+        [Newtonsoft.Json.JsonIgnore]
         public VitalType Type
         {
             get => Enum.TryParse<VitalType>(TypeString, out var t) ? t : VitalType.Steps;

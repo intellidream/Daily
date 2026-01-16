@@ -13,10 +13,10 @@ namespace Daily.Services.Health
         {
             var metrics = new List<VitalMetric>
             {
-                new() { TypeString = "Steps", Value = 7243, Unit = "count", Date = date },
-                new() { TypeString = "HeartRate", Value = 68, Unit = "bpm", Date = date },
-                new() { TypeString = "Sleep", Value = 7.5, Unit = "hours", Date = date },
-                new() { TypeString = "Calories", Value = 2450, Unit = "kcal", Date = date }
+                new() { TypeString = VitalType.Steps.ToString(), Value = 7243, Unit = "count", Date = date, SourceDevice = "Mock Device" },
+                new() { TypeString = VitalType.HeartRate.ToString(), Value = 68, Unit = "bpm", Date = date, SourceDevice = "Mock Device" },
+                new() { TypeString = VitalType.SleepDuration.ToString(), Value = 450, Unit = "min", Date = date, SourceDevice = "Mock Device" }, // 7.5 hours
+                new() { TypeString = VitalType.ActiveEnergy.ToString(), Value = 2450, Unit = "kcal", Date = date, SourceDevice = "Mock Device" }
             };
             return Task.FromResult(metrics);
         }

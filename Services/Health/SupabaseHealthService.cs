@@ -13,12 +13,13 @@ namespace Daily.Services.Health
         private readonly Supabase.Client _supabase;
         private readonly INativeHealthStore _nativeHealthStore;
         private readonly ILogger<SupabaseHealthService> _logger;
+        private readonly IServiceProvider _serviceProvider; // Lazy Resolution
 
         // Simple memory cache to avoid excessive DB calls during session
         private  List<VitalMetric> _cache = new();
         private DateTime _lastCacheUpdate = DateTime.MinValue;
 
-        public SupabaseHealthService(Supabase.Client supabase, INativeHealthStore nativeHealthStore, ILogger<SupabaseHealthService> logger)
+        public SupabaseHealthService(Supabase.Client supabase, INativeHealthStore nativeHealthStore, ILogger<SupabaseHealthService> logger, IServiceProvider serviceProvider)
         {
             Console.WriteLine("[SupabaseHealthService] Constructor Called.");
             try 
@@ -26,6 +27,7 @@ namespace Daily.Services.Health
                 _supabase = supabase;
                 _nativeHealthStore = nativeHealthStore;
                 _logger = logger;
+                _serviceProvider = serviceProvider;
                 Console.WriteLine("[SupabaseHealthService] Dependencies Assigned.");
             }
             catch(Exception ex)
@@ -109,50 +111,107 @@ namespace Daily.Services.Health
 
         public async Task SyncNativeHealthDataAsync()
         {
-            if (!_nativeHealthStore.IsSupported)
-            {
-                _logger.LogInformation("Native Health Store not supported on this platform.");
-                return;
-            }
-
-            try
-            {
-                // 1. Request Permissions
-                var hasPermission = await _nativeHealthStore.RequestPermissionsAsync();
-                if (!hasPermission)
+                // MOCK MODE FOR DEBUGGING
+                try 
                 {
-                    _logger.LogWarning("Health Permissions denied.");
-                    return;
-                }
+                    // Lazy Resolve SyncService to avoid Circular Dependency
+                    var sync = _serviceProvider.GetService<ISyncService>();
+                    Action<string> log = (msg) => 
+                    {
+                        Console.WriteLine($"[SupabaseHealthService] {msg}");
+                        sync?.Log($"[Health] {msg}");
+                    };
 
-                // 2. Fetch Today's metrics for Sync
-                var metrics = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today);
-                
-                if (metrics == null || !metrics.Any())
+                    log("SyncNativeHealthDataAsync STARTED");
+
+                    // REAL NATIVE FETCH (RESTORED)
+                    if (!_nativeHealthStore.IsSupported)
+                    {
+                        log("Native Health Store not supported.");
+                        return;
+                    }
+
+                    log("Requesting Permissions...");
+                    var hasPermission = await _nativeHealthStore.RequestPermissionsAsync();
+                    if (!hasPermission)
+                    {
+                        log("Permissions Denied.");
+                        return;
+                    }
+
+                    log($"Fetching metrics for {DateTime.Today:d}...");
+                    var metrics = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today);
+                    
+                    if (metrics == null || !metrics.Any())
+                    {
+                        log("No health metrics found locally.");
+                        return;
+                    }
+
+                    // 3. Upsert to Supabase
+                    var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                    
+                    if (user == null) 
+                    {
+                         log("ABORT: User is NULL.");
+                         return;
+                    }
+
+                    log($"Upserting {metrics.Count} metrics for User {user.Id}..."); 
+                    
+                    var sample = metrics.First();
+                    log($"Sample: {sample.TypeString}, Val={sample.Value}, Src={sample.SourceDevice}");
+
+                    foreach (var m in metrics)
+                    {
+                        if (Guid.TryParse(user.Id, out var uid))
+                        {
+                            m.UserId = uid; // Ensure ownership
+                        }
+                        else
+                        {
+                            log($"Warning: Could not parse User ID '{user.Id}' to Guid. Using Empty.");
+                            m.UserId = Guid.Empty;
+                        }
+                    }
+                    
+                    // Bulk Upsert with OnConflict strategy
+                    // RETRY: Using Column Names WITHOUT SPACES. Constraint name might be missing on user DB.
+                    var options = new Supabase.Postgrest.QueryOptions { OnConflict = "user_id,date,type" };
+                    
+                    try 
+                    {
+                        var response = await _supabase.From<VitalMetric>().Upsert(metrics, options);
+                        
+                        int inserted = response.Models.Count;
+                        log($"Upsert Result: {inserted} rows returned.");
+                        
+                        if (inserted == 0)
+                        {
+                             log("WARNING: Upsert returned 0 rows. RLS might be blocking or OnConflict ignored update.");
+                        }
+                        else
+                        {
+                            log($"SUCCESS: Synced {inserted} vital metrics to Cloud.");
+                        }
+                    }
+                    catch (Supabase.Postgrest.Exceptions.PostgrestException pex)
+                    {
+                         log($"Postgrest Error: {pex.Message}");
+                         throw;
+                    }
+                }
+                catch (Exception ex)
                 {
-                    _logger.LogInformation("No new health metrics found.");
-                    return;
+                    // Re-resolve if needed, but 'log' delegate captures 'sync'
+                    // If sync failed to resolve, we just Console.WriteLine.
+                    var msg = $"Fatal Health Sync Error: {ex.Message}";
+                    Console.WriteLine(msg);
+                    _logger.LogError(ex, msg);
+                    
+                     var sync = _serviceProvider.GetService<ISyncService>();
+                     sync?.Log($"[Health] {msg}");
                 }
-
-                // 3. Upsert to Supabase
-                var currentUser = _supabase.Auth.CurrentUser;
-                if (currentUser == null) return;
-
-                foreach (var m in metrics)
-                {
-                    m.UserId = currentUser.Id; // Ensure ownership
-                }
-                
-                // Bulk Upsert if possible, or loop
-                // Supabase-csharp allows List upsert
-                await _supabase.From<VitalMetric>().Upsert(metrics);
-                
-                _logger.LogInformation($"Synced {metrics.Count} vital metrics to Cloud.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error executing Native Health Sync");
-            }
         }
     }
 }

@@ -7,11 +7,13 @@ namespace Daily.Services
     {
         private readonly Supabase.Client _supabase;
         private readonly IDatabaseService _databaseService;
+        private readonly Daily.Services.Health.IHealthService _healthService; // Injected
 
-        public SyncService(Supabase.Client supabase, IDatabaseService databaseService)
+        public SyncService(Supabase.Client supabase, IDatabaseService databaseService, Daily.Services.Health.IHealthService healthService)
         {
             _supabase = supabase;
             _databaseService = databaseService;
+            _healthService = healthService;
         }
 
         public string? LastSyncError { get; private set; }
@@ -27,6 +29,11 @@ namespace Daily.Services
 
             try
             {
+                // 0. Sync Health (Native -> Cloud)
+                // This ensures Supabase has the latest before we do anything else
+                try { await _healthService.SyncNativeHealthDataAsync(); } 
+                catch (Exception hex) { Console.WriteLine($"[SyncService] Health Sync Warning: {hex.Message}"); }
+
                 await PushAsync();
                 await PullAsync();
             }

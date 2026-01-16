@@ -26,7 +26,7 @@
                        Class="@(_isRefreshing ? "spin-animation" : "")"
                        OnClick="@(async () => await TriggerLocalRefresh())" />
         <MudText Class="pl-2" Typo="Typo.h5"><b>DayOne</b></MudText>
-        <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">V29</MudChip>
+        <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">V43</MudChip>
         <MudSpacer />
         
         <MudTooltip Text="@(_isDarkMode ? "Switch to Light Theme" : "Switch to Dark Theme")">
@@ -172,24 +172,29 @@
             {
                 await Task.Delay(1000); 
                 await RefreshService.TriggerRefreshAsync();
-
-                // Trigger Health Sync (Mobile Only) - Detached
-                _ = Task.Run(async () => 
-                {
-                    try {
-                        Console.WriteLine("[MainLayout] Triggering Health Sync (Detached)...");
-                        await MainThread.InvokeOnMainThreadAsync(async () => 
-                        {
-                            Console.WriteLine("[MainLayout] Running Sync on MainThread...");
-                            await HealthService.SyncNativeHealthDataAsync();
-                        });
-                        Console.WriteLine("[MainLayout] Health Sync Triggered Successfully.");
-                    } catch (Exception ex) {
-                        Console.WriteLine($"[MainLayout] Health Sync FAULT: {ex}");
-                        // Do not rethrow
-                    }
-                });
             });
+
+            // Trigger Health Sync (Mobile Only) - Independent & Immediate
+             if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
+                 Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.iOS)
+             {
+                 _ = InvokeAsync(async () => 
+                 {
+                     Console.WriteLine("[MainLayout] Triggering Health Sync (Independent)...");
+                     try 
+                     {
+                         // Wait a bit for UI to settle, but run independent of RefreshService
+                         await Task.Delay(1500); 
+                         Console.WriteLine("[MainLayout] calling SyncNativeHealthDataAsync now...");
+                         await HealthService.SyncNativeHealthDataAsync();
+                         Console.WriteLine("[MainLayout] Health Sync Return.");
+                     } 
+                     catch(Exception ex) 
+                     { 
+                         Console.WriteLine($"[MainLayout] Health Sync FAULT: {ex}"); 
+                     }
+                 });
+             }
         }
     }
 
