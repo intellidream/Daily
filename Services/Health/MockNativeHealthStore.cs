@@ -7,7 +7,7 @@ namespace Daily.Services.Health
 {
     public class MockNativeHealthStore : INativeHealthStore
     {
-        public bool IsSupported => true; // Set to true to verify UI flow
+        public bool IsSupported => false; // Set to false to verify Fallback to Supabase Read on Desktop
 
         public Task<List<VitalMetric>> FetchMetricsAsync(DateTime date)
         {

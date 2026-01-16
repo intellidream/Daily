@@ -21,14 +21,12 @@ namespace Daily.Services.Health
 
         public SupabaseHealthService(Supabase.Client supabase, INativeHealthStore nativeHealthStore, ILogger<SupabaseHealthService> logger, IServiceProvider serviceProvider)
         {
-            Console.WriteLine("[SupabaseHealthService] Constructor Called.");
             try 
             {
                 _supabase = supabase;
                 _nativeHealthStore = nativeHealthStore;
                 _logger = logger;
                 _serviceProvider = serviceProvider;
-                Console.WriteLine("[SupabaseHealthService] Dependencies Assigned.");
             }
             catch(Exception ex)
             {
@@ -95,23 +93,99 @@ namespace Daily.Services.Health
 
         public async Task<List<VitalMetric>> FetchMetricsAsync(DateTime date)
         {
-            if (_nativeHealthStore == null || !_nativeHealthStore.IsSupported) return new List<VitalMetric>();
-
-            // Ensure permissions are granted before attempting to fetch
-            // This was the missing link causing SecurityException on Android
-            var hasPermission = await _nativeHealthStore.RequestPermissionsAsync();
-            if (!hasPermission)
+            // 1. Try Native Store (Mobile)
+            if (_nativeHealthStore != null && _nativeHealthStore.IsSupported)
             {
-                _logger.LogWarning("FetchMetricsAsync: Permissions not granted.");
+                var hasPermission = await _nativeHealthStore.RequestPermissionsAsync();
+                if (hasPermission)
+                {
+                     return await _nativeHealthStore.FetchMetricsAsync(date);
+                }
+                else
+                {
+                     _logger.LogWarning("FetchMetricsAsync: Permissions not granted.");
+                     return new List<VitalMetric>();
+                }
+            }
+            
+            // 2. Fallback: Read from Supabase (Desktop)
+            // "On Mac and Windows just read them"
+            try 
+            {
+            // 2. Fallback: Read from Supabase (Desktop)
+            // "On Mac and Windows just read them"
+            try 
+            {
+            // 2. Fallback: Read from Supabase (Desktop)
+            // "On Mac and Windows just read them"
+            try 
+            {
+                // Lazy Resolve SyncService for Diagnostics
+                var sync = _serviceProvider.GetService<ISyncService>();
+                
+                // Date Logic: Robust Range Query (Yesterday to Tomorrow)
+                // This covers Timezone shifts (e.g. Local 00:00 -> UTC Previous Day 22:00)
+                var start = date.Date.AddDays(-1); 
+                var end = date.Date.AddDays(2);
+                
+                var result = await _supabase.From<VitalMetric>()
+                                      .Where(v => v.Date >= start && v.Date < end)
+                                      .Order("date", Supabase.Postgrest.Constants.Ordering.Descending)
+                                      .Get();
+                
+                if (result.Models.Count > 0)
+                {
+                    // Group by Type and take the Latest one
+                    // This ensures we show the most relevant data even if date is slightly off
+                    var latestMetrics = result.Models
+                        .GroupBy(m => m.TypeString)
+                        .Select(g => g.OrderByDescending(x => x.Date).First())
+                        .ToList();
+
+                    // Only Log if it's a manual refresh or significant? 
+                    // Let's log success to confirm it works.
+                    sync?.Log($"[Read] Found {latestMetrics.Count} recent metrics (Window: {start:MM/dd}-{end:MM/dd}).");
+                    return latestMetrics;
+                }
+                
                 return new List<VitalMetric>();
             }
-
-            return await _nativeHealthStore.FetchMetricsAsync(date);
+            catch(Exception ex)
+            {
+                var msg = $"Failed to read metrics from Supabase: {ex.Message}";
+                // Only log errors
+                Console.WriteLine(msg);
+                _logger.LogError(ex, msg);
+                return new List<VitalMetric>();
+            }
+            }
+            catch(Exception ex)
+            {
+                var msg = $"Failed to read metrics from Supabase: {ex.Message}";
+                Console.WriteLine(msg);
+                _logger.LogError(ex, msg);
+                
+                var sync = _serviceProvider.GetService<ISyncService>();
+                sync?.Log($"[Read Error] {msg}");
+                
+                return new List<VitalMetric>();
+            }
+            }
+            catch(Exception ex)
+            {
+                var msg = $"Failed to read metrics from Supabase: {ex.Message}";
+                Console.WriteLine(msg);
+                _logger.LogError(ex, msg);
+                
+                var sync = _serviceProvider.GetService<ISyncService>();
+                sync?.Log($"[Read Error] {msg}");
+                
+                return new List<VitalMetric>();
+            }
         }
 
         public async Task SyncNativeHealthDataAsync()
         {
-                // MOCK MODE FOR DEBUGGING
                 try 
                 {
                     // Lazy Resolve SyncService to avoid Circular Dependency
@@ -124,10 +198,14 @@ namespace Daily.Services.Health
 
                     log("SyncNativeHealthDataAsync STARTED");
 
-                    // REAL NATIVE FETCH (RESTORED)
+                    // 1. Fetch from Native Store
                     if (!_nativeHealthStore.IsSupported)
                     {
-                        log("Native Health Store not supported.");
+                        // On Mac/Windows, we don't sync UP. We only read DOWN (via Widget).
+                        // So this method effectively does nothing on Desktop, which is correct.
+                        // REDUCED LOGGING: Only log this once per session or if explicit? 
+                        // Actually explicit refresh calls this, so it's good to know nothing happened.
+                        log("Native Health Store not supported (Skipping Upload). Reading handled by Widget.");
                         return;
                     }
 

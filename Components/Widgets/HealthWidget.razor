@@ -81,19 +81,19 @@
             {
                 var metrics = await HealthService.FetchMetricsAsync(DateTime.Now);
                 
-                var stepsMetric = metrics.FirstOrDefault(m => m.TypeString == "Steps");
+                var stepsMetric = metrics.FirstOrDefault(m => m.TypeString == VitalType.Steps.ToString());
                 if (stepsMetric != null) _steps = stepsMetric.Value;
                 else _steps = 0;
 
-                var hrMetric = metrics.FirstOrDefault(m => m.TypeString == "HeartRate");
+                var hrMetric = metrics.FirstOrDefault(m => m.TypeString == VitalType.HeartRate.ToString());
                 if (hrMetric != null) _bpm = hrMetric.Value;
                 else _bpm = 0;
 
-                var sleepMetric = metrics.FirstOrDefault(m => m.TypeString == "Sleep");
-                if (sleepMetric != null) _sleepHours = sleepMetric.Value;
+                var sleepMetric = metrics.FirstOrDefault(m => m.TypeString == VitalType.SleepDuration.ToString());
+                if (sleepMetric != null) _sleepHours = Math.Round(sleepMetric.Value / 60.0, 1); // Convert Min to Hours
                 else _sleepHours = 0;
                 
-                var calMetric = metrics.FirstOrDefault(m => m.TypeString == "Calories");
+                var calMetric = metrics.FirstOrDefault(m => m.TypeString == VitalType.ActiveEnergy.ToString());
                 if (calMetric != null) _calories = calMetric.Value;
                 else _calories = 0;
                 
