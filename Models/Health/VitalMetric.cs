@@ -11,7 +11,15 @@ namespace Daily.Models.Health
         RestingHeartRate,
         SleepDuration, // Minutes
         Weight,
-        ActiveEnergy // Calories
+        ActiveEnergy, // Calories
+        // V50 Additions
+        BloodPressureSystolic,
+        BloodPressureDiastolic,
+        BloodGlucose,
+        OxygenSaturation,
+        BodyTemperature,
+        Hydration,
+        Distance
     }
 
     [Table("vitals")]

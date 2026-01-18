@@ -179,6 +179,108 @@ namespace Daily.Platforms.Android
                      metrics.Add(new VitalMetric { TypeString = VitalType.ActiveEnergy.ToString(), Value = Math.Round(totalCalories), Unit = "kcal", Date = date, SourceDevice = "Health Connect" });
                 }
 
+                // --- V50 ADDITIONS ---
+
+                // 5. Distance (Sum)
+                try {
+                    var distResponse = await ReadRecordsInternal<DistanceRecord>();
+                    double totalDist = 0;
+                    foreach (DistanceRecord record in GetRecordsList(distResponse))
+                    {
+                        totalDist += record.Distance.Meters;
+                    }
+                    if (totalDist > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Distance.ToString(), Value = Math.Round(totalDist, 2), Unit = "m", Date = date, SourceDevice = "Health Connect" });
+                } catch {}
+
+                // 6. Weight (Latest)
+                try {
+                    var wResponse = await ReadRecordsInternal<WeightRecord>();
+                    var wRecords = GetRecordsList(wResponse);
+                    if (wRecords.Count > 0)
+                    {
+                        // Take the last one (Latest)
+                        var last = wRecords[wRecords.Count - 1] as WeightRecord;
+                        metrics.Add(new VitalMetric { TypeString = VitalType.Weight.ToString(), Value = last.Weight.Kilograms, Unit = "kg", Date = date, SourceDevice = "Health Connect" });
+                    }
+                } catch {}
+
+                // 7. Hydration (Sum)
+                try {
+                    var hResponse = await ReadRecordsInternal<HydrationRecord>();
+                    double totalHydro = 0;
+                    foreach (HydrationRecord record in GetRecordsList(hResponse))
+                    {
+                        totalHydro += record.Volume.Liters;
+                    }
+                    if (totalHydro > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Hydration.ToString(), Value = Math.Round(totalHydro, 1), Unit = "L", Date = date, SourceDevice = "Health Connect" });
+                } catch {}
+
+                // 8. Blood Pressure (Average)
+                try {
+                    var bpResponse = await ReadRecordsInternal<BloodPressureRecord>();
+                    var bpList = GetRecordsList(bpResponse);
+                    if (bpList.Count > 0)
+                    {
+                        double sysSum = 0;
+                        double diaSum = 0;
+                        foreach (BloodPressureRecord record in bpList)
+                        {
+                            sysSum += record.Systolic.MillimetersOfMercury;
+                            diaSum += record.Diastolic.MillimetersOfMercury;
+                        }
+                        metrics.Add(new VitalMetric { TypeString = VitalType.BloodPressureSystolic.ToString(), Value = Math.Round(sysSum / bpList.Count), Unit = "mmHg", Date = date, SourceDevice = "Health Connect" });
+                        metrics.Add(new VitalMetric { TypeString = VitalType.BloodPressureDiastolic.ToString(), Value = Math.Round(diaSum / bpList.Count), Unit = "mmHg", Date = date, SourceDevice = "Health Connect" });
+                    }
+                } catch {}
+
+                // 9. Glucose (Average)
+                try {
+                    var gResponse = await ReadRecordsInternal<BloodGlucoseRecord>();
+                    var gList = GetRecordsList(gResponse);
+                    if (gList.Count > 0)
+                    {
+                        double gSum = 0;
+                        foreach (BloodGlucoseRecord record in gList)
+                        {
+                            // MillimolesPerLiter is standard for intl, but maybe mg/dL? 
+                            // Let's use MilligramsPerDeciliter as it's an integer-like friendly number (80-120), vs 5.5
+                            // Properties: Level (BloodGlucose)
+                            gSum += record.Level.MilligramsPerDeciliter;
+                        }
+                        metrics.Add(new VitalMetric { TypeString = VitalType.BloodGlucose.ToString(), Value = Math.Round(gSum / gList.Count), Unit = "mg/dL", Date = date, SourceDevice = "Health Connect" });
+                    }
+                } catch {}
+
+                // 10. SpO2 (Average)
+                try {
+                    var oResponse = await ReadRecordsInternal<OxygenSaturationRecord>();
+                    var oList = GetRecordsList(oResponse);
+                    if (oList.Count > 0)
+                    {
+                        double oSum = 0;
+                        foreach (OxygenSaturationRecord record in oList)
+                        {
+                            oSum += record.Percentage.Value; // 98.0
+                        }
+                        metrics.Add(new VitalMetric { TypeString = VitalType.OxygenSaturation.ToString(), Value = Math.Round(oSum / oList.Count, 1), Unit = "%", Date = date, SourceDevice = "Health Connect" });
+                    }
+                } catch {}
+
+                // 11. Body Temperature (Average)
+                try {
+                    var tResponse = await ReadRecordsInternal<BodyTemperatureRecord>();
+                    var tList = GetRecordsList(tResponse);
+                    if (tList.Count > 0)
+                    {
+                        double tSum = 0;
+                        foreach (BodyTemperatureRecord record in tList)
+                        {
+                            tSum += record.Temperature.Celsius;
+                        }
+                        metrics.Add(new VitalMetric { TypeString = VitalType.BodyTemperature.ToString(), Value = Math.Round(tSum / tList.Count, 1), Unit = "C", Date = date, SourceDevice = "Health Connect" });
+                    }
+                } catch {}
+
                 return metrics;
             }
             catch (Exception ex)
