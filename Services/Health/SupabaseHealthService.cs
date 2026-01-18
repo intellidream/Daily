@@ -93,7 +93,12 @@ namespace Daily.Services.Health
 
         public async Task<List<VitalMetric>> FetchMetricsAsync(DateTime date)
         {
-            // 1. Try Native Store (Mobile)
+            // V49 LOGIC: UNIFIED READ
+            // User Request: "read from Supabase" on Mobile too, to match Desktop behavior.
+            // Native Sync is handled separately by SyncService.SyncNativeHealthDataAsync().
+            
+            /* 
+            // 1. Try Native Store (Mobile) - DISABLED for V49 to enforce Cloud Truth
             if (_nativeHealthStore != null && _nativeHealthStore.IsSupported)
             {
                 var hasPermission = await _nativeHealthStore.RequestPermissionsAsync();
@@ -107,15 +112,8 @@ namespace Daily.Services.Health
                      return new List<VitalMetric>();
                 }
             }
+            */
             
-            // 2. Fallback: Read from Supabase (Desktop)
-            // "On Mac and Windows just read them"
-            try 
-            {
-            // 2. Fallback: Read from Supabase (Desktop)
-            // "On Mac and Windows just read them"
-            try 
-            {
             // 2. Fallback: Read from Supabase (Desktop)
             // "On Mac and Windows just read them"
             try 
@@ -123,9 +121,9 @@ namespace Daily.Services.Health
                 // Lazy Resolve SyncService for Diagnostics
                 var sync = _serviceProvider.GetService<ISyncService>();
                 
-                // Date Logic: Robust Range Query (Yesterday to Tomorrow)
-                // This covers Timezone shifts (e.g. Local 00:00 -> UTC Previous Day 22:00)
-                var start = date.Date.AddDays(-1); 
+                // Date Logic: Robust Range Query (Widen to 30 days for Desktop "Latest Available")
+                // User Request: "read the last one available"
+                var start = date.Date.AddDays(-30); 
                 var end = date.Date.AddDays(2);
                 
                 var result = await _supabase.From<VitalMetric>()
@@ -136,15 +134,12 @@ namespace Daily.Services.Health
                 if (result.Models.Count > 0)
                 {
                     // Group by Type and take the Latest one
-                    // This ensures we show the most relevant data even if date is slightly off
                     var latestMetrics = result.Models
                         .GroupBy(m => m.TypeString)
                         .Select(g => g.OrderByDescending(x => x.Date).First())
                         .ToList();
 
-                    // Only Log if it's a manual refresh or significant? 
-                    // Let's log success to confirm it works.
-                    sync?.Log($"[Read] Found {latestMetrics.Count} recent metrics (Window: {start:MM/dd}-{end:MM/dd}).");
+                    sync?.Log($"[Read] Found {latestMetrics.Count} recent metrics (Window: -30 days).");
                     return latestMetrics;
                 }
                 
@@ -153,33 +148,8 @@ namespace Daily.Services.Health
             catch(Exception ex)
             {
                 var msg = $"Failed to read metrics from Supabase: {ex.Message}";
-                // Only log errors
                 Console.WriteLine(msg);
                 _logger.LogError(ex, msg);
-                return new List<VitalMetric>();
-            }
-            }
-            catch(Exception ex)
-            {
-                var msg = $"Failed to read metrics from Supabase: {ex.Message}";
-                Console.WriteLine(msg);
-                _logger.LogError(ex, msg);
-                
-                var sync = _serviceProvider.GetService<ISyncService>();
-                sync?.Log($"[Read Error] {msg}");
-                
-                return new List<VitalMetric>();
-            }
-            }
-            catch(Exception ex)
-            {
-                var msg = $"Failed to read metrics from Supabase: {ex.Message}";
-                Console.WriteLine(msg);
-                _logger.LogError(ex, msg);
-                
-                var sync = _serviceProvider.GetService<ISyncService>();
-                sync?.Log($"[Read Error] {msg}");
-                
                 return new List<VitalMetric>();
             }
         }
@@ -188,7 +158,6 @@ namespace Daily.Services.Health
         {
                 try 
                 {
-                    // Lazy Resolve SyncService to avoid Circular Dependency
                     var sync = _serviceProvider.GetService<ISyncService>();
                     Action<string> log = (msg) => 
                     {
@@ -198,13 +167,8 @@ namespace Daily.Services.Health
 
                     log("SyncNativeHealthDataAsync STARTED");
 
-                    // 1. Fetch from Native Store
                     if (!_nativeHealthStore.IsSupported)
                     {
-                        // On Mac/Windows, we don't sync UP. We only read DOWN (via Widget).
-                        // So this method effectively does nothing on Desktop, which is correct.
-                        // REDUCED LOGGING: Only log this once per session or if explicit? 
-                        // Actually explicit refresh calls this, so it's good to know nothing happened.
                         log("Native Health Store not supported (Skipping Upload). Reading handled by Widget.");
                         return;
                     }
@@ -217,16 +181,22 @@ namespace Daily.Services.Health
                         return;
                     }
 
-                    log($"Fetching metrics for {DateTime.Today:d}...");
-                    var metrics = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today);
+                    // V48 LOGIC: Sync Today AND Yesterday (Backfill)
+                    log($"Fetching metrics for Today ({DateTime.Today:d}) AND Yesterday...");
                     
-                    if (metrics == null || !metrics.Any())
+                    var metricsToday = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today);
+                    var metricsYesterday = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today.AddDays(-1));
+                    
+                    var metrics = new List<VitalMetric>();
+                    if (metricsToday != null) metrics.AddRange(metricsToday);
+                    if (metricsYesterday != null) metrics.AddRange(metricsYesterday);
+                    
+                    if (!metrics.Any())
                     {
-                        log("No health metrics found locally.");
+                        log("No health metrics found locally (Today or Yesterday).");
                         return;
                     }
 
-                    // 3. Upsert to Supabase
                     var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
                     
                     if (user == null) 
@@ -235,48 +205,87 @@ namespace Daily.Services.Health
                          return;
                     }
 
-                    log($"Upserting {metrics.Count} metrics for User {user.Id}..."); 
-                    
-                    var sample = metrics.First();
-                    log($"Sample: {sample.TypeString}, Val={sample.Value}, Src={sample.SourceDevice}");
-
-                    foreach (var m in metrics)
+                    if (!Guid.TryParse(user.Id, out var uid))
                     {
-                        if (Guid.TryParse(user.Id, out var uid))
-                        {
-                            m.UserId = uid; // Ensure ownership
-                        }
-                        else
-                        {
-                            log($"Warning: Could not parse User ID '{user.Id}' to Guid. Using Empty.");
-                            m.UserId = Guid.Empty;
-                        }
+                        log("ABORT: Invalid User ID.");
+                        return;
                     }
-                    
-                    // Bulk Upsert with OnConflict strategy
-                    // RETRY: Using Column Names WITHOUT SPACES. Constraint name might be missing on user DB.
-                    var options = new Supabase.Postgrest.QueryOptions { OnConflict = "user_id,date,type" };
-                    
+
+                    // 2a. Fetch EXISTING records for Today to get their Primary Keys (Ids)
+                    // This ensures that 'Upsert' acts as an UPDATE, not a failed INSERT due to conflicts.
                     try 
                     {
-                        var response = await _supabase.From<VitalMetric>().Upsert(metrics, options);
+                        // ROBUST SYNC STRATEGY: 
+                        // 1. Fetch range (Yesterday/Today) to catch Timezone-shifted records.
+                        // 2. Exact Match in Memory (C#) to avoid SQL query nuances.
+                        // 3. Explicit Update vs Insert.
+
+                        var searchStart = DateTime.Today.AddDays(-1);
+                        var searchEnd = DateTime.Today.AddDays(1);
                         
-                        int inserted = response.Models.Count;
-                        log($"Upsert Result: {inserted} rows returned.");
+                        var existingResult = await _supabase.From<VitalMetric>()
+                            .Where(x => x.Date >= searchStart && x.Date <= searchEnd && x.UserId == uid)
+                            .Get();
                         
-                        if (inserted == 0)
+                        var existingList = existingResult.Models;
+                        log($"[Sync] Nuclear Strategy: Found {existingList.Count} cloud records to check against.");
+
+                        var idsToDelete = new List<Guid>();
+                        var recordsToInsert = new List<VitalMetric>();
+
+                        foreach (var m in metrics)
                         {
-                             log("WARNING: Upsert returned 0 rows. RLS might be blocking or OnConflict ignored update.");
+                            m.UserId = uid;
+                            
+                            // Find ANY existing record for this Type on this Day
+                            // We will DELETE it and replace it with the new value.
+                            var match = existingList.FirstOrDefault(x => 
+                                x.TypeString == m.TypeString && 
+                                x.Date.Date == m.Date.Date);
+
+                            if (match != null)
+                            {
+                                idsToDelete.Add(match.Id);
+                                log($"[Sync] MARKED FOR DELETE: {m.TypeString} (Old ID: {match.Id})");
+                            }
+                            
+                            // Always insert the new metric as a fresh record
+                            // Reset ID to ensure it's treated as new
+                            m.Id = Guid.NewGuid();
+                            m.CreatedAt = DateTime.UtcNow;
+                            m.UpdatedAt = DateTime.UtcNow;
+                            recordsToInsert.Add(m);
                         }
-                        else
+                        
+                        // 1. Execute Deletes (Clean the slate)
+                        if (idsToDelete.Any())
                         {
-                            log($"SUCCESS: Synced {inserted} vital metrics to Cloud.");
+                            // Batch delete not natively supported easily by ID list in explicit Filter syntax sometimes
+                            // But we can loop for reliability or use 'in' filter if supported.
+                            // Let's use loop for absolute safety to avoid syntax errors.
+                            foreach(var delId in idsToDelete)
+                            {
+                                await _supabase.From<VitalMetric>().Where(x => x.Id == delId).Delete();
+                            }
+                            log($"[Sync] Deleted {idsToDelete.Count} stale records.");
+                        }
+
+                        // 2. Execute Inserts (Fresh Write)
+                        if (recordsToInsert.Any())
+                        {
+                            var insertResponse = await _supabase.From<VitalMetric>().Insert(recordsToInsert);
+                            log($"[Sync] Inserted {insertResponse.Models.Count} fresh records.");
                         }
                     }
                     catch (Supabase.Postgrest.Exceptions.PostgrestException pex)
                     {
                          log($"Postgrest Error: {pex.Message}");
                          throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        log($"Sync Preparation/Execution Failed: {ex.Message}");
+                        throw;
                     }
                 }
                 catch (Exception ex)
