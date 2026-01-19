@@ -89,8 +89,8 @@ namespace Daily.Services
                     }
 
                     // 3. Single Robust Attempt (Fast Timeout)
-                    _syncService.Log("[WeatherService] Requesting GPS Location...");
-                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Default, 4));
+                    _syncService.Log("[WeatherService] Requesting GPS Location (Timeout: 10s)...");
+                    location = await MainThread.InvokeOnMainThreadAsync(async () => await AttemptGetLocation(GeolocationAccuracy.Default, 10));
                     
                     if (location != null) 
                     {
@@ -124,14 +124,16 @@ namespace Daily.Services
         {
             try
             {
-                return await _geolocation.GetLocationAsync(new GeolocationRequest
+                var request = new GeolocationRequest
                 {
                     DesiredAccuracy = accuracy,
                     Timeout = TimeSpan.FromSeconds(timeoutSeconds)
-                });
+                };
+                return await _geolocation.GetLocationAsync(request);
             }
-            catch
+            catch (Exception ex)
             {
+                _syncService.Log($"[WeatherService] GetLocation Error: {ex.Message}");
                 return null;
             }
         }
