@@ -11,6 +11,15 @@
 	<uses-permission android:name="android.permission.health.READ_HEART_RATE" />
 	<uses-permission android:name="android.permission.health.READ_SLEEP" />
 	<uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+
+	<!-- V50 Additions (Fixing Permission Denied) -->
+	<uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE" />
+	<uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE" />
+	<uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
+	<uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE" />
+	<uses-permission android:name="android.permission.health.READ_WEIGHT" />
+	<uses-permission android:name="android.permission.health.READ_HYDRATION" />
+	<uses-permission android:name="android.permission.health.READ_DISTANCE" />
     
 	<application android:allowBackup="true" android:icon="@mipmap/appicon_android" android:supportsRtl="true" android:label="Daily">
         <!-- Health Connect Rationale Activity Alias -->

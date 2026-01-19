@@ -26,7 +26,7 @@
                        Class="@(_isRefreshing ? "spin-animation" : "")"
                        OnClick="@(async () => await TriggerLocalRefresh())" />
         <MudText Class="pl-2" Typo="Typo.h5"><b>DayOne</b></MudText>
-                <MudChip T="string" Color="Color.Tertiary" Size="Size.Small" Class="ml-3">V50</MudChip>
+                <MudChip T="string" Color="Color.Tertiary" Size="Size.Small" Class="ml-3">V56</MudChip>
         <MudSpacer />
         
         <MudTooltip Text="@(_isDarkMode ? "Switch to Light Theme" : "Switch to Dark Theme")">
@@ -187,7 +187,8 @@
                          await Task.Delay(1500); 
                          Console.WriteLine("[MainLayout] calling SyncNativeHealthDataAsync now...");
                          await HealthService.SyncNativeHealthDataAsync();
-                         Console.WriteLine("[MainLayout] Health Sync Return.");
+                         Console.WriteLine("[MainLayout] Health Sync Return. Triggering UI Refresh to show new data...");
+                         await RefreshService.TriggerRefreshAsync();
                      } 
                      catch(Exception ex) 
                      { 

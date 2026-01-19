@@ -187,13 +187,24 @@ namespace Daily.Services.Health
                     var metricsToday = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today);
                     var metricsYesterday = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today.AddDays(-1));
                     
+                    int countToday = metricsToday?.Count ?? 0;
+                    int countYesterday = metricsYesterday?.Count ?? 0;
+                    
+                    log($"[Fetch] Today: {countToday} items, Yesterday: {countYesterday} items.");
+                    
+                    if (countToday > 0)
+                    {
+                        var types = string.Join(", ", metricsToday.Select(x => x.TypeString).Distinct());
+                        log($"[Fetch] Today's Types: {types}");
+                    }
+
                     var metrics = new List<VitalMetric>();
                     if (metricsToday != null) metrics.AddRange(metricsToday);
                     if (metricsYesterday != null) metrics.AddRange(metricsYesterday);
                     
                     if (!metrics.Any())
                     {
-                        log("No health metrics found locally (Today or Yesterday).");
+                        log("No health metrics found locally (Today or Yesterday). Aborting Upload.");
                         return;
                     }
 
@@ -216,66 +227,27 @@ namespace Daily.Services.Health
                     try 
                     {
                         // ROBUST SYNC STRATEGY: 
-                        // 1. Fetch range (Yesterday/Today) to catch Timezone-shifted records.
-                        // 2. Exact Match in Memory (C#) to avoid SQL query nuances.
-                        // 3. Explicit Update vs Insert.
-
-                        var searchStart = DateTime.Today.AddDays(-1);
-                        var searchEnd = DateTime.Today.AddDays(1);
-                        
-                        var existingResult = await _supabase.From<VitalMetric>()
-                            .Where(x => x.Date >= searchStart && x.Date <= searchEnd && x.UserId == uid)
-                            .Get();
-                        
-                        var existingList = existingResult.Models;
-                        log($"[Sync] Nuclear Strategy: Found {existingList.Count} cloud records to check against.");
-
-                        var idsToDelete = new List<Guid>();
-                        var recordsToInsert = new List<VitalMetric>();
+                        // ROBUST SYNC STRATEGY (V56): UPSERT (Insert or Update on Conflict)
+                        // This bypasses the need for accurate "Read" filters which are proving fragile across platforms/date formats.
+                        // We rely on the Unique Constraint 'vitals_user_date_type_key' to handle the merge.
 
                         foreach (var m in metrics)
                         {
                             m.UserId = uid;
-                            
-                            // Find ANY existing record for this Type on this Day
-                            // We will DELETE it and replace it with the new value.
-                            var match = existingList.FirstOrDefault(x => 
-                                x.TypeString == m.TypeString && 
-                                x.Date.Date == m.Date.Date);
-
-                            if (match != null)
-                            {
-                                idsToDelete.Add(match.Id);
-                                log($"[Sync] MARKED FOR DELETE: {m.TypeString} (Old ID: {match.Id})");
-                            }
-                            
-                            // Always insert the new metric as a fresh record
-                            // Reset ID to ensure it's treated as new
-                            m.Id = Guid.NewGuid();
-                            m.CreatedAt = DateTime.UtcNow;
+                            // Ensure timestamps are fresh
                             m.UpdatedAt = DateTime.UtcNow;
-                            recordsToInsert.Add(m);
-                        }
-                        
-                        // 1. Execute Deletes (Clean the slate)
-                        if (idsToDelete.Any())
-                        {
-                            // Batch delete not natively supported easily by ID list in explicit Filter syntax sometimes
-                            // But we can loop for reliability or use 'in' filter if supported.
-                            // Let's use loop for absolute safety to avoid syntax errors.
-                            foreach(var delId in idsToDelete)
-                            {
-                                await _supabase.From<VitalMetric>().Where(x => x.Id == delId).Delete();
-                            }
-                            log($"[Sync] Deleted {idsToDelete.Count} stale records.");
+                            // Note: CreatedAt will be preserved by Postgres on Update, or set on Insert.
                         }
 
-                        // 2. Execute Inserts (Fresh Write)
-                        if (recordsToInsert.Any())
+                        // Upsert with OnConflict strategy
+                        var upsertOptions = new Supabase.Postgrest.QueryOptions
                         {
-                            var insertResponse = await _supabase.From<VitalMetric>().Insert(recordsToInsert);
-                            log($"[Sync] Inserted {insertResponse.Models.Count} fresh records.");
-                        }
+                            Upsert = true,
+                            OnConflict = "user_id, date, type" // The columns that define uniqueness (vitals_user_date_type_key)
+                        };
+
+                        var response = await _supabase.From<VitalMetric>().Upsert(metrics, upsertOptions);
+                        log($"[Sync] Upserted {response.Models.Count} records successfully.");
                     }
                     catch (Supabase.Postgrest.Exceptions.PostgrestException pex)
                     {
