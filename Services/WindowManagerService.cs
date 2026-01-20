@@ -256,6 +256,7 @@ namespace Daily.Services
         }
 
 #if MACCATALYST
+        public bool IsMacDetailActive => _activeMacDetailPage != null;
         private void MoveWindowMacCatalyst()
         {
             var nsWindow = (Application.Current as Daily.App)?.GetMainNSWindow();

@@ -222,14 +222,29 @@ namespace Daily
                             // 2. Calculate Frame
                             var trayFrame = MacTrayService.LastTrayFrame;
                             
-                            // Always use Sidebar metrics (User Request: Stability over Dynamic Sizing)
-                            double width = 450; 
+                            // Check State for Width Strategy
+                            bool isDetailActive = _windowManagerService?.IsMacDetailActive ?? false;
+                            
+                            double width = 450;
+                            if (isDetailActive)
+                            {
+                                // Wide Mode (Match ResizeMacWindow logic)
+                                width = visibleFrame.Width * 0.90;
+                                if (width > 1500) width = 1500;
+                            }
+
                             double widthToUse = width;
                             double height = visibleFrame.Height; 
                             double y = visibleFrame.Y; 
                             double x = 0;
 
-                            if (trayFrame.Width > 0 && trayFrame.Height > 0)
+                            if (isDetailActive)
+                            {
+                                // Center on Screen
+                                var screenCenterX = visibleFrame.X + (visibleFrame.Width / 2);
+                                x = screenCenterX - (widthToUse / 2);
+                            }
+                            else if (trayFrame.Width > 0 && trayFrame.Height > 0)
                             {
                                 var trayCenterX = trayFrame.X + (trayFrame.Width / 2);
                                 x = trayCenterX - (widthToUse / 2);
