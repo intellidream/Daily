@@ -26,7 +26,19 @@ namespace Daily.Services
                         // Continue ensuring other delegates run
                     }
                 }
-                await Task.WhenAll(tasks);
+                try
+                {
+                    // Enforce 15s Timeout to prevent "Infinite Spinner"
+                    await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(15));
+                }
+                catch (TimeoutException)
+                {
+                    Console.WriteLine("[RefreshService] TriggerRefreshAsync TIMED OUT > 15s. Unblocking UI.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[RefreshService] Aggregate Refresh Error: {ex}");
+                }
             }
         }
 
@@ -47,7 +59,19 @@ namespace Daily.Services
                         Console.WriteLine($"Detail refresh delegate error: {ex}");
                     }
                 }
-                await Task.WhenAll(tasks);
+                try
+                {
+                    // Enforce 15s Timeout
+                    await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(15));
+                }
+                catch (TimeoutException)
+                {
+                     Console.WriteLine("[RefreshService] TriggerDetailRefreshAsync TIMED OUT > 15s. Unblocking UI.");
+                }
+                catch (Exception ex)
+                {
+                     Console.WriteLine($"[RefreshService] Aggregate DetailRefresh Error: {ex}");
+                }
             }
         }
     }
