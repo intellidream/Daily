@@ -386,7 +386,32 @@ namespace Daily
                     var displayArea = DisplayArea.GetFromWindowId(id, DisplayAreaFallback.Primary);
                     var workArea = displayArea.WorkArea;
                     
-                    int width = 950; // Increased Sidebar width for Windows (scaling)
+                    int width = 950; // Fallback
+                    
+                    // DPI SCALING LOGIC
+                    // Target: 480 Effective Points (Sidebar Size)
+                    double targetPoints = 480; 
+                    double scale = 1.0;
+
+                    // Try to get scale from XamlRoot (Most Accurate)
+                    if (nativeWindow.Content != null && nativeWindow.Content.XamlRoot != null)
+                    {
+                        scale = nativeWindow.Content.XamlRoot.RasterizationScale;
+                    }
+                    else 
+                    {
+                        // Fallback: Estimate from DPI
+                        var dpi = Win32Interop.GetDpiForWindow(handle);
+                        scale = dpi / 96.0;
+                    }
+
+                    if (scale <= 0) scale = 1.0;
+                    width = (int)(targetPoints * scale);
+
+                    // Safety Min/Max
+                    if (width < 320) width = 320; 
+                    if (width > 1200) width = 1200;
+
                     int height = workArea.Height;
                     int x = workArea.X + workArea.Width - width;
                     int y = workArea.Y;
