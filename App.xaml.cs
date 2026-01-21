@@ -355,6 +355,9 @@ namespace Daily
 #endif
 
         #if WINDOWS
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
         private void ConfigureWindowsWindow(Window window)
         {
             Action<Window> applySettings = (w) =>
@@ -401,8 +404,12 @@ namespace Daily
                     else 
                     {
                         // Fallback: Estimate from DPI
-                        var dpi = Win32Interop.GetDpiForWindow(handle);
-                        scale = dpi / 96.0;
+                        try 
+                        {
+                            var dpi = GetDpiForWindow(handle);
+                            scale = dpi / 96.0;
+                        }
+                        catch { scale = 1.0; }
                     }
 
                     if (scale <= 0) scale = 1.0;
