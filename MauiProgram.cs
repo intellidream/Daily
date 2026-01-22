@@ -106,10 +106,10 @@ namespace Daily
 //            Console.WriteLine("[MauiProgram] Registering iOS HealthKitService...");
 //            builder.Services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Platforms.iOS.Services.Health.HealthKitService>();
 //#else
-            // iOS Safe Mode (Mock) until Entitlements are fixed
-#if IOS
-            Console.WriteLine("[MauiProgram] Registering MockNativeHealthStore (SAFE MODE)...");
-            builder.Services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Services.Health.MockNativeHealthStore>();
+            // iOS HealthKit (Actual)
+#if IOS && !MACCATALYST
+            Console.WriteLine("[MauiProgram] Registering iOS HealthKitService...");
+            builder.Services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Platforms.iOS.Services.Health.HealthKitService>();
 #elif ANDROID
             Console.WriteLine("[MauiProgram] Registering Android HealthConnectService...");
             builder.Services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Platforms.Android.HealthConnectService>();

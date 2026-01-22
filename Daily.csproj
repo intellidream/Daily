@@ -46,6 +46,7 @@
         <CodesignKey Condition="$(TargetFramework.Contains('ios'))">iPhone Developer</CodesignKey>
         <CodesignProvision Condition="$(TargetFramework.Contains('ios'))">Automatic</CodesignProvision>
         <DevelopmentTeam Condition="$(TargetFramework.Contains('ios'))">46P99RQF56</DevelopmentTeam>
+        <CodesignEntitlements Condition="$(TargetFramework.Contains('ios'))">Platforms\iOS\Entitlements.plist</CodesignEntitlements>
     </PropertyGroup>
 
     <ItemGroup>
