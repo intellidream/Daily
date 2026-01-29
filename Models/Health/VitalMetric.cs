@@ -19,7 +19,27 @@ namespace Daily.Models.Health
         OxygenSaturation,
         BodyTemperature,
         Hydration,
-        Distance
+        Distance,
+        // Expanded Activity
+        FloorsClimbed,
+        WalkingSpeed,
+        CyclingPower,
+        CyclingCadence,
+        BasalEnergyBurned, // Resting Calories
+        // Expanded Vitals
+        HeartRateVariabilitySDNN,
+        RespiratoryRate,
+        // Body Measurements
+        BodyFatPercentage,
+        LeanBodyMass,
+        // Nutrition
+        Carbs,
+        Fat,
+        Protein,
+        Caffeine,
+        // Cycle Tracking
+        MenstruationFlow, // 0=None, 1=Light, 2=Medium, 3=Heavy
+        OvulationTest, // 0=Neg, 1=Pos
     }
 
     [Table("vitals")]

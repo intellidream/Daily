@@ -130,7 +130,7 @@ namespace Daily.Platforms.Android
                 {
                     totalSteps += record.Count;
                 }
-                if (totalSteps > 0)
+                if (totalSteps > 10)
                 {
                     metrics.Add(new VitalMetric { TypeString = "Steps", Value = totalSteps, Unit = "count", Date = date, SourceDevice = "Health Connect" });
                 }
@@ -152,15 +152,51 @@ namespace Daily.Platforms.Android
                     metrics.Add(new VitalMetric { TypeString = "HeartRate", Value = Math.Round(hrSum / hrCount), Unit = "bpm", Date = date, SourceDevice = "Health Connect" });
                 }
 
-                // 3. Sleep
-                var sleepResponse = await ReadRecordsInternal<SleepSessionRecord>();
+                // 3. Sleep (Fixed Boundary Issue)
+                // Widen search to include sessions starting Yesterday but ending Today
+                var sleepStart = startInstant.Minus(Java.Time.Duration.OfDays(1));
+                var sleepFilter = TimeRangeFilter.Between(sleepStart, endInstant);
+                
+                // We need a separate read call with the wider filter
+                 async Task<Java.Lang.Object> ReadSleepInternal() 
+                {
+                     try
+                     {
+                         var request = new ReadRecordsRequest(
+                             GetKClass<SleepSessionRecord>(),
+                             sleepFilter, // Wider filter
+                             dataOriginFilter, 
+                             true, 
+                             2000, 
+                             null
+                         );
+                         var tcs = new TaskCompletionSource<Java.Lang.Object>();
+                         _client.ReadRecords(request, new Helpers.TaskContinuation<Java.Lang.Object>(tcs));
+                         return await tcs.Task;
+                     }
+                     catch { return null; }
+                }
+
+                var sleepResponse = await ReadSleepInternal();
                 double totalSleepSeconds = 0;
+                
+                // Java Instant comparison helpers
+                long startEpoch = startInstant.EpochSecond;
+                long endEpoch = endInstant.EpochSecond;
+
                 foreach (SleepSessionRecord record in GetRecordsList(sleepResponse))
                 {
-                    var duration = Java.Time.Duration.Between(record.StartTime, record.EndTime);
-                    totalSleepSeconds += duration.Seconds;
+                    // Filter: Only count sleep sessions that ENDED today (between midnight and next midnight)
+                    // This attributes "last night's sleep" (ending at 7am) to Today.
+                    long endRecord = record.EndTime.EpochSecond;
+                    
+                    if (endRecord >= startEpoch && endRecord < endEpoch)
+                    {
+                        var duration = Java.Time.Duration.Between(record.StartTime, record.EndTime);
+                        totalSleepSeconds += duration.Seconds;
+                    }
                 }
-                if (totalSleepSeconds > 0)
+                if (totalSleepSeconds > 600) // Filter Noise < 10 mins
                 {
                      // Convert to Minutes to match VitalType standard
                      var minutes = Math.Round(totalSleepSeconds / 60.0, 1);
@@ -174,7 +210,7 @@ namespace Daily.Platforms.Android
                 {
                     totalCalories += record.Energy.Kilocalories; 
                 }
-                 if (totalCalories > 0)
+                 if (totalCalories > 10)
                 {
                      metrics.Add(new VitalMetric { TypeString = VitalType.ActiveEnergy.ToString(), Value = Math.Round(totalCalories), Unit = "kcal", Date = date, SourceDevice = "Health Connect" });
                 }
@@ -279,6 +315,126 @@ namespace Daily.Platforms.Android
                         }
                         metrics.Add(new VitalMetric { TypeString = VitalType.BodyTemperature.ToString(), Value = Math.Round(tSum / tList.Count, 1), Unit = "C", Date = date, SourceDevice = "Health Connect" });
                     }
+                } catch {}
+
+                // --- EXPANDED METRICS (Activity) ---
+
+                // 12. Floors Climbed (Sum)
+                try {
+                    var fResponse = await ReadRecordsInternal<FloorsClimbedRecord>();
+                    double totalFloors = 0;
+                    foreach (FloorsClimbedRecord record in GetRecordsList(fResponse))
+                    {
+                        totalFloors += record.Floors;
+                    }
+                    if (totalFloors > 0) metrics.Add(new VitalMetric { TypeString = VitalType.FloorsClimbed.ToString(), Value = Math.Round(totalFloors, 0), Unit = "floors", Date = date, SourceDevice = "Health Connect" });
+                } catch {}
+
+                // 13. Basal Energy (Resting Calories) (Sum)
+                try {
+                    var bmrResponse = await ReadRecordsInternal<BasalMetabolicRateRecord>();
+                    double totalBmr = 0; // BMR is rate (kcal/day) usually... wait. 
+                    // Health Connect BMR Record is 'BasalMetabolicRate' (Power). To get total, we need to integrate over time or use TotalBasalMetabolicRate if available.
+                    // Actually, for consistency with 'ActiveCalories', we often want 'BasalCaloriesBurned'. 
+                    // BUT Health Connect separates them. Let's assume user wants Total Resting Kcal.
+                    // It's complex to integrate. Let's look for 'BasalMetabolicRate' and just average it? No, users want Total Kcal.
+                    // Actually, 'TotalCaloriesBurned' often includes BMR. 
+                    // Let's Skip BMR Integration for now unless we find 'BasalCalories' record. 
+                    // Checking docs... BasalMetabolicRateRecord is a Sample. 
+                    // Let's implement it as an Average Rate (kcal/day) if needed, OR skip if too complex for now.
+                    // Let's do Average Kcal/Day rate.
+                    var bmrList = GetRecordsList(bmrResponse);
+                    if (bmrList.Count > 0) {
+                         double bmrSum = 0;
+                         foreach (BasalMetabolicRateRecord record in bmrList) bmrSum += record.BasalMetabolicRate.KilocaloriesPerDay;
+                         metrics.Add(new VitalMetric { TypeString = VitalType.BasalEnergyBurned.ToString(), Value = Math.Round(bmrSum / bmrList.Count, 0), Unit = "kcal/day", Date = date, SourceDevice = "Health Connect" });
+                    }
+                } catch {}
+
+                // 14. Speed (Average) (WalkingSpeedRecord seems valid)
+                // Note: SpeedRecord usually has 'Speed' field.
+                // Let's use 'SpeedRecord' generic if possible, or specialized.
+                try {
+                     var sResponse = await ReadRecordsInternal<SpeedRecord>();
+                     var sList = GetRecordsList(sResponse);
+                     if (sList.Count > 0) {
+                         double sSum = 0; 
+                         int sCount = 0;
+                         foreach (SpeedRecord record in sList) { 
+                             foreach(var samp in record.Samples) { sSum += samp.Speed.MetersPerSecond; sCount++; }
+                         }
+                         if (sCount > 0) metrics.Add(new VitalMetric { TypeString = VitalType.WalkingSpeed.ToString(), Value = Math.Round(sSum / sCount, 2), Unit = "m/s", Date = date, SourceDevice = "Health Connect" });
+                     }
+                } catch {}
+
+                // -- EXPANDED VITALS --
+
+                // 15. HRV (RMSSD) (Average)
+                try {
+                     var hrvResponse = await ReadRecordsInternal<HeartRateVariabilityRmssdRecord>();
+                     var hrvList = GetRecordsList(hrvResponse);
+                     if (hrvList.Count > 0) {
+                         double hSum = 0;
+                         foreach (HeartRateVariabilityRmssdRecord record in hrvList) hSum += record.HeartRateVariabilityMillis;
+                         metrics.Add(new VitalMetric { TypeString = VitalType.HeartRateVariabilitySDNN.ToString(), Value = Math.Round(hSum / hrvList.Count, 1), Unit = "ms", Date = date, SourceDevice = "Health Connect" });
+                     }
+                } catch {}
+
+                // 16. Respiratory Rate (Average)
+                try {
+                     var rrResponse = await ReadRecordsInternal<RespiratoryRateRecord>();
+                     var rrList = GetRecordsList(rrResponse);
+                     if (rrList.Count > 0) {
+                         double rrSum = 0;
+                         foreach (RespiratoryRateRecord record in rrList) rrSum += record.Rate;
+                         metrics.Add(new VitalMetric { TypeString = VitalType.RespiratoryRate.ToString(), Value = Math.Round(rrSum / rrList.Count, 1), Unit = "br/min", Date = date, SourceDevice = "Health Connect" });
+                     }
+                } catch {}
+
+                // -- BODY MEASUREMENTS --
+
+                // 17. Body Fat (Latest)
+                try {
+                     var bfResponse = await ReadRecordsInternal<BodyFatRecord>();
+                     var bfList = GetRecordsList(bfResponse);
+                     if (bfList.Count > 0) {
+                         var last = bfList[bfList.Count - 1] as BodyFatRecord;
+                         metrics.Add(new VitalMetric { TypeString = VitalType.BodyFatPercentage.ToString(), Value = Math.Round(last.Percentage.Value, 1), Unit = "%", Date = date, SourceDevice = "Health Connect" });
+                     }
+                } catch {}
+
+                // 18. Lean Body Mass (Latest)
+                 try {
+                     var lbmResponse = await ReadRecordsInternal<LeanBodyMassRecord>();
+                     var lbmList = GetRecordsList(lbmResponse);
+                     if (lbmList.Count > 0) {
+                         var last = lbmList[lbmList.Count - 1] as LeanBodyMassRecord;
+                         metrics.Add(new VitalMetric { TypeString = VitalType.LeanBodyMass.ToString(), Value = Math.Round(last.Mass.Kilograms, 1), Unit = "kg", Date = date, SourceDevice = "Health Connect" });
+                     }
+                } catch {}
+
+                // -- NUTRITION (Aggregated) --
+
+                try {
+                    var nResponse = await ReadRecordsInternal<NutritionRecord>();
+                    double carbs = 0;
+                    double fat = 0;
+                    double protein = 0;
+                    double caffeine = 0; 
+                    
+                    foreach (NutritionRecord record in GetRecordsList(nResponse))
+                    {
+                        if (record.TotalCarbohydrate != null) carbs += record.TotalCarbohydrate.Grams;
+                        if (record.TotalFat != null) fat += record.TotalFat.Grams;
+                        if (record.Protein != null) protein += record.Protein.Grams;
+                        if (record.Caffeine != null) caffeine += record.Caffeine.Grams * 1000;
+                    }
+
+                    if (carbs > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Carbs.ToString(), Value = Math.Round(carbs), Unit = "g", Date = date, SourceDevice = "Health Connect" });
+                    if (fat > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Fat.ToString(), Value = Math.Round(fat), Unit = "g", Date = date, SourceDevice = "Health Connect" });
+                    if (protein > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Protein.ToString(), Value = Math.Round(protein), Unit = "g", Date = date, SourceDevice = "Health Connect" });
+                    if (caffeine > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Caffeine.ToString(), Value = Math.Round(caffeine), Unit = "mg", Date = date, SourceDevice = "Health Connect" });
+
                 } catch {}
 
                 return metrics;

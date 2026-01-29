@@ -1,0 +1,16 @@
+@using MudBlazor
+
+<MudPaper Class="pa-3 rounded-xl d-flex flex-column justify-center" Elevation="0" Style="background: rgba(255,255,255,0.05); aspect-ratio: 1;">
+    <div class="d-flex align-center gap-2 mb-2">
+        <MudIcon Icon="@Icon" Color="@Color" Size="Size.Small"/>
+        <MudText Typo="Typo.caption" Style="opacity: 0.7;">@Label</MudText>
+    </div>
+    <MudText Typo="Typo.h6" Class="font-weight-bold">@Value</MudText>
+</MudPaper>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "";
+    [Parameter] public Color Color { get; set; } = Color.Default;
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Value { get; set; } = "";
+}

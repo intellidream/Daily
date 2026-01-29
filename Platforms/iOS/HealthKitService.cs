@@ -86,7 +86,7 @@ namespace Daily.Platforms.iOS.Services.Health
                 if (stepStats != null)
                 {
                     double totalSteps = stepStats.SumQuantity()?.GetDoubleValue(HKUnit.Count) ?? 0;
-                    if (totalSteps > 0)
+                    if (totalSteps > 10) // Filter Noise
                     {
                         metrics.Add(new VitalMetric
                         {
@@ -140,47 +140,161 @@ namespace Daily.Platforms.iOS.Services.Health
                      }
                 }
 
-                // 4. Sleep (Aggregation: Duration Calculation via Samples)
-                // StatisticsQuery doesn't work well for CategoryTypes, so we query samples and sum durations.
+                // 4. Sleep (Aggregation: End Date / Fallback to InBed)
+                // Use StrictEndDate so we capture sleep that started yesterday but ended today (the session for "last night")
                 var sleepType = HKCategoryType.Create(HKCategoryTypeIdentifier.SleepAnalysis);
-                 await ExecuteQuery(sleepType, predicate, 0, (query, results, err) => {
+                var sleepPredicate = HKQuery.GetPredicateForSamples(nsStart, nsEnd, HKQueryOptions.StrictEndDate);
+                
+                await ExecuteQuery(sleepType, sleepPredicate, 0, (query, results, err) => {
                      if (results == null) return;
                      
-                     double totalSleepMinutes = 0;
+                     double asleepMinutes = 0;
+                     double inBedMinutes = 0;
+
                      foreach (var sample in results)
                      {
                          if (sample is HKCategorySample catSample) {
-                             // Consider filtering for Asleep/InBed values if needed, but for now sum all SleepAnalysis samples
-                             // Apple usually provides 'InBed', 'Asleep', 'Awake'. 
-                             // To be simple and match Android simplistic duration, we sum all 'Asleep' segments if possible, 
-                             // but CategoryValue.SleepAnalysisAsleep is strict. 
-                             // Let's sum everything in the category for now to match previous logic, 
-                             // OR filter for Asleep (Value == 1) to be accurate. 
-                             // Let's assume strict 'Asleep' (Value 1) is what users want.
+                             var duration = (catSample.EndDate.SecondsSinceReferenceDate - catSample.StartDate.SecondsSinceReferenceDate) / 60.0;
                              
+                             // Calculate Asleep
                              if (catSample.Value == (long)HKCategoryValueSleepAnalysis.Asleep || 
                                  catSample.Value == (long)HKCategoryValueSleepAnalysis.AsleepCore ||
                                  catSample.Value == (long)HKCategoryValueSleepAnalysis.AsleepDeep ||
                                  catSample.Value == (long)HKCategoryValueSleepAnalysis.AsleepREM)
                              {
-                                 var duration = catSample.EndDate.SecondsSinceReferenceDate - catSample.StartDate.SecondsSinceReferenceDate;
-                                 totalSleepMinutes += (duration / 60.0);
+                                 asleepMinutes += duration;
+                             }
+
+                             // Calculate InBed (Fallback)
+                             if (catSample.Value == (long)HKCategoryValueSleepAnalysis.InBed)
+                             {
+                                 inBedMinutes += duration;
                              }
                          }
                      }
                      
-                     if (totalSleepMinutes > 0)
+                     // Priority: Asleep > InBed
+                     var finalSleep = asleepMinutes > 0 ? asleepMinutes : inBedMinutes;
+
+                     if (finalSleep > 10) // Filter Noise < 10 mins
                      {
                           metrics.Add(new VitalMetric
                           {
                               Type = VitalType.SleepDuration,
-                              Value = Math.Round(totalSleepMinutes, 1), 
+                              Value = Math.Round(finalSleep, 1), 
                               Unit = "min",
-                              Date = start, // Midnight
+                              Date = start, // Midnight of the 'End Day'
                               SourceDevice = "iOS"
                           });
                      }
                  });
+
+                 // -- EXPANDED ACTIVITY --
+
+                 // 5. Floors Climbed (SUM)
+                 var floorsType = HKQuantityType.Create(HKQuantityTypeIdentifier.FlightsClimbed);
+                 var floorsStats = await FetchStatistics(floorsType, predicate, start, HKStatisticsOptions.CumulativeSum);
+                 if (floorsStats != null)
+                 {
+                      double totalFloors = floorsStats.SumQuantity()?.GetDoubleValue(HKUnit.Count) ?? 0;
+                      if (totalFloors > 0) metrics.Add(NewMetric(VitalType.FloorsClimbed, Math.Round(totalFloors), "floors", start));
+                 }
+
+                 // 6. Basal Energy (SUM)
+                 var basalType = HKQuantityType.Create(HKQuantityTypeIdentifier.BasalEnergyBurned);
+                 var basalStats = await FetchStatistics(basalType, predicate, start, HKStatisticsOptions.CumulativeSum);
+                 if (basalStats != null)
+                 {
+                      double totalBasal = basalStats.SumQuantity()?.GetDoubleValue(HKUnit.Kilocalorie) ?? 0;
+                      if (totalBasal > 10) metrics.Add(NewMetric(VitalType.BasalEnergyBurned, Math.Round(totalBasal), "kcal", start));
+                 }
+
+                 // 7. Walking Speed (AVG)
+                 var speedType = HKQuantityType.Create(HKQuantityTypeIdentifier.WalkingSpeed);
+                 var speedStats = await FetchStatistics(speedType, predicate, start, HKStatisticsOptions.DiscreteAverage);
+                 if (speedStats != null)
+                 {
+                      double avgSpeed = speedStats.AverageQuantity()?.GetDoubleValue(HKUnit.Meter.UnitDividedBy(HKUnit.Second)) ?? 0;
+                      if (avgSpeed > 0) metrics.Add(NewMetric(VitalType.WalkingSpeed, Math.Round(avgSpeed, 2), "m/s", start));
+                 }
+
+                 // -- EXPANDED VITALS --
+
+                 // 8. HRV (SDNN) (AVG)
+                 var hrvType = HKQuantityType.Create(HKQuantityTypeIdentifier.HeartRateVariabilitySdnn);
+                 var hrvStats = await FetchStatistics(hrvType, predicate, start, HKStatisticsOptions.DiscreteAverage);
+                 if (hrvStats != null)
+                 {
+                      double avgHrv = hrvStats.AverageQuantity()?.GetDoubleValue(HKUnit.FromString("ms")) ?? 0;
+                      if (avgHrv > 0) metrics.Add(NewMetric(VitalType.HeartRateVariabilitySDNN, Math.Round(avgHrv, 1), "ms", start));
+                 }
+
+                 // 9. Respiratory Rate (AVG)
+                 var rrType = HKQuantityType.Create(HKQuantityTypeIdentifier.RespiratoryRate);
+                 var rrStats = await FetchStatistics(rrType, predicate, start, HKStatisticsOptions.DiscreteAverage);
+                 if (rrStats != null)
+                 {
+                      double avgRr = rrStats.AverageQuantity()?.GetDoubleValue(HKUnit.Count.UnitDividedBy(HKUnit.Minute)) ?? 0;
+                      if (avgRr > 0) metrics.Add(NewMetric(VitalType.RespiratoryRate, Math.Round(avgRr, 1), "br/min", start));
+                 }
+
+                 // -- BODY --
+
+                 // 10. Body Fat (LATEST/AVG)
+                 var bfType = HKQuantityType.Create(HKQuantityTypeIdentifier.BodyFatPercentage);
+                 var bfStats = await FetchStatistics(bfType, predicate, start, HKStatisticsOptions.DiscreteAverage); 
+                 if (bfStats != null)
+                 {
+                      double avgBf = bfStats.AverageQuantity()?.GetDoubleValue(HKUnit.Percent) ?? 0;
+                      if (avgBf > 0) metrics.Add(NewMetric(VitalType.BodyFatPercentage, Math.Round(avgBf * 100, 1), "%", start));
+                 }
+
+                 // 11. Lean Body Mass (LATEST/AVG)
+                 var lbmType = HKQuantityType.Create(HKQuantityTypeIdentifier.LeanBodyMass);
+                 var lbmStats = await FetchStatistics(lbmType, predicate, start, HKStatisticsOptions.DiscreteAverage);
+                 if (lbmStats != null)
+                 {
+                      double avgLbm = lbmStats.AverageQuantity()?.GetDoubleValue(HKUnit.FromString("kg")) ?? 0;
+                      if (avgLbm > 0) metrics.Add(NewMetric(VitalType.LeanBodyMass, Math.Round(avgLbm, 1), "kg", start));
+                 }
+
+                 // -- NUTRITION --
+
+                 // 12. Carbs (SUM)
+                 var carbType = HKQuantityType.Create(HKQuantityTypeIdentifier.DietaryCarbohydrates);
+                 var carbStats = await FetchStatistics(carbType, predicate, start, HKStatisticsOptions.CumulativeSum);
+                 if (carbStats != null)
+                 {
+                      double totalCarbs = carbStats.SumQuantity()?.GetDoubleValue(HKUnit.Gram) ?? 0;
+                      if (totalCarbs > 0) metrics.Add(NewMetric(VitalType.Carbs, Math.Round(totalCarbs), "g", start));
+                 }
+
+                 // 13. Fat (SUM)
+                 var fatType = HKQuantityType.Create(HKQuantityTypeIdentifier.DietaryFatTotal);
+                 var fatStats = await FetchStatistics(fatType, predicate, start, HKStatisticsOptions.CumulativeSum);
+                 if (fatStats != null)
+                 {
+                      double totalFat = fatStats.SumQuantity()?.GetDoubleValue(HKUnit.Gram) ?? 0;
+                      if (totalFat > 0) metrics.Add(NewMetric(VitalType.Fat, Math.Round(totalFat), "g", start));
+                 }
+
+                 // 14. Protein (SUM)
+                 var protType = HKQuantityType.Create(HKQuantityTypeIdentifier.DietaryProtein);
+                 var protStats = await FetchStatistics(protType, predicate, start, HKStatisticsOptions.CumulativeSum);
+                 if (protStats != null)
+                 {
+                      double totalProt = protStats.SumQuantity()?.GetDoubleValue(HKUnit.Gram) ?? 0;
+                      if (totalProt > 0) metrics.Add(NewMetric(VitalType.Protein, Math.Round(totalProt), "g", start));
+                 }
+
+                 // 15. Caffeine (SUM)
+                 var caffType = HKQuantityType.Create(HKQuantityTypeIdentifier.DietaryCaffeine);
+                 var caffStats = await FetchStatistics(caffType, predicate, start, HKStatisticsOptions.CumulativeSum);
+                 if (caffStats != null)
+                 {
+                      double totalCaff = caffStats.SumQuantity()?.GetDoubleValue(HKUnit.FromString("mg")) ?? 0;
+                      if (totalCaff > 0) metrics.Add(NewMetric(VitalType.Caffeine, Math.Round(totalCaff), "mg", start));
+                 }
             }
             catch (Exception ex)
             {
@@ -254,6 +368,19 @@ namespace Daily.Platforms.iOS.Services.Health
              
              _healthStore.ExecuteQuery(sampleQuery);
              return tcs.Task;
+        }
+
+        
+        private VitalMetric NewMetric(VitalType type, double value, string unit, DateTime date)
+        {
+            return new VitalMetric
+            {
+                Type = type,
+                Value = value,
+                Unit = unit,
+                Date = date,
+                SourceDevice = "iOS"
+            };
         }
     }
 }

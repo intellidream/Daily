@@ -222,32 +222,72 @@ namespace Daily.Services.Health
                         return;
                     }
 
-                    // 2a. Fetch EXISTING records for Today to get their Primary Keys (Ids)
-                    // This ensures that 'Upsert' acts as an UPDATE, not a failed INSERT due to conflicts.
+                    // 2a. Fetch EXISTING records for the date range (Today/Yesterday) to Merge
+                    // This prevents overwriting high values (e.g. 5000 steps from Android) with low values (e.g. 200 steps from iOS)
                     try 
                     {
-                        // ROBUST SYNC STRATEGY: 
-                        // ROBUST SYNC STRATEGY (V56): UPSERT (Insert or Update on Conflict)
-                        // This bypasses the need for accurate "Read" filters which are proving fragile across platforms/date formats.
-                        // We rely on the Unique Constraint 'vitals_user_date_type_key' to handle the merge.
+                        var minDate = metrics.Min(m => m.Date);
+                        var maxDate = metrics.Max(m => m.Date);
 
-                        foreach (var m in metrics)
+
+                        var minDateStr = minDate.ToString("O");
+                        var maxDateStr = maxDate.ToString("O");
+
+                        var existingResult = await _supabase.From<VitalMetric>()
+                                                  .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid.ToString())
+                                                  .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, minDateStr)
+                                                  .Filter("date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, maxDateStr)
+                                                  .Get();
+                        
+                        var existingMetrics = existingResult.Models;
+
+                        // MERGE LOGIC: Smart Strategy
+                        // - Cumulative (Steps, Calories): Max Wins (prevents partial sync overwrites)
+                        // - Spot (Weight, HR): Last Write Wins (implicit via Upsert, unless we skip)
+                        
+                        foreach (var local in metrics)
                         {
-                            m.UserId = uid;
-                            // Ensure timestamps are fresh
-                            m.UpdatedAt = DateTime.UtcNow;
-                            // Note: CreatedAt will be preserved by Postgres on Update, or set on Insert.
+                            local.UserId = uid;
+                            local.UpdatedAt = DateTime.UtcNow;
+
+                            var remote = existingMetrics.FirstOrDefault(e => e.Date == local.Date && e.TypeString == local.TypeString);
+                            if (remote != null)
+                            {
+                                if (IsCumulative(local.TypeString))
+                                {
+                                    // MAX WINS for Cumulative
+                                    if (remote.Value > local.Value)
+                                    {
+                                        log($"[Sync] Keeping Remote (Cumulative) {local.TypeString}: {remote.Value} (Local: {local.Value})");
+                                        local.Value = remote.Value;
+                                        local.SourceDevice = remote.SourceDevice;
+                                        local.Unit = remote.Unit;
+                                    }
+                                }
+                                else
+                                {
+                                    // SPOT METRICS (Weight, HR, etc.)
+                                    // Default: Last Write Wins (Local overwrites Remote). 
+                                    // However, check if Remote is significantly "newer" to avoid race conditions? 
+                                    // For simplicity and user expectation: The device performing the sync is authoritative for Spot metrics 
+                                    // UNLESS the remote value is identical (optimization).
+                                    
+                                    // Warning: If Android has Weight 80kg and iOS has Weight 85kg (old), and iOS syncs, it overwrites Android.
+                                    // Ideally we compare 'CreatedAt' or 'Source Timestamp', but we lack granular source timestamps in this simple model.
+                                    // We will stick to "Local Wins" for Spot, as user requested "Max Wins" check.
+                                }
+                            }
                         }
 
-                        // Upsert with OnConflict strategy
+                        // Upsert with OnConflict strategy (vitals_user_date_type_key)
                         var upsertOptions = new Supabase.Postgrest.QueryOptions
                         {
                             Upsert = true,
-                            OnConflict = "user_id, date, type" // The columns that define uniqueness (vitals_user_date_type_key)
+                            OnConflict = "user_id, date, type" 
                         };
 
                         var response = await _supabase.From<VitalMetric>().Upsert(metrics, upsertOptions);
-                        log($"[Sync] Upserted {response.Models.Count} records successfully.");
+                        log($"[Sync] Upserted {response.Models.Count} merged records successfully.");
                     }
                     catch (Supabase.Postgrest.Exceptions.PostgrestException pex)
                     {
@@ -271,6 +311,29 @@ namespace Daily.Services.Health
                      var sync = _serviceProvider.GetService<ISyncService>();
                      sync?.Log($"[Health] {msg}");
                 }
+        }
+
+        private bool IsCumulative(string typeString)
+        {
+            if (Enum.TryParse<VitalType>(typeString, out var type))
+            {
+                return type switch
+                {
+                    VitalType.Steps => true,
+                    VitalType.ActiveEnergy => true,
+                    VitalType.BasalEnergyBurned => true, // Resting Cal
+                    VitalType.Distance => true,
+                    VitalType.FloorsClimbed => true,
+                    VitalType.Hydration => true, 
+                    VitalType.Carbs => true,
+                    VitalType.Fat => true,
+                    VitalType.Protein => true,
+                    VitalType.Caffeine => true,
+                    VitalType.SleepDuration => true, // Usually we want the longest recorded sleep session if multiple devices track? Or Max.
+                    _ => false // Weight, HR, BP, BodyFat, Speed, etc. are SPOT measurements.
+                };
+            }
+            return false;
         }
     }
 }

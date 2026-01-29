@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Components
 @inject IHealthService HealthService
 @inject IRefreshService RefreshService
+@inject IWindowManagerService WindowManager
 
 <!-- Custom CSS for Glossy/Premium Look is assumed handled by global styles or MudBlazor theme -->
 <div class="d-flex flex-column h-100 w-100 gap-2">
@@ -30,115 +31,71 @@
         }
     </div>
 
-    <div class="d-flex flex-column gap-3 flex-grow-1 overflow-auto pa-1">
+    <!-- Main Content -->
+    <div class="d-flex flex-column gap-3 flex-grow-1 overflow-auto pa-1" style="scrollbar-width: none;">
         
-        <!-- ROW 1: GAUGES (Key Daily Goals) -->
-        <!-- Logic: Steps (10k), Kcal (2500), Sleep (8h) -->
-        <MudGrid Spacing="2" Class="align-center justify-center">
-            
-            <!-- Steps Gauge -->
-            <MudItem xs="4" Class="d-flex flex-column align-center">
-                <MudProgressCircular Value="@GetPercent(_steps, 10000)" Size="Size.Medium" Color="Color.Primary" StrokeWidth="5">
+        <!-- HERO METRICS (Radial Circles) -->
+        <div class="d-flex align-center justify-space-around px-1 pt-2">
+            <!-- Steps -->
+            <div class="d-flex flex-column align-center relative">
+                 <div style="@GetSourceDotStyle(_stepsSource); position: absolute; top: -2px; right: -2px; z-index: 10;"></div>
+                 <MudProgressCircular Value="@GetPercent(_steps, 10000)" Size="Size.Medium" Color="Color.Primary" StrokeWidth="8">
                      <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Size="Size.Small" Color="Color.Primary"/>
-                </MudProgressCircular>
-                <MudText Typo="Typo.caption" Class="mt-1 font-weight-bold">@FormatNumber(_steps)</MudText>
-                <MudText Typo="Typo.caption" Style="font-size: 0.6rem; opacity: 0.7;">Steps</MudText>
-            </MudItem>
-
-             <!-- Kcal Gauge -->
-            <MudItem xs="4" Class="d-flex flex-column align-center">
-                <MudProgressCircular Value="@GetPercent(_calories, 2500)" Size="Size.Medium" Color="Color.Warning" StrokeWidth="5">
+                 </MudProgressCircular>
+                 <MudText Typo="Typo.caption" Class="mt-1" Style="font-weight:700; line-height:1;">@FormatNumber(_steps)</MudText>
+            </div>
+            
+            <!-- Calories -->
+            <div class="d-flex flex-column align-center relative">
+                 <div style="@GetSourceDotStyle(_caloriesSource); position: absolute; top: -2px; right: -2px; z-index: 10;"></div>
+                 <MudProgressCircular Value="@GetPercent(_calories, 2500)" Size="Size.Medium" Color="Color.Warning" StrokeWidth="8">
                      <MudIcon Icon="@Icons.Material.Filled.LocalFireDepartment" Size="Size.Small" Color="Color.Warning"/>
-                </MudProgressCircular>
-                <MudText Typo="Typo.caption" Class="mt-1 font-weight-bold">@FormatNumber(_calories)</MudText>
-                <MudText Typo="Typo.caption" Style="font-size: 0.6rem; opacity: 0.7;">Kcal</MudText>
-            </MudItem>
+                 </MudProgressCircular>
+                 <MudText Typo="Typo.caption" Class="mt-1" Style="font-weight:700; line-height:1;">@FormatNumber(_calories)</MudText>
+            </div>
 
-            <!-- Sleep Gauge -->
-            <!-- Goal: 8h (480 min). Value is in Minutes internally, but displayed as Hours -->
-            <MudItem xs="4" Class="d-flex flex-column align-center">
-                <MudProgressCircular Value="@GetPercent(_sleepMinutes, 480)" Size="Size.Medium" Color="Color.Info" StrokeWidth="5">
+             <!-- Sleep -->
+            <div class="d-flex flex-column align-center relative">
+                 <div style="@GetSourceDotStyle(_sleepSource); position: absolute; top: -2px; right: -2px; z-index: 10;"></div>
+                 <MudProgressCircular Value="@GetPercent(_sleepMinutes, 480)" Size="Size.Medium" Color="Color.Info" StrokeWidth="8">
                      <MudIcon Icon="@Icons.Material.Filled.Bedtime" Size="Size.Small" Color="Color.Info"/>
-                </MudProgressCircular>
-                <MudText Typo="Typo.caption" Class="mt-1 font-weight-bold">@(_sleepMinutes > 0 ? Math.Round(_sleepMinutes/60.0, 1) + "h" : "--")</MudText>
-                <MudText Typo="Typo.caption" Style="font-size: 0.6rem; opacity: 0.7;">Sleep</MudText>
-            </MudItem>
+                 </MudProgressCircular>
+                 <MudText Typo="Typo.caption" Class="mt-1" Style="font-weight:700; line-height:1;">@FormatSleep(_sleepMinutes)</MudText>
+            </div>
+        </div>
 
-        </MudGrid>
+        <MudDivider Class="my-2" />
 
-        <MudDivider />
-
-        <!-- ROW 2: PRIMARY STATS (HR, Distance, Weight) -->
-        <MudGrid Spacing="1">
+        <!-- SECONDARY STATS (Bubbles Style - Single Row if possible or Grid) -->
+        <div class="d-flex gap-2 justify-center">
             <!-- Heart Rate -->
-            <MudItem xs="4">
-                <MudPaper Class="d-flex flex-column align-center py-2 px-1 rounded" Elevation="0" Style="background: rgba(255,255,255,0.05);">
-                    <MudIcon Icon="@Icons.Material.Filled.Favorite" Color="Color.Error" Size="Size.Small"/>
-                    <MudText Typo="Typo.body2" Class="font-weight-bold mt-1">@(_bpm > 0 ? _bpm : "--")</MudText>
-                    <MudText Typo="Typo.caption" Style="font-size: 0.6rem;">BPM</MudText>
-                </MudPaper>
-            </MudItem>
-
-            <!-- Distance (km) -->
-            <MudItem xs="4">
-                <MudPaper Class="d-flex flex-column align-center py-2 px-1 rounded" Elevation="0" Style="background: rgba(255,255,255,0.05);">
-                    <MudIcon Icon="@Icons.Material.Filled.Map" Color="Color.Success" Size="Size.Small"/>
-                    <MudText Typo="Typo.body2" Class="font-weight-bold mt-1">@(_distanceMeters > 0 ? Math.Round(_distanceMeters/1000.0, 2) + "km" : "--")</MudText>
-                    <MudText Typo="Typo.caption" Style="font-size: 0.6rem;">Dist</MudText>
-                </MudPaper>
-            </MudItem>
+            <div class="d-flex flex-column align-center justify-center pa-2 rounded-xl flex-grow-1 text-center relative" style="background: rgba(255,255,255,0.05);">
+                <div style="@GetSourceDotStyle(_bpmSource); position: absolute; top: 4px; right: 4px;"></div>
+                <MudIcon Icon="@Icons.Material.Filled.Favorite" Color="Color.Error" Size="Size.Small"/>
+                <MudText Typo="Typo.body2" Class="font-weight-bold mt-1">@(_bpm > 0 ? _bpm : "--")</MudText>
+            </div>
 
             <!-- Weight -->
-            <MudItem xs="4">
-                <MudPaper Class="d-flex flex-column align-center py-2 px-1 rounded" Elevation="0" Style="background: rgba(255,255,255,0.05);">
-                    <MudIcon Icon="@Icons.Material.Filled.MonitorWeight" Color="Color.Secondary" Size="Size.Small"/>
-                    <MudText Typo="Typo.body2" Class="font-weight-bold mt-1">@(_weightKg > 0 ? _weightKg : "--")</MudText>
-                     <MudText Typo="Typo.caption" Style="font-size: 0.6rem;">Kg</MudText>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
+            <div class="d-flex flex-column align-center justify-center pa-2 rounded-xl flex-grow-1 text-center relative" style="background: rgba(255,255,255,0.05);">
+                 <div style="@GetSourceDotStyle(_weightSource); position: absolute; top: 4px; right: 4px;"></div>
+                <MudIcon Icon="@Icons.Material.Filled.MonitorWeight" Color="Color.Primary" Size="Size.Small"/>
+                <MudText Typo="Typo.body2" Class="font-weight-bold mt-1">@(_weightKg > 0 ? _weightKg : "--")</MudText>
+            </div>
 
-        <!-- ROW 3: ADVANCED STATS (BP, Glucose, SpO2, Hydration) -->
-        <!-- Redesigned as requested: Icon (Left), Value (Center Big), Name (Right) -->
-        <MudGrid Spacing="1">
-            
-            <!-- BP -->
-            <MudItem xs="6">
-                <div class="d-flex align-center justify-space-between rounded pa-2" style="background: rgba(255,255,255,0.03); height: 100%;">
-                    <MudIcon Icon="@Icons.Material.Filled.Compress" Size="Size.Small" Color="Color.Error" />
-                    <MudText Typo="Typo.h6" Class="font-weight-bold mx-2">@GetBPString()</MudText>
-                    <MudText Typo="Typo.caption" Style="opacity: 0.7;">BP</MudText>
-                </div>
-            </MudItem>
+             <!-- BP or Other -->
+            <div class="d-flex flex-column align-center justify-center pa-2 rounded-xl flex-grow-1 text-center relative" style="background: rgba(255,255,255,0.05);">
+                 <div style="@GetSourceDotStyle(_bpSource); position: absolute; top: 4px; right: 4px;"></div>
+                <MudIcon Icon="@Icons.Material.Filled.Compress" Color="Color.Error" Size="Size.Small"/>
+                <MudText Typo="Typo.body2" Class="font-weight-bold mt-1" Style="font-size: 0.8em">@GetBPString()</MudText>
+            </div>
+        </div>
 
-            <!-- SpO2 -->
-             <MudItem xs="6">
-                <div class="d-flex align-center justify-space-between rounded pa-2" style="background: rgba(255,255,255,0.03); height: 100%;">
-                    <MudIcon Icon="@Icons.Material.Filled.Air" Size="Size.Small" Color="Color.Info" />
-                    <MudText Typo="Typo.h6" Class="font-weight-bold mx-2">@(_oxy > 0 ? _oxy + "%" : "--")</MudText>
-                    <MudText Typo="Typo.caption" Style="opacity: 0.7;">SpO2</MudText>
-                </div>
-            </MudItem>
-
-            <!-- Glucose -->
-            <MudItem xs="6">
-                <div class="d-flex align-center justify-space-between rounded pa-2" style="background: rgba(255,255,255,0.03); height: 100%;">
-                    <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Size="Size.Small" Color="Color.Warning" />
-                    <MudText Typo="Typo.h6" Class="font-weight-bold mx-2">@(_glucose > 0 ? _glucose : "--")</MudText>
-                    <MudText Typo="Typo.caption" Style="opacity: 0.7;">Glu</MudText>
-                </div>
-            </MudItem>
-
-             <!-- Hydration -->
-            <MudItem xs="6">
-                <div class="d-flex align-center justify-space-between rounded pa-2" style="background: rgba(255,255,255,0.03); height: 100%;">
-                     <MudIcon Icon="@Icons.Material.Filled.LocalDrink" Size="Size.Small" Color="Color.Info" />
-                     <MudText Typo="Typo.h6" Class="font-weight-bold mx-2">@(_hydration > 0 ? _hydration + "L" : "--")</MudText>
-                     <MudText Typo="Typo.caption" Style="opacity: 0.7;">Water</MudText>
-                </div>
-            </MudItem>
-
-        </MudGrid>
+        <!-- NUTRTION (Pills) -->
+        <div class="d-flex gap-2 justify-center mt-auto pb-1">
+            <MudChip T="string" Color="Color.Success" Variant="Variant.Text" Size="Size.Small" Icon="@Icons.Material.Filled.Grass">@(_carbs > 0 ? _carbs + "g" : "--")</MudChip>
+            <MudChip T="string" Color="Color.Warning" Variant="Variant.Text" Size="Size.Small" Icon="@Icons.Material.Filled.Egg">@(_prot > 0 ? _prot + "g" : "--")</MudChip>
+            <MudChip T="string" Color="Color.Error" Variant="Variant.Text" Size="Size.Small" Icon="@Icons.Material.Filled.OilBarrel">@(_fat > 0 ? _fat + "g" : "--")</MudChip>
+        </div>
 
     </div>
 </div>
@@ -149,22 +106,15 @@
     [Parameter] public RenderFragment HeaderAction { get; set; }
 
     // Metrics
-    private double _steps;
-    private double _calories;
-    private double _sleepMinutes;
-    
-    // Heart & Body
-    private double _bpm;
-    private double _distanceMeters;
-    private double _weightKg;
-    
-    // Advanced
-    private double _bpSys;
-    private double _bpDia;
-    private double _glucose;
-    private double _oxy;
-    private double _temp;
-    private double _hydration;
+    private double _steps, _calories, _sleepMinutes;
+    private double _carbs, _prot, _fat;
+    private double _bpm, _distanceMeters, _weightKg;
+    private double _bpSys, _bpDia;
+
+    // Sources
+    private string _stepsSource, _caloriesSource, _sleepSource;
+    private string _bpmSource, _weightSource, _bpSource;
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -182,20 +132,22 @@
             {
                 var metrics = await HealthService.FetchMetricsAsync(DateTime.Now);
                 
-                _steps = GetVal(metrics, VitalType.Steps);
-                _calories = GetVal(metrics, VitalType.ActiveEnergy); 
-                _sleepMinutes = GetVal(metrics, VitalType.SleepDuration);
+                (_steps, _stepsSource) = GetValAndSource(metrics, VitalType.Steps);
+                (_calories, _caloriesSource) = GetValAndSource(metrics, VitalType.ActiveEnergy); 
+                (_sleepMinutes, _sleepSource) = GetValAndSource(metrics, VitalType.SleepDuration);
                 
-                _bpm = GetVal(metrics, VitalType.HeartRate);
+                (_bpm, _bpmSource) = GetValAndSource(metrics, VitalType.HeartRate);
                 _distanceMeters = GetVal(metrics, VitalType.Distance);
-                _weightKg = GetVal(metrics, VitalType.Weight);
+                (_weightKg, _weightSource) = GetValAndSource(metrics, VitalType.Weight);
                 
-                _bpSys = GetVal(metrics, VitalType.BloodPressureSystolic);
+                double bpSys, bpDia; string bpSrc;
+                (bpSys, bpSrc) = GetValAndSource(metrics, VitalType.BloodPressureSystolic);
+                _bpSys = bpSys; _bpSource = bpSrc;
                 _bpDia = GetVal(metrics, VitalType.BloodPressureDiastolic);
-                _glucose = GetVal(metrics, VitalType.BloodGlucose);
-                _oxy = GetVal(metrics, VitalType.OxygenSaturation);
-                _temp = GetVal(metrics, VitalType.BodyTemperature);
-                _hydration = GetVal(metrics, VitalType.Hydration);
+
+                _carbs = GetVal(metrics, VitalType.Carbs);
+                _prot = GetVal(metrics, VitalType.Protein);
+                _fat = GetVal(metrics, VitalType.Fat);
 
                 StateHasChanged();
             });
@@ -212,6 +164,12 @@
          return m?.Value ?? 0;
     }
 
+    private (double, string) GetValAndSource(List<VitalMetric> metrics, VitalType type)
+    {
+         var m = metrics.FirstOrDefault(x => x.TypeString == type.ToString());
+         return (m?.Value ?? 0, m?.SourceDevice ?? "");
+    }
+
     private int GetPercent(double current, double goal)
     {
         if (goal <= 0) return 0;
@@ -221,7 +179,17 @@
     
     private string FormatNumber(double val)
     {
+        // K number formatting (e.g. 10.5k) if > 1000
+        if (val >= 1000) return (val / 1000.0).ToString("N1") + "k";
         return val > 0 ? val.ToString("N0") : "--";
+    }
+
+    private string FormatSleep(double minutes)
+    {
+        if (minutes <= 0) return "--";
+        // e.g. 7h 30m
+        var ts = TimeSpan.FromMinutes(minutes);
+        return $"{ts.Hours}h {ts.Minutes}m";
     }
 
     private string GetBPString()
@@ -230,6 +198,15 @@
         if (_bpSys > 0) return $"{_bpSys}/--";
         if (_bpDia > 0) return $"--/{_bpDia}";
         return "--";
+    }
+
+    private string GetSourceDotStyle(string source)
+    {
+        string color = "transparent"; // Default hidden if empty
+        if (source == "iOS") color = "#2979FF"; // Blue
+        else if (source == "Health Connect" || source == "Android") color = "#00E676"; // Green
+        
+        return $"width: 6px; height: 6px; border-radius: 50%; background-color: {color}; display: inline-block;";
     }
 
     public void Dispose()
