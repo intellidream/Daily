@@ -287,13 +287,77 @@ namespace Daily.Platforms.iOS.Services.Health
                       if (totalProt > 0) metrics.Add(NewMetric(VitalType.Protein, Math.Round(totalProt), "g", start));
                  }
 
-                 // 15. Caffeine (SUM)
+                
+                // 15. Caffeine (SUM)
                  var caffType = HKQuantityType.Create(HKQuantityTypeIdentifier.DietaryCaffeine);
                  var caffStats = await FetchStatistics(caffType, predicate, start, HKStatisticsOptions.CumulativeSum);
                  if (caffStats != null)
                  {
                       double totalCaff = caffStats.SumQuantity()?.GetDoubleValue(HKUnit.FromString("mg")) ?? 0;
                       if (totalCaff > 0) metrics.Add(NewMetric(VitalType.Caffeine, Math.Round(totalCaff), "mg", start));
+                 }
+
+                 // -- NEW V50 METRICS --
+
+                 // 16. Sugar (SUM)
+                 var sugarType = HKQuantityType.Create(HKQuantityTypeIdentifier.DietarySugar);
+                 var sugarStats = await FetchStatistics(sugarType, predicate, start, HKStatisticsOptions.CumulativeSum);
+                 if (sugarStats != null) {
+                     double val = sugarStats.SumQuantity()?.GetDoubleValue(HKUnit.Gram) ?? 0;
+                     if (val > 0) metrics.Add(NewMetric(VitalType.Sugar, Math.Round(val), "g", start));
+                 }
+                 
+                 // 17. Vitamin C (SUM)
+                 var vitCType = HKQuantityType.Create(HKQuantityTypeIdentifier.DietaryVitaminC);
+                 var vitCStats = await FetchStatistics(vitCType, predicate, start, HKStatisticsOptions.CumulativeSum);
+                 if (vitCStats != null) {
+                     double val = vitCStats.SumQuantity()?.GetDoubleValue(HKUnit.FromString("mg")) ?? 0;
+                     if (val > 0) metrics.Add(NewMetric(VitalType.VitaminC, Math.Round(val), "mg", start));
+                 }
+
+                 // 18. Iron (SUM)
+                 var ironType = HKQuantityType.Create(HKQuantityTypeIdentifier.DietaryIron);
+                 var ironStats = await FetchStatistics(ironType, predicate, start, HKStatisticsOptions.CumulativeSum);
+                 if (ironStats != null) {
+                     double val = ironStats.SumQuantity()?.GetDoubleValue(HKUnit.FromString("mg")) ?? 0;
+                     if (val > 0) metrics.Add(NewMetric(VitalType.Iron, Math.Round(val), "mg", start));
+                 }
+                 // (Add other micros similarly if needed, sticking to core list for now)
+
+                 // 19. Cycle Tracking (Sample Query)
+                 var mensType = HKCategoryType.Create(HKCategoryTypeIdentifier.MenstrualFlow);
+                 await ExecuteQuery(mensType, predicate, 1, (q, r, e) => {
+                     if (r != null && r.Length > 0) metrics.Add(NewMetric(VitalType.MenstruationFlow, 1, "bool", start));
+                 });
+
+                 // 20. Mindfulness (SUM Duration)
+                 var mindType = HKCategoryType.Create(HKCategoryTypeIdentifier.MindfulSession);
+                 await ExecuteQuery(mindType, predicate, 0, (q, r, e) => {
+                     if (r != null) {
+                        double totalMind = 0;
+                        foreach(var s in r) totalMind += (s.EndDate.SecondsSinceReferenceDate - s.StartDate.SecondsSinceReferenceDate) / 60.0;
+                        if (totalMind > 0) metrics.Add(NewMetric(VitalType.MindfulSession, Math.Round(totalMind), "min", start));
+                     }
+                 });
+
+                 // 21. Height (Latest)
+                 var heightType = HKQuantityType.Create(HKQuantityTypeIdentifier.Height);
+                 var heightStats = await FetchStatistics(heightType, predicate, start, HKStatisticsOptions.DiscreteAverage); // or latest sample
+                 if (heightStats != null) {
+                     double val = heightStats.AverageQuantity()?.GetDoubleValue(HKUnit.Meter) ?? 0;
+                     if (val > 0) metrics.Add(NewMetric(VitalType.Height, Math.Round(val, 2), "m", start));
+                 }
+                 
+                 // 22. Cycling Power (Avg)
+                 if (HKHealthStore.IsHealthDataAvailable) { // Check specific version/device support implicitly via Type Create
+                      try {
+                          var powerType = HKQuantityType.Create(HKQuantityTypeIdentifier.CyclingPower);
+                          var powerStats = await FetchStatistics(powerType, predicate, start, HKStatisticsOptions.DiscreteAverage);
+                          if (powerStats != null) {
+                              double val = powerStats.AverageQuantity()?.GetDoubleValue(HKUnit.Watt) ?? 0;
+                              if (val > 0) metrics.Add(NewMetric(VitalType.CyclingPower, Math.Round(val), "W", start));
+                          }
+                      } catch {}
                  }
             }
             catch (Exception ex)

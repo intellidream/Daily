@@ -23,23 +23,45 @@ namespace Daily.Models.Health
         // Expanded Activity
         FloorsClimbed,
         WalkingSpeed,
+        RunningSpeed, // New
         CyclingPower,
-        CyclingCadence,
+        CyclingCadence, // New
+        WorkoutDuration, // New
         BasalEnergyBurned, // Resting Calories
         // Expanded Vitals
         HeartRateVariabilitySDNN,
+        HeartRateVariabilityRMSSD, // New
         RespiratoryRate,
+        BasalBodyTemperature, // New
         // Body Measurements
         BodyFatPercentage,
         LeanBodyMass,
+        Height, // New
+        BodyMassIndex, // New
+        BoneMass, // New
         // Nutrition
         Carbs,
         Fat,
         Protein,
         Caffeine,
+        Sugar, // New
+        VitaminC, // New
+        VitaminA, // New
+        Iron, // New
+        Magnesium, // New
+        Zinc, // New
+        Calcium, // New
+        // Sleep Stages
+        SleepAwake, // New
+        SleepDeep, // New
+        SleepLight, // New
+        SleepREM, // New
         // Cycle Tracking
         MenstruationFlow, // 0=None, 1=Light, 2=Medium, 3=Heavy
         OvulationTest, // 0=Neg, 1=Pos
+        SexualActivity, // New (0=No, 1=Protection, 2=Unprotected) - Simplified to just "Event"
+        // Mindfulness
+        MindfulSession, // Minutes
     }
 
     [Table("vitals")]

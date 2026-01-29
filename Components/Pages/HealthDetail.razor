@@ -107,7 +107,7 @@
                 <MudPaper Class="detail-tile rounded-xl pa-4 d-flex flex-column align-center justify-center relative" Elevation="3" Style="height: 140px;">
                      <div style="@GetSourceDotStyle(_hrvSource); position: absolute; top: 12px; right: 12px;"></div>
                     <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Secondary" Class="mb-2" />
-                    <MudText Typo="Typo.caption" Style="opacity: 0.6; text-transform: uppercase;">HRV (SDNN)</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6; text-transform: uppercase;">HRV</MudText>
                     <MudText Typo="Typo.h5" Class="font-weight-bold">@(_hrv > 0 ? _hrv + " ms" : "--")</MudText>
                 </MudPaper>
             </MudItem>
@@ -121,26 +121,102 @@
                     <MudText Typo="Typo.h5" Class="font-weight-bold">@GetBPString()</MudText>
                 </MudPaper>
             </MudItem>
-
-            <!-- Nutrition Summary -->
+            
+            <!-- Body Composition Row -->
             <MudItem xs="12">
                  <MudPaper Class="detail-tile rounded-xl pa-4 d-flex align-center justify-space-around relative" Elevation="3" Style="height: 100px;">
                      <div class="d-flex flex-column align-center">
-                         <MudText Typo="Typo.caption" Style="color: #4caf50;">CARBS</MudText>
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_carbs > 0 ? _carbs + "g" : "--")</MudText>
+                         <MudText Typo="Typo.caption" Style="opacity: 0.6;">BODY FAT</MudText>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_bodyFat > 0 ? _bodyFat + "%" : "--")</MudText>
                      </div>
                      <MudDivider Vertical="true" FlexItem="true" />
                       <div class="d-flex flex-column align-center">
-                         <MudText Typo="Typo.caption" Style="color: #ff9800;">PROT</MudText>
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_prot > 0 ? _prot + "g" : "--")</MudText>
+                         <MudText Typo="Typo.caption" Style="opacity: 0.6;">BMI</MudText>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_bmi > 0 ? _bmi.ToString("N1") : "--")</MudText>
                      </div>
                      <MudDivider Vertical="true" FlexItem="true" />
                       <div class="d-flex flex-column align-center">
-                         <MudText Typo="Typo.caption" Style="color: #f44336;">FAT</MudText>
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_fat > 0 ? _fat + "g" : "--")</MudText>
+                         <MudText Typo="Typo.caption" Style="opacity: 0.6;">LEAN MASS</MudText>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_leanMass > 0 ? _leanMass + "kg" : "--")</MudText>
                      </div>
                  </MudPaper>
             </MudItem>
+
+            <!-- Sleep & Mind Row -->
+             <MudItem xs="12">
+                 <MudPaper Class="detail-tile rounded-xl pa-4 d-flex align-center justify-space-around relative" Elevation="3" Style="height: 100px;">
+                     <div class="d-flex flex-column align-center">
+                         <div style="display:flex; align-items:center; gap:4px">
+                            <MudIcon Icon="@Icons.Material.Filled.SelfImprovement" Color="Color.Info" Size="Size.Small"/>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.6;">MIND</MudText>
+                         </div>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_mindMinutes > 0 ? _mindMinutes + "m" : "--")</MudText>
+                     </div>
+                     <MudDivider Vertical="true" FlexItem="true" />
+                      <div class="d-flex flex-column align-center">
+                         <div style="display:flex; align-items:center; gap:4px">
+                             <MudIcon Icon="@Icons.Material.Filled.DeviceThermostat" Color="Color.Warning" Size="Size.Small"/>
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">TEMP</MudText>
+                         </div>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_temp > 0 ? _temp + "°C" : "--")</MudText>
+                     </div>
+                     <MudDivider Vertical="true" FlexItem="true" />
+                      <div class="d-flex flex-column align-center">
+                         <div style="display:flex; align-items:center; gap:4px">
+                            <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Color="Color.Primary" Size="Size.Small"/>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.6;">H2O</MudText>
+                         </div>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_hydration > 0 ? _hydration + "L" : "--")</MudText>
+                     </div>
+                 </MudPaper>
+            </MudItem>
+
+            <!-- Nutrition Summary -->
+            <MudItem xs="12">
+                 <MudPaper Class="detail-tile rounded-xl pa-4 d-flex flex-column gap-2 relative" Elevation="3">
+                     <!-- Macros -->
+                     <div class="d-flex align-center justify-space-around mb-2">
+                         <div class="d-flex flex-column align-center">
+                             <MudText Typo="Typo.caption" Style="color: #4caf50;">CARBS</MudText>
+                             <MudText Typo="Typo.h6" Class="font-weight-bold">@(_carbs > 0 ? _carbs + "g" : "--")</MudText>
+                         </div>
+                          <div class="d-flex flex-column align-center">
+                             <MudText Typo="Typo.caption" Style="color: #ff9800;">PROT</MudText>
+                             <MudText Typo="Typo.h6" Class="font-weight-bold">@(_prot > 0 ? _prot + "g" : "--")</MudText>
+                         </div>
+                          <div class="d-flex flex-column align-center">
+                             <MudText Typo="Typo.caption" Style="color: #f44336;">FAT</MudText>
+                             <MudText Typo="Typo.h6" Class="font-weight-bold">@(_fat > 0 ? _fat + "g" : "--")</MudText>
+                         </div>
+                     </div>
+                     <MudDivider Light="true"/>
+                     <!-- Micros -->
+                     <div class="d-flex align-center justify-space-around mt-1">
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">Sug: @(_sugar > 0 ? _sugar+"g" : "-")</MudText>
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">Iron: @(_iron > 0 ? _iron+"mg" : "-")</MudText>
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">VitC: @(_vitC > 0 ? _vitC+"mg" : "-")</MudText>
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">Caff: @(_caffeine > 0 ? _caffeine+"mg" : "-")</MudText>
+                     </div>
+                 </MudPaper>
+            </MudItem>
+
+            <!-- Cycle Tracking (Conditional) -->
+            @if (_mensFlow || _ovulationRes > 0 || _sexualActivity)
+            {
+                <MudItem xs="12">
+                    <MudPaper Class="detail-tile rounded-xl pa-4 d-flex align-center justify-space-between relative" Elevation="3" Style="background: rgba(233, 30, 99, 0.1);">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Female" Color="Color.Secondary"/>
+                            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="font-weight-bold">Cycle</MudText>
+                        </div>
+                        <div class="d-flex gap-4">
+                             @if(_mensFlow) { <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled">Flow</MudChip> }
+                             @if(_ovulationRes == 1) { <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled">Ovulation (+)</MudChip> }
+                             @if(_sexualActivity) { <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Activity</MudChip> }
+                        </div>
+                    </MudPaper>
+                </MudItem>
+            }
 
         </MudGrid>
     </MudItem>
@@ -169,14 +245,21 @@
     private double _distanceMeters, _floors, _speed;
     private double _bpm, _rhr, _hrv, _respRate;
     private double _temp, _oxy, _bpSys, _bpDia, _glucose;
-    private double _weightKg, _bodyFat, _leanMass;
-    private double _carbs, _fat, _prot, _caffeine, _hydration;
+    private double _weightKg, _bodyFat, _leanMass, _height, _boneMass, _bmi;
+    private double _carbs, _fat, _prot, _caffeine, _hydration, _sugar;
+    private double _vitC, _vitA, _iron, _mag, _zinc, _calc;
     
+    // Cycle & Mind
+    private bool _mensFlow;
+    private int _ovulationRes; // enum
+    private bool _sexualActivity;
+    private double _mindMinutes;
+
     // Source Fields
     private string _stepsSource, _caloriesSource, _sleepSource;
     private string _bpmSource, _weightSource, _hrvSource, _bpSource;
-    private string _sourceSummary = "";
-
+    private string _bodySource, _nutSource, _cycleSource; // Aggregated source flags
+    
     // Diagnostics
     private string _debugLog = "";
     private bool _isSyncing = false;
@@ -243,7 +326,13 @@
                 // Heart & Vitals
                 (_bpm, _bpmSource) = GetValAndSource(metrics, VitalType.HeartRate);
                 _rhr = GetVal(metrics, VitalType.RestingHeartRate);
-                (_hrv, _hrvSource) = GetValAndSource(metrics, VitalType.HeartRateVariabilitySDNN);
+                
+                // HRV Priority: SDNN (iOS default) > RMSSD (Android default)
+                var sdnn = GetValAndSource(metrics, VitalType.HeartRateVariabilitySDNN);
+                var rmssd = GetValAndSource(metrics, VitalType.HeartRateVariabilityRMSSD);
+                if (sdnn.Item1 > 0) (_hrv, _hrvSource) = sdnn;
+                else (_hrv, _hrvSource) = rmssd;
+
                 _respRate = GetVal(metrics, VitalType.RespiratoryRate);
                 
                 double bpSys = 0; string bpSrc = "";
@@ -258,13 +347,32 @@
                 (_weightKg, _weightSource) = GetValAndSource(metrics, VitalType.Weight);
                 _bodyFat = GetVal(metrics, VitalType.BodyFatPercentage);
                 _leanMass = GetVal(metrics, VitalType.LeanBodyMass);
+                _height = GetVal(metrics, VitalType.Height);
+                _boneMass = GetVal(metrics, VitalType.BoneMass);
                 
-                // Nutrition (Sources likely mixed or MyFitnessPal etc, ignore for now)
+                // BMI Calculation
+                if (_weightKg > 0 && _height > 0) _bmi = _weightKg / (_height * _height);
+                else _bmi = 0;
+
+                // Nutrition
                 _carbs = GetVal(metrics, VitalType.Carbs);
                 _fat = GetVal(metrics, VitalType.Fat);
                 _prot = GetVal(metrics, VitalType.Protein);
                 _caffeine = GetVal(metrics, VitalType.Caffeine);
+                _sugar = GetVal(metrics, VitalType.Sugar);
                 _hydration = GetVal(metrics, VitalType.Hydration);
+                
+                _vitC = GetVal(metrics, VitalType.VitaminC);
+                _iron = GetVal(metrics, VitalType.Iron);
+                _mag = GetVal(metrics, VitalType.Magnesium);
+                
+                // Cycle
+                _mensFlow = GetVal(metrics, VitalType.MenstruationFlow) > 0;
+                _sexualActivity = GetVal(metrics, VitalType.SexualActivity) > 0;
+                _ovulationRes = (int)GetVal(metrics, VitalType.OvulationTest);
+                
+                // Mind
+                _mindMinutes = GetVal(metrics, VitalType.MindfulSession);
 
                 StateHasChanged();
             });
@@ -311,7 +419,7 @@
     
     private string GetSourceDotStyle(string source)
     {
-        string color = "rgba(158, 158, 158, 0.5)"; // Default Grey/Transparent
+        string color = "rgba(158, 158, 158, 0.5)"; // Default Grey
         if (source == "iOS") color = "#2979FF"; // Blue
         else if (source == "Health Connect" || source == "Android") color = "#00E676"; // Green
         else if (source == "Manual") color = "#E91E63"; // Pink

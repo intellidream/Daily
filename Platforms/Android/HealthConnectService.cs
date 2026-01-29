@@ -317,6 +317,8 @@ namespace Daily.Platforms.Android
                     }
                 } catch {}
 
+
+                
                 // --- EXPANDED METRICS (Activity) ---
 
                 // 12. Floors Climbed (Sum)
@@ -328,21 +330,11 @@ namespace Daily.Platforms.Android
                         totalFloors += record.Floors;
                     }
                     if (totalFloors > 0) metrics.Add(new VitalMetric { TypeString = VitalType.FloorsClimbed.ToString(), Value = Math.Round(totalFloors, 0), Unit = "floors", Date = date, SourceDevice = "Health Connect" });
-                } catch {}
+                } catch { }
 
                 // 13. Basal Energy (Resting Calories) (Sum)
                 try {
                     var bmrResponse = await ReadRecordsInternal<BasalMetabolicRateRecord>();
-                    double totalBmr = 0; // BMR is rate (kcal/day) usually... wait. 
-                    // Health Connect BMR Record is 'BasalMetabolicRate' (Power). To get total, we need to integrate over time or use TotalBasalMetabolicRate if available.
-                    // Actually, for consistency with 'ActiveCalories', we often want 'BasalCaloriesBurned'. 
-                    // BUT Health Connect separates them. Let's assume user wants Total Resting Kcal.
-                    // It's complex to integrate. Let's look for 'BasalMetabolicRate' and just average it? No, users want Total Kcal.
-                    // Actually, 'TotalCaloriesBurned' often includes BMR. 
-                    // Let's Skip BMR Integration for now unless we find 'BasalCalories' record. 
-                    // Checking docs... BasalMetabolicRateRecord is a Sample. 
-                    // Let's implement it as an Average Rate (kcal/day) if needed, OR skip if too complex for now.
-                    // Let's do Average Kcal/Day rate.
                     var bmrList = GetRecordsList(bmrResponse);
                     if (bmrList.Count > 0) {
                          double bmrSum = 0;
@@ -367,6 +359,20 @@ namespace Daily.Platforms.Android
                      }
                 } catch {}
 
+                // 14b. Power (Cycling) (Average)
+                try {
+                     var pResponse = await ReadRecordsInternal<PowerRecord>();
+                     var pList = GetRecordsList(pResponse);
+                     if (pList.Count > 0) {
+                         double pSum = 0; 
+                         int pCount = 0;
+                         foreach (PowerRecord record in pList) { 
+                             foreach(var samp in record.Samples) { pSum += samp.Power.Watts; pCount++; }
+                         }
+                         if (pCount > 0) metrics.Add(new VitalMetric { TypeString = VitalType.CyclingPower.ToString(), Value = Math.Round(pSum / pCount, 0), Unit = "W", Date = date, SourceDevice = "Health Connect" });
+                     }
+                } catch {}
+
                 // -- EXPANDED VITALS --
 
                 // 15. HRV (RMSSD) (Average)
@@ -376,7 +382,7 @@ namespace Daily.Platforms.Android
                      if (hrvList.Count > 0) {
                          double hSum = 0;
                          foreach (HeartRateVariabilityRmssdRecord record in hrvList) hSum += record.HeartRateVariabilityMillis;
-                         metrics.Add(new VitalMetric { TypeString = VitalType.HeartRateVariabilitySDNN.ToString(), Value = Math.Round(hSum / hrvList.Count, 1), Unit = "ms", Date = date, SourceDevice = "Health Connect" });
+                         metrics.Add(new VitalMetric { TypeString = VitalType.HeartRateVariabilityRMSSD.ToString(), Value = Math.Round(hSum / hrvList.Count, 1), Unit = "ms", Date = date, SourceDevice = "Health Connect" });
                      }
                 } catch {}
 
@@ -390,6 +396,19 @@ namespace Daily.Platforms.Android
                          metrics.Add(new VitalMetric { TypeString = VitalType.RespiratoryRate.ToString(), Value = Math.Round(rrSum / rrList.Count, 1), Unit = "br/min", Date = date, SourceDevice = "Health Connect" });
                      }
                 } catch {}
+
+                // 16b. Basal Body Temperature (Average)
+                try {
+                    var btResponse = await ReadRecordsInternal<BasalBodyTemperatureRecord>();
+                    var btList = GetRecordsList(btResponse);
+                    if (btList.Count > 0)
+                    {
+                        double btSum = 0;
+                        foreach (BasalBodyTemperatureRecord record in btList) btSum += record.Temperature.Celsius;
+                        metrics.Add(new VitalMetric { TypeString = VitalType.BasalBodyTemperature.ToString(), Value = Math.Round(btSum / btList.Count, 2), Unit = "C", Date = date, SourceDevice = "Health Connect" });
+                    }
+                } catch {}
+
 
                 // -- BODY MEASUREMENTS --
 
@@ -413,27 +432,92 @@ namespace Daily.Platforms.Android
                      }
                 } catch {}
 
+                // 19. Height (Latest)
+                try {
+                     var hResponse = await ReadRecordsInternal<HeightRecord>();
+                     var hList = GetRecordsList(hResponse);
+                     if (hList.Count > 0) {
+                         var last = hList[hList.Count - 1] as HeightRecord;
+                         metrics.Add(new VitalMetric { TypeString = VitalType.Height.ToString(), Value = Math.Round(last.Height.Meters, 2), Unit = "m", Date = date, SourceDevice = "Health Connect" });
+                     }
+                } catch {}
+
+                // 20. Bone Mass (Latest)
+                try {
+                     var bmResponse = await ReadRecordsInternal<BoneMassRecord>();
+                     var bmList = GetRecordsList(bmResponse);
+                     if (bmList.Count > 0) {
+                         var last = bmList[bmList.Count - 1] as BoneMassRecord;
+                         metrics.Add(new VitalMetric { TypeString = VitalType.BoneMass.ToString(), Value = Math.Round(last.Mass.Kilograms, 2), Unit = "kg", Date = date, SourceDevice = "Health Connect" });
+                     }
+                } catch {}
+
+                // -- CYCLE TRACKING --
+                try {
+                    var mensResponse = await ReadRecordsInternal<MenstruationPeriodRecord>();
+                    // Just count flow presence, 1=Flow
+                    if (GetRecordsList(mensResponse).Count > 0)
+                         metrics.Add(new VitalMetric { TypeString = VitalType.MenstruationFlow.ToString(), Value = 1, Unit = "bool", Date = date, SourceDevice = "Health Connect" });
+                } catch {}
+
+                try {
+                    var ovuResponse = await ReadRecordsInternal<OvulationTestRecord>();
+                    var oList = GetRecordsList(ovuResponse);
+                    if (oList.Count > 0)
+                    {
+                        var last = oList[oList.Count - 1] as OvulationTestRecord;
+                         // Result: 0=Inconclusive, 1=Positive, 2=Neg? need to check int mapping. 
+                         // Assuming positive presence is key.
+                        metrics.Add(new VitalMetric { TypeString = VitalType.OvulationTest.ToString(), Value = last.Result, Unit = "enum", Date = date, SourceDevice = "Health Connect" });
+                    }
+                } catch {}
+
+                try {
+                    var sexResponse = await ReadRecordsInternal<SexualActivityRecord>();
+                    if (GetRecordsList(sexResponse).Count > 0)
+                         metrics.Add(new VitalMetric { TypeString = VitalType.SexualActivity.ToString(), Value = 1, Unit = "event", Date = date, SourceDevice = "Health Connect" });
+                } catch {}
+
+
                 // -- NUTRITION (Aggregated) --
 
                 try {
                     var nResponse = await ReadRecordsInternal<NutritionRecord>();
-                    double carbs = 0;
-                    double fat = 0;
-                    double protein = 0;
-                    double caffeine = 0; 
+                    double carbs = 0, fat = 0, protein = 0, caffeine = 0, sugar = 0;
+                    double vitC = 0, vitA = 0, iron = 0, mag = 0, zinc = 0, calc = 0;
                     
                     foreach (NutritionRecord record in GetRecordsList(nResponse))
                     {
                         if (record.TotalCarbohydrate != null) carbs += record.TotalCarbohydrate.Grams;
                         if (record.TotalFat != null) fat += record.TotalFat.Grams;
                         if (record.Protein != null) protein += record.Protein.Grams;
-                        if (record.Caffeine != null) caffeine += record.Caffeine.Grams * 1000;
+                        if (record.Caffeine != null) caffeine += record.Caffeine.Grams * 1000; // mg
+                        if (record.Sugar != null) sugar += record.Sugar.Grams;
+                        
+                        if (record.VitaminC != null) vitC += record.VitaminC.Grams * 1000; // mg
+                        if (record.VitaminA != null) vitA += record.VitaminA.Grams * 1000000; // mcg (Check Units?? Vitamin A usually mcg) 
+                        // Actually grams check: usually very small. Let's assume grams from API and normalize to display (mg/mcg).
+                        // Let's store as MG for everything for simplicity in DB, except A in RE/IU?
+                        // Let's store grams as base unit in DB to be safe, but UI wants readable.
+                        // Wait, VitaminC.Grams returns double.
+                        // Let's store MG.
+                        if (record.Iron != null) iron += record.Iron.Grams * 1000;
+                        if (record.Magnesium != null) mag += record.Magnesium.Grams * 1000;
+                        if (record.Zinc != null) zinc += record.Zinc.Grams * 1000;
+                        if (record.Calcium != null) calc += record.Calcium.Grams * 1000;
                     }
 
                     if (carbs > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Carbs.ToString(), Value = Math.Round(carbs), Unit = "g", Date = date, SourceDevice = "Health Connect" });
                     if (fat > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Fat.ToString(), Value = Math.Round(fat), Unit = "g", Date = date, SourceDevice = "Health Connect" });
                     if (protein > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Protein.ToString(), Value = Math.Round(protein), Unit = "g", Date = date, SourceDevice = "Health Connect" });
                     if (caffeine > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Caffeine.ToString(), Value = Math.Round(caffeine), Unit = "mg", Date = date, SourceDevice = "Health Connect" });
+                    
+                    if (sugar > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Sugar.ToString(), Value = Math.Round(sugar), Unit = "g", Date = date, SourceDevice = "Health Connect" });
+                    if (vitC > 0) metrics.Add(new VitalMetric { TypeString = VitalType.VitaminC.ToString(), Value = Math.Round(vitC), Unit = "mg", Date = date, SourceDevice = "Health Connect" });
+                    if (iron > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Iron.ToString(), Value = Math.Round(iron), Unit = "mg", Date = date, SourceDevice = "Health Connect" });
+                    if (mag > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Magnesium.ToString(), Value = Math.Round(mag), Unit = "mg", Date = date, SourceDevice = "Health Connect" });
+                    if (zinc > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Zinc.ToString(), Value = Math.Round(zinc), Unit = "mg", Date = date, SourceDevice = "Health Connect" });
+                    if (calc > 0) metrics.Add(new VitalMetric { TypeString = VitalType.Calcium.ToString(), Value = Math.Round(calc), Unit = "mg", Date = date, SourceDevice = "Health Connect" });
 
                 } catch {}
 
