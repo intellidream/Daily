@@ -10,9 +10,12 @@ namespace Daily.Services
     {
         private readonly HttpClient _httpClient;
 
-        public YouTubeService()
+        private readonly IAuthService _authService;
+
+        public YouTubeService(IAuthService authService)
         {
-            _httpClient = new HttpClient();
+            _httpClient = new HttpClient(new Daily.Services.Auth.GoogleAuthHandler(authService));
+            _authService = authService;
         }
 
         public string? SelectedCategory { get; private set; }
@@ -29,13 +32,38 @@ namespace Daily.Services
 
         public async Task<(List<VideoItem> Videos, string NextPageToken)> GetRecommendationsAsync(string accessToken, string? pageToken = null, string? category = null)
         {
-            if (string.IsNullOrEmpty(accessToken))
-            {
-               return (new List<VideoItem>(), "");
-            }
+             // Retry Wrapper
+             for (int retry = 0; retry < 2; retry++)
+             {
+                 try
+                 {
+                    // Update token if we refreshed it in previous loop
+                    if (retry > 0) accessToken = _authService.GetProviderToken() ?? accessToken;
 
-            try
-            {
+                    if (string.IsNullOrEmpty(accessToken)) return (new List<VideoItem>(), "");
+                    
+                    return await GetRecommendationsInternalAsync(accessToken, pageToken, category);
+                 }
+                 catch (HttpRequestException httpEx) when (httpEx.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                 {
+                     Console.WriteLine($"[YouTubeService] 401 Unauthorized. Attempting refresh... (Retry {retry})");
+                     if (retry == 0)
+                     {
+                         var refreshed = await _authService.RefreshGoogleTokenAsync();
+                         if (!refreshed) throw; // Abort if refresh failed
+                     }
+                     else throw; // Don't loop forever
+                 }
+                 catch (Exception)
+                 {
+                     throw; // Let general catch handle it, or we can squash
+                 }
+             }
+             return (GetMockData(), "");
+        }
+
+        private async Task<(List<VideoItem> Videos, string NextPageToken)> GetRecommendationsInternalAsync(string accessToken, string? pageToken, string? category)
+        {
                 string url;
                 bool isSearch = false;
 
@@ -72,6 +100,13 @@ namespace Daily.Services
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
                 var response = await _httpClient.SendAsync(request);
+                
+                // CRITICAL: Throw so we catch in the retry loop
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    throw new HttpRequestException("Unauthorized", null, System.Net.HttpStatusCode.Unauthorized);
+                }
+                
                 if (response.IsSuccessStatusCode)
                 {
                     var json = await response.Content.ReadAsStringAsync();
@@ -164,13 +199,8 @@ namespace Daily.Services
                 {
                      return (GetMockData(), "");
                 }
-            }
-            catch (Exception ex)
-            {
-                 Console.WriteLine($"YouTube Exception: {ex}");
-                 return (GetMockData(), "");
-            }
         }
+
 
         private async Task<(List<VideoItem> Videos, string NextPageToken)> GetSubscribedVideosAsync(string accessToken, string? pageToken)
         {

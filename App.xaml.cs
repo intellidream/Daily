@@ -26,8 +26,9 @@ namespace Daily
         private readonly ISyncService _syncService;
 
         private readonly WindowManagerService _windowManagerService;
+        private readonly DebugLogger _logger;
 
-        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService, WindowManagerService windowManagerService)
+        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService, WindowManagerService windowManagerService, DebugLogger logger)
         {
             InitializeComponent();
             _windowManagerService = windowManagerService;
@@ -39,6 +40,7 @@ namespace Daily
             _syncService = syncService;
             _refreshService = refreshService;
             _backButtonService = backButtonService;
+            _logger = logger;
 #if MACCATALYST
             // Daily.Platforms.MacCatalyst.MacTrayService.Log("App Constructor Called");
 #endif
@@ -46,14 +48,63 @@ namespace Daily
             // Initialize Data Layer & Services
             Task.Run(async () => 
             {
+                _logger.Log("[App] Initialization Started.");
                 await _databaseService.InitializeAsync();
                 await _supabase.InitializeAsync();
                 
-                // Trigger Services Init (Check Auth & Sync)
+                // MANUAL HYDRATION
+                var currentSession = _supabase.Auth.CurrentSession;
+                if (currentSession == null)
+                {
+                    _logger.Log("[App] Supabase Session is NULL. Attempting Manual Hydration...");
+                    try 
+                    {
+                        var persistence = new Daily.Services.Auth.MauiSessionPersistence(_logger);
+                        var storedSession = persistence.LoadSession();
+                        if (storedSession != null && !string.IsNullOrEmpty(storedSession.AccessToken))
+                        {
+                             _logger.Log($"[App] Hydrating Session for {storedSession.User?.Email}...");
+                             await _supabase.Auth.SetSession(storedSession.AccessToken, storedSession.RefreshToken);
+                             
+                             // CRITICAL: Restore Provider Token (YouTube) which SetSession ignores
+                             if (_supabase.Auth.CurrentSession != null && !string.IsNullOrEmpty(storedSession.ProviderToken))
+                             {
+                                 _supabase.Auth.CurrentSession.ProviderToken = storedSession.ProviderToken;
+                                 if (!string.IsNullOrEmpty(storedSession.ProviderRefreshToken))
+                                 {
+                                     _supabase.Auth.CurrentSession.ProviderRefreshToken = storedSession.ProviderRefreshToken;
+                                 }
+                                 _logger.Log($"[App] Restored ProviderToken (Length: {storedSession.ProviderToken.Length})");
+                                 
+                                 // PERSIST: We must re-save immediately, otherwise the internal SetSession 
+                                 // saved a version *without* the token, and next restart it will be gone.
+                                 persistence.SaveSession(_supabase.Auth.CurrentSession);
+                                 _logger.Log($"[App] Re-saved Session with ProviderToken to ensure persistence.");
+                             }
+
+                             currentSession = _supabase.Auth.CurrentSession;
+                             _logger.Log($"[App] Manual Hydration Result: {(currentSession != null ? "Success" : "Failed")}");
+                        }
+                        else
+                        {
+                            _logger.Log("[App] No Stored Session found.");
+                        }
+                    }
+                    catch(Exception ex)
+                    {
+                         _logger.Log($"[App] Manual Hydration Error: {ex}");
+                    }
+                }
+                else
+                {
+                    _logger.Log($"[App] Supabase Auto-Loaded Session: {currentSession.User?.Email}");
+                }
+
                 await _settingsService.InitializeAsync();
+                _logger.Log($"[App] Settings Initialized. IsAuthenticated: {_settingsService.IsAuthenticated}");
+                
                 await _habitsService.InitializeAsync();
                 
-                // Start Timer (Robustness)
                 _syncService.StartBackgroundSync();
             });
 

@@ -223,23 +223,24 @@
         <!-- Debug Log Section (New) -->
         <MudItem xs="12">
              <MudPaper Class="detail-tile rounded-xl pa-4" Elevation="3">
-                 <MudText Typo="Typo.h6" Class="mb-2 font-weight-bold">Debug Log</MudText>
+                 <MudText Typo="Typo.h6" Class="mb-2 font-weight-bold">Diagnostics (Auth & Sync)</MudText>
                  <MudTextField T="string" 
-                               Value="@SyncService.DebugLog" 
-                               Label="Sync Diagnostics" 
+                               Value="@(string.Join("\n", DebugLogger.Logs))" 
+                               Label="Application Logs" 
                                Variant="Variant.Outlined" 
-                               Lines="10" 
+                               Lines="15" 
                                ReadOnly="true"
-                               Style="font-family: monospace; font-size: 12px;" />
+                               Style="font-family: monospace; font-size: 11px;" />
                  <div class="d-flex justify-end mt-2 gap-2">
-                     <MudButton Variant="Variant.Outlined" Color="Color.Info" OnClick="@(() => SyncService.Log("Test Log Entry " + DateTime.Now.ToLongTimeString()))">Test Log</MudButton>
-                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="@(() => StateHasChanged())">Refresh Log</MudButton>
+                     <MudButton Variant="Variant.Outlined" Color="Color.Info" OnClick="@(() => DebugLogger.Log("Test Log Entry " + DateTime.Now.ToLongTimeString()))">Test Log</MudButton>
+                     <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DebugLogger.Clear())">Clear</MudButton>
                  </div>
              </MudPaper>
         </MudItem>
     </MudGrid>
 </div>
 
+@inject DebugLogger DebugLogger
 @inject ISyncService SyncService
 @inject IWindowManagerService WindowManagerService
 
@@ -283,9 +284,9 @@
     public void Dispose()
     {
         SettingsService.OnSettingsChanged -= OnSettingsChanged;
-        if (SyncService != null)
+        if (DebugLogger != null)
         {
-            SyncService.OnDebugLogUpdated -= OnLogUpdated;
+            DebugLogger.OnLogAdded -= OnLogUpdated;
         }
     }
 
@@ -299,9 +300,9 @@
         await SettingsService.InitializeAsync();
         SettingsService.OnSettingsChanged += OnSettingsChanged;
         
-        if (SyncService != null)
+        if (DebugLogger != null)
         {
-            SyncService.OnDebugLogUpdated += OnLogUpdated;
+            DebugLogger.OnLogAdded += OnLogUpdated;
         }
     }
 

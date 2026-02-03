@@ -154,15 +154,24 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.ITrayService, Daily.Services.StubTrayService>();
 #endif
 
+            builder.Services.AddSingleton<Daily.Services.DebugLogger>();
+            
             // Supabase Configuration
             var supabaseUrl = Daily.Configuration.Secrets.SupabaseUrl;
             var supabaseKey = Daily.Configuration.Secrets.SupabaseKey;
-            var supabaseOptions = new Supabase.SupabaseOptions
+            
+            // Register Client using Factory to resolve dependencies (DebugLogger)
+            builder.Services.AddSingleton(provider => 
             {
-                AutoRefreshToken = true,
-                AutoConnectRealtime = true
-            };
-            builder.Services.AddSingleton(provider => new Supabase.Client(supabaseUrl, supabaseKey, supabaseOptions));
+                var logger = provider.GetRequiredService<Daily.Services.DebugLogger>();
+                var options = new Supabase.SupabaseOptions
+                {
+                    AutoRefreshToken = true,
+                    AutoConnectRealtime = true,
+                    SessionHandler = new Daily.Services.Auth.MauiSessionPersistence(logger)
+                };
+                return new Supabase.Client(supabaseUrl, supabaseKey, options);
+            });
 
             return builder.Build();
         }

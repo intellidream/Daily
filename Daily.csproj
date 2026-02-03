@@ -42,11 +42,14 @@
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
         <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
         
-        <!-- iOS Provisioning: Automatic with Specific Team -->
-        <CodesignKey Condition="$(TargetFramework.Contains('ios'))">iPhone Developer</CodesignKey>
-        <CodesignProvision Condition="$(TargetFramework.Contains('ios'))">Automatic</CodesignProvision>
-        <DevelopmentTeam Condition="$(TargetFramework.Contains('ios'))">46P99RQF56</DevelopmentTeam>
-        <CodesignEntitlements Condition="$(TargetFramework.Contains('ios'))">Platforms\iOS\Entitlements.plist</CodesignEntitlements>
+    </PropertyGroup>
+
+    <!-- iOS Provisioning -->
+    <PropertyGroup Condition="$(TargetFramework.Contains('ios'))">
+        <CodesignKey>iPhone Developer</CodesignKey>
+        <CodesignProvision>Automatic</CodesignProvision>
+        <DevelopmentTeam>46P99RQF56</DevelopmentTeam>
+        <CodesignEntitlements>Platforms\iOS\Entitlements.plist</CodesignEntitlements>
     </PropertyGroup>
 
     <ItemGroup>
@@ -80,6 +83,7 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
         <PackageReference Include="MudBlazor" Version="8.15.0" />
         <PackageReference Include="H.NotifyIcon.Maui" Version="2.4.1" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
         <PackageReference Include="postgrest-csharp" Version="3.5.1" />
         <PackageReference Include="SmartReader" Version="0.10.2" />
         <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
