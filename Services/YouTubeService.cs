@@ -32,34 +32,24 @@ namespace Daily.Services
 
         public async Task<(List<VideoItem> Videos, string NextPageToken)> GetRecommendationsAsync(string accessToken, string? pageToken = null, string? category = null)
         {
-             // Retry Wrapper
-             for (int retry = 0; retry < 2; retry++)
-             {
-                 try
-                 {
-                    // Update token if we refreshed it in previous loop
-                    if (retry > 0) accessToken = _authService.GetProviderToken() ?? accessToken;
+            if (string.IsNullOrEmpty(accessToken))
+            {
+               return (new List<VideoItem>(), "");
+            }
 
-                    if (string.IsNullOrEmpty(accessToken)) return (new List<VideoItem>(), "");
-                    
-                    return await GetRecommendationsInternalAsync(accessToken, pageToken, category);
-                 }
-                 catch (HttpRequestException httpEx) when (httpEx.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                 {
-                     Console.WriteLine($"[YouTubeService] 401 Unauthorized. Attempting refresh... (Retry {retry})");
-                     if (retry == 0)
-                     {
-                         var refreshed = await _authService.RefreshGoogleTokenAsync();
-                         if (!refreshed) throw; // Abort if refresh failed
-                     }
-                     else throw; // Don't loop forever
-                 }
-                 catch (Exception)
-                 {
-                     throw; // Let general catch handle it, or we can squash
-                 }
-             }
-             return (GetMockData(), "");
+            try
+            {
+                // Authenticated calls are now handled by GoogleAuthHandler which automatically refreshes 401s
+                return await GetRecommendationsInternalAsync(accessToken, pageToken, category);
+            }
+            catch (Exception ex)
+            {
+                 Console.WriteLine($"[YouTubeService] Recommendation Error: {ex}");
+                 // On error, return empty or mock? 
+                 // If the Handler failed (e.g. Refresh failed), we will eventually land here.
+                 // Returning empty list might show "Unable to load" in UI.
+                 return (new List<VideoItem>(), ""); 
+            }
         }
 
         private async Task<(List<VideoItem> Videos, string NextPageToken)> GetRecommendationsInternalAsync(string accessToken, string? pageToken, string? category)

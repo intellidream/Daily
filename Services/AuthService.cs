@@ -126,8 +126,7 @@ namespace Daily.Services
                     Scopes = "https://www.googleapis.com/auth/youtube.readonly",
                     QueryParams = new Dictionary<string, string>
                     {
-                        { "access_type", "offline" },
-                        { "prompt", "consent" }
+                        { "access_type", "offline" }
                     }
                 });
 
