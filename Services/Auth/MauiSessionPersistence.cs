@@ -56,7 +56,13 @@ namespace Daily.Services.Auth
                 
                 try 
                 {
-                    SecureStorage.SetAsync(SessionKey, json).GetAwaiter().GetResult();
+                    #if WINDOWS
+                    Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] Offloading SecureStorage to Task.Run to avoid UI Deadlock...");
+                    #endif
+                    
+                    // DEADLOCK FIX: Wrap in Task.Run to avoid capturing UI SynchronizationContext
+                    Task.Run(async () => await SecureStorage.SetAsync(SessionKey, json)).GetAwaiter().GetResult();
+                    
                     Log($"[MauiSessionPersistence] Session Saved via SecureStorage.");
                     #if WINDOWS
                     Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] SecureStorage Success.");
@@ -121,7 +127,8 @@ namespace Daily.Services.Auth
                 // Try SecureStorage First
                 try
                 {
-                    json = SecureStorage.GetAsync(SessionKey).GetAwaiter().GetResult();
+                    // DEADLOCK FIX: Wrap in Task.Run
+                    json = Task.Run(async () => await SecureStorage.GetAsync(SessionKey)).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
