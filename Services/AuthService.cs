@@ -188,8 +188,14 @@ namespace Daily.Services
                 
                 if (!string.IsNullOrEmpty(code))
                 {
+                    #if WINDOWS
+                    Daily.WinUI.AuthDebug.Log($"[AuthService] Exchanging Code for Session (Code len: {code.Length})...");
+                    #endif
                     // Exchange code for session using the PKCE Verifier from the state
                     await _supabase.Auth.ExchangeCodeForSession(state.PKCEVerifier, code);
+                    #if WINDOWS
+                    Daily.WinUI.AuthDebug.Log($"[AuthService] Session Exchanged Successfully!");
+                    #endif
                 }
                 else
                 {

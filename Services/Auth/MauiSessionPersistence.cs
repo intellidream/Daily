@@ -24,9 +24,11 @@ namespace Daily.Services.Auth
         {
             try
             {
+                #if WINDOWS
+                Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] SaveSession Invoked");
+                #endif
+                
                 // CRITICAL FIX: Preserve Provider Tokens if missing (Token Loss Prevention)
-                // This handles the case where Supabase library refreshes the JWT but returns a "headless" session 
-                // without the provider token, potentially overwriting our valid saved token.
                 if (string.IsNullOrEmpty(session.ProviderToken))
                 {
                      var stored = LoadSession();
@@ -35,7 +37,6 @@ namespace Daily.Services.Auth
                          if (!string.IsNullOrEmpty(stored.ProviderToken)) 
                          {
                              session.ProviderToken = stored.ProviderToken;
-                             // Log preserved if needed?
                          }
                          if (!string.IsNullOrEmpty(stored.ProviderRefreshToken))
                          {
@@ -44,17 +45,29 @@ namespace Daily.Services.Auth
                      }
                 }
 
+                #if WINDOWS
+                Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] Serializing Session...");
+                #endif
                 var json = JsonConvert.SerializeObject(session);
-                Log($"[MauiSessionPersistence] Saving Session...");
+                
+                #if WINDOWS
+                Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] Saving to SecureStorage (Key: {SessionKey})...");
+                #endif
                 
                 try 
                 {
                     SecureStorage.SetAsync(SessionKey, json).GetAwaiter().GetResult();
                     Log($"[MauiSessionPersistence] Session Saved via SecureStorage.");
+                    #if WINDOWS
+                    Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] SecureStorage Success.");
+                    #endif
                 }
                 catch (Exception ex)
                 {
                     Log($"[MauiSessionPersistence] SecureStorage Failed ({ex.Message}). Falling back to Preferences...");
+                    #if WINDOWS
+                    Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] SecureStorage Failed: {ex.Message}. Falling back...");
+                    #endif
                     Preferences.Set(SessionKey, json);
                     Log($"[MauiSessionPersistence] Session Saved via Preferences.");
                 }
@@ -62,6 +75,9 @@ namespace Daily.Services.Auth
             catch (Exception ex)
             {
                 Log($"[MauiSessionPersistence] Save Failed: {ex.Message}");
+                #if WINDOWS
+                Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] FATAL SAVE ERROR: {ex.Message}");
+                #endif
             }
         }
 
