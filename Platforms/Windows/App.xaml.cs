@@ -69,6 +69,7 @@ namespace Daily.WinUI
         {
             if (args.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
             {
+                var protocolArgs = args.Data as Windows.ApplicationModel.Activation.ProtocolActivatedEventArgs;
                 if (protocolArgs != null)
                 {
                     Daily.WinUI.AuthDebug.Log($"Protocol Activated: {protocolArgs.Uri}");
