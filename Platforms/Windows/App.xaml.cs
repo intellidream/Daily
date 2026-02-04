@@ -72,19 +72,27 @@ namespace Daily.WinUI
                 var protocolArgs = args.Data as Windows.ApplicationModel.Activation.ProtocolActivatedEventArgs;
                 if (protocolArgs != null)
                 {
-                    var uri = protocolArgs.Uri.ToString();
+                    var uri = protocolArgs.Uri;
                     
-                    // Parse Code from URI (similar to Android logic)
+                    // Manual Query Parsing (Safer than System.Web.HttpUtility)
                     var code = "";
-                    if (protocolArgs.Uri.Query.Contains("code="))
+                    string queryToParse = "";
+
+                    if (!string.IsNullOrEmpty(uri.Query)) queryToParse = uri.Query.TrimStart('?');
+                    else if (!string.IsNullOrEmpty(uri.Fragment)) queryToParse = uri.Fragment.TrimStart('#');
+
+                    if (!string.IsNullOrEmpty(queryToParse))
                     {
-                        var query = System.Web.HttpUtility.ParseQueryString(protocolArgs.Uri.Query);
-                        code = query.Get("code");
-                    }
-                    else if (protocolArgs.Uri.Fragment.Contains("code="))
-                    {
-                         var query = System.Web.HttpUtility.ParseQueryString(protocolArgs.Uri.Fragment.TrimStart('#'));
-                         code = query.Get("code");
+                        var parts = queryToParse.Split('&');
+                        foreach (var part in parts)
+                        {
+                            var kv = part.Split('=');
+                            if (kv.Length == 2 && kv[0] == "code")
+                            {
+                                code = System.Net.WebUtility.UrlDecode(kv[1]);
+                                break;
+                            }
+                        }
                     }
 
                     if (!string.IsNullOrEmpty(code) && Daily.Services.AuthService.GoogleAuthTcs != null && !Daily.Services.AuthService.GoogleAuthTcs.Task.IsCompleted)

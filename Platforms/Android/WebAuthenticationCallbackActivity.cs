@@ -45,11 +45,21 @@ namespace Daily.Platforms.Android
                 var fragment = uri.Fragment; // includes #
                 if (!string.IsNullOrEmpty(fragment))
                 {
-                   var q = System.Web.HttpUtility.ParseQueryString(fragment.TrimStart('#'));
-                   var fragCode = q.Get("code");
-                   if (!string.IsNullOrEmpty(fragCode))
+                   // Manual Parse
+                   var cleanFrag = fragment.TrimStart('#');
+                   var parts = cleanFrag.Split('&');
+                   foreach (var part in parts)
                    {
-                       Daily.Services.AuthService.GoogleAuthTcs?.TrySetResult(fragCode);
+                       var kv = part.Split('=');
+                       if (kv.Length == 2 && kv[0] == "code")
+                       {
+                           var fragCode = System.Net.WebUtility.UrlDecode(kv[1]);
+                           if (!string.IsNullOrEmpty(fragCode))
+                           {
+                               Daily.Services.AuthService.GoogleAuthTcs?.TrySetResult(fragCode);
+                           }
+                           break;
+                       }
                    }
                 }
             }
