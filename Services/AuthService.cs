@@ -139,17 +139,35 @@ namespace Daily.Services
                 try 
                 {
                     // Use Launcher instead of WebAuthenticator to bypass Intent checks
+                    Console.WriteLine("[AuthService] Opening Browser via Launcher...");
+                    #if WINDOWS
+                    Daily.WinUI.AuthDebug.Log("[AuthService] Opening Browser via Launcher...");
+                    #endif
+                    
                     await Launcher.OpenAsync(state.Uri);
+                    
+                    Console.WriteLine("[AuthService] Browser Opened. Waiting for callback...");
+                    #if WINDOWS
+                    Daily.WinUI.AuthDebug.Log("[AuthService] Browser Opened. Waiting for callback TCS...");
+                    #endif
                     
                     // Wait for the callback (handled in WebAuthenticationCallbackActivity or Windows App.xaml.cs)
                     var completedTask = await Task.WhenAny(GoogleAuthTcs.Task, Task.Delay(TimeSpan.FromMinutes(2)));
 
                     if (completedTask == GoogleAuthTcs.Task)
                     {
+                        Console.WriteLine("[AuthService] Callback Received!");
+                        #if WINDOWS
+                        Daily.WinUI.AuthDebug.Log("[AuthService] Callback Received!");
+                        #endif
                         code = await GoogleAuthTcs.Task;
                     }
                     else
                     {
+                        Console.WriteLine("[AuthService] Login Timed Out!");
+                        #if WINDOWS
+                        Daily.WinUI.AuthDebug.Log("[AuthService] Login Timed Out!");
+                        #endif
                         GoogleAuthTcs.TrySetCanceled();
                         await CommunityToolkit.Maui.Alerts.Toast.Make("Login Timed Out").Show();
                     }
@@ -157,6 +175,9 @@ namespace Daily.Services
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[AuthService] LAUNCHER FAILED: {ex}");
+                    #if WINDOWS
+                    Daily.WinUI.AuthDebug.Log($"[AuthService] LAUNCHER FAILED: {ex}");
+                    #endif
                     await CommunityToolkit.Maui.Alerts.Toast.Make($"Launcher Error: {ex.Message}").Show();
                     throw;
                 }

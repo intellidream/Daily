@@ -69,9 +69,9 @@ namespace Daily.WinUI
         {
             if (args.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
             {
-                var protocolArgs = args.Data as Windows.ApplicationModel.Activation.ProtocolActivatedEventArgs;
                 if (protocolArgs != null)
                 {
+                    Daily.WinUI.AuthDebug.Log($"Protocol Activated: {protocolArgs.Uri}");
                     var uri = protocolArgs.Uri;
                     
                     // Manual Query Parsing (Safer than System.Web.HttpUtility)
@@ -80,6 +80,8 @@ namespace Daily.WinUI
 
                     if (!string.IsNullOrEmpty(uri.Query)) queryToParse = uri.Query.TrimStart('?');
                     else if (!string.IsNullOrEmpty(uri.Fragment)) queryToParse = uri.Fragment.TrimStart('#');
+
+                    Daily.WinUI.AuthDebug.Log($"Query to parse: {queryToParse}");
 
                     if (!string.IsNullOrEmpty(queryToParse))
                     {
@@ -90,14 +92,27 @@ namespace Daily.WinUI
                             if (kv.Length == 2 && kv[0] == "code")
                             {
                                 code = System.Net.WebUtility.UrlDecode(kv[1]);
+                                Daily.WinUI.AuthDebug.Log("Code found!");
                                 break;
                             }
                         }
                     }
 
-                    if (!string.IsNullOrEmpty(code) && Daily.Services.AuthService.GoogleAuthTcs != null && !Daily.Services.AuthService.GoogleAuthTcs.Task.IsCompleted)
+                    if (!string.IsNullOrEmpty(code))
                     {
-                        Daily.Services.AuthService.GoogleAuthTcs.TrySetResult(code);
+                         if(Daily.Services.AuthService.GoogleAuthTcs != null && !Daily.Services.AuthService.GoogleAuthTcs.Task.IsCompleted)
+                         {
+                            Daily.WinUI.AuthDebug.Log("Setting TCS Result...");
+                            Daily.Services.AuthService.GoogleAuthTcs.TrySetResult(code);
+                         }
+                         else
+                         {
+                             Daily.WinUI.AuthDebug.Log("TCS is null or already completed!");
+                         }
+                    }
+                    else
+                    {
+                        Daily.WinUI.AuthDebug.Log("No code found in URI.");
                     }
                     
                     // Bring window to front
