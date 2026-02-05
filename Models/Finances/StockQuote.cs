@@ -15,6 +15,15 @@ namespace Daily.Models.Finances
         // Optional: High/Low/Open can be added later if needed
     }
     
+    public class PortfolioItem : StockQuote
+    {
+        public decimal Quantity { get; set; }
+        public decimal CostBasis { get; set; } // Total Cost Logic
+        public decimal TotalValue => CurrentPrice * Quantity;
+        public decimal TotalGainLoss => TotalValue - CostBasis;
+        public decimal TotalGainLossPercent => CostBasis != 0 ? (TotalGainLoss / CostBasis) * 100 : 0;
+    }
+
     public class MoneyData
     {
         // Placeholder for future currency data

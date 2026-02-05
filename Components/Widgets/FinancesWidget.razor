@@ -4,9 +4,10 @@
 @inject IFinancesService FinancesService
 @inject IWindowManagerService WindowManager
 @inject IRefreshService RefreshService
+@inject NavigationManager NavManager
 
 <!-- Widget Container -->
-<div class="d-flex flex-column h-100 w-100 gap-2">
+<div class="d-flex flex-column h-100 w-100 gap-2 cursor-pointer" @onclick="@(() => NavManager.NavigateTo("/finance"))">
     <!-- Header / Carousel -->
     <div class="d-flex align-center mb-1 flex-shrink-0" style="gap: 2px;">
          <div class="flex-grow-1" style="min-width: 0;">
@@ -89,11 +90,18 @@
         }
         else
         {
-            <!-- MONEY VIEW (Placeholder) -->
-             <div class="d-flex flex-column align-center justify-center h-100 text-center gap-2">
-                <MudIcon Icon="@Icons.Material.Filled.Construction" Size="Size.Large" Color="Color.Warning" />
-                <MudText Typo="Typo.caption" Style="opacity: 0.7;">Personal Finance Manager</MudText>
-                <MudText Typo="Typo.caption" Color="Color.Warning" Class="font-weight-bold">UNDER CONSTRUCTION</MudText>
+            <!-- MONEY VIEW -->
+             <div class="d-flex flex-column align-center justify-center h-100 text-center gap-1">
+                <MudText Typo="Typo.caption" Style="opacity: 0.7;">Net Worth</MudText>
+                <MudText Typo="Typo.h4" Class="font-weight-bold" Color="Color.Success">@(_loading ? "..." : _netWorth.ToString("C0"))</MudText>
+                
+                @if (!_loading && _accounts.Any())
+                {
+                    <div class="d-flex gap-2 mt-2">
+                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">Cash: @(_accounts.Sum(x => x.CurrentBalance).ToString("C0"))</MudChip>
+                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Secondary">Inv: @(_stocks.OfType<PortfolioItem>().Sum(x => x.TotalValue).ToString("C0"))</MudChip>
+                    </div>
+                }
             </div>
         }
     </div>
@@ -105,14 +113,16 @@
     private int _currentSlide = 0;
     private bool _loading = false;
     private List<StockQuote> _stocks = new();
+    private List<LocalAccount> _accounts = new();
+    private decimal _netWorth = 0;
     
-    // Default list for now, later could be user configurable
-    private List<string> _trackedSymbols = new() { "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL" };
+    // Default list ONLY if no holdings
+    private List<string> _defaultSymbols = new() { "AAPL", "MSFT", "NVDA", "TSLA" };
 
     protected override async Task OnInitializedAsync()
     {
         RefreshService.RefreshRequested += RefreshData;
-        await LoadStocks();
+        await LoadData();
     }
     
     private void OnCarouselIndexChanged(int index)
@@ -122,23 +132,36 @@
     
     private async Task RefreshData()
     {
-        await LoadStocks();
+        await LoadData();
         await InvokeAsync(StateHasChanged);
     }
     
-    private async Task LoadStocks()
+    private async Task LoadData()
     {
         _loading = true;
         await InvokeAsync(StateHasChanged);
         
         try 
         {
-            // Fetch quote
-            _stocks = await FinancesService.GetStockQuotesAsync(_trackedSymbols);
+            // 1. Money/NetWorth
+            _netWorth = await FinancesService.GetNetWorthAsync();
+            _accounts = await FinancesService.GetAccountsAsync();
+
+            // 2. Stocks (Holdings)
+            var holdings = await FinancesService.GetHoldingsWithQuotesAsync();
+            if (holdings.Any())
+            {
+                _stocks = holdings;
+            }
+            else
+            {
+                // Fallback to defaults if empty portfolio
+                _stocks = await FinancesService.GetStockQuotesAsync(_defaultSymbols);
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading stocks: {ex}");
+            Console.WriteLine($"Error loading finance data: {ex}");
         }
         
         _loading = false;

@@ -292,6 +292,93 @@ namespace Daily.Services.Finances
                     tran.Update(account);
                 }
             });
+
+        }
+
+        // ==========================================
+        // Portfolio Implementation
+        // ==========================================
+
+        public async Task<List<StockQuote>> GetHoldingsWithQuotesAsync()
+        {
+            await _databaseService.InitializeAsync();
+            
+            // 1. Get Holdings
+            var holdings = await _databaseService.Connection.Table<LocalHolding>().Where(h => !h.IsDeleted).ToListAsync();
+            if (!holdings.Any()) return new List<StockQuote>();
+
+            // 2. Get Quotes
+            var symbols = holdings.Select(h => h.SecuritySymbol).Distinct().ToList();
+            var quotes = await GetStockQuotesAsync(symbols);
+            var quoteMap = quotes.ToDictionary(q => q.Symbol, q => q);
+
+            // 3. Merge
+            var result = new List<StockQuote>();
+            foreach (var h in holdings)
+            {
+                if (quoteMap.TryGetValue(h.SecuritySymbol, out var q))
+                {
+                    result.Add(new PortfolioItem
+                    {
+                        Symbol = q.Symbol,
+                        CompanyName = q.CompanyName,
+                        CurrentPrice = q.CurrentPrice,
+                        Change = q.Change,
+                        PercentChange = q.PercentChange,
+                        LogoUrl = q.LogoUrl,
+                        Quantity = h.Quantity,
+                        CostBasis = h.CostBasis
+                    });
+                }
+                else
+                {
+                    // Fallback if quote missing (shouldn't happen if GetStockQuotes works)
+                    result.Add(new PortfolioItem
+                    {
+                        Symbol = h.SecuritySymbol,
+                        Quantity = h.Quantity,
+                        CostBasis = h.CostBasis,
+                        CurrentPrice = 0
+                    });
+                }
+            }
+            
+            // Aggregate if multiple holdings of same symbol?
+            // Usually Portfolio shows one line per symbol. 
+            // If user has multiple lots, we should aggregate.
+            // Let's aggregate by Symbol.
+            
+            var aggregated = result.Cast<PortfolioItem>()
+                .GroupBy(p => p.Symbol)
+                .Select(g => new PortfolioItem
+                {
+                    Symbol = g.Key,
+                    CompanyName = g.First().CompanyName,
+                    CurrentPrice = g.First().CurrentPrice,
+                    Change = g.First().Change,
+                    PercentChange = g.First().PercentChange,
+                    LogoUrl = g.First().LogoUrl,
+                    Quantity = g.Sum(x => x.Quantity),
+                    CostBasis = g.Sum(x => x.CostBasis)
+                })
+                .OrderByDescending(p => p.TotalValue)
+                .Cast<StockQuote>()
+                .ToList();
+
+            return aggregated;
+        }
+
+        public async Task<decimal> GetNetWorthAsync()
+        {
+            // 1. Accounts (Cash)
+            var accounts = await GetAccountsAsync();
+            var cash = accounts.Sum(a => a.CurrentBalance);
+
+            // 2. Investments
+            var portfolio = await GetHoldingsWithQuotesAsync();
+            var investments = portfolio.OfType<PortfolioItem>().Sum(p => p.TotalValue);
+
+            return cash + investments;
         }
     }
 }

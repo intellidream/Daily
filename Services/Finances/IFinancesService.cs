@@ -18,5 +18,9 @@ namespace Daily.Services.Finances
         Task AddAccountAsync(LocalAccount account);
         Task<List<LocalTransaction>> GetTransactionsAsync(string accountId);
         Task AddTransactionAsync(LocalTransaction transaction);
+
+        // Portfolio Features
+        Task<decimal> GetNetWorthAsync();
+        Task<List<StockQuote>> GetHoldingsWithQuotesAsync();
     }
 }

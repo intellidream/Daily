@@ -1,9 +1,11 @@
-@page "/finances"
+@page "/finance"
 @using Daily.Models.Finances
 @using Daily.Services.Finances
 @using Daily.Services
+@using Daily.Components.Pages.Finances
 @inject IFinancesService FinancesService
 @inject IRefreshService RefreshService
+@inject IDialogService DialogService
 @implements IDisposable
 
 <div class="d-flex flex-column h-100 pb-4" style="overflow-y: auto;">
@@ -15,21 +17,21 @@
 
     @if (FinancesService.CurrentViewType == "Stocks")
     {
+         <!-- WATCHLIST VIEW -->
          <MudPaper Class="detail-tile rounded-xl pa-4 relative" Elevation="3">
              <div class="d-flex align-center justify-space-between mb-4">
                  <MudText Typo="Typo.h6" Class="font-weight-bold">Watchlist</MudText>
                  <MudChip T="string" Size="Size.Small" Color="Color.Surface" Variant="Variant.Outlined">US Market (Delayed)</MudChip>
              </div>
              
-             @if (_stocks.Any())
+             @if (_watchlistStocks.Any())
              {
                  <div class="d-flex flex-column gap-3 mt-2">
-                     @foreach (var stock in _stocks)
+                     @foreach (var stock in _watchlistStocks)
                      {
                          var isPositive = stock.Change >= 0;
                          var color = isPositive ? Color.Success : Color.Error;
                          var icon = isPositive ? Icons.Material.Filled.ArrowDropUp : Icons.Material.Filled.ArrowDropDown;
-                         var bgClass = isPositive ? "success-glass" : "error-glass"; // We will style this inline for simplicity or reuse existing
                          var bgStyle = isPositive ? "background: rgba(76, 175, 80, 0.05); border: 1px solid rgba(76, 175, 80, 0.2);" : "background: rgba(244, 67, 54, 0.05); border: 1px solid rgba(244, 67, 54, 0.2);";
                          
                          <MudPaper Class="d-flex align-center justify-space-between pa-4 rounded-xl cursor-pointer hover-zoom" 
@@ -81,36 +83,122 @@
     }
     else
     {
-        <!-- MONEY / CURRENCY (Placeholder) -->
-        <MudPaper Class="detail-tile rounded-xl pa-6 d-flex flex-column align-center justify-center text-center relative h-100" Elevation="3" 
-                  Style="min-height: 400px; background: rgba(255,193,7, 0.05); border: 1px dashed rgba(255,193,7, 0.3);">
-            
-             <MudIcon Icon="@Icons.Material.Filled.Construction" Size="Size.Large" Color="Color.Warning" Class="mb-4" />
-             
-             <MudText Typo="Typo.h6" Class="font-weight-bold" Color="Color.Warning">Money Manager</MudText>
-             <MudText Typo="Typo.body2" Class="mt-2" Style="opacity: 0.7;">
-                 Currency Exchange & Wallet
-             </MudText>
-             
-             <MudChip T="string" Class="mt-4" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">COMING SOON</MudChip>
-        </MudPaper>
+        <!-- MONEY / PORTFOLIO VIEW -->
+        <MudContainer MaxWidth="MaxWidth.Large" Class="mt-0 px-0">
+            <!-- Header -->
+            <div class="d-flex flex-column align-center mb-6">
+                <MudText Typo="Typo.h5" Class="mb-1" Style="opacity: 0.7;">Net Worth</MudText>
+                <MudText Typo="Typo.h2" Class="font-weight-bold" Color="Color.Success">@(_netWorth.ToString("C0"))</MudText>
+                <div class="d-flex gap-4 mt-2">
+                     <MudText Typo="Typo.body1" Color="Color.Primary">Cash: @(_totalCash.ToString("C0"))</MudText>
+                     <MudText Typo="Typo.body1" Color="Color.Secondary">Investments: @(_totalInvestments.ToString("C0"))</MudText>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+                <!-- ACCOUNTS TAB -->
+                <MudTabPanel Text="Accounts" Icon="@Icons.Material.Filled.AccountBalanceWallet">
+                    <MudTable Items="@_accounts" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Type</MudTh>
+                            <MudTh>Balance</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Name">@context.Name</MudTd>
+                            <MudTd DataLabel="Type">@context.Type</MudTd>
+                            <MudTd DataLabel="Balance" Style="font-weight: bold;">@context.CurrentBalance.ToString("C2")</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudTabPanel>
+
+                <!-- INVESTMENTS TAB -->
+                <MudTabPanel Text="Investments" Icon="@Icons.Material.Filled.ShowChart">
+                     <MudTable Items="@_portfolio" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh>Symbol</MudTh>
+                            <MudTh>Qty</MudTh>
+                            <MudTh>Price</MudTh>
+                            <MudTh>Value</MudTh>
+                            <MudTh>Change</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Symbol">
+                                <div class="d-flex align-center gap-2">
+                                    @if(!string.IsNullOrEmpty(context.LogoUrl))
+                                    {
+                                        <MudAvatar Image="@context.LogoUrl" Size="Size.Small" />
+                                    }
+                                    <div class="d-flex flex-column">
+                                        <MudText Typo="Typo.body2" Class="font-weight-bold">@context.Symbol</MudText>
+                                        <MudText Typo="Typo.caption">@context.CompanyName</MudText>
+                                    </div>
+                                </div>
+                            </MudTd>
+                            <MudTd DataLabel="Qty">@((context as PortfolioItem)?.Quantity.ToString("F2"))</MudTd>
+                            <MudTd DataLabel="Price">@context.CurrentPrice.ToString("C2")</MudTd>
+                            <MudTd DataLabel="Value" Style="font-weight: bold;">@((context as PortfolioItem)?.TotalValue.ToString("C2"))</MudTd>
+                            <MudTd DataLabel="Change">
+                                <MudText Color="@(context.Change >= 0 ? Color.Success : Color.Error)">
+                                    @context.PercentChange.ToString("F2")%
+                                </MudText>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudTabPanel>
+
+                <!-- TRANSACTIONS TAB -->
+                <MudTabPanel Text="Transactions" Icon="@Icons.Material.Filled.Receipt">
+                     <MudTable Items="@_transactions" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh>Date</MudTh>
+                            <MudTh>Description</MudTh>
+                            <MudTh>Amount</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Date">@context.Date.ToShortDateString()</MudTd>
+                            <MudTd DataLabel="Description">
+                                <div class="d-flex flex-column">
+                                    <MudText>@context.Description</MudText>
+                                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">@context.Category</MudText>
+                                </div>
+                            </MudTd>
+                            <MudTd DataLabel="Amount">
+                                <MudText Color="@(context.Amount >= 0 ? Color.Success : Color.Error)">
+                                    @context.Amount.ToString("C2")
+                                </MudText>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudTabPanel>
+            </MudTabs>
+
+            <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Class="fixed-fab" OnClick="OpenAddDialog" Style="position: fixed; bottom: 20px; right: 20px;" />
+        </MudContainer>
     }
 </div>
 
 @code {
-    private bool _loading = false;
-    private List<StockQuote> _stocks = new();
+    private bool _loading = true;
     
-    // Default list
+    // Watchlist Data
+    private List<StockQuote> _watchlistStocks = new();
     private List<string> _trackedSymbols = new() { "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META", "NFLX" };
+
+    // Portfolio Data
+    private decimal _netWorth = 0;
+    private decimal _totalCash = 0;
+    private decimal _totalInvestments = 0;
+    private List<LocalAccount> _accounts = new();
+    private List<StockQuote> _portfolio = new();
+    private List<LocalTransaction> _transactions = new();
 
     protected override async Task OnInitializedAsync()
     {
         RefreshService.DetailRefreshRequested += RefreshData;
         FinancesService.OnViewTypeChanged += OnViewTypeChanged;
-        
-        // Initial load
-        await LoadStocks();
+        await LoadData();
     }
     
     private void OnViewTypeChanged()
@@ -120,28 +208,57 @@
     
     private async Task RefreshData()
     {
-        await LoadStocks();
+        await LoadData();
         await InvokeAsync(StateHasChanged);
     }
     
-    private async Task LoadStocks()
+    private async Task LoadData()
     {
-        // Only show loading if we really need to, maybe unnecessary for view switching if data is cached (future)
-        // For now, keep it simple
         _loading = true;
         await InvokeAsync(StateHasChanged);
         
         try 
         {
-            _stocks = await FinancesService.GetStockQuotesAsync(_trackedSymbols);
+            // Load Watchlist (Stocks View)
+            _watchlistStocks = await FinancesService.GetStockQuotesAsync(_trackedSymbols);
+            
+            // Load Portfolio (Money View)
+            _netWorth = await FinancesService.GetNetWorthAsync();
+            _accounts = await FinancesService.GetAccountsAsync();
+            _portfolio = await FinancesService.GetHoldingsWithQuotesAsync();
+            
+            // Calculate totals
+            _totalCash = _accounts.Sum(a => a.CurrentBalance);
+            _totalInvestments = _portfolio.OfType<PortfolioItem>().Sum(p => p.TotalValue);
+
+            // Fetch recent transactions (last 50 from all accounts)
+            var allTrans = new List<LocalTransaction>();
+            foreach(var acc in _accounts)
+            {
+                var trans = await FinancesService.GetTransactionsAsync(acc.Id);
+                allTrans.AddRange(trans);
+            }
+            _transactions = allTrans.OrderByDescending(t => t.Date).Take(50).ToList();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading stock details: {ex}");
+            Console.WriteLine($"Error loading finance data: {ex}");
         }
         
         _loading = false;
         await InvokeAsync(StateHasChanged);
+    }
+    
+    private async Task OpenAddDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };
+        var dialog = await DialogService.ShowAsync<AddTransactionDialog>("Add Transaction", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadData();
+        }
     }
     
     public void Dispose()
