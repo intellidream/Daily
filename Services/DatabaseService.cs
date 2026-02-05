@@ -38,6 +38,12 @@ namespace Daily.Services
                 var res3 = await _connection.CreateTableAsync<LocalUserPreferences>();
                 var res4 = await _connection.CreateTableAsync<LocalDailySummary>();
                 
+                // Finances
+                var res5 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalAccount>();
+                var res6 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalTransaction>();
+                var res7 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalSecurity>();
+                var res8 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalHolding>();
+                
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
                 try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar"); } catch { /* Ignore if exists */ }
                 

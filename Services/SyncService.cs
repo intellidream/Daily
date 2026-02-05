@@ -1,4 +1,5 @@
 using Daily.Models;
+using Daily.Models.Finances;
 using System.Diagnostics;
 
 namespace Daily.Services
@@ -169,6 +170,11 @@ namespace Daily.Services
 
             // 3. Push Preferences
             await PushPreferencesAsync(userId);
+            
+            // 4. Push Finances (Accounts & Transactions & Holdings)
+            await PushAccountsAsync(userId);
+            await PushTransactionsAsync(userId);
+            await PushHoldingsAsync(userId);
 
             // 4. Consolidate & Push Summaries (New Protocol)
             await ConsolidateHistoryAsync(userId); 
@@ -266,6 +272,11 @@ namespace Daily.Services
 
             // 3. Pull Preferences
             totalPulled += await PullPreferencesAsync(userId);
+            
+            // 4. Pull Finances
+            totalPulled += await PullAccountsAsync(userId);
+            totalPulled += await PullTransactionsAsync(userId);
+            totalPulled += await PullHoldingsAsync(userId);
 
             // 4. Pull Summaries
             totalPulled += await PullSummariesAsync(userId);
@@ -673,6 +684,279 @@ namespace Daily.Services
                  Console.WriteLine($"[SyncService] Pull Summaries Error: {ex.Message}");
              }
              return 0;
+              return 0;
+         }
+
+        // ==========================================
+        // Finance Sync Logic
+        // ==========================================
+
+        private async Task PushAccountsAsync(string userId)
+        {
+            var dirty = await _databaseService.Connection.Table<LocalAccount>()
+                                .Where(a => a.SyncedAt == null && a.UserId == userId)
+                                .ToListAsync();
+            
+            if (dirty.Any())
+            {
+                Console.WriteLine($"[SyncService] Pushing {dirty.Count} Accounts...");
+                var remoteList = dirty.Select(MapToRemote).ToList();
+                try 
+                {
+                    await _supabase.From<Account>().Upsert(remoteList);
+                    foreach(var a in dirty)
+                    {
+                        a.SyncedAt = DateTime.UtcNow;
+                        await _databaseService.Connection.UpdateAsync(a);
+                    }
+                    Console.WriteLine("[SyncService] Push Accounts Success.");
+                }
+                catch(Exception ex) { Console.WriteLine($"[SyncService] Push Accounts Failed: {ex.Message}"); }
+            }
         }
+
+        private async Task<int> PullAccountsAsync(string userId)
+        {
+            try 
+            {
+                var response = await _supabase.From<Account>().Where(a => a.UserId == Guid.Parse(userId)).Get();
+                int count = response.Models.Count;
+                if (count > 0)
+                {
+                    Console.WriteLine($"[SyncService] Pulled {count} Accounts.");
+                    await _databaseService.Connection.RunInTransactionAsync(tran => 
+                    {
+                        foreach(var remote in response.Models)
+                        {
+                            var local = MapToLocal(remote);
+                            local.SyncedAt = DateTime.UtcNow;
+                            tran.InsertOrReplace(local);
+                        }
+                    });
+                }
+                return count;
+            }
+            catch(Exception ex) { Console.WriteLine($"[SyncService] Pull Accounts Failed: {ex.Message}"); return 0; }
+        }
+
+        private async Task PushTransactionsAsync(string userId)
+        {
+             // Join not easy, so fetch all dirty transactions and check account ownership or trust UserId if added to Transaction?
+             // Transaction doesn't have UserId on it. It has AccountId.
+             // We need to fetch transactions where Account.UserId == userId.
+             // But locally we can't easily join in SQLite-net-pcl without query.
+             // Easier: Just fetch all dirty transactions. 
+             // Ideally we should filter by User, but LocalTransaction doesn't have UserId.
+             // We can fetch Account first.
+             
+             // Optimization: Fetch all dirty transactions. Filter in memory if needed, but usually local DB only has current user data?
+             // Wait, multi-user support on same device? If so, we must be careful.
+             // Assuming single user per DB or we need to look up Account.
+             
+             var dirty = await _databaseService.Connection.Table<LocalTransaction>()
+                                .Where(t => t.SyncedAt == null)
+                                .ToListAsync();
+             
+             if (dirty.Any())
+             {
+                 // Filter by User ownership (via Account)
+                 var accountIds = dirty.Select(t => t.AccountId).Distinct().ToList();
+                 var userAccounts = await _databaseService.Connection.Table<LocalAccount>()
+                                        .Where(a => accountIds.Contains(a.Id) && a.UserId == userId)
+                                        .ToListAsync();
+                 var validAccountIds = userAccounts.Select(a => a.Id).ToHashSet();
+                 
+                 var validDirty = dirty.Where(d => validAccountIds.Contains(d.AccountId)).ToList();
+                 
+                 if (validDirty.Any())
+                 {
+                    Console.WriteLine($"[SyncService] Pushing {validDirty.Count} Transactions...");
+                    var remoteList = validDirty.Select(MapToRemote).ToList();
+                    try
+                    {
+                        await _supabase.From<Transaction>().Upsert(remoteList);
+                        foreach(var t in validDirty)
+                        {
+                            t.SyncedAt = DateTime.UtcNow;
+                            await _databaseService.Connection.UpdateAsync(t);
+                        }
+                    }
+                    catch(Exception ex) { Console.WriteLine($"[SyncService] Push Transactions Failed: {ex.Message}"); }
+                 }
+             }
+        }
+
+        private async Task<int> PullTransactionsAsync(string userId)
+        {
+            // Pull transactions for all accounts belonging to user.
+            // Supabase: Join? Or fetching all transactions for user?
+            // Transaction has AccountId. User has Accounts.
+            // RLS usually handles: "Select * from transactions" returns only mine (via account ownership).
+            // If RLS is set up correctly (auth.uid() = account.user_id), we can just Select *.
+            // But we can't select * from transactions without filter? 
+            // Usually we filter by account_id.
+            
+            // Let's rely on embedded resource or fetch accounts then transactions.
+            // Simplest: Fetch Accounts (we have them), then fetch transactions for those accounts.
+            // Or use RLS. Let's try fetching all Transactions (assuming RLS restricts).
+            // NOTE: If RLS requires a join that PostgREST doesn't automaticlly allow without embedding...
+            // User provided schema: 
+            // create policy "Users can view their own transactions" on transactions for select using (
+            //   exists ( select 1 from accounts where accounts.id = transactions.account_id and accounts.user_id = auth.uid() )
+            // );
+            // So YES, RLS works. calling .Get() on Transactions should return all user transactions.
+            
+            try 
+            {
+                // Range logic for transactions if many?
+                var response = await _supabase.From<Transaction>().Order("date", Supabase.Postgrest.Constants.Ordering.Descending).Limit(1000).Get();
+                int count = response.Models.Count;
+                if (count > 0)
+                {
+                    Console.WriteLine($"[SyncService] Pulled {count} Transactions.");
+                     await _databaseService.Connection.RunInTransactionAsync(tran => 
+                    {
+                        foreach(var remote in response.Models)
+                        {
+                            var local = MapToLocal(remote);
+                            local.SyncedAt = DateTime.UtcNow;
+                            tran.InsertOrReplace(local);
+                        }
+                    });
+                }
+                return count;
+            }
+             catch(Exception ex) { Console.WriteLine($"[SyncService] Pull Transactions Failed: {ex.Message}"); return 0; }
+        }
+
+        private async Task PushHoldingsAsync(string userId)
+        {
+             var dirty = await _databaseService.Connection.Table<LocalHolding>()
+                                .Where(h => h.SyncedAt == null)
+                                .ToListAsync();
+             
+             if (dirty.Any())
+             {
+                 // Filter by User ownership (via Account)
+                 var accountIds = dirty.Select(h => h.AccountId).Distinct().ToList();
+                 var userAccounts = await _databaseService.Connection.Table<LocalAccount>()
+                                        .Where(a => accountIds.Contains(a.Id) && a.UserId == userId)
+                                        .ToListAsync();
+                 var validAccountIds = userAccounts.Select(a => a.Id).ToHashSet();
+                 
+                 var validDirty = dirty.Where(d => validAccountIds.Contains(d.AccountId)).ToList();
+                 
+                 if (validDirty.Any())
+                 {
+                    Console.WriteLine($"[SyncService] Pushing {validDirty.Count} Holdings...");
+                    var remoteList = validDirty.Select(MapToRemote).ToList();
+                    try
+                    {
+                        await _supabase.From<Holding>().Upsert(remoteList);
+                        foreach(var h in validDirty)
+                        {
+                            h.SyncedAt = DateTime.UtcNow;
+                            await _databaseService.Connection.UpdateAsync(h);
+                        }
+                    }
+                    catch(Exception ex) { Console.WriteLine($"[SyncService] Push Holdings Failed: {ex.Message}"); }
+                 }
+             }
+        }
+
+        private async Task<int> PullHoldingsAsync(string userId)
+        {
+            try 
+            {
+                var response = await _supabase.From<Holding>().Limit(1000).Get(); // RLS handles userid via account join
+                int count = response.Models.Count;
+                if (count > 0)
+                {
+                    Console.WriteLine($"[SyncService] Pulled {count} Holdings.");
+                     await _databaseService.Connection.RunInTransactionAsync(tran => 
+                    {
+                        foreach(var remote in response.Models)
+                        {
+                            var local = MapToLocal(remote);
+                            local.SyncedAt = DateTime.UtcNow;
+                            tran.InsertOrReplace(local);
+                        }
+                    });
+                }
+                return count;
+            }
+             catch(Exception ex) { Console.WriteLine($"[SyncService] Pull Holdings Failed: {ex.Message}"); return 0; }
+        }
+
+        // Mappers
+        private Account MapToRemote(LocalAccount l) => new Account
+        {
+            Id = Guid.Parse(l.Id),
+            UserId = Guid.Parse(l.UserId),
+            Name = l.Name,
+            Type = l.Type,
+            Currency = l.Currency,
+            CurrentBalance = l.CurrentBalance,
+            CreatedAt = l.CreatedAt,
+            UpdatedAt = l.UpdatedAt
+        };
+
+        private LocalAccount MapToLocal(Account r) => new LocalAccount
+        {
+            Id = r.Id.ToString(),
+            UserId = r.UserId.ToString(),
+            Name = r.Name,
+            Type = r.Type,
+            Currency = r.Currency,
+            CurrentBalance = r.CurrentBalance,
+            CreatedAt = r.CreatedAt,
+            UpdatedAt = r.UpdatedAt
+        };
+
+        private Transaction MapToRemote(LocalTransaction l) => new Transaction
+        {
+            Id = Guid.Parse(l.Id),
+            AccountId = Guid.Parse(l.AccountId),
+            Date = l.Date,
+            Amount = l.Amount,
+            Category = l.Category,
+            Description = l.Description,
+            CreatedAt = l.CreatedAt,
+            UpdatedAt = l.UpdatedAt
+        };
+
+        private LocalTransaction MapToLocal(Transaction r) => new LocalTransaction
+        {
+            Id = r.Id.ToString(),
+            AccountId = r.AccountId.ToString(),
+            Date = r.Date,
+            Amount = r.Amount,
+            Category = r.Category,
+            Description = r.Description,
+            CreatedAt = r.CreatedAt,
+            UpdatedAt = r.UpdatedAt
+        };
+
+        private Holding MapToRemote(LocalHolding l) => new Holding
+        {
+            Id = Guid.Parse(l.Id),
+            AccountId = Guid.Parse(l.AccountId),
+            SecuritySymbol = l.SecuritySymbol,
+            Quantity = l.Quantity,
+            CostBasis = l.CostBasis,
+            CreatedAt = l.CreatedAt,
+            UpdatedAt = l.UpdatedAt
+        };
+
+        private LocalHolding MapToLocal(Holding r) => new LocalHolding
+        {
+            Id = r.Id.ToString(),
+            AccountId = r.AccountId.ToString(),
+            SecuritySymbol = r.SecuritySymbol,
+            Quantity = r.Quantity,
+            CostBasis = r.CostBasis,
+            CreatedAt = r.CreatedAt,
+            UpdatedAt = r.UpdatedAt
+        };
     }
 }

@@ -12,5 +12,11 @@ namespace Daily.Services.Finances
         
         Task<List<StockQuote>> GetStockQuotesAsync(List<string> symbols);
         Task<MoneyData> GetMoneyDataAsync();
+
+        // Money Features
+        Task<List<LocalAccount>> GetAccountsAsync();
+        Task AddAccountAsync(LocalAccount account);
+        Task<List<LocalTransaction>> GetTransactionsAsync(string accountId);
+        Task AddTransactionAsync(LocalTransaction transaction);
     }
 }

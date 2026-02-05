@@ -1,5 +1,6 @@
 using Daily.Configuration;
 using Daily.Models.Finances;
+using Daily.Services;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -8,6 +9,7 @@ namespace Daily.Services.Finances
     public class FinancesService : IFinancesService
     {
         private readonly HttpClient _httpClient;
+        private readonly IDatabaseService _databaseService;
         private readonly string _apiKey;
         private readonly bool _useMockData;
 
@@ -29,9 +31,10 @@ namespace Daily.Services.Finances
         // Constants
         private const string BaseUrl = "https://finnhub.io/api/v1";
 
-        public FinancesService(HttpClient httpClient)
+        public FinancesService(HttpClient httpClient, IDatabaseService databaseService)
         {
             _httpClient = httpClient;
+            _databaseService = databaseService;
             _apiKey = Secrets.FinnhubApiKey;
             _useMockData = string.IsNullOrEmpty(_apiKey) || _apiKey == ""; 
             
@@ -53,59 +56,114 @@ namespace Daily.Services.Finances
             }
 
             var results = new List<StockQuote>();
+            
+            // Ensure DB is ready
+            await _databaseService.InitializeAsync();
 
             foreach (var symbol in symbols)
             {
-                try
+                StockQuote? quote = null;
+                bool needsFetch = true;
+
+                // 1. Try Cache
+                try 
                 {
-                    // Rate Limit: Free tier is 60 req/min. 
-                    var response = await _httpClient.GetAsync($"{BaseUrl}/quote?symbol={symbol}&token={_apiKey}");
-                    if (response.IsSuccessStatusCode)
+                    var cached = await _databaseService.Connection.Table<LocalSecurity>()
+                                    .Where(s => s.Symbol == symbol)
+                                    .FirstOrDefaultAsync();
+                                    
+                    if (cached != null)
                     {
-                        var json = await response.Content.ReadAsStringAsync();
-                        var data = JsonSerializer.Deserialize<FinnhubQuote>(json);
-
-                        if (data != null && data.CurrentPrice != 0)
+                        // Check freshness (15 mins)
+                        if (cached.LastUpdatedAt.HasValue && cached.LastUpdatedAt.Value > DateTime.UtcNow.AddMinutes(-15))
                         {
-                            var quote = new StockQuote
+                            quote = new StockQuote
                             {
-                                Symbol = symbol,
-                                CurrentPrice = data.CurrentPrice,
-                                Change = data.Change,
-                                PercentChange = data.PercentChange,
-                                CompanyName = symbol // Default to symbol
+                                Symbol = cached.Symbol,
+                                CurrentPrice = cached.LatestPrice,
+                                Change = cached.Change, // Added to LocalSecurity
+                                PercentChange = cached.PercentChange,
+                                CompanyName = cached.Name ?? cached.Symbol,
+                                LogoUrl = $"https://financialmodelingprep.com/image-stock/{cached.Symbol.ToUpper()}.png"
                             };
-
-                            // Enhancement: Fetch Profile for Name only (avoiding logo logic here as we use FMP now)
-                            try 
-                            {
-                                var profileResp = await _httpClient.GetAsync($"{BaseUrl}/stock/profile2?symbol={symbol}&token={_apiKey}");
-                                if (profileResp.IsSuccessStatusCode)
-                                {
-                                     var pJson = await profileResp.Content.ReadAsStringAsync();
-                                     var profile = JsonSerializer.Deserialize<FinnhubProfile>(pJson);
-                                     
-                                     if (profile != null && !string.IsNullOrEmpty(profile.Name))
-                                     {
-                                        quote.CompanyName = profile.Name;
-                                     } 
-                                }
-                            }
-                            catch { /* Ignore profile errors */ }
-
-                            // PRIMARY LOGO STRATEGY: Financial Modeling Prep (Free, Ticker-based)
-                            // Validated via curl: https://financialmodelingprep.com/image-stock/AAPL.png
-                            // This is much more reliable than domain extraction.
-                            quote.LogoUrl = $"https://financialmodelingprep.com/image-stock/{symbol.ToUpper()}.png";
-
-                            results.Add(quote);
+                            
+                            Console.WriteLine($"[FinancesService] Cache HIT for {symbol}");
+                            needsFetch = false;
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) { Console.WriteLine($"[FinancesService] Cache Read Error: {ex.Message}"); }
+
+                if (needsFetch)
                 {
-                    Console.WriteLine($"[FinancesService] Error fetching {symbol}: {ex.Message}");
+                    try
+                    {
+                        // 2. Fetch API
+                        var response = await _httpClient.GetAsync($"{BaseUrl}/quote?symbol={symbol}&token={_apiKey}");
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var json = await response.Content.ReadAsStringAsync();
+                            var data = JsonSerializer.Deserialize<FinnhubQuote>(json);
+
+                            if (data != null && data.CurrentPrice != 0)
+                            {
+                                quote = new StockQuote
+                                {
+                                    Symbol = symbol,
+                                    CurrentPrice = data.CurrentPrice,
+                                    Change = data.Change,
+                                    PercentChange = data.PercentChange,
+                                    CompanyName = symbol // Default to symbol
+                                };
+
+                                // Enhancement: Profile for Name (Optimization: Only if name missing or aggressive update?)
+                                // We'll stick to logic: Try fetch profile.
+                                string companyName = symbol;
+                                try 
+                                {
+                                    var profileResp = await _httpClient.GetAsync($"{BaseUrl}/stock/profile2?symbol={symbol}&token={_apiKey}");
+                                    if (profileResp.IsSuccessStatusCode)
+                                    {
+                                         var pJson = await profileResp.Content.ReadAsStringAsync();
+                                         var profile = JsonSerializer.Deserialize<FinnhubProfile>(pJson);
+                                         
+                                         if (profile != null && !string.IsNullOrEmpty(profile.Name))
+                                         {
+                                            quote.CompanyName = profile.Name;
+                                            companyName = profile.Name;
+                                         } 
+                                    }
+                                }
+                                catch { /* Ignore profile errors */ }
+
+                                quote.LogoUrl = $"https://financialmodelingprep.com/image-stock/{symbol.ToUpper()}.png";
+                                
+                                // 3. Update Cache
+                                try
+                                {
+                                    var cachedSec = new LocalSecurity
+                                    {
+                                        Symbol = symbol,
+                                        Name = companyName,
+                                        Type = "equity", // Default
+                                        LatestPrice = data.CurrentPrice,
+                                        Change = data.Change,
+                                        PercentChange = data.PercentChange,
+                                        LastUpdatedAt = DateTime.UtcNow
+                                    };
+                                    await _databaseService.Connection.InsertOrReplaceAsync(cachedSec);
+                                }
+                                catch (Exception ex) { Console.WriteLine($"[FinancesService] Cache Write Error: {ex.Message}"); }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[FinancesService] Error fetching {symbol}: {ex.Message}");
+                    }
                 }
+
+                if (quote != null) results.Add(quote);
             }
 
             return results;
@@ -177,6 +235,63 @@ namespace Daily.Services.Finances
 
             [JsonPropertyName("weburl")]
             public string WebUrl { get; set; }
+        }
+
+        // ==========================================
+        // Money Implementation
+        // ==========================================
+
+        public async Task<List<LocalAccount>> GetAccountsAsync()
+        {
+            await _databaseService.InitializeAsync();
+            return await _databaseService.Connection.Table<LocalAccount>()
+                            .Where(a => !a.IsDeleted)
+                            .ToListAsync();
+        }
+
+        public async Task AddAccountAsync(LocalAccount account)
+        {
+            await _databaseService.InitializeAsync();
+             // Ensure ID 
+            if (string.IsNullOrEmpty(account.Id)) account.Id = Guid.NewGuid().ToString();
+            account.CreatedAt = DateTime.UtcNow;
+            account.UpdatedAt = DateTime.UtcNow;
+            account.SyncedAt = null; // Dirty
+            
+            await _databaseService.Connection.InsertAsync(account);
+        }
+
+        public async Task<List<LocalTransaction>> GetTransactionsAsync(string accountId)
+        {
+            await _databaseService.InitializeAsync();
+            return await _databaseService.Connection.Table<LocalTransaction>()
+                            .Where(t => t.AccountId == accountId && !t.IsDeleted)
+                            .OrderByDescending(t => t.Date)
+                            .ToListAsync();
+        }
+
+        public async Task AddTransactionAsync(LocalTransaction transaction)
+        {
+            await _databaseService.InitializeAsync();
+             if (string.IsNullOrEmpty(transaction.Id)) transaction.Id = Guid.NewGuid().ToString();
+            transaction.CreatedAt = DateTime.UtcNow;
+            transaction.UpdatedAt = DateTime.UtcNow;
+            transaction.SyncedAt = null; // Dirty
+
+            // ACID: Transaction should update Account Balance
+            await _databaseService.Connection.RunInTransactionAsync(tran => 
+            {
+                tran.Insert(transaction);
+                
+                var account = tran.Find<LocalAccount>(transaction.AccountId);
+                if (account != null)
+                {
+                    account.CurrentBalance += transaction.Amount; // Amount is signed (+/-, e.g. -50 for expense)
+                    account.UpdatedAt = DateTime.UtcNow;
+                    account.SyncedAt = null; // Dirty
+                    tran.Update(account);
+                }
+            });
         }
     }
 }
