@@ -139,6 +139,9 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.IAuthService, Daily.Services.AuthService>();
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
             builder.Services.AddSingleton<HttpClient>();
+            
+            // Finances Service
+            builder.Services.AddSingleton<Daily.Services.Finances.IFinancesService, Daily.Services.Finances.FinancesService>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

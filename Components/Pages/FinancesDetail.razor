@@ -1,0 +1,130 @@
+@page "/finances"
+@using Daily.Models.Finances
+@using Daily.Services.Finances
+@using Daily.Services
+@inject IFinancesService FinancesService
+@inject IRefreshService RefreshService
+@implements IDisposable
+
+<div class="d-flex flex-column h-100 pb-4" style="overflow-y: auto;">
+    
+    @if (_loading)
+    {
+         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="rounded-lg mb-4" />
+    }
+
+    @if (FinancesService.CurrentViewType == "Stocks")
+    {
+         <MudPaper Class="detail-tile rounded-xl pa-4 relative" Elevation="3">
+             <div class="d-flex align-center justify-space-between mb-4">
+                 <MudText Typo="Typo.h6" Class="font-weight-bold">Watchlist</MudText>
+                 <MudChip T="string" Size="Size.Small" Color="Color.Surface" Variant="Variant.Outlined">US Market (Delayed)</MudChip>
+             </div>
+             
+             @if (_stocks.Any())
+             {
+                 <MudTable Items="@_stocks" Hover="true" Breakpoint="Breakpoint.None" Dense="true" Style="background: transparent;">
+                     <HeaderContent>
+                         <MudTh>Symbol</MudTh>
+                         <MudTh>Price</MudTh>
+                         <MudTh>Change</MudTh>
+                         <MudTh>%</MudTh>
+                     </HeaderContent>
+                     <RowTemplate>
+                         <MudTd DataLabel="Symbol">
+                             <MudText Typo="Typo.body2" Class="font-weight-bold">@context.Symbol</MudText>
+                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">@context.CompanyName</MudText>
+                         </MudTd>
+                         <MudTd DataLabel="Price">
+                             <MudText Typo="Typo.body2" Class="font-weight-bold">@context.CurrentPrice.ToString("F2")</MudText>
+                         </MudTd>
+                         <MudTd DataLabel="Change">
+                             <MudText Typo="Typo.body2" Color="@(context.Change >= 0 ? Color.Success : Color.Error)">
+                                 @(context.Change > 0 ? "+" : "")@context.Change.ToString("F2")
+                             </MudText>
+                         </MudTd>
+                         <MudTd DataLabel="%">
+                              <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(context.Change >= 0 ? Color.Success : Color.Error)">
+                                  @(context.PercentChange > 0 ? "+" : "")@context.PercentChange.ToString("F2")%
+                              </MudChip>
+                         </MudTd>
+                     </RowTemplate>
+                 </MudTable>
+             }
+             else
+             {
+                 <MudText Typo="Typo.body2" Style="opacity: 0.6;">No stocks tracked.</MudText>
+             }
+         </MudPaper>
+    }
+    else
+    {
+        <!-- MONEY / CURRENCY (Placeholder) -->
+        <MudPaper Class="detail-tile rounded-xl pa-6 d-flex flex-column align-center justify-center text-center relative h-100" Elevation="3" 
+                  Style="min-height: 400px; background: rgba(255,193,7, 0.05); border: 1px dashed rgba(255,193,7, 0.3);">
+            
+             <MudIcon Icon="@Icons.Material.Filled.Construction" Size="Size.Large" Color="Color.Warning" Class="mb-4" />
+             
+             <MudText Typo="Typo.h6" Class="font-weight-bold" Color="Color.Warning">Money Manager</MudText>
+             <MudText Typo="Typo.body2" Class="mt-2" Style="opacity: 0.7;">
+                 Currency Exchange & Wallet
+             </MudText>
+             
+             <MudChip T="string" Class="mt-4" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">COMING SOON</MudChip>
+        </MudPaper>
+    }
+</div>
+
+@code {
+    private bool _loading = false;
+    private List<StockQuote> _stocks = new();
+    
+    // Default list
+    private List<string> _trackedSymbols = new() { "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META", "NFLX" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        RefreshService.DetailRefreshRequested += RefreshData;
+        FinancesService.OnViewTypeChanged += OnViewTypeChanged;
+        
+        // Initial load
+        await LoadStocks();
+    }
+    
+    private void OnViewTypeChanged()
+    {
+        StateHasChanged();
+    }
+    
+    private async Task RefreshData()
+    {
+        await LoadStocks();
+        await InvokeAsync(StateHasChanged);
+    }
+    
+    private async Task LoadStocks()
+    {
+        // Only show loading if we really need to, maybe unnecessary for view switching if data is cached (future)
+        // For now, keep it simple
+        _loading = true;
+        await InvokeAsync(StateHasChanged);
+        
+        try 
+        {
+            _stocks = await FinancesService.GetStockQuotesAsync(_trackedSymbols);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading stock details: {ex}");
+        }
+        
+        _loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+    
+    public void Dispose()
+    {
+        RefreshService.DetailRefreshRequested -= RefreshData;
+        FinancesService.OnViewTypeChanged -= OnViewTypeChanged;
+    }
+}

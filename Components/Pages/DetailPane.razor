@@ -8,7 +8,9 @@
 @inject IRssFeedService RssService
 @inject IWeatherService WeatherService
 @inject ISettingsService SettingsService
+@inject ISettingsService SettingsService
 @inject IHabitsService HabitsService
+@inject Services.Finances.IFinancesService FinancesService
 @implements IDisposable
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
@@ -170,6 +172,31 @@
                   </MudCarousel>
               </div>
          }
+        else if (NavService.CurrentView == "Finances")
+        {
+             <div class="d-flex align-center flex-grow-1 position-relative ml-2 mr-4" style="min-width: 0; height: 100%;">
+                  <MudCarousel TData="object" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                               SelectedIndex="@_selectedFinancesIndex" SelectedIndexChanged="@OnFinancesCarouselIndexChanged"
+                               Class="flex-grow-1 rounded-pill mud-theme-primary">
+                      <MudCarouselItem Transition="Transition.Slide">
+                          <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                              <MudIcon Icon="@Icons.Material.Filled.ShowChart" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                              <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
+                                  Stocks
+                              </MudText>
+                          </div>
+                      </MudCarouselItem>
+                      <MudCarouselItem Transition="Transition.Slide">
+                           <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                               <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                               <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
+                                   Money
+                               </MudText>
+                           </div>
+                       </MudCarouselItem>
+                  </MudCarousel>
+             </div>
+        }
         else
         {
             <MudText Typo="Typo.h6"><b>@NavService.CurrentTitle</b></MudText>
@@ -225,6 +252,14 @@
             else if (NavService.CurrentView == "vitals")
             {
                 <HealthDetail />
+            }
+            else if (NavService.CurrentView == "vitals")
+            {
+                <HealthDetail />
+            }
+            else if (NavService.CurrentView == "Finances")
+            {
+                <FinancesDetail />
             }
             else
             {
@@ -309,6 +344,7 @@
         SettingsService.OnSettingsChanged += AsyncStateHasChanged; // Subscribe for auth changes
         SettingsService.OnSettingsChanged += AsyncStateHasChanged; // Subscribe for auth changes
         HabitsService.OnViewTypeChanged += AsyncStateHasChanged; // Subscribe for habit view changes
+        FinancesService.OnViewTypeChanged += AsyncStateHasChanged; // Subscribe for finances view changes
         NavService.OnDetailVisibilityChanged += OnDetailVisibilityChanged;
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
@@ -390,6 +426,7 @@
         WeatherService.OnLocationChanged -= StateHasChanged;
         SettingsService.OnSettingsChanged -= StateHasChanged;
         HabitsService.OnViewTypeChanged -= StateHasChanged;
+        FinancesService.OnViewTypeChanged -= StateHasChanged;
         if (Application.Current != null)
         {
         }
@@ -508,6 +545,17 @@
                 StateHasChanged();
             }
         }
+        
+        // Sync Finances Index
+        if (NavService.CurrentView == "Finances")
+        {
+            var targetIndex = FinancesService.CurrentViewType == "Money" ? 1 : 0;
+            if (_selectedFinancesIndex != targetIndex)
+            {
+                _selectedFinancesIndex = targetIndex;
+                StateHasChanged();
+            }
+        }
     }
 
     private void OnCarouselIndexChanged(int index)
@@ -532,6 +580,13 @@
     {
         _selectedHabitIndex = index;
         HabitsService.CurrentViewType = index == 1 ? "smokes" : "water";
+    }
+
+    private int _selectedFinancesIndex = 0;
+    private void OnFinancesCarouselIndexChanged(int index)
+    {
+        _selectedFinancesIndex = index;
+        FinancesService.CurrentViewType = index == 1 ? "Money" : "Stocks";
     }
 
     private async void OnFeedChangedHandler()

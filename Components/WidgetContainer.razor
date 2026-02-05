@@ -8,7 +8,7 @@
     {
         <div class="masonry-item @(IsFullWidth(widget) ? "span-all" : "")">
             <MudPaper Class="pa-4 detail-tile rounded-xl" Elevation="3" Square="false" Style="">
-                @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget" && widget.ComponentType != "HabitsWidget" && widget.ComponentType != "MediaWidget" && widget.ComponentType != "HealthWidget")
+                @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget" && widget.ComponentType != "HabitsWidget" && widget.ComponentType != "MediaWidget" && widget.ComponentType != "HealthWidget" && widget.ComponentType != "FinancesWidget")
                 {
                     <div class="d-flex align-center justify-space-between">
                          <MudText Typo="Typo.h6">@widget.Title</MudText>
@@ -67,6 +67,14 @@
                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => OpenWidgetDetail(widget))" Color="Color.Primary" Style="transform: scaleX(-1);" />
                         </HeaderAction>
                     </Daily.Components.Widgets.HabitsWidget>
+                }
+                else if (widget.ComponentType == "FinancesWidget")
+                {
+                    <Daily.Components.Widgets.FinancesWidget>
+                        <HeaderAction>
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => OpenWidgetDetail(widget))" Color="Color.Primary" Style="transform: scaleX(-1);" />
+                        </HeaderAction>
+                    </Daily.Components.Widgets.FinancesWidget>
                 }
                 else
                 {
@@ -136,6 +144,10 @@
         else if (widget.ComponentType == "HabitsWidget")
         {
             WindowManager.OpenDetail("Habits", widget.Title);
+        }
+        else if (widget.ComponentType == "FinancesWidget")
+        {
+            WindowManager.OpenDetail("Finances", widget.Title);
         }
         else
         {
