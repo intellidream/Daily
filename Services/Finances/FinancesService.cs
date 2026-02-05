@@ -33,7 +33,16 @@ namespace Daily.Services.Finances
         {
             _httpClient = httpClient;
             _apiKey = Secrets.FinnhubApiKey;
-            _useMockData = string.IsNullOrEmpty(_apiKey) || _apiKey == ""; // Fallback to mock if key is empty
+            _useMockData = string.IsNullOrEmpty(_apiKey) || _apiKey == ""; 
+            
+            if (_useMockData)
+            {
+                Console.WriteLine("[FinancesService] !!! USING MOCK DATA (No API Key) !!!");
+            }
+            else
+            {
+                 Console.WriteLine($"[FinancesService] USING REAL DATA (Key Length: {_apiKey.Length})");
+            }
         }
 
         public async Task<List<StockQuote>> GetStockQuotesAsync(List<string> symbols)
@@ -50,33 +59,52 @@ namespace Daily.Services.Finances
                 try
                 {
                     // Rate Limit: Free tier is 60 req/min. 
-                    // Simple throttling: 1 req per second if we were looping fast, but for 3-5 items it's usually fine.
-                    // We can add a small delay if needed.
-
                     var response = await _httpClient.GetAsync($"{BaseUrl}/quote?symbol={symbol}&token={_apiKey}");
                     if (response.IsSuccessStatusCode)
                     {
                         var json = await response.Content.ReadAsStringAsync();
                         var data = JsonSerializer.Deserialize<FinnhubQuote>(json);
 
-                        if (data != null && data.CurrentPrice != 0) // Basic validation
+                        if (data != null && data.CurrentPrice != 0)
                         {
-                            results.Add(new StockQuote
+                            var quote = new StockQuote
                             {
                                 Symbol = symbol,
                                 CurrentPrice = data.CurrentPrice,
                                 Change = data.Change,
                                 PercentChange = data.PercentChange,
-                                CompanyName = symbol // Finnhub quote doesn't return name, would need Profile2 endpoint. Using Symbol for now.
-                            });
+                                CompanyName = symbol // Default to symbol
+                            };
+
+                            // Enhancement: Fetch Profile for Name only (avoiding logo logic here as we use FMP now)
+                            try 
+                            {
+                                var profileResp = await _httpClient.GetAsync($"{BaseUrl}/stock/profile2?symbol={symbol}&token={_apiKey}");
+                                if (profileResp.IsSuccessStatusCode)
+                                {
+                                     var pJson = await profileResp.Content.ReadAsStringAsync();
+                                     var profile = JsonSerializer.Deserialize<FinnhubProfile>(pJson);
+                                     
+                                     if (profile != null && !string.IsNullOrEmpty(profile.Name))
+                                     {
+                                        quote.CompanyName = profile.Name;
+                                     } 
+                                }
+                            }
+                            catch { /* Ignore profile errors */ }
+
+                            // PRIMARY LOGO STRATEGY: Financial Modeling Prep (Free, Ticker-based)
+                            // Validated via curl: https://financialmodelingprep.com/image-stock/AAPL.png
+                            // This is much more reliable than domain extraction.
+                            quote.LogoUrl = $"https://financialmodelingprep.com/image-stock/{symbol.ToUpper()}.png";
+
+                            results.Add(quote);
                         }
                     }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[FinancesService] Error fetching {symbol}: {ex.Message}");
-                    // On error, maybe fallback to mock or just skip? 
-                    // For now, let's add a "Error" state mock so user sees something failed visually if they care
                 }
             }
 
@@ -117,7 +145,8 @@ namespace Daily.Services.Finances
                     CurrentPrice = basePrice + change,
                     Change = change,
                     PercentChange = Math.Round((change / basePrice) * 100, 2),
-                    CompanyName = sym // Mock name
+                    CompanyName = sym, // Mock name
+                    LogoUrl = $"https://financialmodelingprep.com/image-stock/{sym.ToUpper()}.png"
                 });
             }
 
@@ -135,18 +164,19 @@ namespace Daily.Services.Finances
 
             [JsonPropertyName("dp")]
             public decimal PercentChange { get; set; }
+        }
 
-            [JsonPropertyName("h")]
-            public decimal High { get; set; }
+        // Finnhub Response Model for /stock/profile2
+        private class FinnhubProfile
+        {
+            [JsonPropertyName("logo")]
+            public string Logo { get; set; }
+            
+            [JsonPropertyName("name")]
+            public string Name { get; set; }
 
-            [JsonPropertyName("l")]
-            public decimal Low { get; set; }
-
-            [JsonPropertyName("o")]
-            public decimal Open { get; set; }
-
-            [JsonPropertyName("pc")]
-            public decimal PreviousClose { get; set; }
+            [JsonPropertyName("weburl")]
+            public string WebUrl { get; set; }
         }
     }
 }

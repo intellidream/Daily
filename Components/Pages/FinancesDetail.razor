@@ -23,39 +23,61 @@
              
              @if (_stocks.Any())
              {
-                 <MudTable Items="@_stocks" Hover="true" Breakpoint="Breakpoint.None" Dense="true" Style="background: transparent;">
-                     <HeaderContent>
-                         <MudTh>Symbol</MudTh>
-                         <MudTh>Price</MudTh>
-                         <MudTh>Change</MudTh>
-                         <MudTh>%</MudTh>
-                     </HeaderContent>
-                     <RowTemplate>
-                         <MudTd DataLabel="Symbol">
-                             <MudText Typo="Typo.body2" Class="font-weight-bold">@context.Symbol</MudText>
-                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">@context.CompanyName</MudText>
-                         </MudTd>
-                         <MudTd DataLabel="Price">
-                             <MudText Typo="Typo.body2" Class="font-weight-bold">@context.CurrentPrice.ToString("F2")</MudText>
-                         </MudTd>
-                         <MudTd DataLabel="Change">
-                             <MudText Typo="Typo.body2" Color="@(context.Change >= 0 ? Color.Success : Color.Error)">
-                                 @(context.Change > 0 ? "+" : "")@context.Change.ToString("F2")
-                             </MudText>
-                         </MudTd>
-                         <MudTd DataLabel="%">
-                              <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(context.Change >= 0 ? Color.Success : Color.Error)">
-                                  @(context.PercentChange > 0 ? "+" : "")@context.PercentChange.ToString("F2")%
-                              </MudChip>
-                         </MudTd>
-                     </RowTemplate>
-                 </MudTable>
+                 <div class="d-flex flex-column gap-3 mt-2">
+                     @foreach (var stock in _stocks)
+                     {
+                         var isPositive = stock.Change >= 0;
+                         var color = isPositive ? Color.Success : Color.Error;
+                         var icon = isPositive ? Icons.Material.Filled.ArrowDropUp : Icons.Material.Filled.ArrowDropDown;
+                         var bgClass = isPositive ? "success-glass" : "error-glass"; // We will style this inline for simplicity or reuse existing
+                         var bgStyle = isPositive ? "background: rgba(76, 175, 80, 0.05); border: 1px solid rgba(76, 175, 80, 0.2);" : "background: rgba(244, 67, 54, 0.05); border: 1px solid rgba(244, 67, 54, 0.2);";
+                         
+                         <MudPaper Class="d-flex align-center justify-space-between pa-4 rounded-xl cursor-pointer hover-zoom" 
+                                   Elevation="0" Style="@bgStyle">
+                             
+                             <!-- Left: Symbol & Name -->
+                             <div class="d-flex align-center gap-4">
+                                 @if (!string.IsNullOrEmpty(stock.LogoUrl))
+                                 {
+                                     <MudPaper Class="d-flex align-center justify-center rounded overflow-hidden mr-4" Width="40px" Height="40px" Elevation="0" Style="background-color: white;">
+                                         <MudImage Src="@stock.LogoUrl" Width="32" Height="32" ObjectFit="ObjectFit.Contain" />
+                                     </MudPaper>
+                                 }
+                                 else
+                                 {
+                                     <MudAvatar Color="Color.Surface" Variant="Variant.Filled" Rounded="true" Class="mr-4">
+                                         @stock.Symbol.Substring(0, 1)
+                                     </MudAvatar>
+                                 }
+                                 
+                                 <div class="d-flex flex-column">
+                                     <MudText Typo="Typo.h6" Class="font-weight-bold" Style="line-height: 1.1;">@stock.Symbol</MudText>
+                                     <MudText Typo="Typo.body2" Style="opacity: 0.6;">@stock.CompanyName</MudText>
+                                 </div>
+                             </div>
+                             
+                             <!-- Right: Price & Change -->
+                             <div class="d-flex align-center gap-4">
+                                 <div class="d-flex flex-column align-end">
+                                     <MudText Typo="Typo.h6" Class="font-weight-bold">@stock.CurrentPrice.ToString("F2")</MudText>
+                                     <MudText Typo="Typo.caption" Style="opacity: 0.6;">Price</MudText>
+                                 </div>
+                                 
+                                 <MudChip T="string" Size="Size.Medium" Variant="Variant.Filled" Color="@color" Class="px-3" Icon="@icon">
+                                      <MudText Typo="Typo.body2" Class="font-weight-bold ml-1">
+                                          @(stock.PercentChange > 0 ? "+" : "")@stock.PercentChange.ToString("F2")%
+                                      </MudText>
+                                 </MudChip>
+                             </div>
+                         </MudPaper>
+                     }
+                 </div>
              }
              else
              {
-                 <MudText Typo="Typo.body2" Style="opacity: 0.6;">No stocks tracked.</MudText>
+                 <MudText Typo="Typo.body2" Style="opacity: 0.6;" Class="ma-4">No stocks tracked.</MudText>
              }
-         </MudPaper>
+         </MudPaper> 
     }
     else
     {
