@@ -99,7 +99,10 @@
             <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
                 <!-- ACCOUNTS TAB -->
                 <MudTabPanel Text="Accounts" Icon="@Icons.Material.Filled.AccountBalanceWallet">
-                    <MudTable Items="@_accounts" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading">
+                    <div class="d-flex justify-end pa-2">
+                         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Text" Color="Color.Primary" OnClick="OpenAddAccountDialog">Add Account</MudButton>
+                    </div>
+                    <MudTable Items="@_accounts" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" Elevation="0">
                         <HeaderContent>
                             <MudTh>Name</MudTh>
                             <MudTh>Type</MudTh>
@@ -249,6 +252,18 @@
         await InvokeAsync(StateHasChanged);
     }
     
+    private async Task OpenAddAccountDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };
+        var dialog = await DialogService.ShowAsync<AddAccountDialog>("Add Account", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadData();
+        }
+    }
+
     private async Task OpenAddDialog()
     {
         var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };

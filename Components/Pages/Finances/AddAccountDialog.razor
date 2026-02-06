@@ -1,0 +1,91 @@
+@using MudBlazor
+@using Daily.Models.Finances
+@using Daily.Services.Finances
+@inject IFinancesService FinancesService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField Label="Account Name" @bind-Value="_name" Required="true" />
+            
+            <MudSelect T="string" Label="Type" @bind-Value="_type" Required="true" AnchorOrigin="Origin.BottomCenter">
+                <MudSelectItem Value="@("Checking")">Checking</MudSelectItem>
+                <MudSelectItem Value="@("Savings")">Savings</MudSelectItem>
+                <MudSelectItem Value="@("Credit")">Credit Card</MudSelectItem>
+                <MudSelectItem Value="@("Investment")">Investment</MudSelectItem>
+                <MudSelectItem Value="@("Cash")">Cash</MudSelectItem>
+            </MudSelect>
+
+            <MudTextField Label="Currency" @bind-Value="_currency" />
+            <MudNumericField Label="Initial Balance" @bind-Value="_balance" Format="F2" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_processing">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@_processing">
+            @if (_processing)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Creating...</MudText>
+            }
+            else
+            {
+                <MudText>Create</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+
+    private MudForm _form;
+    private string _name;
+    private string _type = "Checking";
+    private string _currency = "USD";
+    private decimal _balance;
+    private bool _processing = false;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        if (_processing) return;
+        
+        try 
+        {
+            await _form.Validate();
+            if (_form.IsValid)
+            {
+                _processing = true;
+                StateHasChanged();
+
+                var account = new LocalAccount
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Name = _name,
+                    Type = _type,
+                    Currency = _currency,
+                    CurrentBalance = _balance,
+                    UserId = Guid.Empty.ToString(), // Local only for now? Or get ID?
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                     // SyncedAt is null implies dirty
+                };
+
+                await FinancesService.AddAccountAsync(account);
+                
+                _processing = false;
+                MudDialog.Close(DialogResult.Ok(account));
+            }
+        }
+        catch (Exception ex)
+        {
+            _processing = false;
+            Console.WriteLine($"[AddAccountDialog] Error: {ex}");
+            Snackbar.Add($"Error creating account: {ex.Message}", Severity.Error);
+            StateHasChanged();
+        }
+    }
+}

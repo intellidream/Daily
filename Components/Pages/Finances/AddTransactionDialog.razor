@@ -1,8 +1,8 @@
-@page "/finance/add"
 @using MudBlazor
 @using Daily.Models.Finances
 @using Daily.Services.Finances
 @inject IFinancesService FinancesService
+@inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
@@ -23,13 +23,23 @@
         </MudForm>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+        <MudButton OnClick="Cancel" Disabled="@_processing">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@_processing">
+             @if (_processing)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Saving...</MudText>
+            }
+            else
+            {
+                <MudText>Save</MudText>
+            }
+        </MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
-    // [CascadingParameter] MudBlazor.MudDialogInstance MudDialog { get; set; }
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
     
     private MudForm _form;
     private List<LocalAccount> _accounts = new();
@@ -38,6 +48,7 @@
     private DateTime? _date = DateTime.Today;
     private string _category;
     private string _description;
+    private bool _processing = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -45,29 +56,43 @@
         if (_accounts.Any()) _selectedAccount = _accounts.First();
     }
 
-    private void Cancel() 
-    {
-        // MudDialog.Cancel();
-    }
+    private void Cancel() => MudDialog.Cancel();
 
     private async Task Submit()
     {
-        await _form.Validate();
-        if (_form.IsValid)
+        if (_processing) return;
+        
+        try 
         {
-            if (_selectedAccount == null) return;
-
-            var transaction = new LocalTransaction
+            await _form.Validate();
+            if (_form.IsValid)
             {
-                AccountId = _selectedAccount.Id,
-                Amount = _amount,
-                Date = _date ?? DateTime.Now,
-                Category = _category,
-                Description = _description
-            };
+                if (_selectedAccount == null) return;
+                
+                _processing = true;
+                StateHasChanged();
 
-            await FinancesService.AddTransactionAsync(transaction);
-            // MudDialog.Close(DialogResult.Ok(transaction));
+                var transaction = new LocalTransaction
+                {
+                    AccountId = _selectedAccount.Id,
+                    Amount = _amount,
+                    Date = _date ?? DateTime.Now,
+                    Category = _category,
+                    Description = _description
+                };
+
+                await FinancesService.AddTransactionAsync(transaction);
+                
+                _processing = false;
+                MudDialog.Close(DialogResult.Ok(transaction));
+            }
+        }
+        catch (Exception ex)
+        {
+            _processing = false;
+            Console.WriteLine($"[AddTransactionDialog] Error: {ex}");
+            Snackbar.Add($"Error saving transaction: {ex.Message}", Severity.Error);
+            StateHasChanged();
         }
     }
 }

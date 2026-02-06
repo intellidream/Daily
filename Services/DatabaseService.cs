@@ -7,6 +7,7 @@ namespace Daily.Services
     {
         private SQLiteAsyncConnection _connection;
         private bool _initialized = false;
+        private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private const string DbName = "Daily.db3";
 
         public SQLiteAsyncConnection Connection => _connection;
@@ -24,28 +25,31 @@ namespace Daily.Services
         {
             if (_initialized) return;
 
+            await _initLock.WaitAsync().ConfigureAwait(false);
             try 
             {
+                if (_initialized) return;
+
                 Console.WriteLine($"[DatabaseService] Initializing DB at: {_connection.DatabasePath}");
                 
                 // MIGRATION: Rename legacy tables if they exist
-                await RenameTableIfExists("local_habit_logs", "habits_logs");
-                await RenameTableIfExists("local_habit_goals", "habits_goals");
-                await RenameTableIfExists("local_user_preferences", "user_preferences");
+                await RenameTableIfExists("local_habit_logs", "habits_logs").ConfigureAwait(false);
+                await RenameTableIfExists("local_habit_goals", "habits_goals").ConfigureAwait(false);
+                await RenameTableIfExists("local_user_preferences", "user_preferences").ConfigureAwait(false);
                 
-                var res1 = await _connection.CreateTableAsync<LocalHabitLog>();
-                var res2 = await _connection.CreateTableAsync<LocalHabitGoal>();
-                var res3 = await _connection.CreateTableAsync<LocalUserPreferences>();
-                var res4 = await _connection.CreateTableAsync<LocalDailySummary>();
+                var res1 = await _connection.CreateTableAsync<LocalHabitLog>().ConfigureAwait(false);
+                var res2 = await _connection.CreateTableAsync<LocalHabitGoal>().ConfigureAwait(false);
+                var res3 = await _connection.CreateTableAsync<LocalUserPreferences>().ConfigureAwait(false);
+                var res4 = await _connection.CreateTableAsync<LocalDailySummary>().ConfigureAwait(false);
                 
                 // Finances
-                var res5 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalAccount>();
-                var res6 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalTransaction>();
-                var res7 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalSecurity>();
-                var res8 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalHolding>();
+                var res5 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalAccount>().ConfigureAwait(false);
+                var res6 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalTransaction>().ConfigureAwait(false);
+                var res7 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalSecurity>().ConfigureAwait(false);
+                var res8 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalHolding>().ConfigureAwait(false);
                 
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
-                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar"); } catch { /* Ignore if exists */ }
+                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar").ConfigureAwait(false); } catch { /* Ignore if exists */ }
                 
                 Console.WriteLine($"[DatabaseService] Tables Created results: {res1}, {res2}, {res3}, {res4}");
                 
@@ -55,6 +59,10 @@ namespace Daily.Services
             {
                 Console.WriteLine($"[DatabaseService] Init Critical Error: {ex}");
                 throw;
+            }
+            finally
+            {
+                 _initLock.Release();
             }
         }
 

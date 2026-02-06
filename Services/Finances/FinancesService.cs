@@ -251,28 +251,28 @@ namespace Daily.Services.Finances
 
         public async Task AddAccountAsync(LocalAccount account)
         {
-            await _databaseService.InitializeAsync();
+            await _databaseService.InitializeAsync().ConfigureAwait(false);
              // Ensure ID 
             if (string.IsNullOrEmpty(account.Id)) account.Id = Guid.NewGuid().ToString();
             account.CreatedAt = DateTime.UtcNow;
             account.UpdatedAt = DateTime.UtcNow;
             account.SyncedAt = null; // Dirty
             
-            await _databaseService.Connection.InsertAsync(account);
+            await _databaseService.Connection.InsertAsync(account).ConfigureAwait(false);
         }
 
         public async Task<List<LocalTransaction>> GetTransactionsAsync(string accountId)
         {
-            await _databaseService.InitializeAsync();
+            await _databaseService.InitializeAsync().ConfigureAwait(false);
             return await _databaseService.Connection.Table<LocalTransaction>()
                             .Where(t => t.AccountId == accountId && !t.IsDeleted)
                             .OrderByDescending(t => t.Date)
-                            .ToListAsync();
+                            .ToListAsync().ConfigureAwait(false);
         }
 
         public async Task AddTransactionAsync(LocalTransaction transaction)
         {
-            await _databaseService.InitializeAsync();
+            await _databaseService.InitializeAsync().ConfigureAwait(false);
              if (string.IsNullOrEmpty(transaction.Id)) transaction.Id = Guid.NewGuid().ToString();
             transaction.CreatedAt = DateTime.UtcNow;
             transaction.UpdatedAt = DateTime.UtcNow;
@@ -291,7 +291,7 @@ namespace Daily.Services.Finances
                     account.SyncedAt = null; // Dirty
                     tran.Update(account);
                 }
-            });
+            }).ConfigureAwait(false);
 
         }
 
