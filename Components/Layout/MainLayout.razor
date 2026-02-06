@@ -26,7 +26,7 @@
                        Class="@(_isRefreshing ? "spin-animation" : "")"
                        OnClick="@(async () => await TriggerLocalRefresh())" />
         <MudText Class="pl-2" Typo="Typo.h5"><b>DayOne</b></MudText>
-                <MudChip T="string" Color="Color.Tertiary" Size="Size.Small" Class="ml-3">V69</MudChip>
+                <MudChip T="string" Color="Color.Tertiary" Size="Size.Small" Class="ml-3">@($"V{AppInfo.Version.Major}.{AppInfo.Version.Minor}.{AppInfo.Version.Build}")</MudChip>
         <MudSpacer />
         
         <MudTooltip Text="@(_isDarkMode ? "Switch to Light Theme" : "Switch to Dark Theme")">

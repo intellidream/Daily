@@ -64,6 +64,12 @@ namespace Daily.Services.Finances
             {
                 StockQuote? quote = null;
                 bool needsFetch = true;
+                
+                // Determine Market Type based on symbol format
+                // Convention: "BINANCE:BTCUSDT" -> Crypto, "OANDA:EUR_USD" -> Forex, "AAPL" -> Equity
+                string marketType = "Equity";
+                if (symbol.Contains(":") && (symbol.Contains("BINANCE") || symbol.Contains("COINBASE") || symbol.Contains("KRAKEN"))) marketType = "Crypto";
+                else if (symbol.Contains(":") && (symbol.Contains("OANDA") || symbol.Contains("FX"))) marketType = "Forex";
 
                 // 1. Try Cache
                 try 
@@ -81,11 +87,23 @@ namespace Daily.Services.Finances
                             {
                                 Symbol = cached.Symbol,
                                 CurrentPrice = cached.LatestPrice,
-                                Change = cached.Change, // Added to LocalSecurity
+                                Change = cached.Change,
                                 PercentChange = cached.PercentChange,
                                 CompanyName = cached.Name ?? cached.Symbol,
-                                LogoUrl = $"https://financialmodelingprep.com/image-stock/{cached.Symbol.ToUpper()}.png"
+                                MarketType = cached.Type ?? marketType,
+                                LogoUrl = marketType == "Equity" && !symbol.Contains(":") 
+                                    ? $"https://financialmodelingprep.com/image-stock/{cached.Symbol.ToUpper()}.png"
+                                    : ""
                             };
+                            
+                            // Simple Logo Logic for major crypto
+                            if (marketType == "Crypto")
+                            {
+                                if (symbol.Contains("BTC")) quote.LogoUrl = "https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=025";
+                                if (symbol.Contains("ETH")) quote.LogoUrl = "https://cryptologos.cc/logos/ethereum-eth-logo.png?v=025";
+                                if (symbol.Contains("SOL")) quote.LogoUrl = "https://cryptologos.cc/logos/solana-sol-logo.png?v=025";
+                                if (symbol.Contains("DOGE")) quote.LogoUrl = "https://cryptologos.cc/logos/dogecoin-doge-logo.png?v=025";
+                            }
                             
                             Console.WriteLine($"[FinancesService] Cache HIT for {symbol}");
                             needsFetch = false;
@@ -99,44 +117,99 @@ namespace Daily.Services.Finances
                     try
                     {
                         // 2. Fetch API
-                        var response = await _httpClient.GetAsync($"{BaseUrl}/quote?symbol={symbol}&token={_apiKey}");
+                        string fetchSymbol = symbol;
+
+                        // Strict Forex Handling (OANDA:EUR_USD)
+                        if (marketType == "Forex")
+                        {
+                            string pair = symbol.Replace("/", "_").Replace(":", "");
+                            if (pair.Contains("OANDA")) pair = pair.Replace("OANDA", "");
+                            if (pair.Contains("FXCM")) pair = pair.Replace("FXCM", "");
+                            fetchSymbol = $"OANDA:{pair}"; 
+                        }
+
+                        // 1. Try Primary Fetch
+                        var response = await _httpClient.GetAsync($"{BaseUrl}/quote?symbol={fetchSymbol}&token={_apiKey}");
+                        FinnhubQuote data = null;
+
                         if (response.IsSuccessStatusCode)
                         {
                             var json = await response.Content.ReadAsStringAsync();
-                            var data = JsonSerializer.Deserialize<FinnhubQuote>(json);
+                            try { data = JsonSerializer.Deserialize<FinnhubQuote>(json); } catch { }
+                        }
 
-                            if (data != null && data.CurrentPrice != 0)
+                        // 2. Failover: If Primary failed OR returned 0 price, try FXCM (for Forex)
+                        if (marketType == "Forex" && (data == null || data.CurrentPrice == 0))
+                        {
+                             Console.WriteLine($"[FinancesService] OANDA failed/zero for {fetchSymbol}, trying FXCM...");
+                             // Switch to FXCM
+                             string pair = symbol.Replace("/", "_").Replace(":", "");
+                             if (pair.Contains("OANDA")) pair = pair.Replace("OANDA", "");
+                             if (pair.Contains("FXCM")) pair = pair.Replace("FXCM", "");
+                             fetchSymbol = $"FXCM:{pair}";
+
+                             response = await _httpClient.GetAsync($"{BaseUrl}/quote?symbol={fetchSymbol}&token={_apiKey}");
+                             if (response.IsSuccessStatusCode)
+                             {
+                                 var json = await response.Content.ReadAsStringAsync();
+                                 try { data = JsonSerializer.Deserialize<FinnhubQuote>(json); } catch { }
+                             }
+                        }
+                        
+                        // 3. Process Result (if any valid data found)
+                        if (data != null && data.CurrentPrice != 0)
+                        {
+                            quote = new StockQuote
                             {
-                                quote = new StockQuote
-                                {
-                                    Symbol = symbol,
-                                    CurrentPrice = data.CurrentPrice,
-                                    Change = data.Change,
-                                    PercentChange = data.PercentChange,
-                                    CompanyName = symbol // Default to symbol
-                                };
+                                Symbol = symbol, // Keep original simplified symbol for display
+                                CurrentPrice = data.CurrentPrice,
+                                Change = data.Change,
+                                PercentChange = data.PercentChange,
+                                MarketType = marketType,
+                                CompanyName = symbol 
+                            };
 
-                                // Enhancement: Profile for Name (Optimization: Only if name missing or aggressive update?)
-                                // We'll stick to logic: Try fetch profile.
                                 string companyName = symbol;
-                                try 
+                                string logoUrl = "";
+                                
+                                // Clean up Company Name
+                                if (marketType == "Crypto")
                                 {
-                                    var profileResp = await _httpClient.GetAsync($"{BaseUrl}/stock/profile2?symbol={symbol}&token={_apiKey}");
-                                    if (profileResp.IsSuccessStatusCode)
-                                    {
-                                         var pJson = await profileResp.Content.ReadAsStringAsync();
-                                         var profile = JsonSerializer.Deserialize<FinnhubProfile>(pJson);
-                                         
-                                         if (profile != null && !string.IsNullOrEmpty(profile.Name))
-                                         {
-                                            quote.CompanyName = profile.Name;
-                                            companyName = profile.Name;
-                                         } 
-                                    }
+                                    if (symbol.Contains("BTC")) { companyName = "Bitcoin"; logoUrl = "https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=025"; }
+                                    else if (symbol.Contains("ETH")) { companyName = "Ethereum"; logoUrl = "https://cryptologos.cc/logos/ethereum-eth-logo.png?v=025"; }
+                                    else if (symbol.Contains("SOL")) { companyName = "Solana"; logoUrl = "https://cryptologos.cc/logos/solana-sol-logo.png?v=025"; }
+                                    else if (symbol.Contains("DOGE")) { companyName = "Dogecoin"; logoUrl = "https://cryptologos.cc/logos/dogecoin-doge-logo.png?v=025"; }
+                                    else companyName = symbol.Split(':')[1].Replace("USDT", "");
                                 }
-                                catch { /* Ignore profile errors */ }
+                                else if (marketType == "Forex")
+                                {
+                                    companyName = symbol.Replace("_", "/").Replace("OANDA:", "").Replace("FXCM:", "");
+                                    // Make sure we just show "EUR/USD" etc
+                                    if (companyName.Contains(":")) companyName = companyName.Split(':')[1];
+                                }
+                                else // Equity
+                                {
+                                    try 
+                                    {
+                                        var profileResp = await _httpClient.GetAsync($"{BaseUrl}/stock/profile2?symbol={symbol}&token={_apiKey}");
+                                        if (profileResp.IsSuccessStatusCode)
+                                        {
+                                             var pJson = await profileResp.Content.ReadAsStringAsync();
+                                             var profile = JsonSerializer.Deserialize<FinnhubProfile>(pJson);
+                                             
+                                             if (profile != null && !string.IsNullOrEmpty(profile.Name))
+                                             {
+                                                quote.CompanyName = profile.Name;
+                                                companyName = profile.Name;
+                                             } 
+                                        }
+                                    }
+                                    catch { /* Ignore profile errors */ }
+                                    logoUrl = $"https://financialmodelingprep.com/image-stock/{symbol.ToUpper()}.png";
+                                }
 
-                                quote.LogoUrl = $"https://financialmodelingprep.com/image-stock/{symbol.ToUpper()}.png";
+                                quote.CompanyName = companyName;
+                                quote.LogoUrl = logoUrl;
                                 
                                 // 3. Update Cache
                                 try
@@ -145,7 +218,7 @@ namespace Daily.Services.Finances
                                     {
                                         Symbol = symbol,
                                         Name = companyName,
-                                        Type = "equity", // Default
+                                        Type = marketType, 
                                         LatestPrice = data.CurrentPrice,
                                         Change = data.Change,
                                         PercentChange = data.PercentChange,
@@ -156,7 +229,6 @@ namespace Daily.Services.Finances
                                 catch (Exception ex) { Console.WriteLine($"[FinancesService] Cache Write Error: {ex.Message}"); }
                             }
                         }
-                    }
                     catch (Exception ex)
                     {
                         Console.WriteLine($"[FinancesService] Error fetching {symbol}: {ex.Message}");
@@ -379,6 +451,16 @@ namespace Daily.Services.Finances
             var investments = portfolio.OfType<PortfolioItem>().Sum(p => p.TotalValue);
 
             return cash + investments;
+        }
+        private async Task<decimal> PeekPrice(HttpResponseMessage response)
+        {
+             try
+             {
+                 // Simple check: if content length is tiny, might be empty json
+                 if (response.Content.Headers.ContentLength < 5) return 0;
+                 return 1; // Assume valid
+             }
+             catch { return 0; }
         }
     }
 }

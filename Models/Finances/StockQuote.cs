@@ -11,6 +11,7 @@ namespace Daily.Models.Finances
         public decimal PercentChange { get; set; }
         public string CompanyName { get; set; } = string.Empty;
         public string LogoUrl { get; set; } = string.Empty;
+        public string MarketType { get; set; } = "Equity"; // Equity, Crypto, Forex
         
         // Optional: High/Low/Open can be added later if needed
     }
