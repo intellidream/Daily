@@ -34,32 +34,32 @@
                          var icon = isPositive ? Icons.Material.Filled.ArrowDropUp : Icons.Material.Filled.ArrowDropDown;
                          var bgStyle = isPositive ? "background: rgba(76, 175, 80, 0.05); border: 1px solid rgba(76, 175, 80, 0.2);" : "background: rgba(244, 67, 54, 0.05); border: 1px solid rgba(244, 67, 54, 0.2);";
                          
-                         <MudPaper Class="d-flex align-center justify-space-between pa-4 rounded-xl cursor-pointer hover-zoom" 
+                         <MudPaper Class="d-flex align-center justify-space-between pa-3 pa-sm-4 rounded-xl cursor-pointer hover-zoom" 
                                    Elevation="0" Style="@bgStyle">
                              
                              <!-- Left: Symbol & Name -->
-                             <div class="d-flex align-center gap-4">
-                                 @if (!string.IsNullOrEmpty(stock.LogoUrl))
-                                 {
-                                     <MudPaper Class="d-flex align-center justify-center rounded overflow-hidden mr-4" Width="40px" Height="40px" Elevation="0" Style="background-color: white;">
+                             <div class="d-flex align-center gap-2 gap-sm-4" style="min-width: 0; flex: 1;">
+                                 <div class="d-flex align-center justify-center mr-3 mr-sm-4" style="width: 40px; height: 40px; min-width: 40px;">
+                                     @if (!string.IsNullOrEmpty(stock.LogoUrl))
+                                     {
                                          <MudImage Src="@stock.LogoUrl" Width="32" Height="32" ObjectFit="ObjectFit.Contain" />
-                                     </MudPaper>
-                                 }
-                                 else
-                                 {
-                                     <MudAvatar Color="Color.Surface" Variant="Variant.Filled" Rounded="true" Class="mr-4">
-                                         @stock.Symbol.Substring(0, 1)
-                                     </MudAvatar>
-                                 }
+                                     }
+                                     else
+                                     {
+                                         <MudAvatar Color="Color.Surface" Variant="Variant.Filled" Rounded="true" Style="height: 100%; width: 100%;">
+                                             @stock.Symbol.Substring(0, 1)
+                                         </MudAvatar>
+                                     }
+                                 </div>
                                  
-                                 <div class="d-flex flex-column">
+                                 <div class="d-flex flex-column" style="min-width: 0; overflow: hidden;">
                                      <MudText Typo="Typo.h6" Class="font-weight-bold" Style="line-height: 1.1;">@stock.Symbol</MudText>
-                                     <MudText Typo="Typo.body2" Style="opacity: 0.6;">@stock.CompanyName</MudText>
+                                     <MudText Typo="Typo.body2" Style="opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">@stock.CompanyName</MudText>
                                  </div>
                              </div>
                              
                              <!-- Right: Price & Change -->
-                             <div class="d-flex align-center gap-4">
+                             <div class="d-flex align-center gap-2 gap-sm-4 flex-shrink-0">
                                  <div class="d-flex flex-column align-end">
                                      <MudText Typo="Typo.h6" Class="font-weight-bold">@stock.CurrentPrice.ToString("F2")</MudText>
                                      <MudText Typo="Typo.caption" Style="opacity: 0.6;">Price</MudText>
