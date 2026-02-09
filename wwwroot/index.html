@@ -93,6 +93,29 @@
                 transform: rotate(360deg);
             }
         }
+
+        /* 
+           V80: Return to Dropdown with Ultimate Z-Index
+           Targeting the Popover Provider & Class specifically.
+        */
+        .mud-popover-provider,
+        .mud-popover,
+        .compact-selector-menu {
+            z-index: 2147483647 !important;
+            /* Max INT */
+        }
+
+        .compact-selector-menu {
+            opacity: 1 !important;
+            background-color: var(--mud-palette-surface) !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4) !important;
+            border: 1px solid rgba(128, 128, 128, 0.2) !important;
+        }
+
+        /* Ensure contents are solid */
+        .compact-selector-menu .mud-list {
+            background-color: var(--mud-palette-surface) !important;
+        }
     </style>
 </head>
 

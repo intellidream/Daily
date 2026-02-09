@@ -433,3 +433,9 @@ body.mesh-background .blinds-appbar.collapsed .appbar-handle {
 [data-theme='dark'] .appbar-handle:hover {
     background-color: rgba(50, 50, 50, 0.85);
 }
+
+/* --- COMPACT SELECTOR FIX --- */
+/* Ensure the dropdown menu appears above all other content */
+.compact-selector-menu {
+    z-index: 2200 !important;
+}

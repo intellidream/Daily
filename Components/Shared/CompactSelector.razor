@@ -1,36 +1,31 @@
 @namespace Daily.Components.Shared
 
-<MudMenu Dense="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" PopoverClass="compact-selector-menu mud-elevation-25" ListClass="pa-1" Style="z-index: 2000;">
-    <ActivatorContent>
-        <MudChip T="string" Size="Size.Small" Color="Color.Surface" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.KeyboardArrowDown" IconColor="Color.Default" Class="ma-0 cursor-pointer hover-darken" Style="border-color: rgba(128,128,128, 0.3);">
-            @Value
-        </MudChip>
-    </ActivatorContent>
-    <ChildContent>
-        @foreach (var item in Items)
-        {
-            <MudMenuItem OnClick="@(() => OnItemSelected(item))" Style="@(item == Value ? "font-weight: bold; color: var(--mud-palette-primary);" : "")">
-                @item
-            </MudMenuItem>
-        }
-    </ChildContent>
-</MudMenu>
-
-<style>
-    .compact-selector-menu {
-        z-index: 9999 !important;
-        background-color: var(--mud-palette-surface) !important;
-    }
-</style>
+<MudExpansionPanels Elevation="0" DisableBorders="true" Dense="true" Gutters="false" Class="compact-selector-panel pa-0" Style="min-width: 140px; background: transparent;">
+    <MudExpansionPanel Text="@Value" @bind-IsExpanded="_isExpanded" Dense="true" Class="pa-0" Style="background: transparent;">
+        <MudList T="string" Clickable="true" Dense="true" DisablePadding="true">
+            @foreach (var item in Items)
+            {
+                <MudListItem OnClick="@(() => OnItemSelected(item))" Dense="true">
+                    <MudText Color="@(item == Value ? Color.Primary : Color.Inherit)" Typo="Typo.body2" Class="@(item == Value ? "font-weight-bold" : "")">
+                        @item
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    </MudExpansionPanel>
+</MudExpansionPanels>
 
 @code {
     [Parameter] public string Value { get; set; }
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
     [Parameter] public List<string> Items { get; set; } = new();
 
+    private bool _isExpanded;
+
     private async Task OnItemSelected(string item)
     {
         Value = item;
         await ValueChanged.InvokeAsync(item);
+        _isExpanded = false;
     }
 }
