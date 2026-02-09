@@ -1,11 +1,11 @@
 @namespace Daily.Components.Shared
 
-<MudExpansionPanels Elevation="0" DisableBorders="true" Dense="true" Gutters="false" Class="compact-selector-panel pa-0" Style="min-width: 140px; background: transparent;">
-    <MudExpansionPanel Text="@Value" @bind-IsExpanded="_isExpanded" Dense="true" Class="pa-0" Style="background: transparent;">
+<MudExpansionPanels Elevation="0" DisableBorders="true" Dense="true" Gutters="false" Class="compact-selector-panel pa-0" Style="min-width: 150px; background: transparent;">
+    <MudExpansionPanel Text="@Value" @bind-IsExpanded="_isExpanded" Dense="true" Class="pa-0" Style="background: transparent;" Icon="@GetIcon(Value)">
         <MudList T="string" Clickable="true" Dense="true" DisablePadding="true">
             @foreach (var item in Items)
             {
-                <MudListItem OnClick="@(() => OnItemSelected(item))" Dense="true">
+                <MudListItem OnClick="@(() => OnItemSelected(item))" Dense="true" Icon="@GetIcon(item)">
                     <MudText Color="@(item == Value ? Color.Primary : Color.Inherit)" Typo="Typo.body2" Class="@(item == Value ? "font-weight-bold" : "")">
                         @item
                     </MudText>
@@ -27,5 +27,16 @@
         Value = item;
         await ValueChanged.InvokeAsync(item);
         _isExpanded = false;
+    }
+
+    private string GetIcon(string item)
+    {
+        return item switch
+        {
+            "US Stocks" => Icons.Material.Filled.CandlestickChart,
+            "Crypto" => Icons.Material.Filled.CurrencyBitcoin,
+            "Forex" => Icons.Material.Filled.CurrencyExchange,
+            _ => Icons.Material.Filled.List
+        };
     }
 }
