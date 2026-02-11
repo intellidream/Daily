@@ -141,6 +141,8 @@ namespace Daily
             builder.Services.AddSingleton<HttpClient>();
             
             // Finances Service
+            builder.Services.AddSingleton<Daily.Services.Finances.YahooFinanceService>();
+            builder.Services.AddSingleton<Daily.Services.Finances.FinnhubService>();
             builder.Services.AddSingleton<Daily.Services.Finances.IFinancesService, Daily.Services.Finances.FinancesService>();
 
 #if DEBUG

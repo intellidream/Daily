@@ -3,15 +3,17 @@ using Daily.Models.Finances;
 using Daily.Services;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Supabase;
+using Supabase.Postgrest;
 
 namespace Daily.Services.Finances
 {
     public class FinancesService : IFinancesService
     {
-        private readonly HttpClient _httpClient;
+        private readonly YahooFinanceService _yahooService;
+        private readonly FinnhubService _finnhubService;
+        private readonly Supabase.Client _supabaseClient;
         private readonly IDatabaseService _databaseService;
-        private readonly string _apiKey;
-        private readonly bool _useMockData;
 
         public event Action OnViewTypeChanged;
         private string _currentViewType = "Stocks";
@@ -28,289 +30,326 @@ namespace Daily.Services.Finances
             }
         }
 
-        // Constants
-        private const string BaseUrl = "https://finnhub.io/api/v1";
-
-        public FinancesService(HttpClient httpClient, IDatabaseService databaseService)
+        public FinancesService(YahooFinanceService yahooService, FinnhubService finnhubService, Supabase.Client supabaseClient, IDatabaseService databaseService)
         {
-            _httpClient = httpClient;
+            _yahooService = yahooService;
+            _finnhubService = finnhubService;
+            _supabaseClient = supabaseClient;
             _databaseService = databaseService;
-            _apiKey = Secrets.FinnhubApiKey;
-            _useMockData = string.IsNullOrEmpty(_apiKey) || _apiKey == ""; 
-            
-            if (_useMockData)
-            {
-                Console.WriteLine("[FinancesService] !!! USING MOCK DATA (No API Key) !!!");
-            }
-            else
-            {
-                 Console.WriteLine($"[FinancesService] USING REAL DATA (Key Length: {_apiKey.Length})");
-            }
         }
 
         public async Task<List<StockQuote>> GetStockQuotesAsync(List<string> symbols)
         {
-            if (_useMockData)
-            {
-                return GetMockData(symbols);
-            }
-
             var results = new List<StockQuote>();
-            
-            // Ensure DB is ready
+            var symbolsToFetchFromYahoo = new List<string>();
+
+            if (symbols == null || !symbols.Any()) return results;
+
+            // Ensure DB is initialized
+            // Ensure DB is initialized
             await _databaseService.InitializeAsync();
 
-            foreach (var symbol in symbols)
-            {
-                StockQuote? quote = null;
-                bool needsFetch = true;
-                
-                // Determine Market Type based on symbol format
-                // Convention: "BINANCE:BTCUSDT" -> Crypto, "OANDA:EUR_USD" -> Forex, "AAPL" -> Equity
-                string marketType = "Equity";
-                if (symbol.Contains(":") && (symbol.Contains("BINANCE") || symbol.Contains("COINBASE") || symbol.Contains("KRAKEN"))) marketType = "Crypto";
-                else if (symbol.Contains(":") && (symbol.Contains("OANDA") || symbol.Contains("FX"))) marketType = "Forex";
+            var cachedSecurities = new List<LocalSecurity>();
 
-                // 1. Try Cache
-                try 
+            try 
+            {
+                // 1. Check Local SQLite Cache
+                cachedSecurities = await _databaseService.Connection.Table<LocalSecurity>()
+                                      .Where(s => symbols.Contains(s.Symbol))
+                                      .ToListAsync();
+
+                foreach (var symbol in symbols)
                 {
-                    var cached = await _databaseService.Connection.Table<LocalSecurity>()
-                                    .Where(s => s.Symbol == symbol)
-                                    .FirstOrDefaultAsync();
-                                    
+                    var cached = cachedSecurities.FirstOrDefault(s => s.Symbol == symbol);
+                    
+                    bool isFresh = false;
+                    bool isRich = false;
+
                     if (cached != null)
                     {
-                        // Check freshness (15 mins)
+                        // Check Freshness (15 mins)
                         if (cached.LastUpdatedAt.HasValue && cached.LastUpdatedAt.Value > DateTime.UtcNow.AddMinutes(-15))
                         {
-                            quote = new StockQuote
-                            {
-                                Symbol = cached.Symbol,
-                                CurrentPrice = cached.LatestPrice,
-                                Change = cached.Change,
-                                PercentChange = cached.PercentChange,
-                                CompanyName = cached.Name ?? cached.Symbol,
-                                MarketType = cached.Type ?? marketType,
-                                LogoUrl = marketType == "Equity" && !symbol.Contains(":") 
-                                    ? $"https://financialmodelingprep.com/image-stock/{cached.Symbol.ToUpper()}.png"
-                                    : ""
-                            };
-                            
-                            // Simple Logo Logic for major crypto
-                            if (marketType == "Crypto")
-                            {
-                                if (symbol.Contains("BTC")) quote.LogoUrl = "https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=025";
-                                if (symbol.Contains("ETH")) quote.LogoUrl = "https://cryptologos.cc/logos/ethereum-eth-logo.png?v=025";
-                                if (symbol.Contains("SOL")) quote.LogoUrl = "https://cryptologos.cc/logos/solana-sol-logo.png?v=025";
-                                if (symbol.Contains("DOGE")) quote.LogoUrl = "https://cryptologos.cc/logos/dogecoin-doge-logo.png?v=025";
-                            }
-                            
-                            Console.WriteLine($"[FinancesService] Cache HIT for {symbol}");
-                            needsFetch = false;
-                        }
-                    }
-                }
-                catch (Exception ex) { Console.WriteLine($"[FinancesService] Cache Read Error: {ex.Message}"); }
-
-                if (needsFetch)
-                {
-                    try
-                    {
-                        // 2. Fetch API
-                        string fetchSymbol = symbol;
-
-                        // Strict Forex Handling (OANDA:EUR_USD)
-                        if (marketType == "Forex")
-                        {
-                            string pair = symbol.Replace("/", "_").Replace(":", "");
-                            if (pair.Contains("OANDA")) pair = pair.Replace("OANDA", "");
-                            if (pair.Contains("FXCM")) pair = pair.Replace("FXCM", "");
-                            fetchSymbol = $"OANDA:{pair}"; 
+                            isFresh = true;
                         }
 
-                        // 1. Try Primary Fetch
-                        var response = await _httpClient.GetAsync($"{BaseUrl}/quote?symbol={fetchSymbol}&token={_apiKey}");
-                        FinnhubQuote data = null;
-
-                        if (response.IsSuccessStatusCode)
+                        // Check Richness (DayHigh/Volume)
+                        if (cached.DayHigh.HasValue && cached.Volume.HasValue)
                         {
-                            var json = await response.Content.ReadAsStringAsync();
-                            try { data = JsonSerializer.Deserialize<FinnhubQuote>(json); } catch { }
-                        }
-
-                        // 2. Failover: If Primary failed OR returned 0 price, try FXCM (for Forex)
-                        if (marketType == "Forex" && (data == null || data.CurrentPrice == 0))
-                        {
-                             Console.WriteLine($"[FinancesService] OANDA failed/zero for {fetchSymbol}, trying FXCM...");
-                             // Switch to FXCM
-                             string pair = symbol.Replace("/", "_").Replace(":", "");
-                             if (pair.Contains("OANDA")) pair = pair.Replace("OANDA", "");
-                             if (pair.Contains("FXCM")) pair = pair.Replace("FXCM", "");
-                             fetchSymbol = $"FXCM:{pair}";
-
-                             response = await _httpClient.GetAsync($"{BaseUrl}/quote?symbol={fetchSymbol}&token={_apiKey}");
-                             if (response.IsSuccessStatusCode)
-                             {
-                                 var json = await response.Content.ReadAsStringAsync();
-                                 try { data = JsonSerializer.Deserialize<FinnhubQuote>(json); } catch { }
-                             }
+                            isRich = true;
                         }
                         
-                        // 3. Process Result (if any valid data found)
-                        if (data != null && data.CurrentPrice != 0)
+                        // FIX: Force update if using old/broken FMP or Clearbit icons
+                        if (cached.LogoUrl != null && (cached.LogoUrl.Contains("financialmodelingprep.com") || cached.LogoUrl.Contains("clearbit.com")))
                         {
-                            quote = new StockQuote
+                            // Invalidate to force Google Favicon logic (via YahooService fetch)
+                             isFresh = false; 
+                        }
+
+                        // FIX: Force update if Crypto name is generic "USD"
+                        // RELAXED: Removed "Name == Symbol" check to prevent loops for valid symbols like "SOL"
+                        if (cached.Type == "crypto" && cached.Name == "USD")
+                        {
+                            isFresh = false;
+                        }
+
+                        // Use cached if valid-ish (we can show stale data while fetching)
+                        results.Add(MapToQuote(cached));
+                    }
+
+                    // Decide if we need to fetch
+                    // RELAXED CACHE: If it's fresh, use it. Don't force re-fetch just for "richness" (Volume/DayHigh).
+                    // This prevents infinite loops with Finnhub which always returns "light" data.
+                    if (!isFresh || cached == null)
+                    {
+                         if (!symbolsToFetchFromYahoo.Contains(symbol)) symbolsToFetchFromYahoo.Add(symbol);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[FinancesService] SQLite Read Error: {ex.Message}");
+                symbolsToFetchFromYahoo = symbols.ToList();
+            }
+
+            // 2. Fetch Stale/Missing/Rich data from Yahoo
+            if (symbolsToFetchFromYahoo.Any())
+            {
+                // Console.WriteLine($"[FinancesService] Fetching from Yahoo: {string.Join(", ", symbolsToFetchFromYahoo)}");
+                var yahooData = await _yahooService.GetMarketDataAsync(symbolsToFetchFromYahoo);
+
+                // Failover Logic: If Yahoo didn't return some symbols, try Finnhub
+                var missingSymbols = symbolsToFetchFromYahoo.Where(s => !yahooData.ContainsKey(s)).ToList();
+                if (missingSymbols.Any())
+                {
+                    foreach (var missing in missingSymbols)
+                    {
+                        var finnhubQuote = await _finnhubService.GetQuoteAsync(missing);
+                        if (finnhubQuote != null)
+                        {
+                            // Finnhub data is "lighter" (no CompanyName usually), so we might need to patch it
+                            // Use cached name if available or symbol as fallback
+                            var cached = cachedSecurities.FirstOrDefault(s => s.Symbol == missing);
+                            if (string.IsNullOrEmpty(finnhubQuote.CompanyName))
                             {
-                                Symbol = symbol, // Keep original simplified symbol for display
-                                CurrentPrice = data.CurrentPrice,
-                                Change = data.Change,
-                                PercentChange = data.PercentChange,
-                                MarketType = marketType,
-                                CompanyName = symbol 
-                            };
+                                finnhubQuote.CompanyName = cached?.Name ?? GetPrettyName(missing, missing);
+                            }
+                            // Attempt to infer MarketType/Currency/Exchange if missing
+                            if (string.IsNullOrEmpty(finnhubQuote.Currency)) finnhubQuote.Currency = "USD"; // Default
+                            if (string.IsNullOrEmpty(finnhubQuote.MarketType)) 
+                            {
+                                if (missing.Contains("-USD")) finnhubQuote.MarketType = "crypto";
+                                else if (missing.Contains("=X")) finnhubQuote.MarketType = "forex";
+                                else finnhubQuote.MarketType = "stock";
+                            }
 
-                                string companyName = symbol;
-                                string logoUrl = "";
-                                
-                                // Clean up Company Name
-                                if (marketType == "Crypto")
-                                {
-                                    if (symbol.Contains("BTC")) { companyName = "Bitcoin"; logoUrl = "https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=025"; }
-                                    else if (symbol.Contains("ETH")) { companyName = "Ethereum"; logoUrl = "https://cryptologos.cc/logos/ethereum-eth-logo.png?v=025"; }
-                                    else if (symbol.Contains("SOL")) { companyName = "Solana"; logoUrl = "https://cryptologos.cc/logos/solana-sol-logo.png?v=025"; }
-                                    else if (symbol.Contains("DOGE")) { companyName = "Dogecoin"; logoUrl = "https://cryptologos.cc/logos/dogecoin-doge-logo.png?v=025"; }
-                                    else companyName = symbol.Split(':')[1].Replace("USDT", "");
-                                }
-                                else if (marketType == "Forex")
-                                {
-                                    companyName = symbol.Replace("_", "/").Replace("OANDA:", "").Replace("FXCM:", "");
-                                    // Make sure we just show "EUR/USD" etc
-                                    if (companyName.Contains(":")) companyName = companyName.Split(':')[1];
-                                }
-                                else // Equity
-                                {
-                                    try 
-                                    {
-                                        var profileResp = await _httpClient.GetAsync($"{BaseUrl}/stock/profile2?symbol={symbol}&token={_apiKey}");
-                                        if (profileResp.IsSuccessStatusCode)
-                                        {
-                                             var pJson = await profileResp.Content.ReadAsStringAsync();
-                                             var profile = JsonSerializer.Deserialize<FinnhubProfile>(pJson);
-                                             
-                                             if (profile != null && !string.IsNullOrEmpty(profile.Name))
-                                             {
-                                                quote.CompanyName = profile.Name;
-                                                companyName = profile.Name;
-                                             } 
-                                        }
-                                    }
-                                    catch { /* Ignore profile errors */ }
-                                    logoUrl = $"https://financialmodelingprep.com/image-stock/{symbol.ToUpper()}.png";
-                                }
-
-                                quote.CompanyName = companyName;
-                                quote.LogoUrl = logoUrl;
-                                
-                                // 3. Update Cache
-                                try
-                                {
-                                    var cachedSec = new LocalSecurity
-                                    {
-                                        Symbol = symbol,
-                                        Name = companyName,
-                                        Type = marketType, 
-                                        LatestPrice = data.CurrentPrice,
-                                        Change = data.Change,
-                                        PercentChange = data.PercentChange,
-                                        LastUpdatedAt = DateTime.UtcNow
-                                    };
-                                    await _databaseService.Connection.InsertOrReplaceAsync(cachedSec);
-                                }
-                                catch (Exception ex) { Console.WriteLine($"[FinancesService] Cache Write Error: {ex.Message}"); }
+                            // Add to yahooData so it gets processed downstream
+                            if (!yahooData.ContainsKey(missing))
+                            {
+                                yahooData.Add(missing, finnhubQuote);
                             }
                         }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[FinancesService] Error fetching {symbol}: {ex.Message}");
                     }
                 }
 
-                if (quote != null) results.Add(quote);
+                if (yahooData.Any())
+                {
+                    // Update Results with Fresh Data (Merge with Cached)
+                    foreach (var kvp in yahooData)
+                    {
+                        var freshQuote = kvp.Value;
+                        
+                        // 2a. Merge with Cached Data to preserve richness (Logo, Volume, MarketCap)
+                        // This is crucial because Finnhub quotes are "light" (missing huge chunks of data)
+                        // If we just overwrite, we lose the Logos and Charts.
+                        var cached = cachedSecurities.FirstOrDefault(s => s.Symbol == freshQuote.Symbol);
+                        if (cached != null)
+                        {
+                            // Preserve Name if fresh is generic/missing
+                            if (string.IsNullOrEmpty(freshQuote.CompanyName) || freshQuote.CompanyName == freshQuote.Symbol)
+                            {
+                                 freshQuote.CompanyName = cached.Name;
+                            }
+
+                            // Preserve Logo if fresh is missing
+                            // Finnhub returns NULL LogoUrl. We MUST use the cached one if valid.
+                            if (string.IsNullOrEmpty(freshQuote.LogoUrl) && !string.IsNullOrEmpty(cached.LogoUrl))
+                            {
+                                freshQuote.LogoUrl = cached.LogoUrl;
+                            }
+
+                            // Preserve Rich Data (Volume/MarketCap) if fresh is missing/zero
+                            if (freshQuote.Volume == 0 && cached.Volume.HasValue) freshQuote.Volume = cached.Volume;
+                            if (freshQuote.MarketCap == 0 && cached.MarketCap.HasValue) freshQuote.MarketCap = cached.MarketCap;
+                            if (freshQuote.DayHigh == 0 && cached.DayHigh.HasValue) freshQuote.DayHigh = cached.DayHigh;
+                            if (freshQuote.DayLow == 0 && cached.DayLow.HasValue) freshQuote.DayLow = cached.DayLow;
+                        }
+
+                        // 2b. Final Fallback for Logo
+                        if (string.IsNullOrEmpty(freshQuote.LogoUrl))
+                        {
+                             freshQuote.LogoUrl = GetLogoUrl(freshQuote.Symbol, freshQuote.CompanyName, freshQuote.MarketType);
+                        }
+                        
+                        // Remove stale entry if exists
+                        var existing = results.FirstOrDefault(r => r.Symbol == freshQuote.Symbol);
+                        if (existing != null) results.Remove(existing);
+                        
+                        results.Add(freshQuote);
+
+                        // 3. Update Local SQLite Cache
+                        try
+                        {
+                            var security = new LocalSecurity
+                            {
+                                Symbol = freshQuote.Symbol,
+                                Name = freshQuote.CompanyName, 
+                                LatestPrice = freshQuote.CurrentPrice,
+                                LastUpdatedAt = DateTime.UtcNow,
+                                Type = MapMarketType(freshQuote.MarketType),
+                                Change = freshQuote.Change,
+                                PercentChange = freshQuote.PercentChange,
+                                
+                                // Rich Data
+                                DayHigh = freshQuote.DayHigh,
+                                DayLow = freshQuote.DayLow,
+                                Volume = freshQuote.Volume,
+                                MarketCap = freshQuote.MarketCap,
+                                Currency = freshQuote.Currency,
+                                Exchange = freshQuote.Exchange,
+                                LogoUrl = freshQuote.LogoUrl
+                            };
+                            
+                            await _databaseService.Connection.InsertOrReplaceAsync(security);
+                        }
+                        catch(Exception ex)
+                        {
+                             Console.WriteLine($"[FinancesService] SQLite Write Error: {ex}");
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[FinancesService] Yahoo fetch returned empty. Keeping cached data if available.");
+                }
             }
 
             return results;
         }
 
+        private StockQuote MapToQuote(LocalSecurity sec)
+        {
+            return new StockQuote
+            {
+                Symbol = sec.Symbol,
+                CompanyName = sec.Name ?? sec.Symbol,
+                CurrentPrice = sec.LatestPrice,
+                Change = sec.Change, 
+                PercentChange = sec.PercentChange,
+                MarketType = sec.Type,
+                Currency = sec.Currency,
+                Exchange = sec.Exchange,
+                // Rich Data from Local Cache
+                DayHigh = sec.DayHigh,
+                DayLow = sec.DayLow,
+                Volume = sec.Volume,
+                MarketCap = sec.MarketCap,
+                LogoUrl = !string.IsNullOrEmpty(sec.LogoUrl) ? sec.LogoUrl : GetLogoUrl(sec.Symbol, sec.Name, sec.Type)
+            };
+        }
+
+        private string GetLogoUrl(string symbol, string name, string type)
+        {
+            var s = symbol.ToUpper().Trim();
+
+            // 1. Bitcoin/Crypto specific
+            if (s == "BTC" || s.Contains("BTC-")) return "https://upload.wikimedia.org/wikipedia/commons/4/46/Bitcoin.svg";
+            if (s == "ETH" || s.Contains("ETH-")) return "https://upload.wikimedia.org/wikipedia/commons/6/6f/Ethereum-icon-purple.svg";
+            if (s == "SOL" || s.Contains("SOL-")) return "https://upload.wikimedia.org/wikipedia/en/b/b9/Solana_logo.png";
+            if (s == "BNB" || s.Contains("BNB-")) return "https://upload.wikimedia.org/wikipedia/commons/f/fc/Binance-coin-bnb-logo.png";
+            if (s == "XRP" || s.Contains("XRP-")) return "https://upload.wikimedia.org/wikipedia/commons/9/91/XRP_Symbol.png"; // or similar
+            if (s == "ADA" || s.Contains("ADA-")) return "https://upload.wikimedia.org/wikipedia/commons/1/1a/Cardano-ada-logo.png";
+            if (s == "DOGE" || s.Contains("DOGE-")) return "https://upload.wikimedia.org/wikipedia/en/d/d0/Dogecoin_Logo.png";
+            
+            // 2. Google Favicon Service
+            // We need a domain. 
+            // If name contains space, take first word. 
+            // "Apple Inc" -> apple.com
+            // "Microsoft Corporation" -> microsoft.com
+            // "Nvidia" -> nvidia.com
+
+            if (!string.IsNullOrEmpty(name))
+            {
+                name = GetPrettyName(s, name);
+                
+                var candidates = name.ToLower().Split(new char[]{' ', ',', '.', '-'}, StringSplitOptions.RemoveEmptyEntries);
+                if (candidates.Length > 0)
+                {
+                    var domain = candidates[0] + ".com";
+                    // Google Favicon Service
+                    return $"https://www.google.com/s2/favicons?domain={domain}&sz=128";
+                }
+            }
+            
+            // Fallback to Google with symbol if name fails
+            return $"https://www.google.com/s2/favicons?domain={s.ToLower()}.com&sz=128";
+        }
+
+        private string GetPrettyName(string symbol, string name)
+        {
+            var s = symbol.ToUpper().Trim();
+             // SPECIAL MAPPINGS FOR KNOWN CRYPTOS/STOCKS IF NAME IS JUST SYMBOL OR MISSING
+            if (string.IsNullOrEmpty(name) || name.ToUpper() == s || name.ToUpper() == s.Replace("-USD", "")) 
+            {
+                var ticker = s.Replace("-USD", "");
+                return ticker switch
+                {
+                    "SOL" => "Solana",
+                    "BNB" => "Binance",
+                    "XRP" => "Ripple",
+                    "ADA" => "Cardano",
+                    "DOGE" => "Dogecoin",
+                    "AVAX" => "Avalanche",
+                    "DOT" => "Polkadot",
+                    "LINK" => "Chainlink",
+                    "NVDA" => "Nvidia", 
+                    "MSFT" => "Microsoft",
+                    "AAPL" => "Apple",
+                    "GOOG" => "Google",
+                    "AMZN" => "Amazon",
+                    "TSLA" => "Tesla",
+                    "META" => "Meta",
+                    _ => name ?? s
+                };
+            }
+            return name;
+        }
+
+        private string MapMarketType(string rawType)
+        {
+            // Yahoo might return "EQUITY", "CURRENCY", "CRYPTOCURRENCY"
+            // Map to our "stock", "forex", "crypto"
+            return rawType?.ToUpper() switch
+            {
+                "EQUITY" => "stock",
+                "CURRENCY" => "forex",
+                "CRYPTOCURRENCY" => "crypto",
+                _ => rawType?.ToLower() ?? "stock"
+            };
+        }
+
         public Task<MoneyData> GetMoneyDataAsync()
         {
-            // Placeholder Mock
-            return Task.FromResult(new MoneyData
-            {
-                BaseCurrency = "USD",
-                TargetCurrency = "EUR",
-                Rate = 0.92m // Static mock rate
-            });
-        }
-
-        private List<StockQuote> GetMockData(List<string> symbols)
-        {
-            // Return realistic looking data for the requested symbols
-            var mocks = new List<StockQuote>();
-            var rnd = new Random();
-
-            foreach (var sym in symbols)
-            {
-                decimal basePrice = 100m;
-                if (sym == "AAPL") basePrice = 220m;
-                if (sym == "MSFT") basePrice = 415m;
-                if (sym == "GOOGL") basePrice = 175m;
-                if (sym == "TSLA") basePrice = 240m;
-                if (sym == "NVDA") basePrice = 120m;
-
-                var change = (decimal)(rnd.NextDouble() * 10 - 4); // -4 to +6 range roughly
-                
-                mocks.Add(new StockQuote
-                {
-                    Symbol = sym,
-                    CurrentPrice = basePrice + change,
-                    Change = change,
-                    PercentChange = Math.Round((change / basePrice) * 100, 2),
-                    CompanyName = sym, // Mock name
-                    LogoUrl = $"https://financialmodelingprep.com/image-stock/{sym.ToUpper()}.png"
-                });
-            }
-
-            return mocks;
-        }
-
-        // Finnhub Response Model for /quote
-        private class FinnhubQuote
-        {
-            [JsonPropertyName("c")]
-            public decimal CurrentPrice { get; set; }
-
-            [JsonPropertyName("d")]
-            public decimal Change { get; set; }
-
-            [JsonPropertyName("dp")]
-            public decimal PercentChange { get; set; }
-        }
-
-        // Finnhub Response Model for /stock/profile2
-        private class FinnhubProfile
-        {
-            [JsonPropertyName("logo")]
-            public string Logo { get; set; }
-            
-            [JsonPropertyName("name")]
-            public string Name { get; set; }
-
-            [JsonPropertyName("weburl")]
-            public string WebUrl { get; set; }
+             return Task.FromResult(new MoneyData
+             {
+                 BaseCurrency = "USD",
+                 TargetCurrency = "EUR",
+                 Rate = 0.92m 
+             });
         }
 
         // ==========================================
-        // Money Implementation
+        // Money Implementation (Local SQLite)
         // ==========================================
 
         public async Task<List<LocalAccount>> GetAccountsAsync()
@@ -324,11 +363,10 @@ namespace Daily.Services.Finances
         public async Task AddAccountAsync(LocalAccount account)
         {
             await _databaseService.InitializeAsync().ConfigureAwait(false);
-             // Ensure ID 
             if (string.IsNullOrEmpty(account.Id)) account.Id = Guid.NewGuid().ToString();
             account.CreatedAt = DateTime.UtcNow;
             account.UpdatedAt = DateTime.UtcNow;
-            account.SyncedAt = null; // Dirty
+            account.SyncedAt = null; 
             
             await _databaseService.Connection.InsertAsync(account).ConfigureAwait(false);
         }
@@ -345,12 +383,11 @@ namespace Daily.Services.Finances
         public async Task AddTransactionAsync(LocalTransaction transaction)
         {
             await _databaseService.InitializeAsync().ConfigureAwait(false);
-             if (string.IsNullOrEmpty(transaction.Id)) transaction.Id = Guid.NewGuid().ToString();
+            if (string.IsNullOrEmpty(transaction.Id)) transaction.Id = Guid.NewGuid().ToString();
             transaction.CreatedAt = DateTime.UtcNow;
             transaction.UpdatedAt = DateTime.UtcNow;
-            transaction.SyncedAt = null; // Dirty
+            transaction.SyncedAt = null; 
 
-            // ACID: Transaction should update Account Balance
             await _databaseService.Connection.RunInTransactionAsync(tran => 
             {
                 tran.Insert(transaction);
@@ -358,9 +395,9 @@ namespace Daily.Services.Finances
                 var account = tran.Find<LocalAccount>(transaction.AccountId);
                 if (account != null)
                 {
-                    account.CurrentBalance += transaction.Amount; // Amount is signed (+/-, e.g. -50 for expense)
+                    account.CurrentBalance += transaction.Amount; 
                     account.UpdatedAt = DateTime.UtcNow;
-                    account.SyncedAt = null; // Dirty
+                    account.SyncedAt = null; 
                     tran.Update(account);
                 }
             }).ConfigureAwait(false);
@@ -375,11 +412,11 @@ namespace Daily.Services.Finances
         {
             await _databaseService.InitializeAsync();
             
-            // 1. Get Holdings
+            // 1. Get Holdings (Local)
             var holdings = await _databaseService.Connection.Table<LocalHolding>().Where(h => !h.IsDeleted).ToListAsync();
             if (!holdings.Any()) return new List<StockQuote>();
 
-            // 2. Get Quotes
+            // 2. Get Quotes (Global)
             var symbols = holdings.Select(h => h.SecuritySymbol).Distinct().ToList();
             var quotes = await GetStockQuotesAsync(symbols);
             var quoteMap = quotes.ToDictionary(q => q.Symbol, q => q);
@@ -399,12 +436,14 @@ namespace Daily.Services.Finances
                         PercentChange = q.PercentChange,
                         LogoUrl = q.LogoUrl,
                         Quantity = h.Quantity,
-                        CostBasis = h.CostBasis
+                        CostBasis = h.CostBasis,
+                        MarketType = q.MarketType,
+                        Currency = q.Currency,
+                        Exchange = q.Exchange
                     });
                 }
                 else
                 {
-                    // Fallback if quote missing (shouldn't happen if GetStockQuotes works)
                     result.Add(new PortfolioItem
                     {
                         Symbol = h.SecuritySymbol,
@@ -414,11 +453,6 @@ namespace Daily.Services.Finances
                     });
                 }
             }
-            
-            // Aggregate if multiple holdings of same symbol?
-            // Usually Portfolio shows one line per symbol. 
-            // If user has multiple lots, we should aggregate.
-            // Let's aggregate by Symbol.
             
             var aggregated = result.Cast<PortfolioItem>()
                 .GroupBy(p => p.Symbol)
@@ -431,7 +465,10 @@ namespace Daily.Services.Finances
                     PercentChange = g.First().PercentChange,
                     LogoUrl = g.First().LogoUrl,
                     Quantity = g.Sum(x => x.Quantity),
-                    CostBasis = g.Sum(x => x.CostBasis)
+                    CostBasis = g.Sum(x => x.CostBasis),
+                    MarketType = g.First().MarketType,
+                    Currency = g.First().Currency,
+                    Exchange = g.First().Exchange
                 })
                 .OrderByDescending(p => p.TotalValue)
                 .Cast<StockQuote>()
@@ -442,25 +479,13 @@ namespace Daily.Services.Finances
 
         public async Task<decimal> GetNetWorthAsync()
         {
-            // 1. Accounts (Cash)
             var accounts = await GetAccountsAsync();
             var cash = accounts.Sum(a => a.CurrentBalance);
 
-            // 2. Investments
             var portfolio = await GetHoldingsWithQuotesAsync();
             var investments = portfolio.OfType<PortfolioItem>().Sum(p => p.TotalValue);
 
             return cash + investments;
-        }
-        private async Task<decimal> PeekPrice(HttpResponseMessage response)
-        {
-             try
-             {
-                 // Simple check: if content length is tiny, might be empty json
-                 if (response.Content.Headers.ContentLength < 5) return 0;
-                 return 1; // Assume valid
-             }
-             catch { return 0; }
         }
     }
 }

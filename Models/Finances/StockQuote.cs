@@ -11,9 +11,26 @@ namespace Daily.Models.Finances
         public decimal PercentChange { get; set; }
         public string CompanyName { get; set; } = string.Empty;
         public string LogoUrl { get; set; } = string.Empty;
-        public string MarketType { get; set; } = "Equity"; // Equity, Crypto, Forex
         
-        // Optional: High/Low/Open can be added later if needed
+        public string MarketType { get; set; } = "Equity"; // Equity, Crypto, Forex
+        public string Currency { get; set; } = "USD";
+        public string Exchange { get; set; } = "US";
+
+        public string CurrencySymbol => Currency switch
+        {
+            "USD" => "$",
+            "EUR" => "€",
+            "RON" => "lei",
+            "GBP" => "£",
+            "JPY" => "¥",
+            _ => Currency
+        };
+
+        // Rich Data
+        public decimal? DayHigh { get; set; }
+        public decimal? DayLow { get; set; }
+        public long? Volume { get; set; }
+        public long? MarketCap { get; set; }
     }
     
     public class PortfolioItem : StockQuote

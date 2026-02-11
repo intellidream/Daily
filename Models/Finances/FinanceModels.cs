@@ -166,6 +166,15 @@ namespace Daily.Models.Finances
         public decimal Change { get; set; }
         public decimal PercentChange { get; set; }
         public DateTime? LastUpdatedAt { get; set; }
+
+        // Rich Data
+        public decimal? DayHigh { get; set; }
+        public decimal? DayLow { get; set; }
+        public long? Volume { get; set; }
+        public long? MarketCap { get; set; }
+        public string? LogoUrl { get; set; }
+        public string? Currency { get; set; }
+        public string? Exchange { get; set; }
     }
 
     [SQLite.Table("holdings")]
