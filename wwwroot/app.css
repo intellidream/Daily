@@ -26,6 +26,11 @@ body {
     background: transparent !important;
 }
 
+/* Compact Mode (Windows/Desktop) */
+.compact-mode {
+    zoom: 0.85;
+}
+
 /* --- LIGHT MODE (Default) --- */
 .mesh-background {
     /* Light Mode Gradient: Darker Pastel Purple -> Off-White -> Darker Pastel Cyan */

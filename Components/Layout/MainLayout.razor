@@ -70,6 +70,20 @@
     private bool _isDarkMode = true;
     private bool _isAppBarExpanded = true;
 
+    protected override void OnInitialized()
+    {
+        Console.WriteLine("[MainLayout] OnInitialized Called.");
+        if (Application.Current != null)
+        {
+            // Subscribe to system theme changes
+            Application.Current.RequestedThemeChanged += OnThemeChanged;
+            
+            // Set initial state based on current system theme
+            _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
+        }
+
+        UpdateLayoutClasses();
+    }
     private void ToggleAppBar()
     {
         _isAppBarExpanded = !_isAppBarExpanded;
@@ -159,10 +173,11 @@
             }
             else
             {
-                // On Windows/Desktop, we use the CSS background
+                // On Windows/Desktop, we use the CSS background AND compact mode
                 try
                 {
                     await JSRuntime.InvokeVoidAsync("dailyInterop.addClassToBody", "mesh-background");
+                    await JSRuntime.InvokeVoidAsync("dailyInterop.addClassToBody", "compact-mode");
                 }
                 catch (Exception) { /* Ignore */ }
             }
@@ -202,20 +217,8 @@
     private string AppBarClass { get; set; } = "";
     private string ContainerClass { get; set; } = "";
 
-    protected override void OnInitialized()
-    {
-        Console.WriteLine("[MainLayout] OnInitialized Called.");
-        if (Application.Current != null)
-        {
-            // Subscribe to system theme changes
-            Application.Current.RequestedThemeChanged += OnThemeChanged;
-            
-            // Set initial state based on current system theme
-            _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
-        }
+    // OnInitialized moved up
 
-        UpdateLayoutClasses();
-    }
 
     private void UpdateLayoutClasses()
     {

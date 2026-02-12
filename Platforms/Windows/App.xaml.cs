@@ -58,6 +58,9 @@ namespace Daily.WinUI
             {
                 nativeWindow.ExtendsContentIntoTitleBar = true;
                 Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(nativeWindow);
+                // Explicitly set window size to 450x900 effective pixels (Compact Sidebar)
+                // This matches the "Compact" density setting
+                Daily.Platforms.Windows.WindowHelpers.ResizeAndDockRight(nativeWindow, 400, 900);
             }
 
             // Handle initial launch activation
