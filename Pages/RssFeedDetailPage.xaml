@@ -1,0 +1,85 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:Daily.Models"
+             x:Class="Daily.Pages.RssFeedDetailPage"
+             Title="News">
+    <Grid RowDefinitions="Auto,*" RowSpacing="12" Padding="16">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" VerticalOptions="Center">
+            <Picker ItemsSource="{Binding Feeds}"
+                    SelectedItem="{Binding SelectedFeed}"
+                    ItemDisplayBinding="{Binding Name}"
+                    HorizontalOptions="Fill" />
+            <Button Grid.Column="1"
+                    Text="⟳"
+                    WidthRequest="36"
+                    HeightRequest="32"
+                    VerticalOptions="Center"
+                    Command="{Binding RefreshCommand}" />
+        </Grid>
+
+        <Grid Grid.Row="1" RowDefinitions="Auto,*" RowSpacing="12">
+            <Label Text="{Binding Error}"
+                   TextColor="Red"
+                   IsVisible="{Binding HasError}" />
+
+            <CollectionView Grid.Row="1"
+                            ItemsSource="{Binding DisplayItems}"
+                            SelectionMode="None"
+                            IsVisible="{Binding IsListVisible}"
+                            HorizontalOptions="FillAndExpand">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="models:RssItem">
+                        <Border StrokeThickness="0" Padding="6,10" HorizontalOptions="FillAndExpand" BackgroundColor="Transparent">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnItemTapped" CommandParameter="{Binding .}" />
+                            </Border.GestureRecognizers>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup Name="CommonStates">
+                                    <VisualState Name="Normal">
+                                        <VisualState.Setters>
+                                            <Setter Property="BackgroundColor" Value="Transparent" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Property="BackgroundColor" Value="{AppThemeBinding Light='#14000000', Dark='#20FFFFFF'}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState Name="Selected">
+                                        <VisualState.Setters>
+                                            <Setter Property="BackgroundColor" Value="{AppThemeBinding Light='#22000000', Dark='#30FFFFFF'}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" HorizontalOptions="FillAndExpand">
+                                <Image Source="{Binding ImageUrl}"
+                                       WidthRequest="80"
+                                       HeightRequest="56"
+                                       Aspect="AspectFill" />
+                                <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                    <Label Text="{Binding Title}" FontAttributes="Bold" LineBreakMode="TailTruncation" MaxLines="2" />
+                                    <Label Text="{Binding PublishDate, StringFormat='{0:MMM dd, yyyy}'}" FontSize="12" Opacity="0.7" />
+                                    <Label Text="{Binding Description}" FontSize="12" Opacity="0.8" LineBreakMode="TailTruncation" MaxLines="2" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <ScrollView Grid.Row="1" IsVisible="{Binding IsDetailVisible}">
+                <VerticalStackLayout Spacing="12">
+                    <Button Text="Back to list" Command="{Binding ClearSelectionCommand}" />
+                    <ActivityIndicator IsRunning="{Binding IsArticleLoading}"
+                                       IsVisible="{Binding IsArticleLoading}" />
+                    <Label Text="{Binding SelectedItem.Title}" FontSize="20" FontAttributes="Bold" />
+                    <Image Source="{Binding SelectedItem.ImageUrl}" IsVisible="{Binding HasSelectedImage}" Aspect="AspectFill" HeightRequest="200" />
+                    <Label Text="{Binding SelectedItem.PublishDate, StringFormat='{0:f}'}" FontSize="12" Opacity="0.7" />
+                    <Label Text="{Binding SelectedItem.Content}" TextType="Html" />
+                    <Button Text="Open in browser" Command="{Binding OpenLinkCommand}" />
+                </VerticalStackLayout>
+            </ScrollView>
+        </Grid>
+    </Grid>
+</ContentPage>

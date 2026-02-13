@@ -12,12 +12,13 @@
     </ContentPage.Background>
 
     <ScrollView>
-            <VerticalStackLayout Padding="16" Spacing="16">
-                <views:WeatherWidgetView>
-                    <views:WeatherWidgetView.GestureRecognizers>
-                        <TapGestureRecognizer Tapped="OnWeatherWidgetTapped" />
-                    </views:WeatherWidgetView.GestureRecognizers>
-                </views:WeatherWidgetView>
-            </VerticalStackLayout>
+        <VerticalStackLayout Padding="16" Spacing="16">
+            <views:WeatherWidgetView>
+                <views:WeatherWidgetView.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnWeatherWidgetTapped" />
+                </views:WeatherWidgetView.GestureRecognizers>
+            </views:WeatherWidgetView>
+            <views:RssFeedWidgetView ItemSelected="OnRssItemSelected" />
+        </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

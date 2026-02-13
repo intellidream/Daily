@@ -1,4 +1,5 @@
 using Daily.ViewModels;
+using Daily.Models;
 
 namespace Daily.Pages;
 
@@ -22,5 +23,10 @@ public partial class HomePage : ContentPage
     private async void OnWeatherWidgetTapped(object? sender, TappedEventArgs e)
     {
         await Navigation.PushAsync(new WeatherDetailPage(_weatherViewModel));
+    }
+
+    private async void OnRssItemSelected(object? sender, RssItem e)
+    {
+        await Navigation.PushAsync(new RssFeedDetailPage(e));
     }
 }

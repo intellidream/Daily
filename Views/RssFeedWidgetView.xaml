@@ -1,0 +1,83 @@
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:Daily.Models"
+             x:Class="Daily.Views.RssFeedWidgetView">
+    <Border StrokeThickness="0"
+            StrokeShape="RoundRectangle 20"
+            Padding="16">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" Offset="0.0" />
+                <GradientStop Color="{AppThemeBinding Light='#F5F5F8', Dark='#2A2A2A'}" Offset="1.0" />
+            </LinearGradientBrush>
+        </Border.Background>
+        <Grid RowDefinitions="Auto,*" RowSpacing="12">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" VerticalOptions="Center">
+                <Picker ItemsSource="{Binding Feeds}"
+                        SelectedItem="{Binding SelectedFeed}"
+                        ItemDisplayBinding="{Binding Name}"
+                        HorizontalOptions="Fill" />
+                <Button Grid.Column="1"
+                        Text="⟳"
+                        WidthRequest="36"
+                        HeightRequest="32"
+                        VerticalOptions="Center"
+                        Command="{Binding RefreshCommand}" />
+            </Grid>
+
+            <Grid Grid.Row="1">
+                <ActivityIndicator IsRunning="{Binding IsLoading}"
+                                   IsVisible="{Binding IsLoading}"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center" />
+                <Label Text="{Binding Error}"
+                       TextColor="Red"
+                       IsVisible="{Binding HasError}"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center" />
+                <CollectionView ItemsSource="{Binding DisplayItems}"
+                                SelectionMode="None"
+                                HorizontalOptions="FillAndExpand">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="models:RssItem">
+                            <Border StrokeThickness="0" Padding="6,8" HorizontalOptions="FillAndExpand" BackgroundColor="Transparent">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnItemTapped" CommandParameter="{Binding .}" />
+                                </Border.GestureRecognizers>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup Name="CommonStates">
+                                        <VisualState Name="Normal">
+                                            <VisualState.Setters>
+                                                <Setter Property="BackgroundColor" Value="Transparent" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light='#14000000', Dark='#20FFFFFF'}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState Name="Selected">
+                                            <VisualState.Setters>
+                                                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light='#22000000', Dark='#30FFFFFF'}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" HorizontalOptions="FillAndExpand">
+                                    <Image Source="{Binding ImageUrl}"
+                                           WidthRequest="56"
+                                           HeightRequest="40"
+                                           Aspect="AspectFill" />
+                                    <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                        <Label Text="{Binding Title}" FontAttributes="Bold" LineBreakMode="TailTruncation" MaxLines="2" />
+                                        <Label Text="{Binding PublishDate, StringFormat='{0:MMM dd}'}" FontSize="12" Opacity="0.7" />
+                                    </VerticalStackLayout>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Grid>
+        </Grid>
+    </Border>
+</ContentView>
