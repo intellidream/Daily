@@ -15,6 +15,7 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
     private FeedSource? _selectedFeed;
     private RssItem? _selectedItem;
     private bool _isArticleLoading;
+    private bool _isFullArticleLoaded;
     private bool _isDisposed;
 
     public ObservableCollection<FeedSource> Feeds { get; }
@@ -104,22 +105,7 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
     public async Task SelectItemAsync(RssItem item)
     {
         SelectedItem = item;
-
-        if (!string.IsNullOrWhiteSpace(item.Link))
-        {
-            IsArticleLoading = true;
-            var fullArticle = await _service.FetchFullArticleAsync(item.Link);
-            IsArticleLoading = false;
-
-            if (!string.IsNullOrWhiteSpace(fullArticle.Content))
-            {
-                SelectedItem = fullArticle;
-            }
-            else if (!string.IsNullOrWhiteSpace(fullArticle.Description))
-            {
-                SelectedItem = fullArticle;
-            }
-        }
+        _isFullArticleLoaded = false;
     }
 
     private async Task LoadReaderAsync()
@@ -129,7 +115,25 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        await SelectItemAsync(SelectedItem);
+        if (_isFullArticleLoaded || string.IsNullOrWhiteSpace(SelectedItem.Link))
+        {
+            return;
+        }
+
+        IsArticleLoading = true;
+        var fullArticle = await _service.FetchFullArticleAsync(SelectedItem.Link);
+        IsArticleLoading = false;
+
+        if (!string.IsNullOrWhiteSpace(fullArticle.Content))
+        {
+            SelectedItem = fullArticle;
+            _isFullArticleLoaded = true;
+        }
+        else if (!string.IsNullOrWhiteSpace(fullArticle.Description))
+        {
+            SelectedItem = fullArticle;
+            _isFullArticleLoaded = true;
+        }
     }
 
     private void OnItemsUpdated()

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using AngleSharp.Html.Parser;
+using HtmlAgilityPack;
 using SmartReader;
 
 namespace Daily.Services;
@@ -76,6 +77,13 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
                     var mainTextLength = await _webView.EvaluateJavaScriptAsync($"(function(){{var el=document.querySelector('{mainSelector}');return el && el.innerText ? el.innerText.length : 0;}})()");
                     mainTextLength = DecodeJsonString(mainTextLength);
                     Log($"[Reader] Main selector text length: {mainTextLength}");
+
+                    var smartReaderArticle = await TrySmartReaderArticleAsync(_webView, args.Url ?? url, cancellationToken);
+                    if (smartReaderArticle != null)
+                    {
+                        tcs.TrySetResult(smartReaderArticle);
+                        return;
+                    }
                     var script = await GetReadabilityScriptAsync();
                     if (string.IsNullOrWhiteSpace(script))
                     {
@@ -158,7 +166,9 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
                     var content = string.IsNullOrWhiteSpace(result.Content)
                         ? ConvertTextToHtml(result.TextContent)
                         : result.Content;
+                    content = NormalizeForRepublica(args.Url ?? url, content, result.TextContent);
                     content = CleanArticleHtml(content);
+                    content = CleanWithHtmlAgilityPackIfNeeded(args.Url ?? url, content);
                     content = WrapWithReaderContainer(content);
 
                     Log($"[Reader] Parsed content length: {content?.Length ?? 0}, text length: {result.TextContent?.Length ?? 0}");
@@ -301,9 +311,60 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
             return null;
         }
 
-        var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        var paragraphs = string.Join("", lines.Select(line => $"<p>{System.Net.WebUtility.HtmlEncode(line.Trim())}</p>"));
-        return $"<div>{paragraphs}</div>";
+        var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        var builder = new StringBuilder();
+        var inList = false;
+        var orderedList = false;
+
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.Trim();
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                if (inList)
+                {
+                    builder.Append(orderedList ? "</ol>" : "</ul>");
+                    inList = false;
+                    orderedList = false;
+                }
+
+                continue;
+            }
+
+            if (IsListItemLine(line, out var listText, out var isOrdered))
+            {
+                if (!inList || orderedList != isOrdered)
+                {
+                    if (inList)
+                    {
+                        builder.Append(orderedList ? "</ol>" : "</ul>");
+                    }
+
+                    builder.Append(isOrdered ? "<ol>" : "<ul>");
+                    inList = true;
+                    orderedList = isOrdered;
+                }
+
+                builder.Append($"<li>{System.Net.WebUtility.HtmlEncode(listText)}</li>");
+                continue;
+            }
+
+            if (inList)
+            {
+                builder.Append(orderedList ? "</ol>" : "</ul>");
+                inList = false;
+                orderedList = false;
+            }
+
+            builder.Append($"<p>{System.Net.WebUtility.HtmlEncode(line)}</p>");
+        }
+
+        if (inList)
+        {
+            builder.Append(orderedList ? "</ol>" : "</ul>");
+        }
+
+        return $"<div>{builder}</div>";
     }
 
     public async Task<string?> GetRenderedHtmlAsync(string url, CancellationToken cancellationToken = default)
@@ -644,6 +705,8 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
                 }
             }
 
+            NormalizeDivsToParagraphs(body);
+
             return body.InnerHtml;
         }
         catch
@@ -665,6 +728,178 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
         }
 
         return $"<div class=\"reader-content\">{html}</div>";
+    }
+
+    private static string? NormalizeForRepublica(string url, string? html, string? textContent)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return html;
+        }
+
+        if (IsRepublica(url))
+        {
+            if (!string.IsNullOrWhiteSpace(textContent) && html.Contains("<div", StringComparison.OrdinalIgnoreCase))
+            {
+                return ConvertTextToHtml(textContent) ?? html;
+            }
+        }
+
+        return html;
+    }
+
+    private static bool IsRepublica(string url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+               uri.Host.Contains("republica.ro", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? CleanWithHtmlAgilityPackIfNeeded(string url, string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html) || !IsRepublica(url))
+        {
+            return html;
+        }
+
+        try
+        {
+            var doc = new HtmlDocument
+            {
+                OptionFixNestedTags = true,
+                OptionAutoCloseOnEnd = true
+            };
+            doc.LoadHtml($"<body>{html}</body>");
+
+            var body = doc.DocumentNode.SelectSingleNode("//body");
+            if (body == null)
+            {
+                return html;
+            }
+
+            RemoveNodesByXPath(body, "//script|//style|//noscript|//header|//footer|//nav|//aside|//form|//button|//svg");
+            RemoveNodesByClassHints(body, new[] { "share", "social", "related", "comment", "promo", "subscribe", "newsletter", "advert", "cookie" });
+            RemoveEmptyNodes(body, new[] { "div", "section", "article", "p" });
+            StripAttributes(body, new[] { "style" });
+            NormalizeDivsToParagraphs(body);
+
+            return body.InnerHtml;
+        }
+        catch
+        {
+            return html;
+        }
+    }
+
+    private static void RemoveNodesByXPath(HtmlNode root, string xpath)
+    {
+        var nodes = root.SelectNodes(xpath);
+        if (nodes == null)
+        {
+            return;
+        }
+
+        foreach (var node in nodes)
+        {
+            node.Remove();
+        }
+    }
+
+    private static void RemoveNodesByClassHints(HtmlNode root, IEnumerable<string> hints)
+    {
+        foreach (var node in root.Descendants().ToList())
+        {
+            var classValue = node.GetAttributeValue("class", string.Empty) + " " + node.GetAttributeValue("id", string.Empty);
+            if (string.IsNullOrWhiteSpace(classValue))
+            {
+                continue;
+            }
+
+            var lowered = classValue.ToLowerInvariant();
+            if (hints.Any(hint => lowered.Contains(hint, StringComparison.OrdinalIgnoreCase)))
+            {
+                node.Remove();
+            }
+        }
+    }
+
+    private static void RemoveEmptyNodes(HtmlNode root, IEnumerable<string> tags)
+    {
+        var tagSet = new HashSet<string>(tags, StringComparer.OrdinalIgnoreCase);
+        foreach (var node in root.Descendants().ToList())
+        {
+            if (!tagSet.Contains(node.Name))
+            {
+                continue;
+            }
+
+            if (node.Descendants("img").Any() || node.Descendants("video").Any() || node.Descendants("iframe").Any())
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(node.InnerText))
+            {
+                node.Remove();
+            }
+        }
+    }
+
+    private static void StripAttributes(HtmlNode root, IEnumerable<string> attributes)
+    {
+        var attrSet = new HashSet<string>(attributes, StringComparer.OrdinalIgnoreCase);
+        foreach (var node in root.Descendants().ToList())
+        {
+            foreach (var attr in node.Attributes.ToList())
+            {
+                if (attrSet.Contains(attr.Name))
+                {
+                    node.Attributes.Remove(attr);
+                }
+            }
+        }
+    }
+
+    private static void NormalizeDivsToParagraphs(HtmlNode root)
+    {
+        foreach (var div in root.Descendants("div").ToList())
+        {
+            if (!IsInlineOnly(div))
+            {
+                continue;
+            }
+
+            var paragraph = HtmlNode.CreateNode("<p></p>");
+            foreach (var child in div.ChildNodes.ToList())
+            {
+                paragraph.AppendChild(child);
+            }
+
+            div.ParentNode.ReplaceChild(paragraph, div);
+        }
+    }
+
+    private static bool IsInlineOnly(HtmlNode node)
+    {
+        foreach (var child in node.ChildNodes)
+        {
+            if (child.NodeType == HtmlNodeType.Text)
+            {
+                continue;
+            }
+
+            if (child.NodeType == HtmlNodeType.Element)
+            {
+                var tag = child.Name.ToLowerInvariant();
+                if (tag is "span" or "a" or "strong" or "em" or "b" or "i" or "u" or "br" or "small" or "sup" or "sub" or "code")
+                {
+                    continue;
+                }
+            }
+
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(node.InnerText);
     }
 
     private static bool ShouldRemoveByClass(AngleSharp.Dom.IElement element)
@@ -697,6 +932,80 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
         return string.IsNullOrWhiteSpace(element.TextContent);
     }
 
+    private static bool IsListItemLine(string line, out string text, out bool isOrdered)
+    {
+        text = line;
+        isOrdered = false;
+
+        if (line.StartsWith("- ") || line.StartsWith("• ") || line.StartsWith("* ") || line.StartsWith("– "))
+        {
+            text = line[2..].Trim();
+            return !string.IsNullOrWhiteSpace(text);
+        }
+
+        var dotIndex = line.IndexOf('.');
+        if (dotIndex > 0 && dotIndex < 4 && int.TryParse(line[..dotIndex], out _))
+        {
+            var candidate = line[(dotIndex + 1)..].TrimStart();
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                text = candidate;
+                isOrdered = true;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void NormalizeDivsToParagraphs(AngleSharp.Dom.IElement root)
+    {
+        foreach (var div in root.QuerySelectorAll("div").ToArray())
+        {
+            if (!IsInlineOnly(div))
+            {
+                continue;
+            }
+
+            var paragraph = div.Owner?.CreateElement("p");
+            if (paragraph == null)
+            {
+                continue;
+            }
+
+            while (div.FirstChild != null)
+            {
+                paragraph.AppendChild(div.FirstChild);
+            }
+
+            div.Replace(paragraph);
+        }
+    }
+
+    private static bool IsInlineOnly(AngleSharp.Dom.IElement element)
+    {
+        foreach (var child in element.ChildNodes)
+        {
+            if (child is AngleSharp.Dom.IText)
+            {
+                continue;
+            }
+
+            if (child is AngleSharp.Dom.IElement childElement)
+            {
+                var tag = childElement.TagName.ToLowerInvariant();
+                if (tag is "span" or "a" or "strong" or "em" or "b" or "i" or "u" or "br" or "small" or "sup" or "sub" or "code")
+                {
+                    continue;
+                }
+            }
+
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(element.TextContent);
+    }
+
     private static string GetArticleSelectors(string url)
     {
         var selectors = "article, main, [itemprop=\"articleBody\"], .article-body, .article-content, .post-content, .entry-content, .content, .post__content, .post-body";
@@ -716,41 +1025,51 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
         return selectors;
     }
 
-    private static async Task<RenderedArticle?> TryFallbackArticleAsync(WebView webView, string url, CancellationToken cancellationToken)
+    private static async Task<RenderedArticle?> TrySmartReaderArticleAsync(WebView webView, string url, CancellationToken cancellationToken)
     {
         var hydratedHtml = await GetHydratedHtmlAsync(webView, url, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(hydratedHtml))
+        if (string.IsNullOrWhiteSpace(hydratedHtml))
         {
-            try
-            {
-                var reader = new Reader(url, hydratedHtml);
-                var article = reader.GetArticle();
-                if (article.IsReadable)
-                {
-                    var content = string.IsNullOrWhiteSpace(article.Content)
-                        ? ConvertTextToHtml(article.TextContent)
-                        : article.Content;
-                    content = CleanArticleHtml(content);
-                    content = WrapWithReaderContainer(content);
-
-                    Log($"[Reader] SmartReader fallback content length: {content?.Length ?? 0}");
-
-                    return new RenderedArticle
-                    {
-                        Title = article.Title,
-                        Content = content,
-                        TextContent = article.TextContent,
-                        Excerpt = article.Excerpt,
-                        Byline = article.Byline
-                    };
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"[Reader] SmartReader fallback failed: {ex.Message}");
-            }
+            return null;
         }
 
+        try
+        {
+            var reader = new Reader(url, hydratedHtml);
+            var article = await reader.GetArticleAsync();
+            if (!article.IsReadable)
+            {
+                return null;
+            }
+
+            var content = string.IsNullOrWhiteSpace(article.Content)
+                ? ConvertTextToHtml(article.TextContent)
+                : article.Content;
+            content = NormalizeForRepublica(url, content, article.TextContent);
+            content = CleanArticleHtml(content);
+            content = CleanWithHtmlAgilityPackIfNeeded(url, content);
+            content = WrapWithReaderContainer(content);
+
+            Log($"[Reader] SmartReader content length: {content?.Length ?? 0}");
+
+            return new RenderedArticle
+            {
+                Title = article.Title,
+                Content = content,
+                TextContent = article.TextContent,
+                Excerpt = article.Excerpt,
+                Byline = article.Byline
+            };
+        }
+        catch (Exception ex)
+        {
+            Log($"[Reader] SmartReader parse failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static async Task<RenderedArticle?> TryFallbackArticleAsync(WebView webView, string url, CancellationToken cancellationToken)
+    {
         var selectors = GetArticleSelectors(url);
         var title = await webView.EvaluateJavaScriptAsync("document.title");
         title = DecodeJsonString(title);
@@ -791,7 +1110,7 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
         return new RenderedArticle
         {
             Title = title,
-            Content = WrapWithReaderContainer(CleanArticleHtml(html)),
+            Content = WrapWithReaderContainer(CleanWithHtmlAgilityPackIfNeeded(url, CleanArticleHtml(NormalizeForRepublica(url, html, text)))),
             TextContent = text,
             Excerpt = excerpt
         };

@@ -160,6 +160,7 @@
 @code {
     private RssItem? _selectedItem = null;
     private bool _isArticleLoading = false;
+    private bool _isFullArticleLoaded = false;
     private bool _isMobile;
     private bool _isDarkMode;
 
@@ -240,6 +241,11 @@
 
     private void OnReaderModeChanged(bool isEnabled)
     {
+        if (isEnabled)
+        {
+            _ = LoadFullArticleIfNeededAsync();
+        }
+
         StateHasChanged();
     }
 
@@ -264,19 +270,10 @@
     private async Task OpenItem(RssItem item)
     {
         _selectedItem = item;
-        _isArticleLoading = true;
+        _isArticleLoading = false;
+        _isFullArticleLoaded = false;
         _backButtonService.Register(OnBackNative);
         NavService.SetCurrentArticle(item.Link, item.Title);
-        StateHasChanged();
-
-        // Fetch full content in background
-        var fullArticle = await RssService.FetchFullArticleAsync(item.Link);
-        if (fullArticle != null && !string.IsNullOrEmpty(fullArticle.Content))
-        {
-            _selectedItem = fullArticle;
-        }
-
-        _isArticleLoading = false;
         StateHasChanged();
     }
 
@@ -284,8 +281,30 @@
     {
         _selectedItem = null;
         _isArticleLoading = false;
+        _isFullArticleLoaded = false;
         _backButtonService.Unregister(OnBackNative);
         NavService.SetCurrentArticle(null, null);
+        StateHasChanged();
+    }
+
+    private async Task LoadFullArticleIfNeededAsync()
+    {
+        if (_selectedItem == null || _isFullArticleLoaded || _isArticleLoading)
+        {
+            return;
+        }
+
+        _isArticleLoading = true;
+        StateHasChanged();
+
+        var fullArticle = await RssService.FetchFullArticleAsync(_selectedItem.Link);
+        if (fullArticle != null && !string.IsNullOrEmpty(fullArticle.Content))
+        {
+            _selectedItem = fullArticle;
+            _isFullArticleLoaded = true;
+        }
+
+        _isArticleLoading = false;
         StateHasChanged();
     }
 
