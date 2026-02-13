@@ -76,10 +76,22 @@
                     <Label Text="{Binding SelectedItem.Title}" FontSize="20" FontAttributes="Bold" />
                     <Image Source="{Binding SelectedItem.ImageUrl}" IsVisible="{Binding HasSelectedImage}" Aspect="AspectFill" HeightRequest="200" />
                     <Label Text="{Binding SelectedItem.PublishDate, StringFormat='{0:f}'}" FontSize="12" Opacity="0.7" />
-                    <Label Text="{Binding SelectedItem.Content}" TextType="Html" />
+                    <Label Text="{Binding SelectedContent}" TextType="Html" />
+                    <Label Text="Content not available for this source." FontSize="12" Opacity="0.7">
+                        <Label.Triggers>
+                            <DataTrigger TargetType="Label" Binding="{Binding HasSelectedContent}" Value="True">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
                     <Button Text="Open in browser" Command="{Binding OpenLinkCommand}" />
                 </VerticalStackLayout>
             </ScrollView>
         </Grid>
+        <WebView x:Name="ReaderWebView"
+                 IsVisible="False"
+                 Opacity="0"
+                 WidthRequest="1"
+                 HeightRequest="1" />
     </Grid>
 </ContentPage>

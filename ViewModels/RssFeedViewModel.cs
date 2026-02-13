@@ -68,6 +68,8 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(IsListVisible));
                 OnPropertyChanged(nameof(IsDetailVisible));
                 OnPropertyChanged(nameof(HasSelectedImage));
+                OnPropertyChanged(nameof(SelectedContent));
+                OnPropertyChanged(nameof(HasSelectedContent));
                 ((Command)OpenLinkCommand).ChangeCanExecute();
             }
         }
@@ -87,6 +89,10 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
     public bool IsListVisible => SelectedItem == null;
     public bool IsDetailVisible => SelectedItem != null;
     public bool HasSelectedImage => !string.IsNullOrWhiteSpace(SelectedItem?.ImageUrl);
+    public string? SelectedContent => !string.IsNullOrWhiteSpace(SelectedItem?.Content)
+        ? SelectedItem?.Content
+        : SelectedItem?.Description;
+    public bool HasSelectedContent => !string.IsNullOrWhiteSpace(SelectedContent);
 
     public ICommand RefreshCommand { get; }
     public ICommand ClearSelectionCommand { get; }
@@ -103,6 +109,10 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
             IsArticleLoading = false;
 
             if (!string.IsNullOrWhiteSpace(fullArticle.Content))
+            {
+                SelectedItem = fullArticle;
+            }
+            else if (!string.IsNullOrWhiteSpace(fullArticle.Description))
             {
                 SelectedItem = fullArticle;
             }

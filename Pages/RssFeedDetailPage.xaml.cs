@@ -14,6 +14,9 @@ public partial class RssFeedDetailPage : ContentPage
 
         var services = Application.Current?.Handler?.MauiContext?.Services;
         var rssService = services?.GetService<IRssFeedService>();
+        var renderedHtmlService = services?.GetService<IRenderedHtmlService>();
+
+        renderedHtmlService?.Attach(ReaderWebView);
 
         if (rssService != null)
         {
