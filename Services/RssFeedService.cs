@@ -263,18 +263,25 @@ namespace Daily.Services
         {
             try
             {
-                // OPTIMIZATION: Use shared HttpClient for fetching to ensure Handler/DNS reuse and speed
-                string? html = null;
                 if (_renderedHtmlService != null)
                 {
-                    html = await _renderedHtmlService.GetRenderedHtmlAsync(url);
+                    var renderedArticle = await _renderedHtmlService.GetRenderedArticleAsync(url);
+                    if (renderedArticle != null && !string.IsNullOrWhiteSpace(renderedArticle.Content))
+                    {
+                        return new RssItem
+                        {
+                            Title = renderedArticle.Title ?? "",
+                            Link = url,
+                            Content = renderedArticle.Content,
+                            Description = renderedArticle.Excerpt ?? renderedArticle.TextContent,
+                            Author = renderedArticle.Byline,
+                            PublishDate = DateTime.Now
+                        };
+                    }
                 }
 
-                if (string.IsNullOrWhiteSpace(html))
-                {
-                    html = await _httpClient.GetStringAsync(url);
-                }
-
+                // OPTIMIZATION: Use shared HttpClient for fetching to ensure Handler/DNS reuse and speed
+                var html = await _httpClient.GetStringAsync(url);
                 var reader = new SmartReader.Reader(url, html);
                 var article = reader.GetArticle(); // Synchronous parse of provided content
 

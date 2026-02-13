@@ -33,6 +33,7 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
         RefreshCommand = new Command(async () => await _service.ReloadCurrentFeedAsync());
         ClearSelectionCommand = new Command(() => SelectedItem = null);
         OpenLinkCommand = new Command(async () => await OpenSelectedLinkAsync(), () => SelectedItem != null);
+        LoadReaderCommand = new Command(async () => await LoadReaderAsync(), () => SelectedItem != null);
 
         _service.OnItemsUpdated += OnItemsUpdated;
         _service.OnFeedChanged += OnFeedChanged;
@@ -71,6 +72,7 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(SelectedContent));
                 OnPropertyChanged(nameof(HasSelectedContent));
                 ((Command)OpenLinkCommand).ChangeCanExecute();
+                ((Command)LoadReaderCommand).ChangeCanExecute();
             }
         }
     }
@@ -97,6 +99,7 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
     public ICommand RefreshCommand { get; }
     public ICommand ClearSelectionCommand { get; }
     public ICommand OpenLinkCommand { get; }
+    public ICommand LoadReaderCommand { get; }
 
     public async Task SelectItemAsync(RssItem item)
     {
@@ -117,6 +120,16 @@ public class RssFeedViewModel : INotifyPropertyChanged, IDisposable
                 SelectedItem = fullArticle;
             }
         }
+    }
+
+    private async Task LoadReaderAsync()
+    {
+        if (SelectedItem == null)
+        {
+            return;
+        }
+
+        await SelectItemAsync(SelectedItem);
     }
 
     private void OnItemsUpdated()

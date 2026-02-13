@@ -84,6 +84,7 @@
                             </DataTrigger>
                         </Label.Triggers>
                     </Label>
+                    <Button Text="Reader view" Command="{Binding LoadReaderCommand}" />
                     <Button Text="Open in browser" Command="{Binding OpenLinkCommand}" />
                 </VerticalStackLayout>
             </ScrollView>

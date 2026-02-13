@@ -76,6 +76,12 @@
 
         <!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
         <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+        <MauiAsset Update="Resources/Raw/readability.min.js" LogicalName="readability.min.js" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="Resources/Raw/readability.min.js" CopyToOutputDirectory="PreserveNewest" />
+        <EmbeddedResource Include="Resources/Raw/readability.min.js" />
     </ItemGroup>
 
     <ItemGroup>
