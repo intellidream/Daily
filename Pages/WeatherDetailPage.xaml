@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:sfChart="clr-namespace:Syncfusion.Maui.Charts;assembly=Syncfusion.Maui.Charts"
+             x:Class="Daily.Pages.WeatherDetailPage"
+             Title="Weather">
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Refresh" Command="{Binding RefreshCommand}" />
+    </ContentPage.ToolbarItems>
+
+    <RefreshView Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsBusy}">
+        <ScrollView>
+            <VerticalStackLayout Padding="16" Spacing="12">
+                <Border StrokeThickness="0" StrokeShape="RoundRectangle 24" Padding="16" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16" RowDefinitions="Auto,Auto">
+                        <Image Source="{Binding IconUrl}" WidthRequest="96" HeightRequest="96" Aspect="AspectFill" />
+
+                        <VerticalStackLayout Grid.Column="1" Spacing="6">
+                            <Label Text="{Binding LocationName}" FontSize="20" FontAttributes="Bold" />
+                            <Label Text="{Binding ConditionTitle}" FontSize="14" Opacity="0.8" />
+                            <Label Text="{Binding LastUpdatedText}" FontSize="11" Opacity="0.6" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Grid.Column="2" Spacing="2" HorizontalOptions="End" HorizontalTextAlignment="End">
+                            <Label Text="{Binding TemperatureText}" FontSize="46" FontAttributes="Bold" />
+                            <Label Text="{Binding FeelsLikeText}" FontSize="12" Opacity="0.7" />
+                            <Label Text="{Binding HighLowText}" FontSize="12" Opacity="0.7" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </Border>
+
+                <Border StrokeThickness="0" StrokeShape="RoundRectangle 20" Padding="12" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}">
+                    <sfChart:SfCartesianChart HeightRequest="220">
+                        <sfChart:SfCartesianChart.XAxes>
+                            <sfChart:DateTimeAxis IntervalType="Hours" />
+                        </sfChart:SfCartesianChart.XAxes>
+                        <sfChart:SfCartesianChart.YAxes>
+                            <sfChart:NumericalAxis />
+                        </sfChart:SfCartesianChart.YAxes>
+                        <sfChart:LineSeries ItemsSource="{Binding ForecastPoints}"
+                                            XBindingPath="Time"
+                                            YBindingPath="Temperature" />
+                    </sfChart:SfCartesianChart>
+                </Border>
+
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="12">
+                    <Border StrokeThickness="0" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" StrokeShape="RoundRectangle 16" Padding="12">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Humidity" FontSize="12" Opacity="0.7" />
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="💧" FontSize="18" Opacity="0.7" />
+                                <Label Text="{Binding HumidityText}" FontSize="16" FontAttributes="Bold" />
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" StrokeShape="RoundRectangle 16" Padding="12">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Wind" FontSize="12" Opacity="0.7" />
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="🌬️" FontSize="18" Opacity="0.7" />
+                                <Label Text="{Binding WindText}" FontSize="16" FontAttributes="Bold" />
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="1" StrokeThickness="0" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" StrokeShape="RoundRectangle 16" Padding="12">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Pressure" FontSize="12" Opacity="0.7" />
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="📈" FontSize="18" Opacity="0.7" />
+                                <Label Text="{Binding PressureText}" FontSize="16" FontAttributes="Bold" />
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" StrokeShape="RoundRectangle 16" Padding="12">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Visibility" FontSize="12" Opacity="0.7" />
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="👁️" FontSize="18" Opacity="0.7" />
+                                <Label Text="{Binding VisibilityText}" FontSize="16" FontAttributes="Bold" />
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12" RowSpacing="12">
+                    <Border StrokeThickness="0" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" StrokeShape="RoundRectangle 16" Padding="12">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Sunrise" FontSize="12" Opacity="0.7" />
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="🌅" FontSize="18" Opacity="0.7" />
+                                <Label Text="{Binding SunriseText}" FontSize="16" FontAttributes="Bold" />
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" StrokeShape="RoundRectangle 16" Padding="12">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Sunset" FontSize="12" Opacity="0.7" />
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                <Label Text="🌇" FontSize="18" Opacity="0.7" />
+                                <Label Text="{Binding SunsetText}" FontSize="16" FontAttributes="Bold" />
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Next hours" FontSize="16" FontAttributes="Bold" />
+                    <CollectionView ItemsSource="{Binding ForecastPoints}" HeightRequest="140" Margin="0">
+                        <CollectionView.ItemsLayout>
+                            <LinearItemsLayout Orientation="Horizontal" ItemSpacing="6" />
+                        </CollectionView.ItemsLayout>
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate>
+                                <Border StrokeThickness="0" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" StrokeShape="RoundRectangle 14" Padding="12">
+                                    <VerticalStackLayout HorizontalOptions="Center" Spacing="2">
+                                        <Label Text="{Binding DisplayTime}" FontSize="12" HorizontalOptions="Center" Opacity="0.7" />
+                                        <Image Source="{Binding IconUrl}" WidthRequest="40" HeightRequest="40" Aspect="AspectFill" />
+                                        <Label Text="{Binding Temperature, StringFormat='{}{0:0}°'}" FontSize="16" FontAttributes="Bold" HorizontalOptions="Center" />
+                                        <Label Text="{Binding PrecipitationText}" FontSize="11" TextColor="#60a5fa" HorizontalOptions="Center" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="5-day outlook" FontSize="16" FontAttributes="Bold" />
+                    <CollectionView ItemsSource="{Binding DailyForecasts}" ItemSizingStrategy="MeasureAllItems">
+                        <CollectionView.ItemsLayout>
+                            <LinearItemsLayout Orientation="Vertical" ItemSpacing="6" />
+                        </CollectionView.ItemsLayout>
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate>
+                                <Border StrokeThickness="0" BackgroundColor="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" StrokeShape="RoundRectangle 16" Padding="12" Margin="0">
+                                    <Grid ColumnDefinitions="80,48,*,Auto" ColumnSpacing="12" RowDefinitions="Auto">
+                                        <Label Grid.Column="0" Text="{Binding DayName}" FontSize="14" FontAttributes="Bold" VerticalOptions="Center" />
+                                        <Image Grid.Column="1" Source="{Binding IconUrl}" WidthRequest="40" HeightRequest="40" Aspect="AspectFill" HorizontalOptions="Center" VerticalOptions="Center" />
+                                        <Grid Grid.Column="2" ColumnDefinitions="Auto,Auto" ColumnSpacing="8" VerticalOptions="Center">
+                                            <Label Text="{Binding PrecipitationText}" FontSize="12" TextColor="#60a5fa" />
+                                            <Label Grid.Column="1" Text="{Binding Condition}" FontSize="12" Opacity="0.7" LineBreakMode="TailTruncation" />
+                                        </Grid>
+                                        <Label Grid.Column="3" Text="{Binding MaxTemp, StringFormat='{}{0:0}°'} / {Binding MinTemp, StringFormat='{}{0:0}°'}" FontSize="14" FontAttributes="Bold" VerticalOptions="Center" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
+</ContentPage>

@@ -1,0 +1,52 @@
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Daily.Views.WeatherWidgetView">
+    <Border StrokeThickness="0"
+            StrokeShape="RoundRectangle 20"
+            Padding="16">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" Offset="0.0" />
+                <GradientStop Color="{AppThemeBinding Light='#F5F5F8', Dark='#2A2A2A'}" Offset="1.0" />
+            </LinearGradientBrush>
+        </Border.Background>
+        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" ColumnSpacing="12" RowSpacing="12">
+            <VerticalStackLayout Grid.Row="0" Grid.Column="0" Spacing="6">
+                <Label Text="{Binding LocationName}" FontSize="16" FontAttributes="Bold" />
+                <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="12">
+                    <Label Grid.Column="0" Text="{Binding TemperatureText}" FontSize="42" FontAttributes="Bold" />
+                    <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center" HorizontalOptions="End">
+                        <Label Text="FEELS LIKE" FontSize="10" Opacity="0.6" HorizontalOptions="End" />
+                        <Label Text="{Binding FeelsLikeText}" FontSize="14" FontAttributes="Bold" HorizontalOptions="End" />
+                    </VerticalStackLayout>
+                </Grid>
+                <Label Text="{Binding ConditionTitle}" FontSize="14" Opacity="0.8" />
+                <Label Text="{Binding HighLowText}" FontSize="12" Opacity="0.7" />
+            </VerticalStackLayout>
+
+            <Grid Grid.Row="0" Grid.Column="1" WidthRequest="96" HeightRequest="96">
+                <Image Source="{Binding IconUrl}" WidthRequest="96" HeightRequest="96" Aspect="AspectFill" />
+            </Grid>
+
+            <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*,*,*" ColumnSpacing="12">
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="HUMIDITY" FontSize="10" Opacity="0.5" />
+                    <Label Text="{Binding HumidityText}" FontSize="12" FontAttributes="Bold" />
+                </VerticalStackLayout>
+                <VerticalStackLayout Grid.Column="1" Spacing="2">
+                    <Label Text="WIND" FontSize="10" Opacity="0.5" />
+                    <Label Text="{Binding WindText}" FontSize="12" FontAttributes="Bold" />
+                </VerticalStackLayout>
+                <VerticalStackLayout Grid.Column="2" Spacing="2" HorizontalOptions="End">
+                    <Label Text="UPDATED" FontSize="10" Opacity="0.5" HorizontalOptions="End" />
+                    <Label Text="{Binding LastUpdatedText}" FontSize="12" FontAttributes="Bold" HorizontalOptions="End" />
+                </VerticalStackLayout>
+            </Grid>
+
+            <ActivityIndicator Grid.Column="1" Grid.Row="1"
+                               HorizontalOptions="End"
+                               IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}" />
+        </Grid>
+    </Border>
+</ContentView>

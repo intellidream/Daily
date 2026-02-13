@@ -1,8 +1,10 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using H.NotifyIcon;
 using CommunityToolkit.Maui;
 using Microsoft.Maui.LifecycleEvents;
+using Syncfusion.Maui.Core.Hosting;
+using Daily.Helpers;
 
 namespace Daily
 {
@@ -10,14 +12,21 @@ namespace Daily
     {
         public static MauiApp CreateMauiApp()
         {
+            var syncfusionKey = Daily.Configuration.Secrets.SyncfusionLicenseKey;
+            if (!string.IsNullOrWhiteSpace(syncfusionKey))
+            {
+                Syncfusion.Licensing.SyncfusionLicenseProvider.RegisterLicense(syncfusionKey);
+            }
 
             var builder = MauiApp.CreateBuilder();
             builder
                 .UseMauiApp<App>()
+                .ConfigureSyncfusionCore()
                 .UseMauiCommunityToolkit()
                 .ConfigureFonts(fonts =>
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+                    fonts.AddFont("MaterialSymbolsOutlined.ttf", IconFonts.MaterialSymbolsOutlined);
                 })
                 .ConfigureLifecycleEvents(events =>
                 {
@@ -160,6 +169,9 @@ namespace Daily
 #endif
 
             builder.Services.AddSingleton<Daily.Services.DebugLogger>();
+            builder.Services.AddSingleton<Daily.ViewModels.WeatherViewModel>();
+            builder.Services.AddTransient<Daily.Pages.HomePage>();
+            builder.Services.AddTransient<Daily.Pages.WeatherDetailPage>();
             
             // Supabase Configuration
             var supabaseUrl = Daily.Configuration.Secrets.SupabaseUrl;
@@ -187,3 +199,6 @@ namespace Daily
 #endif
     }
 }
+
+
+

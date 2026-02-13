@@ -1,4 +1,6 @@
 ﻿using Daily.Services;
+using Daily.Pages;
+using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.InteropServices;
 #if WINDOWS
 using Microsoft.UI;
@@ -24,11 +26,12 @@ namespace Daily
         private readonly ISettingsService _settingsService;
         private readonly IHabitsService _habitsService;
         private readonly ISyncService _syncService;
+        private readonly IServiceProvider _serviceProvider;
 
         private readonly WindowManagerService _windowManagerService;
         private readonly DebugLogger _logger;
 
-        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService, WindowManagerService windowManagerService, DebugLogger logger)
+        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService, WindowManagerService windowManagerService, DebugLogger logger, IServiceProvider serviceProvider)
         {
             InitializeComponent();
             _windowManagerService = windowManagerService;
@@ -41,6 +44,7 @@ namespace Daily
             _refreshService = refreshService;
             _backButtonService = backButtonService;
             _logger = logger;
+            _serviceProvider = serviceProvider;
 #if MACCATALYST
             // Daily.Platforms.MacCatalyst.MacTrayService.Log("App Constructor Called");
 #endif
@@ -133,7 +137,8 @@ namespace Daily
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            var window = new Window(new MainPage(_refreshService, _backButtonService)) { Title = "Daily" };
+            var homePage = _serviceProvider.GetRequiredService<HomePage>();
+            var window = new Window(new NavigationPage(homePage)) { Title = "Daily" };
             
             window.Created += (s, e) =>
             {
