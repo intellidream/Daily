@@ -57,7 +57,12 @@ namespace Daily.WinUI
             if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWindow)
             {
                 nativeWindow.ExtendsContentIntoTitleBar = true;
-                Daily.Platforms.Windows.WindowHelpers.ApplySquareCorners(nativeWindow);
+                if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
+                {
+                    nativeWindow.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+                }
+                Daily.Platforms.Windows.WindowHelpers.ApplyRoundedCorners(nativeWindow);
+                Daily.Platforms.Windows.WindowHelpers.ApplySystemBorderColor(nativeWindow);
                 // Explicitly set window size to 450x900 effective pixels (Compact Sidebar)
                 // This matches the "Compact" density setting
                 Daily.Platforms.Windows.WindowHelpers.ResizeAndDockRight(nativeWindow, 400, 900);

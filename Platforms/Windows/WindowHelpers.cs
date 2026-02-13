@@ -1,13 +1,37 @@
 #if WINDOWS
 using Microsoft.UI.Xaml;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace Daily.Platforms.Windows
 {
     public static class WindowHelpers
     {
+        private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        private static readonly Dictionary<IntPtr, IntPtr> OriginalWndProcs = new();
+        private static readonly Dictionary<IntPtr, WndProc> WndProcDelegates = new();
+
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int pvAttribute, int cbAttribute);
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll", EntryPoint = "CallWindowProcW")]
+        private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        private const int GwlWndProc = -4;
+        private const uint WmNcLButtonDblClk = 0x00A3;
+        private const uint WmSysCommand = 0x0112;
+        private const int HtCaption = 2;
+        private const int ScMaximize = 0xF030;
+
+        private const int DwmwaWindowCornerPreference = 33;
+        private const int DwmwaBorderColor = 34;
+        private const int DwmwcpDontRound = 1;
+        private const int DwmwcpRound = 2;
+        private const int DwmwaColorDefault = unchecked((int)0xFFFFFFFF);
 
         public static void ApplySquareCorners(Microsoft.UI.Xaml.Window window)
         {
@@ -15,11 +39,8 @@ namespace Daily.Platforms.Windows
             {
                 var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
                 
-                // DWMWA_WINDOW_CORNER_PREFERENCE = 33
-                // DWMWCP_DONOTROUND = 1
-                var attribute = 33;
-                var preference = 1;
-                var result = DwmSetWindowAttribute(hWnd, attribute, ref preference, sizeof(int));
+                var preference = DwmwcpDontRound;
+                var result = DwmSetWindowAttribute(hWnd, DwmwaWindowCornerPreference, ref preference, sizeof(int));
                 if (result != 0)
                 {
                     Console.WriteLine($"[WindowHelpers] DwmSetWindowAttribute failed with HRESULT: {result}");
@@ -32,6 +53,84 @@ namespace Daily.Platforms.Windows
             catch (Exception ex)
             {
                 Console.WriteLine($"[WindowHelpers] Failed to apply square corners: {ex.Message}");
+            }
+        }
+
+        public static void DisableTitleBarDoubleClick(Microsoft.UI.Xaml.Window window)
+        {
+            try
+            {
+                var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+                if (OriginalWndProcs.ContainsKey(hWnd))
+                {
+                    return;
+                }
+
+                WndProc newWndProc = (handle, msg, wParam, lParam) =>
+                {
+                    if ((msg == WmNcLButtonDblClk && wParam == new IntPtr(HtCaption)) ||
+                        (msg == WmSysCommand && ((int)wParam & 0xFFF0) == ScMaximize))
+                    {
+                        return IntPtr.Zero;
+                    }
+
+                    if (OriginalWndProcs.TryGetValue(handle, out var originalProc))
+                    {
+                        return CallWindowProc(originalProc, handle, msg, wParam, lParam);
+                    }
+
+                    return IntPtr.Zero;
+                };
+
+                var newProcPtr = Marshal.GetFunctionPointerForDelegate(newWndProc);
+                var original = SetWindowLongPtr(hWnd, GwlWndProc, newProcPtr);
+                OriginalWndProcs[hWnd] = original;
+                WndProcDelegates[hWnd] = newWndProc;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WindowHelpers] Failed to disable title bar double click: {ex.Message}");
+            }
+        }
+
+        public static void ApplyRoundedCorners(Microsoft.UI.Xaml.Window window)
+        {
+            try
+            {
+                var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+
+                var preference = DwmwcpRound;
+                var result = DwmSetWindowAttribute(hWnd, DwmwaWindowCornerPreference, ref preference, sizeof(int));
+                if (result != 0)
+                {
+                    Console.WriteLine($"[WindowHelpers] DwmSetWindowAttribute failed with HRESULT: {result}");
+                }
+                else 
+                {
+                    Console.WriteLine($"[WindowHelpers] Rounded corners applied successfully to HWND: {hWnd}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WindowHelpers] Failed to apply rounded corners: {ex.Message}");
+            }
+        }
+
+        public static void ApplySystemBorderColor(Microsoft.UI.Xaml.Window window)
+        {
+            try
+            {
+                var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+                var color = DwmwaColorDefault;
+                var result = DwmSetWindowAttribute(hWnd, DwmwaBorderColor, ref color, sizeof(int));
+                if (result != 0)
+                {
+                    Console.WriteLine($"[WindowHelpers] DwmSetWindowAttribute border color failed with HRESULT: {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WindowHelpers] Failed to apply system border color: {ex.Message}");
             }
         }
 
@@ -78,7 +177,7 @@ namespace Daily.Platforms.Windows
                         double scale = GetScaleFactor(hWnd);
                         int width = (int)(effectiveWidth * scale);
                         // int height = (int)(effectiveHeight * scale); // We want full height
-                        int height = workArea.Height; // Full height of work area
+                        int height = workArea.Height;
 
                         int x = workArea.Width + workArea.X - width;
                         int y = workArea.Y;

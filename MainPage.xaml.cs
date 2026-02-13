@@ -53,6 +53,14 @@ namespace Daily
             });
         }
 
+        private async void OnRefreshClicked(object sender, EventArgs e)
+        {
+            if (IsRefreshing) return;
+            IsRefreshing = true;
+            await ExecuteRefreshCommand();
+        }
+
+
         // Expose Overlay for Mac Catalyst WindowManager
         public ContentView MacDetailOverlay => DetailOverlay;
         public Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebView MainWebView => blazorWebView;

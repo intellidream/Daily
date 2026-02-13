@@ -427,15 +427,24 @@ namespace Daily
 
                 if (appWindow != null)
                 {
-                    // Remove title bar and borders
+                    // Right-aligned fixed panel without chrome
                     var presenter = appWindow.Presenter as OverlappedPresenter;
                     if (presenter != null)
                     {
                         presenter.IsMaximizable = false;
-                        presenter.IsMinimizable = false;
+                        presenter.IsMinimizable = true;
                         presenter.IsResizable = false;
-                        presenter.SetBorderAndTitleBar(false, false);
+                        presenter.SetBorderAndTitleBar(true, true);
                     }
+
+                    nativeWindow.ExtendsContentIntoTitleBar = false;
+                    if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
+                    {
+                        nativeWindow.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+                    }
+                    Daily.Platforms.Windows.WindowHelpers.ApplyRoundedCorners(nativeWindow);
+                    Daily.Platforms.Windows.WindowHelpers.ApplySystemBorderColor(nativeWindow);
+                    Daily.Platforms.Windows.WindowHelpers.DisableTitleBarDoubleClick(nativeWindow);
                     
 
                     
