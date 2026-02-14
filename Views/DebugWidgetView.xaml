@@ -1,0 +1,33 @@
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Daily.Views.DebugWidgetView">
+    <Border StrokeThickness="0"
+            StrokeShape="RoundRectangle 20"
+            Padding="16">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="{AppThemeBinding Light='#FFFFFF', Dark='#1E1E1E'}" Offset="0.0" />
+                <GradientStop Color="{AppThemeBinding Light='#F5F5F8', Dark='#2A2A2A'}" Offset="1.0" />
+            </LinearGradientBrush>
+        </Border.Background>
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
+            <Label Text="Diagnostics" FontAttributes="Bold" FontSize="16" />
+            <Editor x:Name="LogEditor"
+                    Grid.Row="1"
+                    Text="{Binding LogText}"
+                    FontFamily="Courier New"
+                    FontSize="11"
+                    IsReadOnly="True"
+                    AutoSize="TextChanges"
+                    HeightRequest="200" />
+            <HorizontalStackLayout Grid.Row="2" Spacing="12" HorizontalOptions="End">
+                <Button Text="Copy" Clicked="OnCopyClicked" />
+                <Button Text="Clear" Clicked="OnClearClicked" />
+            </HorizontalStackLayout>
+        </Grid>
+    </Border>
+</ContentView>
+
+
+
+

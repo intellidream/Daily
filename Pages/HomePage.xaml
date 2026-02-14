@@ -20,6 +20,7 @@
                     </views:WeatherWidgetView.GestureRecognizers>
                 </views:WeatherWidgetView>
                 <views:RssFeedWidgetView ItemSelected="OnRssItemSelected" />
+                <views:DebugWidgetView />
             </VerticalStackLayout>
         </ScrollView>
         <WebView x:Name="ReaderWebView"

@@ -151,6 +151,9 @@
       <MauiXaml Update="Pages\WeatherDetailPage.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
+      <MauiXaml Update="Views\DebugWidgetView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </MauiXaml>
       <MauiXaml Update="Views\RssFeedWidgetView.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
