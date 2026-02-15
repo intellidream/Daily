@@ -31,12 +31,14 @@ namespace Daily.Services
         public event Action? OnItemsUpdated;
 
         private readonly HttpClient _httpClient;
+        private readonly IRenderedHtmlService? _renderedHtmlService;
         private readonly Guid _instanceId = Guid.NewGuid();
 
-        public RssFeedService()
+        public RssFeedService(IRenderedHtmlService? renderedHtmlService = null)
         {
             Console.WriteLine($"[RssFeedService] Constructor called. InstanceId: {_instanceId}");
             CurrentFeed = Feeds.First();
+            _renderedHtmlService = renderedHtmlService;
             
             var handler = new HttpClientHandler
             {
@@ -261,6 +263,24 @@ namespace Daily.Services
         {
             try
             {
+
+                if (_renderedHtmlService != null)
+                {
+                    var renderedArticle = await _renderedHtmlService.GetRenderedArticleAsync(url);
+                    if (renderedArticle != null && !string.IsNullOrWhiteSpace(renderedArticle.Content))
+                    {
+                        return new RssItem
+                        {
+                            Title = renderedArticle.Title ?? "",
+                            Link = url,
+                            Content = renderedArticle.Content,
+                            Description = renderedArticle.Excerpt ?? renderedArticle.TextContent,
+                            Author = renderedArticle.Byline,
+                            PublishDate = DateTime.Now
+                        };
+                    }
+                }
+
                 // OPTIMIZATION: Use shared HttpClient for fetching to ensure Handler/DNS reuse and speed
                 var html = await _httpClient.GetStringAsync(url);
                 var reader = new SmartReader.Reader(url, html);

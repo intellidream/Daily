@@ -35,6 +35,9 @@
 
         <!-- Mac Catalyst Detail Overlay -->
         <ContentView x:Name="DetailOverlay" IsVisible="False" BackgroundColor="{AppThemeBinding Light='#f5f5f5', Dark='#121212'}" InputTransparent="False" />
+        
+        <!-- Hidden WebView for Rendering JS Content (MUST be IsVisible=True for WebKit process to run) -->
+        <WebView x:Name="RenderedWebView" IsVisible="True" Opacity="0" InputTransparent="True" WidthRequest="1" HeightRequest="1" HorizontalOptions="Start" VerticalOptions="Start" />
     </Grid>
     <!--</RefreshView>-->
 

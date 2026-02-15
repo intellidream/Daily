@@ -9,12 +9,16 @@ namespace Daily
         private readonly IBackButtonService _backButtonService;
         private bool _isRefreshing;
 
-        public MainPage(IRefreshService refreshService, IBackButtonService backButtonService)
+        public MainPage(IRefreshService refreshService, IBackButtonService backButtonService, IRenderedHtmlService renderedHtmlService)
         {
             InitializeComponent();
             _refreshService = refreshService;
             _backButtonService = backButtonService;
             BindingContext = this;
+
+            // Attach RenderedHtmlService to hidden WebView
+            renderedHtmlService.Attach(RenderedWebView);
+
             RefreshCommand = new Command(async () => await ExecuteRefreshCommand());
         }
 

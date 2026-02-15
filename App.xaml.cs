@@ -24,13 +24,15 @@ namespace Daily
         private readonly ISettingsService _settingsService;
         private readonly IHabitsService _habitsService;
         private readonly ISyncService _syncService;
+        private readonly IRenderedHtmlService _renderedHtmlService;
 
         private readonly WindowManagerService _windowManagerService;
         private readonly DebugLogger _logger;
 
-        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService, WindowManagerService windowManagerService, DebugLogger logger)
+        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService, WindowManagerService windowManagerService, DebugLogger logger, IRenderedHtmlService renderedHtmlService)
         {
             InitializeComponent();
+            _renderedHtmlService = renderedHtmlService;
             _windowManagerService = windowManagerService;
             _trayService = trayService;
             _supabase = supabase;
@@ -133,7 +135,7 @@ namespace Daily
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            var window = new Window(new MainPage(_refreshService, _backButtonService)) { Title = "Daily" };
+            var window = new Window(new MainPage(_refreshService, _backButtonService, _renderedHtmlService)) { Title = "Daily" };
             
             window.Created += (s, e) =>
             {

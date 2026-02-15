@@ -5,6 +5,7 @@
 @inject IDetailNavigationService NavService
 @inject IBackButtonService _backButtonService
 @inject IRefreshService RefreshService
+@inject ISnackbar Snackbar
 
 @implements IDisposable
 
@@ -124,9 +125,20 @@
 
                         @if (!NavService.IsReaderMode)
                         {
-                            <div class="d-flex justify-center mt-8 mb-4">
-                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => NavService.RequestOpenUrl(_selectedItem.Link))" StartIcon="@Icons.Material.Filled.Web">
-                                    Read original article
+                            <div class="d-flex justify-center mt-8 mb-4 gap-4">
+                                <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="@OnReaderViewClicked" StartIcon="@Icons.Material.Filled.ChromeReaderMode" Disabled="@_isReaderViewLoading">
+                                    @if (_isReaderViewLoading)
+                                    {
+                                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                                        <span class="ms-2">Loading Reader View...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Reader View</span>
+                                    }
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@(() => NavService.RequestOpenUrl(_selectedItem.Link))" StartIcon="@Icons.Material.Filled.Web">
+                                    Read original
                                 </MudButton>
                             </div>
                         }
@@ -160,6 +172,7 @@
 @code {
     private RssItem? _selectedItem = null;
     private bool _isArticleLoading = false;
+    private bool _isReaderViewLoading = false;
     private bool _isMobile;
     private bool _isDarkMode;
 
@@ -267,17 +280,57 @@
         _isArticleLoading = true;
         _backButtonService.Register(OnBackNative);
         NavService.SetCurrentArticle(item.Link, item.Title);
-        StateHasChanged();
+        StateHasChanged(); // Show initial content (Description)
 
-        // Fetch full content in background
+        // Do NOT auto-fetch full content here. 
+        // User requested explicit button.
+        // If we want auto-fetch, uncomment below:
+        /*
         var fullArticle = await RssService.FetchFullArticleAsync(item.Link);
         if (fullArticle != null && !string.IsNullOrEmpty(fullArticle.Content))
         {
             _selectedItem = fullArticle;
         }
+        */
 
         _isArticleLoading = false;
         StateHasChanged();
+    }
+
+    private async Task OnReaderViewClicked()
+    {
+        if (_selectedItem == null || _isReaderViewLoading) return;
+
+        _isReaderViewLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            Console.WriteLine($"[RssFeedDetail] Fetching full article for: {_selectedItem.Link}");
+            var fullArticle = await RssService.FetchFullArticleAsync(_selectedItem.Link);
+            
+            if (fullArticle != null && !string.IsNullOrEmpty(fullArticle.Content))
+            {
+                 Console.WriteLine($"[RssFeedDetail] Success. Content length: {fullArticle.Content.Length}");
+                 _selectedItem = fullArticle;
+                 Snackbar.Add("Full article loaded", Severity.Success);
+            }
+            else
+            {
+                 Console.WriteLine($"[RssFeedDetail] Fetch returned null or empty.");
+                 Snackbar.Add("Could not load reader view", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RssFeedDetail] Error: {ex}");
+            Snackbar.Add($"Error loading reader view: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isReaderViewLoading = false;
+            StateHasChanged();
+        }
     }
 
     private void CloseItem()
