@@ -89,16 +89,16 @@
                         }
                         else
                         {
-                             <div class="d-flex align-center mb-6 gap-2">
+                             <div class="d-flex align-center mb-6">
                                  @if (!string.IsNullOrEmpty(RssService.CurrentFeed?.IconUrl))
                                  {
-                                     <MudImage Src="@RssService.CurrentFeed.IconUrl" Width="24" Height="24" />
+                                     <MudImage Src="@RssService.CurrentFeed.IconUrl" Width="20" Height="20" Class="me-2 rounded-circle" ObjectFit="ObjectFit.Cover" />
                                  }
-                                 <MudText Typo="Typo.caption">
-                                     @RssService.CurrentFeed?.Name 
+                                 <MudText Typo="Typo.caption" Style="opacity: 0.8;">
+                                     <span class="fw-bold">@RssService.CurrentFeed?.Name</span>
                                      @if (!string.IsNullOrEmpty(_selectedItem.Author))
                                      {
-                                         <span> •  @_selectedItem.Author</span>
+                                         <span> • @_selectedItem.Author</span>
                                      } 
                                      • @_selectedItem.PublishDate.ToString("f")
                                  </MudText>
