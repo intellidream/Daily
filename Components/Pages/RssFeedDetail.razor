@@ -123,7 +123,7 @@
                             </div>
                         }
 
-                        @if (!NavService.IsReaderMode)
+                        @if (!NavService.IsReaderMode && !_isReaderViewChanged)
                         {
                             <div class="d-flex justify-center mt-8 mb-4 gap-4">
                                 <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="@OnReaderViewClicked" StartIcon="@Icons.Material.Filled.ChromeReaderMode" Disabled="@_isReaderViewLoading">
@@ -136,9 +136,6 @@
                                     {
                                         <span>Reader View</span>
                                     }
-                                </MudButton>
-                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@(() => NavService.RequestOpenUrl(_selectedItem.Link))" StartIcon="@Icons.Material.Filled.Web">
-                                    Read original
                                 </MudButton>
                             </div>
                         }
@@ -173,6 +170,7 @@
     private RssItem? _selectedItem = null;
     private bool _isArticleLoading = false;
     private bool _isReaderViewLoading = false;
+    private bool _isReaderViewChanged = false;
     private bool _isMobile;
     private bool _isDarkMode;
 
@@ -279,6 +277,7 @@
         _selectedItem = item;
         _isArticleLoading = true;
         _backButtonService.Register(OnBackNative);
+        _isReaderViewChanged = false;
         NavService.SetCurrentArticle(item.Link, item.Title);
         StateHasChanged(); // Show initial content (Description)
 
@@ -313,6 +312,7 @@
             {
                  Console.WriteLine($"[RssFeedDetail] Success. Content length: {fullArticle.Content.Length}");
                  _selectedItem = fullArticle;
+                 _isReaderViewChanged = true;
                  Snackbar.Add("Full article loaded", Severity.Success);
             }
             else
