@@ -114,6 +114,9 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
                         tcs.TrySetResult(null);
                         return;
                     }
+                    // Generic cleanup before Readability: remove iframes and other media to avoid video artifacts
+                    await _webView.EvaluateJavaScriptAsync("(function(){var tags=['iframe','video','audio','object','embed','source','track'];tags.forEach(function(t){document.querySelectorAll(t).forEach(function(e){e.remove();});});})()");
+
                     var injectionResult = await _webView.EvaluateJavaScriptAsync(BuildReadabilityInjection(script));
                     injectionResult = DecodeJsonString(injectionResult);
                     Log($"Readability injection result: {injectionResult}");
@@ -705,11 +708,13 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
                 return html;
             }
 
-            var removeSelectors = "script,style,noscript,header,footer,aside,nav,form,button,svg";
+            var removeSelectors = "script,style,noscript,header,footer,aside,nav,form,button,svg,iframe,video,audio,object,embed,source,track,canvas,map,figure";
             foreach (var node in body.QuerySelectorAll(removeSelectors))
             {
                 node.Remove();
             }
+
+
 
             foreach (var node in body.QuerySelectorAll("[style]"))
             {
@@ -811,8 +816,9 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
                 return html;
             }
 
-            RemoveNodesByXPath(body, "//script|//style|//noscript|//header|//footer|//nav|//aside|//form|//button|//svg");
-            RemoveNodesByClassHints(body, new[] { "share", "social", "related", "comment", "promo", "subscribe", "newsletter", "advert", "cookie" });
+            RemoveNodesByXPath(body, "//script|//style|//noscript|//header|//footer|//nav|//aside|//form|//button|//svg|//iframe|//video|//audio|//object|//embed|//source|//track|//canvas|//map|//figure");
+            RemoveNodesByClassHints(body, new[] { "share", "social", "related", "comment", "promo", "subscribe", "newsletter", "advert", "cookie", "video", "player", "embed" });
+            
             RemoveEmptyNodes(body, new[] { "div", "section", "article", "p" });
             StripAttributes(body, new[] { "style" });
             NormalizeDivsToParagraphs(body);
@@ -898,7 +904,7 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
     private bool ShouldRemoveByClass(AngleSharp.Dom.IElement node)
     {
         var cls = (node.ClassName ?? "") + " " + (node.Id ?? "");
-        var hints = new[] { "share", "social", "related", "comment", "promo", "subscribe", "newsletter", "advert", "cookie" };
+        var hints = new[] { "share", "social", "related", "comment", "promo", "subscribe", "newsletter", "advert", "cookie", "video", "player", "embed" };
         return hints.Any(h => cls.Contains(h, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -978,6 +984,8 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
         if (url.Contains("republica.ro")) return ".article-body, .article-content, .post-content, .entry-content, article";
         return "article, main, [itemprop=\\\"articleBody\\\"], .article-body, .article-content, .post-content, .entry-content, .content";
     }
+
+
 
     private void ConfigureDesktopUserAgent(WebView webView)
     {
