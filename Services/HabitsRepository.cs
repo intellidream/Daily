@@ -242,5 +242,80 @@ namespace Daily.Services
                 Date = DateTime.MinValue // Meaningless for Global
             };
         }
+
+        public async Task<Dictionary<string, int>> GetGlobalTypeBreakdownAsync(string habitType, DateTime sinceDate, string userId)
+        {
+            await _databaseService.InitializeAsync();
+            
+            // We only care about logs for this granular breakdown. Summaries don't store "type" metadata usually or it's hard to parse.
+            // We assume that for "since quitting" (usually recent enough), logs exist.
+            // Or if they are older logs, they are in LocalHabitLog (we don't purge yet).
+            
+            var sinceUtc = sinceDate.ToUniversalTime();
+            
+            var logs = await _databaseService.Connection.Table<LocalHabitLog>()
+                            .Where(l => l.HabitType == habitType && l.UserId == userId && l.IsDeleted == false && l.LoggedAt >= sinceUtc)
+                            .ToListAsync();
+
+            var breakdown = new Dictionary<string, int>();
+
+            foreach(var log in logs)
+            {
+                string type = "Unknown";
+                
+                // Parse Metadata: { "type": "Cigarette" }
+                if (!string.IsNullOrEmpty(log.Metadata))
+                {
+                    try
+                    {
+                        if (log.Metadata.Contains("\"type\":"))
+                        {
+                            var parts = log.Metadata.Split(new[] { "\"type\":" }, StringSplitOptions.RemoveEmptyEntries);
+                            if (parts.Length > 1)
+                            {
+                                // Cleanup: "Cigarette" } -> Cigarette
+                                var val = parts[1].Trim().Trim(new[] { ' ', '}', '"' });
+                                if (!string.IsNullOrEmpty(val)) type = val;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!breakdown.ContainsKey(type)) breakdown[type] = 0;
+                breakdown[type]++; // Count incidents, not value (assuming 1 log = 1 cigarette usually, or we use Value?)
+                // Actually the user said "total per each type", usually implies Count of Cigarettes. 
+                // But HabitLog has a Value. If user logs "20 cigarettes", Value is 20. 
+                // Let's use Value to be safe.
+            }
+            
+            // Re-calc using Value
+            breakdown.Clear();
+             foreach(var log in logs)
+            {
+                string type = "Unknown";
+                if (!string.IsNullOrEmpty(log.Metadata))
+                {
+                    try
+                    {
+                        if (log.Metadata.Contains("\"type\":"))
+                        {
+                            var parts = log.Metadata.Split(new[] { "\"type\":" }, StringSplitOptions.RemoveEmptyEntries);
+                            if (parts.Length > 1)
+                            {
+                                var val = parts[1].Trim().Trim(new[] { ' ', '}', '"' });
+                                if (!string.IsNullOrEmpty(val)) type = val;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!breakdown.ContainsKey(type)) breakdown[type] = 0;
+                breakdown[type] += (int)log.Value; 
+            }
+
+            return breakdown;
+        }
     }
 }

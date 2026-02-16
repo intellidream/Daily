@@ -210,5 +210,9 @@ namespace Daily.Services
                  Console.WriteLine("[HabitsService] Initialize: Guest mode.");
              }
         }
+        public async Task<Dictionary<string, int>> GetSmokesBreakdownAsync(DateTime sinceDate)
+        {
+            return await _repository.GetGlobalTypeBreakdownAsync("smokes", sinceDate, CurrentUserIdString);
+        }
     }
 }

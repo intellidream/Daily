@@ -27,5 +27,7 @@ namespace Daily.Services
         Task<List<DailySummary>> GetHistoryAsync(string habitType, DateTime startDate, DateTime endDate);
         
         Task InitializeAsync();
+        
+        Task<Dictionary<string, int>> GetSmokesBreakdownAsync(DateTime sinceDate);
     }
 }

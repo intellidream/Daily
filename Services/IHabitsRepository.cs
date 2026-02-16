@@ -16,5 +16,6 @@ namespace Daily.Services
         // Aggregation Methods
         Task<List<DailySummary>> GetDailyTotalsAsync(string habitType, DateTime startDate, DateTime endDate, string userId);
         Task<DailySummary> GetGlobalTotalsAsync(string habitType, string userId);
+        Task<Dictionary<string, int>> GetGlobalTypeBreakdownAsync(string habitType, DateTime sinceDate, string userId);
     }
 }
