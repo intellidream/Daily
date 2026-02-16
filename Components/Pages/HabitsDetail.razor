@@ -111,20 +111,6 @@
                 </MudPaper>
             </MudItem>
 
-            <!-- Configuration Tile -->
-            <MudItem xs="12">
-                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
-                     <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Configuration</MudText>
-                     <MudGrid>
-                         <MudItem xs="12" sm="6">
-                            <div class="d-flex align-center gap-2">
-                                <MudNumericField @bind-Value="_goalValue" Label="Daily Goal" DebounceInterval="500" OnDebounceIntervalElapsed="UpdateGoal" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="@_unit" />
-                            </div>
-                         </MudItem>
-                     </MudGrid>
-                 </MudPaper>
-            </MudItem>
-
             <!-- History Chart -->
             <MudItem xs="12">
                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
@@ -161,8 +147,19 @@
                 </MudItem>
             }
 
-
-
+            <!-- Configuration Tile -->
+            <MudItem xs="12">
+                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
+                     <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Configuration</MudText>
+                     <MudGrid>
+                         <MudItem xs="12" sm="6">
+                            <div class="d-flex align-center gap-2">
+                                <MudNumericField @bind-Value="_goalValue" Label="Daily Goal" DebounceInterval="500" OnDebounceIntervalElapsed="UpdateGoal" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="@_unit" />
+                            </div>
+                         </MudItem>
+                     </MudGrid>
+                 </MudPaper>
+            </MudItem>
 
         </MudGrid>
     }
@@ -311,6 +308,70 @@
                 </MudPaper>
             </MudItem>
 
+            <!-- Total Smokes Since Quit (Smoke/Fog Style) -->
+             <MudItem xs="12">
+                 <MudPaper Class="pa-6 rounded-xl detail-tile relative overflow-hidden" Elevation="3" 
+                          Style="background: linear-gradient(135deg, rgba(200,200,200,0.1) 0%, rgba(50,50,50,0.2) 100%); backdrop-filter: blur(10px);">
+                     
+                     <!-- Fog Effect -->
+                     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.1) 0%, transparent 60%); pointer-events: none;"></div>
+                     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 70% 70%, rgba(150,150,150,0.1) 0%, transparent 60%); pointer-events: none;"></div>
+                     
+                     <div class="relative d-flex justify-space-between align-center mb-4">
+                         <div class="d-flex align-center gap-2">
+                             <MudIcon Icon="@Icons.Material.Filled.SmokeFree" Color="Color.Default" Style="opacity: 0.8;" />
+                             <MudText Typo="Typo.h6" Class="font-weight-bold" Color="Color.Default">Since Quitting</MudText>
+                         </div>
+                         <MudText Typo="Typo.caption" Style="opacity: 0.6;">@(_smokesQuitDate?.ToString("MMM dd, yyyy") ?? "No Date Set")</MudText>
+                     </div>
+
+                     <MudGrid Spacing="2">
+                         @if (_smokesBreakdown.Any())
+                         {
+                             // Type Breakdown
+                             foreach (var item in _smokesBreakdown)
+                             {
+                                 <MudItem xs="6" sm="3">
+                                     <div class="d-flex flex-column align-center pa-3 rounded-lg" style="background: rgba(128,128,128,0.1); border: 1px solid rgba(128,128,128,0.2);">
+                                         <MudText Typo="Typo.h5" Class="font-weight-bold">@item.Value</MudText>
+                                         <MudText Typo="Typo.caption" Style="opacity: 0.7; text-transform: uppercase;">@item.Key</MudText>
+                                     </div>
+                                 </MudItem>
+                             }
+                             
+                             <!-- Wrapper for Total and Median -->
+                             <MudItem xs="12" Class="mt-2">
+                                 <MudGrid Spacing="2">
+                                     <!-- Total -->
+                                     <MudItem xs="6">
+                                          <div class="d-flex flex-column align-center pa-2 rounded-lg" style="background: rgba(128,128,128,0.05);">
+                                             <MudText Typo="Typo.caption" Style="opacity: 0.7;">TOTAL</MudText>
+                                             <MudText Typo="Typo.h3" Class="font-weight-bold" Color="Color.Error">@_smokesBreakdown.Sum(x => x.Value)</MudText>
+                                          </div>
+                                     </MudItem>
+                                     
+                                     <!-- Median -->
+                                     <MudItem xs="6">
+                                          <div class="d-flex flex-column align-center pa-2 rounded-lg" style="background: rgba(128,128,128,0.05);">
+                                             <MudText Typo="Typo.caption" Style="opacity: 0.7;">MEDIAN</MudText>
+                                             <MudText Typo="Typo.h3" Class="font-weight-bold" Color="Color.Warning">@GetMedianSmokes().ToString("F2")</MudText>
+                                          </div>
+                                     </MudItem>
+                                 </MudGrid>
+                             </MudItem>
+                         }
+                         else
+                         {
+                             <MudItem xs="12">
+                                 <div class="d-flex flex-column align-center justify-center pa-4">
+                                     <MudText Typo="Typo.body1" Color="Color.Default" Style="opacity: 0.7;">No data recorded since quit date.</MudText>
+                                 </div>
+                             </MudItem>
+                         }
+                     </MudGrid>
+                 </MudPaper>
+             </MudItem>
+            
             <!-- Chart -->
             <MudItem xs="12">
                  <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
@@ -321,55 +382,6 @@
                 </MudPaper>
             </MudItem>
             
-            
-            <!-- Total Smokes Since Quit (Scary Tile) -->
-             <MudItem xs="12">
-                 <MudPaper Class="pa-6 rounded-xl detail-tile relative overflow-hidden" Elevation="3" Style="background: linear-gradient(135deg, #b71c1c 0%, #212121 100%);">
-                     <!-- Background pattern or effect -->
-                     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.8) 100%); pointer-events: none;"></div>
-                     
-                     <div class="relative d-flex justify-space-between align-center mb-4">
-                         <div class="d-flex align-center gap-2">
-                             <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Inherit" Style="color: rgba(255,255,255,0.9);" />
-                             <MudText Typo="Typo.h6" Class="font-weight-bold" Style="color: rgba(255,255,255,0.9);">Since Quitting</MudText>
-                         </div>
-                         <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.6);">@(_smokesQuitDate?.ToString("MMM dd, yyyy") ?? "No Date Set")</MudText>
-                     </div>
-
-                     <MudGrid Spacing="2">
-                         @if (_smokesBreakdown.Any())
-                         {
-                             foreach (var item in _smokesBreakdown)
-                             {
-                                 <MudItem xs="6" sm="3">
-                                     <div class="d-flex flex-column align-center pa-3 rounded-lg" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);">
-                                         <MudText Typo="Typo.h4" Class="font-weight-bold" Style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">@item.Value</MudText>
-                                         <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 1px;">@item.Key</MudText>
-                                     </div>
-                                 </MudItem>
-                             }
-                             
-                             <!-- Total Aggregated -->
-                             <MudItem xs="12" Class="mt-2">
-                                 <div class="d-flex justify-center align-center gap-2">
-                                     <MudText Typo="Typo.h5" Style="color: rgba(255,255,255,0.8);">TOTAL IMPACT:</MudText>
-                                     <MudText Typo="Typo.h3" Class="font-weight-bold" Style="color: #FF5252; text-shadow: 0 0 10px rgba(255, 82, 82, 0.5);">@_smokesBreakdown.Sum(x => x.Value)</MudText>
-                                 </div>
-                             </MudItem>
-                         }
-                         else
-                         {
-                             <MudItem xs="12">
-                                 <div class="d-flex flex-column align-center justify-center pa-4">
-                                     <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.7);">No data recorded since quit date.</MudText>
-                                     <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Good job?</MudText>
-                                 </div>
-                             </MudItem>
-                         }
-                     </MudGrid>
-                 </MudPaper>
-             </MudItem>
-
             <!-- Heatmap (Smokes) -->
             @if (_viewType == "smokes" && _heatmapItems.Any())
             {
@@ -424,7 +436,7 @@
                      </MudGrid>
                  </MudPaper>
             </MudItem>
-            
+
             <!-- Info Section: Cool Down & Milestones (Moved Down) -->
             <MudItem xs="12">
                  <!-- Grid Content -->
@@ -830,6 +842,21 @@
         }
     }
     
+    private double GetMedianSmokes()
+    {
+        if (!_smokesQuitDate.HasValue) return 0;
+        
+        var totalSmokes = _smokesBreakdown.Sum(x => x.Value);
+        
+        var startDate = _smokesQuitDate.Value.Date;
+        var endDate = DateTime.Today;
+        var totalDays = (endDate - startDate).TotalDays + 1; // Inclusive
+        
+        if (totalDays <= 0) return 0;
+        
+        return (double)totalSmokes / totalDays;
+    }
+
     private void UpdateWaterStatus()
     {
         if (_progressPercentage >= 100)
