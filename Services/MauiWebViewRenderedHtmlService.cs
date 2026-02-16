@@ -759,6 +759,14 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
 
     private string? NormalizeForRepublica(string url, string? html, string? textContent)
     {
+        // Republica often returns good HTML via Readability.js now.
+        // We should primarily trust 'html'. 
+        // Only fallback to textContent if 'html' seems very sparse.
+        if (!string.IsNullOrWhiteSpace(html) && html.Length > 200) 
+        {
+            return html;
+        }
+
         if (string.IsNullOrWhiteSpace(html))
         {
             return html;
@@ -766,7 +774,7 @@ public class MauiWebViewRenderedHtmlService : IRenderedHtmlService
 
         if (IsRepublica(url))
         {
-            if (!string.IsNullOrWhiteSpace(textContent) && html.Contains("<div", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(textContent))
             {
                 return ConvertTextToHtml(textContent) ?? html;
             }
