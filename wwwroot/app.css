@@ -70,7 +70,7 @@ body {
 
     /* Remove space: target element that has BOTH the class and NOT the light attribute */
     .mesh-background:not([data-theme="light"]) {
-        background: linear-gradient(135deg, #594AE2 0%, #1b0e33 50%, #00d2ff 100%) !important;
+        background: linear-gradient(135deg, #1a1a2e 0%, #0f0c29 50%, #16213e 100%) !important;
         background-attachment: fixed;
         background-size: cover;
     }
@@ -86,7 +86,7 @@ body {
 
 /* Remove space: target element with BOTH attribute and class */
 [data-theme="dark"].mesh-background {
-    background: linear-gradient(135deg, #594AE2 0%, #1b0e33 50%, #00d2ff 100%) !important;
+    background: linear-gradient(135deg, #1a1a2e 0%, #0f0c29 50%, #16213e 100%) !important;
     background-attachment: fixed;
     background-size: cover;
 }
