@@ -29,8 +29,8 @@
         <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
         <AndroidFastDeployment>false</AndroidFastDeployment>
         <!-- Versions -->
-        <ApplicationDisplayVersion>1.1.102</ApplicationDisplayVersion>
-		<ApplicationVersion>102</ApplicationVersion>
+        <ApplicationDisplayVersion>1.1.103</ApplicationDisplayVersion>
+		<ApplicationVersion>103</ApplicationVersion>
 
         <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
 
