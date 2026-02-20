@@ -356,6 +356,7 @@
 
     public void Dispose()
     {
+        SystemMonitor.StopMonitoring();
         SystemMonitor.SystemStatsUpdated -= OnStatsUpdated;
         RefreshService.RefreshRequested -= OnRefreshRequested;
         BackButtonService.Unregister(OnBackNative);

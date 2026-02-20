@@ -244,6 +244,7 @@
 
     public void Dispose()
     {
+        SystemMonitor.StopMonitoring();
         SystemMonitor.SystemStatsUpdated -= OnStatsUpdated;
         RefreshService.DetailRefreshRequested -= OnRefreshRequested;
     }

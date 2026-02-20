@@ -60,10 +60,13 @@ namespace Daily.Services
         private long _prevBytesRx = 0;
         private long _prevBytesTx = 0;
         private DateTime _prevRateCheckTime = DateTime.MinValue;
+        private DateTime _lastStorageCheckTime = DateTime.MinValue;
+        private DateTime _lastNetworkRatesCheckTime = DateTime.MinValue;
         
         // Monitoring State
         private System.Threading.Timer? _timer;
         private bool _isMonitoring;
+        private int _subscriberCount = 0;
         private readonly object _lock = new object();
 
         public SystemMonitorService()
@@ -98,6 +101,7 @@ namespace Daily.Services
         {
             lock (_lock)
             {
+                _subscriberCount++;
                 if (_isMonitoring) return;
                 
                 _isMonitoring = true;
@@ -110,6 +114,10 @@ namespace Daily.Services
         {
             lock (_lock)
             {
+                _subscriberCount--;
+                if (_subscriberCount > 0) return; // Wait until all subscribers detach
+                if (_subscriberCount < 0) _subscriberCount = 0;
+
                 if (!_isMonitoring) return;
 
                 _isMonitoring = false;
@@ -343,6 +351,13 @@ namespace Daily.Services
 #else
              try
              {
+                 // Throttle on Mac/Windows: only check network rates every 15 seconds to save CPU
+                 if ((DateTime.UtcNow - _lastNetworkRatesCheckTime).TotalSeconds < 15 && _lastNetworkRatesCheckTime != DateTime.MinValue)
+                 {
+                     return _cachedNetworkRates;
+                 }
+                 _lastNetworkRatesCheckTime = DateTime.UtcNow;
+
                  if (!NetworkInterface.GetIsNetworkAvailable()) return (0, 0);
                  var interfaces = NetworkInterface.GetAllNetworkInterfaces();
                  long totalRx = 0;
@@ -396,6 +411,13 @@ namespace Daily.Services
 #else
              try
              {
+                 // Throttle on Mac/Windows: only check storage every 60 seconds
+                 if ((DateTime.UtcNow - _lastStorageCheckTime).TotalSeconds < 60 && _lastStorageCheckTime != DateTime.MinValue)
+                 {
+                     return _cachedStorage;
+                 }
+                 _lastStorageCheckTime = DateTime.UtcNow;
+
                  DriveInfo? main = null;
                  var drives = DriveInfo.GetDrives().Where(d => d.IsReady).ToList();
                  main = drives.FirstOrDefault(d => d.Name.Equals(@"C:\", StringComparison.OrdinalIgnoreCase)) 
