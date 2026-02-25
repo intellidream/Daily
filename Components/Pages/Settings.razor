@@ -5,6 +5,7 @@
 @inject IAuthService AuthService
 @inject ISnackbar Snackbar
 @inject ISeederService SeederService
+@inject IDialogService DialogService
 @implements IDisposable
 
 
@@ -58,6 +59,7 @@
                     <div>
                         @if (SettingsService.IsAuthenticated)
                         {
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mr-2" OnClick="@OpenWatchPairingDialog">Pair Watch</MudButton>
                             <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="@SignOut">Sign Out</MudButton>
                         }
                         else
@@ -361,5 +363,11 @@
     {
         await AuthService.SignOutAsync();
         Snackbar.Add("Signed out.", Severity.Info);
+    }
+
+    private async Task OpenWatchPairingDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<Daily.Components.Dialogs.WatchPairingDialog>("Pair Apple Watch", options);
     }
 }

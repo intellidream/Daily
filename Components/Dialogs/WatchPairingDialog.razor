@@ -1,0 +1,84 @@
+@using Daily.Models
+@using Supabase
+@using MudBlazor
+@inject Supabase.Client SupabaseClient
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-4">Enter the 6-digit code shown on your Apple Watch to securely connect it to your account.</MudText>
+        <MudTextField @bind-Value="_pairingCode" Label="6-Digit Code" Variant="Variant.Outlined" MaxLength="6" Immediate="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="PairWatch" Disabled="@(string.IsNullOrWhiteSpace(_pairingCode) || _pairingCode.Length != 6 || _isPairing)">
+            @if (_isPairing)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Pairing...</MudText>
+            }
+            else
+            {
+                <MudText>Connect Watch</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    private string _pairingCode;
+    private bool _isPairing;
+
+    void Cancel() => MudDialog.Cancel();
+
+    private async Task PairWatch()
+    {
+        _isPairing = true;
+        StateHasChanged();
+        
+        try 
+        {
+            var currentSession = SupabaseClient.Auth.CurrentSession;
+            if (currentSession == null || string.IsNullOrEmpty(currentSession.AccessToken))
+            {
+                Snackbar.Add("You must be logged in to pair a Watch.", Severity.Error);
+                return;
+            }
+
+            var existingResponse = await SupabaseClient.From<WatchPairing>()
+                .Where(x => x.Code == _pairingCode)
+                .Get();
+                
+            var existing = existingResponse.Models.FirstOrDefault();
+            if (existing == null)
+            {
+                Snackbar.Add($"Pairing code '{_pairingCode}' not found. Did the watch disconnect?", Severity.Error);
+                return;
+            }
+
+            existing.AccessToken = currentSession.AccessToken;
+            existing.RefreshToken = currentSession.RefreshToken;
+            
+            var updateResponse = await SupabaseClient.From<WatchPairing>().Update(existing);
+            
+            if (updateResponse.Models == null || updateResponse.Models.Count == 0)
+            {
+                Snackbar.Add("Database rejected the token update! (0 rows affected)", Severity.Error);
+                return;
+            }
+                
+            Snackbar.Add("Watch paired successfully! Check your Apple Watch.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Pairing failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPairing = false;
+            StateHasChanged();
+        }
+    }
+}

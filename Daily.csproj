@@ -122,6 +122,11 @@
         <EmbeddedResource Remove="TestParser\**" />
         <None Remove="TestParser\**" />
         <MauiAsset Remove="TestParser\**" />
+        
+        <Compile Remove="WatchOS\**" />
+        <EmbeddedResource Remove="WatchOS\**" />
+        <None Remove="WatchOS\**" />
+        <MauiAsset Remove="WatchOS\**" />
     </ItemGroup>
 
     <Target Name="DebugMauiIcon" BeforeTargets="Build">

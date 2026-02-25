@@ -9,6 +9,22 @@ namespace Daily
     {
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
 
+        public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
+        {
+            // Activate WCSession immediately on app launch so iOS registers the delegate before backgrounding
+            var app = CreateMauiApp();
+            try
+            {
+                var watchService = app.Services.GetService(typeof(Daily.Services.IWatchConnectivityService));
+                Console.WriteLine($"[AppDelegate] Early initialized WatchConnectivityService: {watchService != null}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AppDelegate] Error initializing WatchConnectivity early: {ex.Message}");
+            }
+            return base.FinishedLaunching(application, launchOptions);
+        }
+
         public override bool OpenUrl(UIApplication app, NSUrl url, NSDictionary options)
         {
             // Manual interception for Supabase PKCE Flow

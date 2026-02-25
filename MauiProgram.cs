@@ -140,6 +140,12 @@ namespace Daily
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
             builder.Services.AddSingleton<HttpClient>();
             
+#if IOS && !MACCATALYST
+            builder.Services.AddSingleton<Daily.Services.IWatchConnectivityService, Daily.Platforms.iOS.Services.WatchConnectivityService>();
+#else
+            builder.Services.AddSingleton<Daily.Services.IWatchConnectivityService, Daily.Services.StubWatchConnectivityService>();
+#endif
+            
             // Finances Service
             builder.Services.AddSingleton<Daily.Services.Finances.YahooFinanceService>();
             builder.Services.AddSingleton<Daily.Services.Finances.FinnhubService>();
@@ -169,11 +175,12 @@ namespace Daily
             builder.Services.AddSingleton(provider => 
             {
                 var logger = provider.GetRequiredService<Daily.Services.DebugLogger>();
+                var watchConn = provider.GetRequiredService<Daily.Services.IWatchConnectivityService>();
                 var options = new Supabase.SupabaseOptions
                 {
                     AutoRefreshToken = true,
                     AutoConnectRealtime = true,
-                    SessionHandler = new Daily.Services.Auth.MauiSessionPersistence(logger)
+                    SessionHandler = new Daily.Services.Auth.MauiSessionPersistence(logger, watchConn)
                 };
                 return new Supabase.Client(supabaseUrl, supabaseKey, options);
             });

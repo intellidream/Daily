@@ -8,10 +8,12 @@ namespace Daily.Services.Auth
     {
         private const string SessionKey = "supabase.session";
         private readonly Daily.Services.DebugLogger? _logger;
+        private readonly Daily.Services.IWatchConnectivityService? _watchConnectivityService;
 
-        public MauiSessionPersistence(Daily.Services.DebugLogger? logger = null)
+        public MauiSessionPersistence(Daily.Services.DebugLogger? logger = null, Daily.Services.IWatchConnectivityService? watchConnectivityService = null)
         {
             _logger = logger;
+            _watchConnectivityService = watchConnectivityService;
         }
 
         private void Log(string message)
@@ -67,6 +69,9 @@ namespace Daily.Services.Auth
                     #if WINDOWS
                     Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] SecureStorage Success.");
                     #endif
+                    
+                    // Share with WatchOS
+                    _watchConnectivityService?.SendSupabaseSession(session.AccessToken ?? "", session.RefreshToken ?? "");
                 }
                 catch (Exception ex)
                 {
@@ -76,6 +81,9 @@ namespace Daily.Services.Auth
                     #endif
                     Preferences.Set(SessionKey, json);
                     Log($"[MauiSessionPersistence] Session Saved via Preferences.");
+                    
+                    // Share with WatchOS even on fallback
+                    _watchConnectivityService?.SendSupabaseSession(session.AccessToken ?? "", session.RefreshToken ?? "");
                 }
             }
             catch (Exception ex)
@@ -151,7 +159,13 @@ namespace Daily.Services.Auth
 
                 if (!string.IsNullOrEmpty(json))
                 {
-                    return JsonConvert.DeserializeObject<Session>(json);
+                    var session = JsonConvert.DeserializeObject<Session>(json);
+                    if (session != null)
+                    {
+                        // IMPORTANT: Sync loaded session to Apple Watch proactively on app startup
+                        _watchConnectivityService?.SendSupabaseSession(session.AccessToken ?? "", session.RefreshToken ?? "");
+                    }
+                    return session;
                 }
             }
             catch (Exception ex)
