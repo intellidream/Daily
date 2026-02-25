@@ -7,30 +7,32 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		9151FE892F4DFF2F00A0AF14 /* DailyWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 9151FE882F4DFF2F00A0AF14 /* DailyWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		9151FEA62F4E049900A0AF14 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9151FEA52F4E049900A0AF14 /* Supabase */; };
+		9184D9E22F4F99740083F9EA /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9184D9E12F4F99740083F9EA /* WidgetKit.framework */; };
+		9184D9E42F4F99740083F9EA /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9184D9E32F4F99740083F9EA /* SwiftUI.framework */; };
+		9184D9F32F4F99750083F9EA /* DailyWatchWidgetExtensionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 9184D9DF2F4F99740083F9EA /* DailyWatchWidgetExtensionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		9151FE8A2F4DFF2F00A0AF14 /* PBXContainerItemProxy */ = {
+		9184D9F12F4F99750083F9EA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 9151FE7C2F4DFF2F00A0AF14 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 9151FE872F4DFF2F00A0AF14;
-			remoteInfo = "DailyWatch Watch App";
+			remoteGlobalIDString = 9184D9DE2F4F99740083F9EA;
+			remoteInfo = DailyWatchWidgetExtensionExtension;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		9151FE982F4DFF3100A0AF14 /* Embed Watch Content */ = {
+		9184D9F42F4F99750083F9EA /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
-			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
-			dstSubfolderSpec = 16;
+			dstPath = "";
+			dstSubfolderSpec = 13;
 			files = (
-				9151FE892F4DFF2F00A0AF14 /* DailyWatch Watch App.app in Embed Watch Content */,
+				9184D9F32F4F99750083F9EA /* DailyWatchWidgetExtensionExtension.appex in Embed Foundation Extensions */,
 			);
-			name = "Embed Watch Content";
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -38,12 +40,34 @@
 /* Begin PBXFileReference section */
 		9151FE822F4DFF2F00A0AF14 /* DailyWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DailyWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9151FE882F4DFF2F00A0AF14 /* DailyWatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DailyWatch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		9184D9DF2F4F99740083F9EA /* DailyWatchWidgetExtensionExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DailyWatchWidgetExtensionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		9184D9E12F4F99740083F9EA /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		9184D9E32F4F99740083F9EA /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		9184D9FA2F4F99B60083F9EA /* DailyWatchWidgetExtensionExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DailyWatchWidgetExtensionExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		9184D9F72F4F99750083F9EA /* Exceptions for "DailyWatchWidgetExtension" folder in "DailyWatchWidgetExtensionExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 9184D9DE2F4F99740083F9EA /* DailyWatchWidgetExtensionExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9151FE8C2F4DFF2F00A0AF14 /* DailyWatch Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "DailyWatch Watch App";
+			sourceTree = "<group>";
+		};
+		9184D9E52F4F99740083F9EA /* DailyWatchWidgetExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				9184D9F72F4F99750083F9EA /* Exceptions for "DailyWatchWidgetExtension" folder in "DailyWatchWidgetExtensionExtension" target */,
+			);
+			path = DailyWatchWidgetExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -57,13 +81,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9184D9DC2F4F99740083F9EA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9184D9E42F4F99740083F9EA /* SwiftUI.framework in Frameworks */,
+				9184D9E22F4F99740083F9EA /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		9151FE7B2F4DFF2F00A0AF14 = {
 			isa = PBXGroup;
 			children = (
+				9184D9FA2F4F99B60083F9EA /* DailyWatchWidgetExtensionExtension.entitlements */,
 				9151FE8C2F4DFF2F00A0AF14 /* DailyWatch Watch App */,
+				9184D9E52F4F99740083F9EA /* DailyWatchWidgetExtension */,
+				9184D9E02F4F99740083F9EA /* Frameworks */,
 				9151FE832F4DFF2F00A0AF14 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -73,32 +109,23 @@
 			children = (
 				9151FE822F4DFF2F00A0AF14 /* DailyWatch.app */,
 				9151FE882F4DFF2F00A0AF14 /* DailyWatch Watch App.app */,
+				9184D9DF2F4F99740083F9EA /* DailyWatchWidgetExtensionExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		9184D9E02F4F99740083F9EA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				9184D9E12F4F99740083F9EA /* WidgetKit.framework */,
+				9184D9E32F4F99740083F9EA /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		9151FE812F4DFF2F00A0AF14 /* DailyWatch */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 9151FE992F4DFF3100A0AF14 /* Build configuration list for PBXNativeTarget "DailyWatch" */;
-			buildPhases = (
-				9151FE802F4DFF2F00A0AF14 /* Resources */,
-				9151FE982F4DFF3100A0AF14 /* Embed Watch Content */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				9151FE8B2F4DFF2F00A0AF14 /* PBXTargetDependency */,
-			);
-			name = DailyWatch;
-			packageProductDependencies = (
-			);
-			productName = DailyWatch;
-			productReference = 9151FE822F4DFF2F00A0AF14 /* DailyWatch.app */;
-			productType = "com.apple.product-type.application.watchapp2-container";
-		};
 		9151FE872F4DFF2F00A0AF14 /* DailyWatch Watch App */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 9151FE952F4DFF3100A0AF14 /* Build configuration list for PBXNativeTarget "DailyWatch Watch App" */;
@@ -106,10 +133,12 @@
 				9151FE842F4DFF2F00A0AF14 /* Sources */,
 				9151FE852F4DFF2F00A0AF14 /* Frameworks */,
 				9151FE862F4DFF2F00A0AF14 /* Resources */,
+				9184D9F42F4F99750083F9EA /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				9184D9F22F4F99750083F9EA /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				9151FE8C2F4DFF2F00A0AF14 /* DailyWatch Watch App */,
@@ -122,6 +151,28 @@
 			productReference = 9151FE882F4DFF2F00A0AF14 /* DailyWatch Watch App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		9184D9DE2F4F99740083F9EA /* DailyWatchWidgetExtensionExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9184D9F82F4F99750083F9EA /* Build configuration list for PBXNativeTarget "DailyWatchWidgetExtensionExtension" */;
+			buildPhases = (
+				9184D9DB2F4F99740083F9EA /* Sources */,
+				9184D9DC2F4F99740083F9EA /* Frameworks */,
+				9184D9DD2F4F99740083F9EA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				9184D9E52F4F99740083F9EA /* DailyWatchWidgetExtension */,
+			);
+			name = DailyWatchWidgetExtensionExtension;
+			packageProductDependencies = (
+			);
+			productName = DailyWatchWidgetExtensionExtension;
+			productReference = 9184D9DF2F4F99740083F9EA /* DailyWatchWidgetExtensionExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -132,10 +183,10 @@
 				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
-					9151FE812F4DFF2F00A0AF14 = {
+					9151FE872F4DFF2F00A0AF14 = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
-					9151FE872F4DFF2F00A0AF14 = {
+					9184D9DE2F4F99740083F9EA = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
 				};
@@ -157,21 +208,21 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				9151FE812F4DFF2F00A0AF14 /* DailyWatch */,
 				9151FE872F4DFF2F00A0AF14 /* DailyWatch Watch App */,
+				9184D9DE2F4F99740083F9EA /* DailyWatchWidgetExtensionExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		9151FE802F4DFF2F00A0AF14 /* Resources */ = {
+		9151FE862F4DFF2F00A0AF14 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		9151FE862F4DFF2F00A0AF14 /* Resources */ = {
+		9184D9DD2F4F99740083F9EA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -188,13 +239,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9184D9DB2F4F99740083F9EA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		9151FE8B2F4DFF2F00A0AF14 /* PBXTargetDependency */ = {
+		9184D9F22F4F99750083F9EA /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 9151FE872F4DFF2F00A0AF14 /* DailyWatch Watch App */;
-			targetProxy = 9151FE8A2F4DFF2F00A0AF14 /* PBXContainerItemProxy */;
+			target = 9184D9DE2F4F99740083F9EA /* DailyWatchWidgetExtensionExtension */;
+			targetProxy = 9184D9F12F4F99750083F9EA /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -320,6 +378,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "DailyWatch Watch App/DailyWatch Watch App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -355,6 +414,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "DailyWatch Watch App/DailyWatch Watch App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -386,42 +446,74 @@
 			};
 			name = Release;
 		};
-		9151FE9A2F4DFF3100A0AF14 /* Debug */ = {
+		9184D9F52F4F99750083F9EA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = DailyWatchWidgetExtensionExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7LZ9ZT2Z5B;
-				INFOPLIST_KEY_CFBundleDisplayName = DailyWatch;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DailyWatchWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DailyWatchWidgetExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.intellidream.daily.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.intellidream.daily.watchkitapp.DailyWatchWidgetExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SDKROOT = iphoneos;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Debug;
 		};
-		9151FE9B2F4DFF3100A0AF14 /* Release */ = {
+		9184D9F62F4F99750083F9EA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = DailyWatchWidgetExtensionExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7LZ9ZT2Z5B;
-				INFOPLIST_KEY_CFBundleDisplayName = DailyWatch;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DailyWatchWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DailyWatchWidgetExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.intellidream.daily.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.intellidream.daily.watchkitapp.DailyWatchWidgetExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SDKROOT = iphoneos;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Release;
 		};
@@ -446,11 +538,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		9151FE992F4DFF3100A0AF14 /* Build configuration list for PBXNativeTarget "DailyWatch" */ = {
+		9184D9F82F4F99750083F9EA /* Build configuration list for PBXNativeTarget "DailyWatchWidgetExtensionExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				9151FE9A2F4DFF3100A0AF14 /* Debug */,
-				9151FE9B2F4DFF3100A0AF14 /* Release */,
+				9184D9F52F4F99750083F9EA /* Debug */,
+				9184D9F62F4F99750083F9EA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

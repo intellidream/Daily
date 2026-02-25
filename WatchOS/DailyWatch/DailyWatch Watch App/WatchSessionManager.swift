@@ -28,13 +28,45 @@ class WatchSessionManager: ObservableObject {
     private var pollTimer: Timer?
     
     private init() {
-        self.baseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey)
+        let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+        self.baseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
         self.checkExistingSession()
     }
     
     func checkExistingSession() {
-        if let token = UserDefaults.standard.string(forKey: "supabase_access_token") {
-            self.setAuthenticated(with: token)
+        if let accessToken = UserDefaults.standard.string(forKey: "supabase_access_token"),
+           let refreshToken = UserDefaults.standard.string(forKey: "supabase_refresh_token") {
+            
+            // Initialize the main client right away so auth can take over
+            let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+            self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
+            
+            Task {
+                do {
+                    // This command tells the Supabase Swift library to take ownership of these tokens.
+                    // It will automatically refresh them in the background when they expire!
+                    try await self.supabaseClient?.auth.setSession(accessToken: accessToken, refreshToken: refreshToken)
+                    
+                    DispatchQueue.main.async {
+                        // Extract user_id from the active JWT token
+                        if let userId = self.extractUserId(from: accessToken) {
+                            self.currentUserId = userId
+                        }
+                        self.isAuthenticated = true
+                        self.isPairing = false
+                        
+                        // Mirror the active token to the Widget Extension App Group
+                        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                            groupPrefs.set(accessToken, forKey: "supabase_access_token")
+                        }
+                    }
+                } catch {
+                    // Session restoration failed (e.g., refresh token is completely dead/revoked)
+                    DispatchQueue.main.async {
+                        self.logout()
+                    }
+                }
+            }
         } else {
             self.generatePairingCode()
         }
@@ -87,14 +119,35 @@ class WatchSessionManager: ObservableObject {
                 
                 if let pairing = pairings.first {
                     if let token = pairing.access_token, !token.isEmpty {
-                        // We got the token!
+                        let refresh = pairing.refresh_token ?? ""
+                        
                         DispatchQueue.main.async {
                             self.pollTimer?.invalidate()
                             UserDefaults.standard.set(token, forKey: "supabase_access_token")
-                            if let refresh = pairing.refresh_token {
-                                UserDefaults.standard.set(refresh, forKey: "supabase_refresh_token")
+                            UserDefaults.standard.set(refresh, forKey: "supabase_refresh_token")
+                        }
+                        
+                        // Hand the tokens over to the official Auth module so it manages refreshing
+                        let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+                        self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
+                        
+                        do {
+                            try await self.supabaseClient?.auth.setSession(accessToken: token, refreshToken: refresh)
+                            
+                            DispatchQueue.main.async {
+                                if let userId = self.extractUserId(from: token) {
+                                    self.currentUserId = userId
+                                }
+                                self.isAuthenticated = true
+                                self.isPairing = false
+                                
+                                // Mirror the active token to the Widget Extension App Group
+                                if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                                    groupPrefs.set(token, forKey: "supabase_access_token")
+                                }
                             }
-                            self.setAuthenticated(with: token)
+                        } catch {
+                            print("Failed to initialize Auth session: \(error)")
                         }
                         
                         // Clean up the row
@@ -116,28 +169,13 @@ class WatchSessionManager: ObservableObject {
         }
     }
     
-    func setAuthenticated(with token: String) {
-        let options = SupabaseClientOptions(
-            global: .init(headers: ["Authorization": "Bearer \(token)"])
-        )
-        self.supabaseClient = SupabaseClient(
-            supabaseURL: supabaseUrl,
-            supabaseKey: supabaseAnonKey,
-            options: options
-        )
-        
-        // Extract user_id from the JWT token
-        if let userId = extractUserId(from: token) {
-            self.currentUserId = userId
-        }
-        
-        self.isAuthenticated = true
-        self.isPairing = false
-    }
-    
     func logout() {
         UserDefaults.standard.removeObject(forKey: "supabase_access_token")
         UserDefaults.standard.removeObject(forKey: "supabase_refresh_token")
+        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+            groupPrefs.removeObject(forKey: "supabase_access_token")
+        }
+        
         self.isAuthenticated = false
         self.currentUserId = nil
         self.supabaseClient = nil
