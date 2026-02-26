@@ -2,7 +2,7 @@ import Foundation
 import Supabase
 import Combine
 import SwiftUI
-
+import WatchConnectivity
 // Struct to match the Supabase table for decoding
 struct WatchPairing: Codable {
     let code: String
@@ -11,7 +11,7 @@ struct WatchPairing: Codable {
     let created_at: String?
 }
 
-class WatchSessionManager: ObservableObject {
+class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     static let shared = WatchSessionManager()
     
     @Published var isAuthenticated: Bool = false
@@ -26,10 +26,19 @@ class WatchSessionManager: ObservableObject {
     var supabaseClient: SupabaseClient?
     private var baseClient: SupabaseClient
     private var pollTimer: Timer?
+    private var authStateTask: Task<Void, Never>?
     
-    private init() {
+    private override init() {
         let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
         self.baseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
+        super.init()
+        
+        if WCSession.isSupported() {
+            let session = WCSession.default
+            session.delegate = self
+            session.activate()
+        }
+        
         self.checkExistingSession()
     }
     
@@ -40,6 +49,7 @@ class WatchSessionManager: ObservableObject {
             // Initialize the main client right away so auth can take over
             let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
             self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
+            self.listenToAuthState()
             
             Task {
                 do {
@@ -130,6 +140,7 @@ class WatchSessionManager: ObservableObject {
                         // Hand the tokens over to the official Auth module so it manages refreshing
                         let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
                         self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
+                        self.listenToAuthState()
                         
                         do {
                             try await self.supabaseClient?.auth.setSession(accessToken: token, refreshToken: refresh)
@@ -170,6 +181,7 @@ class WatchSessionManager: ObservableObject {
     }
     
     func logout() {
+        authStateTask?.cancel()
         UserDefaults.standard.removeObject(forKey: "supabase_access_token")
         UserDefaults.standard.removeObject(forKey: "supabase_refresh_token")
         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
@@ -202,5 +214,77 @@ class WatchSessionManager: ObservableObject {
         }
         
         return UUID(uuidString: sub)
+    }
+    
+    private func listenToAuthState() {
+        authStateTask?.cancel()
+        authStateTask = Task { [weak self] in
+            guard let self = self else { return }
+            // Wait for supabaseClient to be truly ready, if not already
+            guard let client = self.supabaseClient else { return }
+            
+            for await state in client.auth.authStateChanges {
+                if let session = state.session {
+                    DispatchQueue.main.async {
+                        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                            groupPrefs.set(session.accessToken, forKey: "supabase_access_token")
+                        }
+                        UserDefaults.standard.set(session.accessToken, forKey: "supabase_access_token")
+                        UserDefaults.standard.set(session.refreshToken, forKey: "supabase_refresh_token")
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - WCSessionDelegate
+    
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        print("WCSession activation state: \(activationState.rawValue)")
+    }
+    
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any] = [:]) {
+        handleReceivedSession(userInfo: userInfo)
+    }
+    
+    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String : Any]) {
+        handleReceivedSession(userInfo: applicationContext)
+    }
+    
+    private func handleReceivedSession(userInfo: [String: Any]) {
+        guard let token = userInfo["supabase_access_token"] as? String, !token.isEmpty,
+              let refresh = userInfo["supabase_refresh_token"] as? String else {
+            return
+        }
+        
+        DispatchQueue.main.async {
+            UserDefaults.standard.set(token, forKey: "supabase_access_token")
+            UserDefaults.standard.set(refresh, forKey: "supabase_refresh_token")
+            
+            if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                groupPrefs.set(token, forKey: "supabase_access_token")
+            }
+            
+            if let userId = self.extractUserId(from: token) {
+                self.currentUserId = userId
+            }
+            
+            self.isAuthenticated = true
+            self.isPairing = false
+        }
+        
+        Task {
+            do {
+                if self.supabaseClient == nil {
+                     let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+                     self.supabaseClient = SupabaseClient(supabaseURL: self.supabaseUrl, supabaseKey: self.supabaseAnonKey, options: options)
+                     self.listenToAuthState()
+                }
+                
+                try await self.supabaseClient?.auth.setSession(accessToken: token, refreshToken: refresh)
+            } catch {
+                print("Failed to update auth session from WCSession: \(error)")
+            }
+        }
     }
 }

@@ -20,6 +20,26 @@ struct BubblesView: View {
         return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: String]
     }
     
+    private func parseDate(_ dateString: String) -> Date? {
+        var norm = dateString.replacingOccurrences(of: " ", with: "T")
+        // If the date string from C# lacks a timezone, append 'Z' to treat it as UTC
+        if !norm.contains("Z") && !norm.hasSuffix("+00") && !norm.contains("+0") && !norm.contains("-0") {
+            if norm.count > 10 { // Ensure it's not just a short string
+                let lastChar = norm.last!
+                if lastChar.isNumber {
+                    norm += "Z"
+                }
+            }
+        }
+        
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = isoFormatter.date(from: norm) { return d }
+        
+        let fallbackFormatter = ISO8601DateFormatter()
+        return fallbackFormatter.date(from: norm)
+    }
+    
     struct DailyTotal: Identifiable {
         let id = UUID()
         let date: Date
@@ -199,7 +219,7 @@ struct BubblesView: View {
                     .value
                 
                 let todayString = formatter.string(from: todayStart)
-                let todayLogs = logs.filter { $0.logged_at >= todayString }
+                let todayLogs = logs.filter { $0.logged_at.replacingOccurrences(of: " ", with: "T") >= todayString }
                 let sum = todayLogs.reduce(0.0) { $0 + $1.value }
                 
                 var tWater = 0.0
@@ -219,12 +239,8 @@ struct BubblesView: View {
                     totalsByDay[d] = 0.0
                 }
                 
-                let isoFormatter = ISO8601DateFormatter()
-                isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                let fallbackFormatter = ISO8601DateFormatter()
-                
                 for log in logs {
-                    if let date = isoFormatter.date(from: log.logged_at) ?? fallbackFormatter.date(from: log.logged_at) {
+                    if let date = self.parseDate(log.logged_at) {
                         let day = calendar.startOfDay(for: date)
                         if totalsByDay[day] != nil {
                             totalsByDay[day]! += log.value
@@ -241,6 +257,7 @@ struct BubblesView: View {
                     self.todayTotal = Int(sum)
                     self.todayWater = Int(tWater)
                     self.todayCoffee = Int(tCoffee)
+                    WidgetCenter.shared.reloadAllTimelines() // Force complication update on load
                 }
             } catch {
                 print("Error fetching bubbles: \(error)")
@@ -284,11 +301,7 @@ struct BubblesView: View {
     }
     
     private func formatTime(dateString: String) -> String {
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let fallbackFormatter = ISO8601DateFormatter()
-        
-        guard let date = isoFormatter.date(from: dateString) ?? fallbackFormatter.date(from: dateString) else { return "" }
+        guard let date = self.parseDate(dateString) else { return "" }
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: date)

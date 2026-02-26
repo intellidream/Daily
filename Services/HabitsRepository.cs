@@ -27,8 +27,8 @@ namespace Daily.Services
                                 .ToListAsync();
             
             return localLogs
+                .Select(l => l.ToDomain()) // Map safely to UTC domain objects first
                 .Where(l => l.LoggedAt >= startUtc && l.LoggedAt < endUtc)
-                .Select(l => l.ToDomain())
                 .OrderByDescending(l => l.LoggedAt)
                 .ToList();
         }

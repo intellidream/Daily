@@ -15,11 +15,11 @@ namespace Daily.Services
                 HabitType = local.HabitType,
                 Value = local.Value,
                 Unit = local.Unit,
-                LoggedAt = local.LoggedAt,
+                LoggedAt = SafeUtc(local.LoggedAt),
                 Metadata = local.Metadata,
-                CreatedAt = local.CreatedAt,
-                UpdatedAt = local.UpdatedAt,
-                SyncedAt = local.SyncedAt,
+                CreatedAt = SafeUtc(local.CreatedAt),
+                UpdatedAt = SafeUtc(local.UpdatedAt),
+                SyncedAt = SafeUtc(local.SyncedAt),
                 IsDeleted = local.IsDeleted
             };
         }
@@ -33,11 +33,11 @@ namespace Daily.Services
                 HabitType = domain.HabitType,
                 Value = domain.Value,
                 Unit = domain.Unit,
-                LoggedAt = domain.LoggedAt,
+                LoggedAt = domain.LoggedAt.ToUniversalTime(),
                 Metadata = domain.Metadata,
-                CreatedAt = domain.CreatedAt,
-                UpdatedAt = domain.UpdatedAt,
-                SyncedAt = domain.SyncedAt,
+                CreatedAt = domain.CreatedAt.ToUniversalTime(),
+                UpdatedAt = domain.UpdatedAt?.ToUniversalTime(),
+                SyncedAt = domain.SyncedAt?.ToUniversalTime(),
                 IsDeleted = domain.IsDeleted
             };
         }
@@ -53,9 +53,9 @@ namespace Daily.Services
                 HabitType = local.HabitType,
                 TargetValue = local.TargetValue,
                 Unit = local.Unit,
-                CreatedAt = local.CreatedAt,
-                UpdatedAt = local.UpdatedAt,
-                SyncedAt = local.SyncedAt,
+                CreatedAt = SafeUtc(local.CreatedAt),
+                UpdatedAt = SafeUtc(local.UpdatedAt),
+                SyncedAt = SafeUtc(local.SyncedAt),
                 IsDeleted = local.IsDeleted
             };
         }
@@ -69,9 +69,9 @@ namespace Daily.Services
                 HabitType = domain.HabitType,
                 TargetValue = domain.TargetValue,
                 Unit = domain.Unit,
-                CreatedAt = domain.CreatedAt,
-                UpdatedAt = domain.UpdatedAt,
-                SyncedAt = domain.SyncedAt,
+                CreatedAt = domain.CreatedAt.ToUniversalTime(),
+                UpdatedAt = domain.UpdatedAt?.ToUniversalTime(),
+                SyncedAt = domain.SyncedAt?.ToUniversalTime(),
                 IsDeleted = domain.IsDeleted
             };
         }
@@ -85,12 +85,12 @@ namespace Daily.Services
                 Id = GenerateGuid(local.Id), // Use consistent hash ID
                 UserId = Guid.Parse(local.UserId),
                 HabitType = local.HabitType,
-                Date = local.Date,
+                Date = SafeUtc(local.Date),
                 TotalValue = local.TotalValue,
                 LogCount = local.LogCount,
                 Metadata = local.Metadata,
-                CreatedAt = local.CreatedAt,
-                UpdatedAt = local.UpdatedAt
+                CreatedAt = SafeUtc(local.CreatedAt),
+                UpdatedAt = SafeUtc(local.UpdatedAt)
             };
         }
 
@@ -105,12 +105,12 @@ namespace Daily.Services
                 Id = strId,
                 UserId = domain.UserId.ToString(),
                 HabitType = domain.HabitType,
-                Date = domain.Date,
+                Date = domain.Date.ToUniversalTime(),
                 TotalValue = domain.TotalValue,
                 LogCount = domain.LogCount,
                 Metadata = domain.Metadata,
-                CreatedAt = domain.CreatedAt,
-                UpdatedAt = domain.UpdatedAt,
+                CreatedAt = domain.CreatedAt.ToUniversalTime(),
+                UpdatedAt = domain.UpdatedAt?.ToUniversalTime(),
                 SyncedAt = DateTime.UtcNow // If coming from Domain (Remote), it is synced. 
             };
         }
@@ -142,7 +142,7 @@ namespace Daily.Services
                             ? new List<string>() 
                             : System.Text.Json.JsonSerializer.Deserialize<List<string>>(local.InterestsJson) ?? new List<string>(),
                 // Ensure UTC Kind for correct serialization
-                UpdatedAt = DateTime.SpecifyKind(local.UpdatedAt, DateTimeKind.Utc) 
+                UpdatedAt = SafeUtc(local.UpdatedAt) 
             };
         }
 
@@ -172,6 +172,22 @@ namespace Daily.Services
                 InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests),
                 UpdatedAt = domain.UpdatedAt
             };
+        }
+
+        // --- Date Parsing Helpers for SQLite-net-pcl (Kind preservation drift) ---
+        private static DateTime SafeUtc(DateTime dt)
+        {
+            return dt.Kind == DateTimeKind.Unspecified 
+                ? DateTime.SpecifyKind(dt, DateTimeKind.Utc) 
+                : dt.ToUniversalTime();
+        }
+
+        private static DateTime? SafeUtc(DateTime? dt)
+        {
+            if (!dt.HasValue) return null;
+            return dt.Value.Kind == DateTimeKind.Unspecified 
+                ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc) 
+                : dt.Value.ToUniversalTime();
         }
 
         // --- Helpers ---
