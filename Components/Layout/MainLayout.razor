@@ -69,6 +69,7 @@
     private bool _isRefreshing;
     private bool _isDarkMode = true;
     private bool _isAppBarExpanded = true;
+    private System.Threading.Timer? _uiRefreshTimer;
 
     protected override void OnInitialized()
     {
@@ -83,6 +84,13 @@
         }
 
         UpdateLayoutClasses();
+
+        // 15-Minute Global Auto-Refresh (UI + Auth Heartbeat)
+        // Starts after 15mins, repeats every 15mins
+        _uiRefreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(TriggerLocalRefresh);
+        }, null, TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(15));
     }
     private void ToggleAppBar()
     {
@@ -255,6 +263,8 @@
 
     public void Dispose()
     {
+        _uiRefreshTimer?.Dispose();
+        
         if (Application.Current != null)
         {
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
