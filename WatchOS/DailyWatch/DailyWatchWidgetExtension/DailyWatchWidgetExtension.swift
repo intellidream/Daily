@@ -120,6 +120,14 @@ struct DailyWatchWidgetExtensionEntryView : View {
     var entry: Provider.Entry
     @Environment(\.widgetFamily) var family
 
+    private func getSmokesColor(total: Int, baseline: Int) -> Color {
+        if total == 0 { return .green }
+        let ratio = Double(total) / Double(max(baseline, 1))
+        if ratio >= 1.0 { return .red }
+        if ratio >= 0.5 { return .orange }
+        return .yellow
+    }
+
     var body: some View {
         if !entry.isLoggedIn {
             Text("Login App")
@@ -136,9 +144,10 @@ struct DailyWatchWidgetExtensionEntryView : View {
                     VStack(spacing: 0) {
                         Image(systemName: showWater ? "drop.fill" : "flame.fill")
                             .font(.system(size: 12))
-                            .foregroundColor(showWater ? .blue : .orange)
+                            .foregroundColor(showWater ? .blue : getSmokesColor(total: entry.smokesTotal, baseline: entry.smokesBaseline))
                         Text("\(showWater ? entry.waterTotal : entry.smokesTotal)")
                             .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(showWater ? .primary : getSmokesColor(total: entry.smokesTotal, baseline: entry.smokesBaseline))
                     }
                 }
             case .accessoryRectangular:
@@ -150,7 +159,7 @@ struct DailyWatchWidgetExtensionEntryView : View {
                                 .font(.system(size: 16, weight: .bold, design: .rounded))
                         }
                         HStack {
-                            Image(systemName: "flame.fill").font(.system(size: 14)).foregroundColor(.orange)
+                            Image(systemName: "flame.fill").font(.system(size: 14)).foregroundColor(getSmokesColor(total: entry.smokesTotal, baseline: entry.smokesBaseline))
                             Text("\(entry.smokesTotal) total")
                                 .font(.system(size: 16, weight: .medium, design: .rounded))
                                 .foregroundColor(.secondary)
@@ -175,21 +184,21 @@ struct DailyWatchWidgetExtensionEntryView : View {
                         
                         // Smokes ring background
                         Circle()
-                            .stroke(Color.orange.opacity(0.3), lineWidth: 4)
+                            .stroke(getSmokesColor(total: entry.smokesTotal, baseline: entry.smokesBaseline).opacity(0.3), lineWidth: 4)
                             .padding(6) // offset for imbricated effect
                         
                         // Smokes ring foreground (using dynamic smokesBaseline)
                         let smokesProgress = CGFloat(entry.smokesTotal) / CGFloat(max(entry.smokesBaseline, 1))
                         Circle()
                             .trim(from: 0, to: min(smokesProgress, 1.0))
-                            .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .stroke(getSmokesColor(total: entry.smokesTotal, baseline: entry.smokesBaseline), style: StrokeStyle(lineWidth: 4, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                             .padding(6)
                     }
                     .frame(width: 44, height: 44)
                 }
             case .accessoryInline:
-                Text("💧 \(entry.waterTotal)  🔥 \(entry.smokesTotal)")
+                Text("💧 \(entry.waterTotal) \(Text("🔥 \(entry.smokesTotal)").foregroundColor(getSmokesColor(total: entry.smokesTotal, baseline: entry.smokesBaseline)))")
             case .accessoryCorner:
                 Image(systemName: "drop.fill").font(.system(size: 14))
             default:

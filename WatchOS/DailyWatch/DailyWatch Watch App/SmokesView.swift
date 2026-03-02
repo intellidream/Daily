@@ -56,13 +56,21 @@ struct SmokesView: View {
         let is_deleted = true
     }
     
+    private func getSmokesColor(total: Int, baseline: Int) -> Color {
+        if total == 0 { return .green }
+        let ratio = Double(total) / Double(max(baseline, 1))
+        if ratio >= 1.0 { return .red }
+        if ratio >= 0.5 { return .orange }
+        return .yellow
+    }
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
                 // Header
                 HStack {
                     Image(systemName: "flame.fill")
-                        .foregroundColor(.red)
+                        .foregroundColor(getSmokesColor(total: todayTotal, baseline: dailyGoal))
                     Text("Smokes")
                         .font(.headline)
                         .fontWeight(.bold)
@@ -78,7 +86,7 @@ struct SmokesView: View {
                         
                         let remaining = max(0, dailyGoal - todayTotal)
                         let progress = CGFloat(remaining) / CGFloat(max(dailyGoal, 1))
-                        let ringColor = progress < 0.25 ? Color.red : (progress < 0.5 ? Color.orange : Color.green)
+                        let ringColor = getSmokesColor(total: todayTotal, baseline: dailyGoal) // Use dynamic color
                         
                         Circle()
                             .trim(from: 0.0, to: progress)
@@ -154,7 +162,7 @@ struct SmokesView: View {
                                 
                                 Image(systemName: isHeated ? "bolt.fill" : "flame.fill")
                                     .font(.system(size: 12))
-                                    .foregroundColor(isHeated ? .blue : .red)
+                                    .foregroundColor(getSmokesColor(total: todayTotal, baseline: dailyGoal))
                                     
                                 Text("1 " + (isHeated ? "Heat" : "Cig"))
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
