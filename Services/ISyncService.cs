@@ -10,6 +10,7 @@ namespace Daily.Services
         string LastSyncMessage { get; }
         string DebugLog { get; }
         event Action? OnDebugLogUpdated;
+        event Action? OnPreferencesPulled;
         void Log(string message);
     }
 }

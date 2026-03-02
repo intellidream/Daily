@@ -36,6 +36,17 @@ namespace Daily.Services
             _databaseService = databaseService;
             _syncService = syncService;
 
+            // Subscribe to Background Sync Updates
+            _syncService.OnPreferencesPulled += () => 
+            {
+                Console.WriteLine("[SettingsService] Preferences Pulled event received. Reloading...");
+                Task.Run(async () => 
+                {
+                    try { await ReloadFromDatabaseAsync(); }
+                    catch(Exception ex) { Console.WriteLine($"[SettingsService] Reload Failed: {ex}"); }
+                });
+            };
+
             // Setup Auth Listener ONCE in Constructor
              _supabase.Auth.AddStateChangedListener((sender, state) => 
             {
@@ -253,6 +264,26 @@ namespace Daily.Services
                 InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests),
                 UpdatedAt = domain.UpdatedAt
             };
+        }
+
+        public async Task ReloadFromDatabaseAsync()
+        {
+            var userId = IsAuthenticated ? CurrentUserId : Guid.Empty.ToString();
+            
+            var localTarget = await _databaseService.Connection.Table<LocalUserPreferences>()
+                                   .Where(x => x.Id == userId)
+                                   .FirstOrDefaultAsync();
+
+            if (localTarget != null)
+            {
+                _currentSettings = ToDomain(localTarget);
+                Console.WriteLine($"[SettingsService] Reload success. Notifying UI. (UpdatedAt: {_currentSettings.UpdatedAt})");
+                OnSettingsChanged?.Invoke();
+            }
+            else
+            {
+                Console.WriteLine("[SettingsService] Reload skipped: No local target found.");
+            }
         }
     }
 }

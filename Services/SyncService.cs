@@ -293,6 +293,7 @@ namespace Daily.Services
         // --- Helper for Debugging ---
         public string DebugLog { get; private set; } = "";
         public event Action? OnDebugLogUpdated;
+        public event Action? OnPreferencesPulled;
 
         public void Log(string message) => LogDebug(message);
 
@@ -383,6 +384,7 @@ namespace Daily.Services
                                         updatedLocal.SyncedAt = DateTime.UtcNow;
                                         await _databaseService.Connection.InsertOrReplaceAsync(updatedLocal);
                                         LogDebug($"[SyncService] Conflict Resolved: Pulled Remote Version.");
+                                        OnPreferencesPulled?.Invoke();
                                     }
                                 }
                                 else
@@ -477,6 +479,10 @@ namespace Daily.Services
                     }
                 }
                 Console.WriteLine($"[SyncService] Pull Preferences Complete. Merged {successfulMergess} records.");
+                if (successfulMergess > 0)
+                {
+                    OnPreferencesPulled?.Invoke();
+                }
                 return successfulMergess;
             }
             catch(Exception e) 

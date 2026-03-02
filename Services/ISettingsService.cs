@@ -14,5 +14,6 @@ namespace Daily.Services
 
         Task InitializeAsync();
         Task SaveSettingsAsync();
+        Task ReloadFromDatabaseAsync();
     }
 }

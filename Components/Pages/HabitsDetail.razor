@@ -655,6 +655,7 @@
         HabitsService.OnHabitsUpdated += RefreshDataVoid;
         HabitsService.OnViewTypeChanged += OnViewTypeChanged;
         RefreshService.DetailRefreshRequested += RefreshDataAsync;
+        SettingsService.OnSettingsChanged += OnSettingsChanged;
         
         // Sync initial view type sync
         _viewType = HabitsService.CurrentViewType;
@@ -667,6 +668,16 @@
         HabitsService.OnHabitsUpdated -= RefreshDataVoid;
         HabitsService.OnViewTypeChanged -= OnViewTypeChanged;
         RefreshService.DetailRefreshRequested -= RefreshDataAsync;
+        SettingsService.OnSettingsChanged -= OnSettingsChanged;
+    }
+
+    private void OnSettingsChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        });
     }
 
     private void OnViewTypeChanged()
