@@ -17,9 +17,25 @@ struct Provider: AppIntentTimelineProvider {
     }
     
     func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
-        let entry = await fetchTodayStats(configuration: configuration)
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
-        return Timeline(entries: [entry], policy: .after(nextUpdate))
+        let baseEntry = await fetchTodayStats(configuration: configuration)
+        let currentDate = Date()
+        var entries: [SimpleEntry] = []
+        
+        // Generate an entry every 5 minutes for the next 30 minutes to alternate views without network calls
+        for minuteOffset in stride(from: 0, to: 35, by: 5) {
+            let entryDate = Calendar.current.date(byAdding: .minute, value: minuteOffset, to: currentDate)!
+            entries.append(SimpleEntry(
+                date: entryDate,
+                configuration: baseEntry.configuration,
+                waterTotal: baseEntry.waterTotal,
+                smokesTotal: baseEntry.smokesTotal,
+                isLoggedIn: baseEntry.isLoggedIn
+            ))
+        }
+        
+        // The policy determines when the OS provides next network sync cycle
+        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: currentDate)!
+        return Timeline(entries: entries, policy: .after(nextUpdate))
     }
     
     private func fetchTodayStats(configuration: ConfigurationAppIntent) async -> SimpleEntry {
@@ -101,29 +117,64 @@ struct DailyWatchWidgetExtensionEntryView : View {
         } else {
             switch family {
             case .accessoryCircular:
+                let currentMinute = Calendar.current.component(.minute, from: entry.date)
+                // Switch every 5 minutes: 0-4 = water, 5-9 = smokes, etc.
+                let showWater = (currentMinute % 10) < 5
                 ZStack {
                     AccessoryWidgetBackground()
                     VStack(spacing: 0) {
-                        Image(systemName: "drop.fill").font(.system(size: 12))
-                        Text("\(entry.waterTotal)")
+                        Image(systemName: showWater ? "drop.fill" : "flame.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(showWater ? .blue : .orange)
+                        Text("\(showWater ? entry.waterTotal : entry.smokesTotal)")
                             .font(.system(size: 14, weight: .bold, design: .rounded))
                     }
                 }
             case .accessoryRectangular:
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Image(systemName: "drop.fill").font(.system(size: 14))
-                        Text("\(entry.waterTotal) ml")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Image(systemName: "drop.fill").font(.system(size: 14)).foregroundColor(.blue)
+                            Text("\(entry.waterTotal) ml")
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                        }
+                        HStack {
+                            Image(systemName: "flame.fill").font(.system(size: 14)).foregroundColor(.orange)
+                            Text("\(entry.smokesTotal) total")
+                                .font(.system(size: 16, weight: .medium, design: .rounded))
+                                .foregroundColor(.secondary)
+                        }
                     }
-                    HStack {
-                        Image(systemName: "flame.fill").font(.system(size: 14))
-                        Text("\(entry.smokesTotal) total")
-                            .font(.system(size: 16, weight: .medium, design: .rounded))
-                            .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Spacer()
+                    
+                    // Imbricated circles visual progress
+                    ZStack {
+                        // Water ring background
+                        Circle()
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 4)
+                        
+                        // Water ring foreground (assuming 2000ml goal for visual purposes)
+                        Circle()
+                            .trim(from: 0, to: min(CGFloat(entry.waterTotal) / 2000.0, 1.0))
+                            .stroke(Color.blue, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                        
+                        // Smokes ring background
+                        Circle()
+                            .stroke(Color.orange.opacity(0.3), lineWidth: 4)
+                            .padding(6) // offset for imbricated effect
+                        
+                        // Smokes ring foreground (assuming 10 smokes goal for visual purposes)
+                        Circle()
+                            .trim(from: 0, to: min(CGFloat(entry.smokesTotal) / 10.0, 1.0))
+                            .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .padding(6)
                     }
+                    .frame(width: 44, height: 44)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             case .accessoryInline:
                 Text("💧 \(entry.waterTotal)  🔥 \(entry.smokesTotal)")
             case .accessoryCorner:
