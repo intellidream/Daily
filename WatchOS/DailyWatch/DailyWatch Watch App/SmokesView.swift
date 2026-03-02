@@ -13,6 +13,14 @@ struct SmokesView: View {
     @State private var selectedLog: HabitLog?
     @State private var showDeleteConfirm: Bool = false
     
+    init() {
+        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
+           let cachedGoalStr = groupPrefs.string(forKey: "smokes_baseline"),
+           let cachedGoal = Int(cachedGoalStr) {
+            _dailyGoal = State(initialValue: cachedGoal)
+        }
+    }
+    
     private func parseMetadata(_ metadata: String?) -> [String: String]? {
         guard let data = metadata?.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: String]
@@ -230,11 +238,40 @@ struct SmokesView: View {
                 
                 let chartData = totalsByDay.map { DailyTotal(date: $0.key, total: $0.value) }
                     .sorted { $0.date < $1.date }
+                    
+                // Fetch dynamic goal
+                struct UserPreference: Decodable { let smokes_baseline: Int? }
+                var finalGoalStr = "20"
+                var finalGoalInt = 20
+                if let userId = WatchSessionManager.shared.currentUserId {
+                    do {
+                        let prefs: UserPreference = try await pClient
+                            .from("user_preferences")
+                            .select()
+                            .eq("id", value: userId.uuidString)
+                            .single()
+                            .execute()
+                            .value
+                        
+                        if let fetchedGoal = prefs.smokes_baseline {
+                            finalGoalInt = fetchedGoal
+                            finalGoalStr = String(finalGoalInt)
+                            
+                            // Save to App Group for Widget
+                            if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                                groupPrefs.set(finalGoalStr, forKey: "smokes_baseline")
+                            }
+                        }
+                    } catch {
+                        print("Error fetching dynamic smokes baseline: \(error)")
+                    }
+                }
                 
                 DispatchQueue.main.async {
                     self.historyLogs = todayLogs
                     self.weeklyTotals = chartData
                     self.todayTotal = Int(sum)
+                    self.dailyGoal = finalGoalInt
                     WidgetCenter.shared.reloadAllTimelines() // Force complication update on load
                 }
             } catch {

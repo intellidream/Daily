@@ -9,11 +9,11 @@ import AppIntents
 
 struct Provider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: ConfigurationAppIntent(), waterTotal: 850, smokesTotal: 3, isLoggedIn: true)
+        SimpleEntry(date: Date(), configuration: ConfigurationAppIntent(), waterTotal: 850, smokesTotal: 3, waterGoal: 2000, smokesBaseline: 20, isLoggedIn: true)
     }
 
     func snapshot(for configuration: ConfigurationAppIntent, in context: Context) async -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: configuration, waterTotal: 850, smokesTotal: 3, isLoggedIn: true)
+        SimpleEntry(date: Date(), configuration: configuration, waterTotal: 850, smokesTotal: 3, waterGoal: 2000, smokesBaseline: 20, isLoggedIn: true)
     }
     
     func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
@@ -29,6 +29,8 @@ struct Provider: AppIntentTimelineProvider {
                 configuration: baseEntry.configuration,
                 waterTotal: baseEntry.waterTotal,
                 smokesTotal: baseEntry.smokesTotal,
+                waterGoal: baseEntry.waterGoal,
+                smokesBaseline: baseEntry.smokesBaseline,
                 isLoggedIn: baseEntry.isLoggedIn
             ))
         }
@@ -41,8 +43,15 @@ struct Provider: AppIntentTimelineProvider {
     private func fetchTodayStats(configuration: ConfigurationAppIntent) async -> SimpleEntry {
         let date = Date()
         let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily")
+        
+        let waterGoalStr = groupPrefs?.string(forKey: "water_goal") ?? "2000"
+        let waterGoal = Int(waterGoalStr) ?? 2000
+        
+        let smokesBaselineStr = groupPrefs?.string(forKey: "smokes_baseline") ?? "20"
+        let smokesBaseline = Int(smokesBaselineStr) ?? 20
+        
         guard let token = groupPrefs?.string(forKey: "supabase_access_token") else {
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, isLoggedIn: false)
+            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: false)
         }
         
         let calendar = Calendar.current
@@ -55,7 +64,7 @@ struct Provider: AppIntentTimelineProvider {
         let endString = formatter.string(from: todayEnd)
         
         guard var components = URLComponents(string: "https://akkfouifxztnfwwiclwg.supabase.co/rest/v1/habits_logs") else {
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, isLoggedIn: true)
+            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         }
         components.queryItems = [
             URLQueryItem(name: "is_deleted", value: "eq.false"),
@@ -64,7 +73,7 @@ struct Provider: AppIntentTimelineProvider {
         ]
         
         guard let url = components.url else {
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, isLoggedIn: true)
+            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         }
         
         var req = URLRequest(url: url)
@@ -75,7 +84,7 @@ struct Provider: AppIntentTimelineProvider {
         do {
             let (data, rsp) = try await URLSession.shared.data(for: req)
             guard let httpResponse = rsp as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, isLoggedIn: true)
+                return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
             }
             struct LogDto: Decodable { let habit_type: String?; let value: Double? }
             let logs = try JSONDecoder().decode([LogDto].self, from: data)
@@ -86,9 +95,9 @@ struct Provider: AppIntentTimelineProvider {
                 if log.habit_type == "water" { water += log.value ?? 0.0 }
                 if log.habit_type == "smokes" { smokes += log.value ?? 0.0 }
             }
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: Int(water), smokesTotal: Int(smokes), isLoggedIn: true)
+            return SimpleEntry(date: date, configuration: configuration, waterTotal: Int(water), smokesTotal: Int(smokes), waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         } catch {
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, isLoggedIn: true)
+            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         }
     }
 
@@ -102,6 +111,8 @@ struct SimpleEntry: TimelineEntry {
     let configuration: ConfigurationAppIntent
     let waterTotal: Int
     let smokesTotal: Int
+    let waterGoal: Int
+    let smokesBaseline: Int
     let isLoggedIn: Bool
 }
 
@@ -155,9 +166,10 @@ struct DailyWatchWidgetExtensionEntryView : View {
                         Circle()
                             .stroke(Color.blue.opacity(0.3), lineWidth: 4)
                         
-                        // Water ring foreground (assuming 2000ml goal for visual purposes)
+                        // Water ring foreground (using dynamic waterGoal)
+                        let waterProgress = CGFloat(entry.waterTotal) / CGFloat(max(entry.waterGoal, 1))
                         Circle()
-                            .trim(from: 0, to: min(CGFloat(entry.waterTotal) / 2000.0, 1.0))
+                            .trim(from: 0, to: min(waterProgress, 1.0))
                             .stroke(Color.blue, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                         
@@ -166,9 +178,10 @@ struct DailyWatchWidgetExtensionEntryView : View {
                             .stroke(Color.orange.opacity(0.3), lineWidth: 4)
                             .padding(6) // offset for imbricated effect
                         
-                        // Smokes ring foreground (assuming 10 smokes goal for visual purposes)
+                        // Smokes ring foreground (using dynamic smokesBaseline)
+                        let smokesProgress = CGFloat(entry.smokesTotal) / CGFloat(max(entry.smokesBaseline, 1))
                         Circle()
-                            .trim(from: 0, to: min(CGFloat(entry.smokesTotal) / 10.0, 1.0))
+                            .trim(from: 0, to: min(smokesProgress, 1.0))
                             .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                             .padding(6)
@@ -211,5 +224,5 @@ extension ConfigurationAppIntent {
 #Preview(as: .accessoryRectangular) {
     DailyWatchWidgetExtension()
 } timeline: {
-    SimpleEntry(date: .now, configuration: .defaults, waterTotal: 850, smokesTotal: 2, isLoggedIn: true)
+    SimpleEntry(date: .now, configuration: .defaults, waterTotal: 850, smokesTotal: 2, waterGoal: 2000, smokesBaseline: 20, isLoggedIn: true)
 }

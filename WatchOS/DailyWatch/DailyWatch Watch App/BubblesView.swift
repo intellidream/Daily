@@ -15,6 +15,14 @@ struct BubblesView: View {
     @State private var selectedLog: HabitLog?
     @State private var showDeleteConfirm: Bool = false
     
+    init() {
+        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
+           let cachedGoalStr = groupPrefs.string(forKey: "water_goal"),
+           let cachedGoal = Int(cachedGoalStr) {
+            _dailyGoal = State(initialValue: cachedGoal)
+        }
+    }
+    
     private func parseMetadata(_ metadata: String?) -> [String: String]? {
         guard let data = metadata?.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: String]
@@ -250,6 +258,33 @@ struct BubblesView: View {
                 
                 let chartData = totalsByDay.map { DailyTotal(date: $0.key, total: $0.value) }
                     .sorted { $0.date < $1.date }
+                    
+                // Fetch dynamic goal
+                struct HabitGoal: Decodable { let target_value: Double? }
+                var finalGoalStr = "2000"
+                var finalGoalInt = 2000
+                do {
+                    let goals: [HabitGoal] = try await pClient
+                        .from("habit_goals")
+                        .select()
+                        .eq("habit_type", value: "water")
+                        .eq("is_deleted", value: false)
+                        .limit(1)
+                        .execute()
+                        .value
+                    
+                    if let fetchedGoal = goals.first?.target_value {
+                        finalGoalInt = Int(fetchedGoal)
+                        finalGoalStr = String(finalGoalInt)
+                        
+                        // Save to App Group for Widget
+                        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                            groupPrefs.set(finalGoalStr, forKey: "water_goal")
+                        }
+                    }
+                } catch {
+                    print("Error fetching dynamic water goal: \(error)")
+                }
                 
                 DispatchQueue.main.async {
                     self.historyLogs = todayLogs
@@ -257,6 +292,7 @@ struct BubblesView: View {
                     self.todayTotal = Int(sum)
                     self.todayWater = Int(tWater)
                     self.todayCoffee = Int(tCoffee)
+                    self.dailyGoal = finalGoalInt
                     WidgetCenter.shared.reloadAllTimelines() // Force complication update on load
                 }
             } catch {
