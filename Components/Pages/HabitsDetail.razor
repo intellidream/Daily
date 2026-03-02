@@ -6,6 +6,7 @@
 @inject IRefreshService RefreshService
 @inject ISnackbar Snackbar
 @inject ISettingsService SettingsService
+@inject IFeedbackService FeedbackService
 @implements IDisposable
 
 <div class="d-flex flex-column h-100 pb-4" style="overflow-y: auto;">
@@ -803,6 +804,8 @@
     
     private async Task AddSmoke(string type = "Cigarette")
     {
+          await FeedbackService.PlaySmokeFeedbackAsync();
+
           _isLoading = true;
           StateHasChanged();
           
@@ -1093,6 +1096,8 @@
     
     private async Task AddDrink(DrinkType drink)
     {
+        await FeedbackService.PlayWaterFeedbackAsync();
+        
         var date = _viewDate ?? DateTime.Now;
         if (date.Date != DateTime.Now.Date) date = date.Date.AddHours(12); // Noon for past dates
         else date = DateTime.Now;

@@ -5,6 +5,7 @@
 @inject IRefreshService RefreshService
 @inject ISettingsService SettingsService
 @inject IWindowManagerService WindowManager
+@inject IFeedbackService FeedbackService
 @implements IDisposable
 
 <div class="d-flex align-center mb-1 flex-grow-1" style="width: 100%; gap: 2px;">
@@ -348,6 +349,7 @@
     {
          await HabitsService.AddLogAsync("smokes", 1, "cig", DateTime.Now, null);
          _smokesCurrentValue = await HabitsService.GetDailyProgressAsync("smokes", DateTime.Now);
+         await FeedbackService.PlaySmokeFeedbackAsync();
     }
 
     private void OpenSettings()
@@ -494,6 +496,7 @@
         try
         {
             await HabitsService.AddLogAsync("water", amount, unit, DateTime.Now, "{ \"drink\": \"" + name + "\" }");
+            await FeedbackService.PlayWaterFeedbackAsync();
         }
         catch (Exception ex)
         {
@@ -507,6 +510,7 @@
          try
          {
              await HabitsService.AddLogAsync("smokes", 1, "cig", DateTime.Now, metadata);
+             await FeedbackService.PlaySmokeFeedbackAsync();
          }
          catch (Exception ex)
          {

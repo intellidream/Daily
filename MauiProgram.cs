@@ -92,6 +92,9 @@ namespace Daily
 #endif
 
 
+            builder.Services.AddSingleton<Plugin.Maui.Audio.IAudioManager>(Plugin.Maui.Audio.AudioManager.Current);
+            builder.Services.AddSingleton<Daily.Services.IFeedbackService, Daily.Services.FeedbackService>();
+            
             builder.Services.AddSingleton<Daily.Services.IWidgetService, Daily.Services.WidgetService>();
             builder.Services.AddSingleton<Daily.Services.IWeatherService, Daily.Services.WeatherService>();
             builder.Services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();
