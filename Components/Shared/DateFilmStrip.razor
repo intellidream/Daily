@@ -94,6 +94,7 @@
     private double _startX;
     private double _scrollLeft;
     private bool _isDragging = false;
+    private bool _hasRendered = false;
 
     protected override void OnParametersSet()
     {
@@ -118,6 +119,15 @@
         }
     }
 
+    protected override async Task OnParametersSetAsync()
+    {
+        // Re-scroll if the selected date changed externally after initial render
+        if (_hasRendered)
+        {
+            await ScrollToSelected();
+        }
+    }
+
 
     
     private async Task ScrollToSelected()
@@ -125,19 +135,28 @@
        var index = _dates.FindIndex(d => d.Date == SelectedDate.Date);
        if(index >= 0)
        {
+           // Give the DOM a tiny fraction of a second to render the new elements if just initialized
+           await Task.Delay(50);
+           
            // Center the selected item
-           await JSRuntime.InvokeVoidAsync("eval", $@"
-                var el = document.getElementById('{_componentId}');
-                if(el) {{
-                    var children = el.children;
-                    if(children && children[{index}]) {{
-                        var child = children[{index}];
-                        var center = child.offsetLeft + child.offsetWidth / 2;
-                        var scroll = center - el.offsetWidth / 2;
-                        el.scrollTo({{ left: scroll, behavior: 'smooth' }});
-                    }}
-                }}
-           ");
+           try 
+           {
+               await JSRuntime.InvokeVoidAsync("eval", $@"
+                    setTimeout(() => {{
+                        var el = document.getElementById('{_componentId}');
+                        if(el) {{
+                            var children = el.children;
+                            if(children && children[{index}]) {{
+                                var child = children[{index}];
+                                var center = child.offsetLeft + child.offsetWidth / 2;
+                                var scroll = center - el.offsetWidth / 2;
+                                el.scrollTo({{ left: scroll, behavior: 'smooth' }});
+                            }}
+                        }}
+                    }}, 10);
+               ");
+           } 
+           catch { /* Ignore JS errors if component unmounted quickly */ }
        }
     }
 
@@ -228,8 +247,10 @@
             ");
             
             await JSRuntime.InvokeVoidAsync("initFilmStripDragRobust", _componentId);
-            await ScrollToSelected();
         }
+        
+        await ScrollToSelected();
+        _hasRendered = true;
     }
 
     private void OnMouseMove(MouseEventArgs e) {}
