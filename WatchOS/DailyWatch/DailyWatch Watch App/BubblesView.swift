@@ -362,25 +362,25 @@ struct BubblesView: View {
         }
         
         Task {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let nowString = formatter.string(from: Date())
+            
+            let newLog = HabitLog(
+                id: UUID(),
+                user_id: WatchSessionManager.shared.currentUserId,
+                habit_type: "water",
+                value: Double(amount),
+                unit: "ml",
+                logged_at: nowString,
+                metadata: "{ \"drink\": \"\(type)\" }"
+            )
+            
             do {
                 guard let pClient = WatchSessionManager.shared.supabaseClient else {
                     DispatchQueue.main.async { isLogging = false }
                     return
                 }
-                
-                let formatter = ISO8601DateFormatter()
-                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                let nowString = formatter.string(from: Date())
-                
-                let newLog = HabitLog(
-                    id: UUID(),
-                    user_id: WatchSessionManager.shared.currentUserId,
-                    habit_type: "water",
-                    value: Double(amount),
-                    unit: "ml",
-                    logged_at: nowString,
-                    metadata: "{ \"drink\": \"\(type)\" }"
-                )
                 
                 DispatchQueue.main.async {
                     self.historyLogs.insert(newLog, at: 0)
@@ -394,9 +394,15 @@ struct BubblesView: View {
                 }
             } catch {
                 print("Error logging water: \(error)")
+                
+                // OFFLINE FALLBACK
+                OfflineSyncManager.shared.enqueue(log: newLog)
+                
                 DispatchQueue.main.async {
-                    fetchData()
+                    // Do not revert the UI, keep the optimistic local state
+                    // Just cleanly release the logging lock
                     isLogging = false
+                    WidgetCenter.shared.reloadAllTimelines()
                 }
             }
         }

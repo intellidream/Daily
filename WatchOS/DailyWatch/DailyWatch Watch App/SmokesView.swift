@@ -340,25 +340,25 @@ struct SmokesView: View {
         }
         
         Task {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let nowString = formatter.string(from: Date())
+            
+            let newLog = HabitLog(
+                id: UUID(),
+                user_id: WatchSessionManager.shared.currentUserId,
+                habit_type: "smokes",
+                value: 1.0,
+                unit: "cig",
+                logged_at: nowString,
+                metadata: "{ \"type\": \"\(type)\" }"
+            )
+            
             do {
                 guard let pClient = WatchSessionManager.shared.supabaseClient else {
                     DispatchQueue.main.async { isLogging = false }
                     return
                 }
-                
-                let formatter = ISO8601DateFormatter()
-                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                let nowString = formatter.string(from: Date())
-                
-                let newLog = HabitLog(
-                    id: UUID(),
-                    user_id: WatchSessionManager.shared.currentUserId,
-                    habit_type: "smokes",
-                    value: 1.0,
-                    unit: "cig",
-                    logged_at: nowString,
-                    metadata: "{ \"type\": \"\(type)\" }"
-                )
                 
                 DispatchQueue.main.async {
                     self.historyLogs.insert(newLog, at: 0)
@@ -372,9 +372,15 @@ struct SmokesView: View {
                 }
             } catch {
                 print("Error logging smoke: \(error)")
+                
+                // OFFLINE FALLBACK
+                OfflineSyncManager.shared.enqueue(log: newLog)
+                
                 DispatchQueue.main.async {
-                    fetchData()
+                    // Do not revert the UI, keep the optimistic local state
+                    // Just cleanly release the logging lock
                     isLogging = false
+                    WidgetCenter.shared.reloadAllTimelines()
                 }
             }
         }
