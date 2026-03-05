@@ -60,10 +60,10 @@ import com.google.android.horologist.annotations.ExperimentalHorologistApi
 @OptIn(ExperimentalHorologistApi::class)
 @Composable
 fun SmokesScreen(sessionManager: WatchSessionManager) {
-    var todayTotal by remember { mutableIntStateOf(0) }
-    var dailyGoal by remember { mutableIntStateOf(20) }
+    var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedSmokesGoal ?: 20) }
     var isLogging by remember { mutableStateOf(false) }
-    var historyLogs by remember { mutableStateOf<List<HabitLog>>(emptyList()) }
+    var historyLogs by remember { mutableStateOf<List<HabitLog>>(sessionManager.cachedSmokesLogs ?: emptyList()) }
+    var todayTotal by remember { mutableIntStateOf(historyLogs.size) }
 
     val scope = rememberCoroutineScope()
     val columnState = rememberResponsiveColumnState()
@@ -86,6 +86,7 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
 
                     if (prefs.isNotEmpty()) {
                         dailyGoal = prefs.first().smokes_baseline ?: 20
+                        sessionManager.cachedSmokesGoal = dailyGoal
                     }
                 }
             } catch (ignored: Exception) {
@@ -113,7 +114,9 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
                     }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
 
                 historyLogs = logs
+                sessionManager.cachedSmokesLogs = logs
                 todayTotal = logs.size
+                sessionManager.persistSmokesTotal(todayTotal)
 
             } catch (ignored: Exception) {
                 // handle error
@@ -137,6 +140,7 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
         if (!isLogging) {
             isLogging = true
             todayTotal += 1
+            sessionManager.persistSmokesTotal(todayTotal)
             
             val metadata = buildJsonObject { put("type", type) }.toString()
             val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
@@ -152,7 +156,9 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
                 metadata = metadata
             )
 
-            historyLogs = listOf(newLog) + historyLogs
+            val newHistory = listOf(newLog) + historyLogs
+            historyLogs = newHistory
+            sessionManager.cachedSmokesLogs = newHistory
 
             scope.launch {
                 try {

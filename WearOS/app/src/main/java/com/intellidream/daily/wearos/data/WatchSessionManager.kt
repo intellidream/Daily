@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.intellidream.daily.wearos.domain.model.WatchPairing
+import com.intellidream.daily.wearos.domain.model.HabitLog
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
@@ -52,6 +53,33 @@ class WatchSessionManager(private val context: Context) {
     
     private val _currentUserId = MutableStateFlow<String?>(null)
     val currentUserId: StateFlow<String?> = _currentUserId
+
+    // Memory caching to prevent "load from scratch" flashing during navigation
+    var cachedBubblesGoal: Int? = null
+    var cachedBubblesLogs: List<HabitLog>? = null
+    
+    var cachedSmokesGoal: Int? = null
+    var cachedSmokesLogs: List<HabitLog>? = null
+
+    // For Complications and Tiles
+    val waterTotalCacheKey = stringPreferencesKey("daily_water_total")
+    val smokesTotalCacheKey = stringPreferencesKey("daily_smokes_total")
+
+    fun persistWaterTotal(water: Int) {
+        scope.launch {
+            context.dataStore.edit { prefs ->
+                prefs[waterTotalCacheKey] = water.toString()
+            }
+        }
+    }
+
+    fun persistSmokesTotal(smokes: Int) {
+        scope.launch {
+            context.dataStore.edit { prefs ->
+                prefs[smokesTotalCacheKey] = smokes.toString()
+            }
+        }
+    }
 
     private var pollJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -162,6 +190,33 @@ class WatchSessionManager(private val context: Context) {
         } catch (e: Exception) {
             if (e !is kotlinx.coroutines.CancellationException) {
                 _errorMessage.value = "Poll Err: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    fun onAppResumed() {
+        if (_isAuthenticated.value) {
+            scope.launch {
+                try {
+                    val prefs = context.dataStore.data.first()
+                    val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
+                    val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
+                    
+                    if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty()) {
+                        supabaseClient.auth.importAuthToken(accessToken, refreshToken)
+                        supabaseClient.auth.refreshCurrentSession()
+                        
+                        val session = supabaseClient.auth.currentSessionOrNull()
+                        if (session != null) {
+                            context.dataStore.edit { editPrefs ->
+                                editPrefs[stringPreferencesKey("supabase_access_token")] = session.accessToken
+                                editPrefs[stringPreferencesKey("supabase_refresh_token")] = session.refreshToken
+                            }
+                        }
+                    }
+                } catch (ignored: Exception) {
+                    // Let the offline manager handle API failures gracefully.
+                }
             }
         }
     }

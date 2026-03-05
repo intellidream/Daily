@@ -62,12 +62,12 @@ import com.google.android.horologist.annotations.ExperimentalHorologistApi
 @OptIn(ExperimentalHorologistApi::class)
 @Composable
 fun BubblesScreen(sessionManager: WatchSessionManager) {
-    var todayTotal by remember { mutableIntStateOf(0) }
-    var todayWater by remember { mutableIntStateOf(0) }
-    var todayCoffee by remember { mutableIntStateOf(0) }
-    var dailyGoal by remember { mutableIntStateOf(2000) }
+    var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedBubblesGoal ?: 2000) }
     var isLogging by remember { mutableStateOf(false) }
-    var historyLogs by remember { mutableStateOf<List<HabitLog>>(emptyList()) }
+    var historyLogs by remember { mutableStateOf<List<HabitLog>>(sessionManager.cachedBubblesLogs ?: emptyList()) }
+    var todayWater by remember { mutableIntStateOf(historyLogs.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }) }
+    var todayCoffee by remember { mutableIntStateOf(historyLogs.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }) }
+    var todayTotal by remember { mutableIntStateOf(todayWater + todayCoffee) }
 
     val scope = rememberCoroutineScope()
     val columnState = rememberResponsiveColumnState()
@@ -89,6 +89,7 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
 
                 if (goals.isNotEmpty()) {
                     dailyGoal = goals.first().target_value?.toInt() ?: 2000
+                    sessionManager.cachedBubblesGoal = dailyGoal
                 }
             } catch (ignored: Exception) {
                 // Ignore goal fetch errors (e.g. offline) and proceed with default dailyGoal
@@ -115,6 +116,7 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                     }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
 
                 historyLogs = logs
+                sessionManager.cachedBubblesLogs = logs
                 
                 var tWater = 0
                 var tCoffee = 0
@@ -125,6 +127,7 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 todayWater = tWater
                 todayCoffee = tCoffee
                 todayTotal = tWater + tCoffee
+                sessionManager.persistWaterTotal(todayTotal)
                 
             } catch (ignored: Exception) {
                 // handle error
@@ -140,6 +143,7 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
         if (!isLogging) {
             isLogging = true
             todayTotal += amount
+            sessionManager.persistWaterTotal(todayTotal)
             if (type.contains("Coffee")) todayCoffee += amount else todayWater += amount
             
             val metadata = buildJsonObject { put("drink", type) }.toString()
@@ -156,7 +160,9 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 metadata = metadata
             )
             
-            historyLogs = listOf(newLog) + historyLogs
+            val newHistory = listOf(newLog) + historyLogs
+            historyLogs = newHistory
+            sessionManager.cachedBubblesLogs = newHistory
 
             scope.launch {
                 try {
