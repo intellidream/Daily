@@ -24,7 +24,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.wear.compose.foundation.lazy.items
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,7 +40,6 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.ListHeader
-import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.google.android.horologist.compose.layout.ScalingLazyColumn
 import com.google.android.horologist.compose.layout.rememberResponsiveColumnState
@@ -46,6 +47,7 @@ import com.intellidream.daily.wearos.data.OfflineSyncManager
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
@@ -58,13 +60,16 @@ import com.google.android.horologist.annotations.ExperimentalHorologistApi
 @OptIn(ExperimentalHorologistApi::class)
 @Composable
 fun SmokesScreen(sessionManager: WatchSessionManager) {
-    var todayTotal by remember { mutableStateOf(0) }
-    var dailyGoal by remember { mutableStateOf(20) }
+    var todayTotal by remember { mutableIntStateOf(0) }
+    var dailyGoal by remember { mutableIntStateOf(20) }
     var isLogging by remember { mutableStateOf(false) }
     var historyLogs by remember { mutableStateOf<List<HabitLog>>(emptyList()) }
 
     val scope = rememberCoroutineScope()
     val columnState = rememberResponsiveColumnState()
+
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val parseFormat = remember { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US) }
 
     val fetchLogs = {
         scope.launch {
@@ -83,7 +88,11 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
                         dailyGoal = prefs.first().smokes_baseline ?: 20
                     }
                 }
+            } catch (ignored: Exception) {
+                // Ignore goal fetch errors (e.g. offline) and proceed with default dailyGoal
+            }
                 
+            try {
                 // Fetch today's logs
                 val calendar = java.util.Calendar.getInstance()
                 calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
@@ -106,7 +115,7 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
                 historyLogs = logs
                 todayTotal = logs.size
 
-            } catch (e: Exception) {
+            } catch (ignored: Exception) {
                 // handle error
             }
         }
@@ -148,7 +157,7 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
             scope.launch {
                 try {
                     sessionManager.supabaseClient.postgrest["habits_logs"].insert(newLog)
-                } catch (e: Exception) {
+                } catch (ignored: Exception) {
                     OfflineSyncManager.shared.enqueue(newLog)
                 } finally {
                     isLogging = false
@@ -224,12 +233,12 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
                 val log = historyLogs[index]
                 val type = if (log.metadata?.contains("Heated") == true) "Heated Tobacco" else "Cigarette"
                 val isHeated = type == "Heated Tobacco"
-                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-                val parseFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-                val timeStr = try {
-                    val date = parseFormat.parse(log.logged_at.replace("Z", ""))
-                    if (date != null) timeFormat.format(date) else ""
-                } catch (e: Exception) { "" }
+                val timeStr = remember(log.logged_at) {
+                    try {
+                        val date = parseFormat.parse(log.logged_at.replace("Z", ""))
+                        if (date != null) timeFormat.format(date) else ""
+                    } catch (ignored: Exception) { "" }
+                }
 
                 Box(
                     modifier = Modifier

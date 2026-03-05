@@ -24,22 +24,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.wear.compose.foundation.lazy.items
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.ListHeader
-import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.google.android.horologist.compose.layout.ScalingLazyColumn
 import com.google.android.horologist.compose.layout.rememberResponsiveColumnState
@@ -47,6 +49,7 @@ import com.intellidream.daily.wearos.data.OfflineSyncManager
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
@@ -59,21 +62,24 @@ import com.google.android.horologist.annotations.ExperimentalHorologistApi
 @OptIn(ExperimentalHorologistApi::class)
 @Composable
 fun BubblesScreen(sessionManager: WatchSessionManager) {
-    var todayTotal by remember { mutableStateOf(0) }
-    var todayWater by remember { mutableStateOf(0) }
-    var todayCoffee by remember { mutableStateOf(0) }
-    var dailyGoal by remember { mutableStateOf(2000) }
+    var todayTotal by remember { mutableIntStateOf(0) }
+    var todayWater by remember { mutableIntStateOf(0) }
+    var todayCoffee by remember { mutableIntStateOf(0) }
+    var dailyGoal by remember { mutableIntStateOf(2000) }
     var isLogging by remember { mutableStateOf(false) }
     var historyLogs by remember { mutableStateOf<List<HabitLog>>(emptyList()) }
 
     val scope = rememberCoroutineScope()
     val columnState = rememberResponsiveColumnState()
 
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val parseFormat = remember { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US) }
+
     val fetchLogs = {
         scope.launch {
             try {
                 // Fetch dynamic goal
-                val goals = sessionManager.supabaseClient.postgrest["habit_goals"]
+                val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
                     .select {
                         filter {
                             eq("habit_type", "water")
@@ -84,7 +90,11 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 if (goals.isNotEmpty()) {
                     dailyGoal = goals.first().target_value?.toInt() ?: 2000
                 }
+            } catch (ignored: Exception) {
+                // Ignore goal fetch errors (e.g. offline) and proceed with default dailyGoal
+            }
 
+            try {
                 // Fetch today's logs
                 val calendar = java.util.Calendar.getInstance()
                 calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
@@ -116,7 +126,7 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 todayCoffee = tCoffee
                 todayTotal = tWater + tCoffee
                 
-            } catch (e: Exception) {
+            } catch (ignored: Exception) {
                 // handle error
             }
         }
@@ -151,7 +161,7 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
             scope.launch {
                 try {
                     sessionManager.supabaseClient.postgrest["habits_logs"].insert(newLog)
-                } catch (e: Exception) {
+                } catch (ignored: Exception) {
                     OfflineSyncManager.shared.enqueue(newLog)
                 } finally {
                     isLogging = false
@@ -180,29 +190,46 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 val wProg = (todayWater.toFloat() / totalG).coerceIn(0f, 1f)
                 val cProg = (todayCoffee.toFloat() / totalG).coerceIn(0f, 1f)
                 
-                CircularProgressIndicator(
-                    progress = 1f,
-                    modifier = Modifier.fillMaxSize(),
-                    strokeWidth = 10.dp,
-                    indicatorColor = Color.DarkGray.copy(alpha=0.3f),
-                    trackColor = Color.Transparent
-                )
+                val wProgAnim by animateFloatAsState(targetValue = wProg, animationSpec = tween(800))
+                val cProgAnim by animateFloatAsState(targetValue = cProg, animationSpec = tween(800))
 
-                CircularProgressIndicator(
-                    progress = animateFloatAsState(targetValue = wProg, animationSpec = tween(800)).value,
-                    modifier = Modifier.fillMaxSize(),
-                    strokeWidth = 10.dp,
-                    indicatorColor = Color.Cyan,
-                    trackColor = Color.Transparent
-                )
-
-                CircularProgressIndicator(
-                    progress = animateFloatAsState(targetValue = wProg + cProg, animationSpec = tween(800)).value,
-                    modifier = Modifier.fillMaxSize(),
-                    strokeWidth = 10.dp,
-                    indicatorColor = Color(0xFFFFA500), // Orange
-                    trackColor = Color.Transparent
-                )
+                androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokeWidth = 10.dp.toPx()
+                    
+                    // Background Ring
+                    drawArc(
+                        color = Color.DarkGray.copy(alpha=0.3f),
+                        startAngle = -90f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                    )
+                    
+                    val wSweep = (wProgAnim * 360f).coerceIn(0f, 360f)
+                    val cSweep = (cProgAnim * 360f).coerceIn(0f, 360f)
+                    
+                    // Water (Cyan)
+                    if (wSweep > 0) {
+                        drawArc(
+                            color = Color.Cyan,
+                            startAngle = -90f,
+                            sweepAngle = wSweep,
+                            useCenter = false,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                    }
+                    
+                    // Coffee (Orange) draws immediately after Water
+                    if (cSweep > 0) {
+                        drawArc(
+                            color = Color(0xFFFFA500),
+                            startAngle = -90f + wSweep,
+                            sweepAngle = cSweep,
+                            useCenter = false,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                    }
+                }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("$todayTotal", fontWeight = FontWeight.Bold, fontSize = 24.sp)
@@ -235,12 +262,12 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
             items(historyLogs.size) { index ->
                 val log = historyLogs[index]
                 val isCoffee = log.metadata?.contains("Coffee") == true
-                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-                val parseFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-                val timeStr = try {
-                    val date = parseFormat.parse(log.logged_at.replace("Z", ""))
-                    if (date != null) timeFormat.format(date) else ""
-                } catch (e: Exception) { "" }
+                val timeStr = remember(log.logged_at) {
+                    try {
+                        val date = parseFormat.parse(log.logged_at.replace("Z", ""))
+                        if (date != null) timeFormat.format(date) else ""
+                    } catch (ignored: Exception) { "" }
+                }
 
                 Box(
                     modifier = Modifier

@@ -61,20 +61,30 @@ class WatchSessionManager(private val context: Context) {
             val prefs = context.dataStore.data.first()
             val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
             val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
+            val savedUserId = prefs[stringPreferencesKey("supabase_user_id")]
 
-            if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty()) {
+            if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty() && !savedUserId.isNullOrEmpty()) {
+                // Optimistic UI loading instantly
+                _currentUserId.value = savedUserId
+                _isAuthenticated.value = true
+                _isPairing.value = false
+                
                 try {
                     supabaseClient.auth.importAuthToken(accessToken, refreshToken)
-                    val user = supabaseClient.auth.currentUserOrNull()
-                    if (user != null) {
-                        _currentUserId.value = user.id
-                        _isAuthenticated.value = true
-                        _isPairing.value = false
-                    } else {
-                        throw Exception("Token expired")
+                    
+                    // Attempt background refresh so API calls don't fail later
+                    supabaseClient.auth.refreshCurrentSession()
+                    
+                    val session = supabaseClient.auth.currentSessionOrNull()
+                    if (session != null) {
+                        context.dataStore.edit { editPrefs ->
+                            editPrefs[stringPreferencesKey("supabase_access_token")] = session.accessToken
+                            editPrefs[stringPreferencesKey("supabase_refresh_token")] = session.refreshToken
+                        }
                     }
                 } catch (e: Exception) {
-                    logout()
+                    // Do not aggressively logout if network fails here. 
+                    // Let the offline manager handle API failures gracefully.
                 }
             } else {
                 generatePairingCode()
@@ -120,21 +130,26 @@ class WatchSessionManager(private val context: Context) {
                 if (!pairing.access_token.isNullOrEmpty()) {
                     val token = pairing.access_token
                     val refresh = pairing.refresh_token.orEmpty()
-
-                    context.dataStore.edit { prefs ->
-                        prefs[stringPreferencesKey("supabase_access_token")] = token
-                        prefs[stringPreferencesKey("supabase_refresh_token")] = refresh
-                    }
-
+                    
                     supabaseClient.auth.importAuthToken(token, refresh)
-                    _currentUserId.value = supabaseClient.auth.currentUserOrNull()?.id
-                    _isAuthenticated.value = true
-                    _isPairing.value = false
+                    val uid = supabaseClient.auth.currentUserOrNull()?.id
 
-                    supabaseClient.postgrest["watch_pairings"]
-                        .delete { filter { eq("code", _pairingCode.value) } }
-                        
-                    pollJob?.cancel()
+                    if (uid != null) {
+                        context.dataStore.edit { prefs ->
+                            prefs[stringPreferencesKey("supabase_access_token")] = token
+                            prefs[stringPreferencesKey("supabase_refresh_token")] = refresh
+                            prefs[stringPreferencesKey("supabase_user_id")] = uid
+                        }
+    
+                        _currentUserId.value = uid
+                        _isAuthenticated.value = true
+                        _isPairing.value = false
+    
+                        supabaseClient.postgrest["watch_pairings"]
+                            .delete { filter { eq("code", _pairingCode.value) } }
+                            
+                        pollJob?.cancel()
+                    }
                 }
             } else {
                // The row disappears when the Phone app claims it OR if we explicitly delete it after success.
@@ -157,8 +172,9 @@ class WatchSessionManager(private val context: Context) {
             context.dataStore.edit { prefs ->
                 prefs.remove(stringPreferencesKey("supabase_access_token"))
                 prefs.remove(stringPreferencesKey("supabase_refresh_token"))
+                prefs.remove(stringPreferencesKey("supabase_user_id"))
             }
-            supabaseClient.auth.signOut()
+            try { supabaseClient.auth.signOut() } catch (e: Exception) {}
             _isAuthenticated.value = false
             _currentUserId.value = null
             generatePairingCode()
