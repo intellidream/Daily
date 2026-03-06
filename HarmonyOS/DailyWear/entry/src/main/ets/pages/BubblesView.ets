@@ -6,6 +6,7 @@ import { vibrator } from '@kit.SensorServiceKit';
 
 @Component
 export struct BubblesView {
+  @Prop @Watch('onRefresh') refreshTrigger: number = 0;
   @State waterTotal: number = 0;
   @State coffeeTotal: number = 0;
   @State waterGoal: number = 2000;
@@ -15,6 +16,10 @@ export struct BubblesView {
 
   async aboutToAppear() {
     await this.fetchData();
+  }
+
+  onRefresh(): void {
+    this.fetchData();
   }
 
   private async fetchData() {

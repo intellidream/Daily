@@ -247,7 +247,7 @@ export class SupabaseClient {
     let url = `${SupabaseClient.SUPABASE_URL}/rest/v1/user_preferences?select=smokes_baseline&limit=1`;
 
     if (this.userId) {
-      url += `&user_id=eq.${this.userId}`;
+      url += `&id=eq.${this.userId}`;
     }
 
     try {

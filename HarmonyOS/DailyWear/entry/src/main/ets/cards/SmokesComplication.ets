@@ -20,7 +20,7 @@ struct SmokesComplication {
           .fontSize(14)
           .fontColor('#555555')
       } else {
-        Text('🚬')
+        Text('🔥')
           .fontSize(14)
         Text(`${this.smokesTotal}`)
           .fontSize(16)

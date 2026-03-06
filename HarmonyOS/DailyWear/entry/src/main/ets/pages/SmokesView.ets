@@ -6,6 +6,7 @@ import { vibrator } from '@kit.SensorServiceKit';
 
 @Component
 export struct SmokesView {
+  @Prop @Watch('onRefresh') refreshTrigger: number = 0;
   @State smokesTotal: number = 0;
   @State baseline: number = 20;
   @State todayLogs: SupabaseHabitLog[] = [];
@@ -14,6 +15,10 @@ export struct SmokesView {
 
   async aboutToAppear() {
     await this.fetchData();
+  }
+
+  onRefresh(): void {
+    this.fetchData();
   }
 
   private async fetchData() {
@@ -131,7 +136,7 @@ export struct SmokesView {
             .stroke('#333333')
             .strokeWidth(6)
 
-          // Smokes progress arc (dynamic color)
+          // Smokes progress arc — drains from full to empty as smokes increase
           Circle()
             .width(90)
             .height(90)
@@ -139,19 +144,19 @@ export struct SmokesView {
             .stroke(this.getSmokesColor())
             .strokeWidth(6)
             .strokeDashArray([
-              Math.min(this.smokesTotal / Math.max(this.baseline, 1), 1.0) * 283,
+              Math.max(0, 1.0 - this.smokesTotal / Math.max(this.baseline, 1)) * 283,
               283
             ])
             .strokeLineCap(LineCapStyle.Round)
             .rotate({ angle: -90 })
 
-          // Center text: remaining
+          // Center text: total / goal
           Column() {
-            Text(this.getRemainingText())
+            Text(`${this.smokesTotal}`)
               .fontSize(22)
               .fontWeight(FontWeight.Bold)
-              .fontColor(this.getSmokesColor())
-            Text('left')
+              .fontColor(this.smokesTotal > this.baseline ? '#F44336' : '#FFFFFF')
+            Text(`/ ${this.baseline}`)
               .fontSize(10)
               .fontColor('#888888')
           }
@@ -164,7 +169,7 @@ export struct SmokesView {
         Row() {
           // Cigarette button
           Column() {
-            Text('🚬')
+            Text('🔥')
               .fontSize(18)
             Text('Cig')
               .fontSize(11)
@@ -259,7 +264,7 @@ export struct SmokesView {
 
             ForEach(this.todayLogs, (log: SupabaseHabitLog) => {
               Row() {
-                Text(this.getSmokeType(log) === 'Heated Tobacco' ? '⚡' : '🚬')
+                Text(this.getSmokeType(log) === 'Heated Tobacco' ? '⚡' : '🔥')
                   .fontSize(14)
                   .margin({ right: 6 })
 

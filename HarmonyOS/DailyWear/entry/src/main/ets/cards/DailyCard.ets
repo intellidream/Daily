@@ -31,7 +31,7 @@ struct DailyCard {
         .justifyContent(FlexAlign.Center)
 
         Row() {
-          Text('🚬')
+          Text('🔥')
             .fontSize(16)
           Text(`${this.smokesTotal}`)
             .fontSize(18)

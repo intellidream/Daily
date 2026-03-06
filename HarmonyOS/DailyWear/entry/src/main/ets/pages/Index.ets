@@ -9,6 +9,8 @@ import { WatchSessionManager } from '../utils/WatchSessionManager';
 struct Index {
   @State isAuthenticated: boolean = false;
   @State isLoaded: boolean = false;
+  @State refreshBubbles: number = 0;
+  @State refreshSmokes: number = 0;
   @StorageLink('PairingSuccess') pairingSuccess: boolean = false;
   private swiperController: SwiperController = new SwiperController();
 
@@ -47,8 +49,8 @@ struct Index {
           .color('#0277BD')
       } else if (this.isAuthenticated || this.pairingSuccess) {
         Swiper(this.swiperController) {
-          BubblesView()
-          SmokesView()
+          BubblesView({ refreshTrigger: this.refreshBubbles })
+          SmokesView({ refreshTrigger: this.refreshSmokes })
         }
         .indicator(
           new DotIndicator()
@@ -60,6 +62,13 @@ struct Index {
         .itemSpace(0)
         .width('100%')
         .height('100%')
+        .onChange((index: number) => {
+          if (index === 0) {
+            this.refreshBubbles++;
+          } else if (index === 1) {
+            this.refreshSmokes++;
+          }
+        })
       } else {
         PairingView()
       }
