@@ -11,6 +11,38 @@
     {
       "name": "EntryAbility_label",
       "value": "label"
+    },
+    {
+      "name": "DailyCardAbility_desc",
+      "value": "Daily habits stats card"
+    },
+    {
+      "name": "DailyCardAbility_label",
+      "value": "Daily Stats"
+    },
+    {
+      "name": "daily_card_name",
+      "value": "Daily Stats"
+    },
+    {
+      "name": "daily_card_desc",
+      "value": "Water and smokes totals for today"
+    },
+    {
+      "name": "water_complication_name",
+      "value": "Water"
+    },
+    {
+      "name": "water_complication_desc",
+      "value": "Today's water intake"
+    },
+    {
+      "name": "smokes_complication_name",
+      "value": "Smokes"
+    },
+    {
+      "name": "smokes_complication_desc",
+      "value": "Today's smoke count"
     }
   ]
 }

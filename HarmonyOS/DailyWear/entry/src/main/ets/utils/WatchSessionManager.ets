@@ -33,7 +33,7 @@ export class WatchSessionManager {
       this.pref = await preferences.getPreferences(context, STORE_NAME);
       return await this.checkExistingSession();
     } catch (err) {
-      hilog.error(DOMAIN, TAG, 'Failed to init preferences', JSON.stringify(err));
+      hilog.error(DOMAIN, TAG, 'Failed to init preferences: ' + JSON.stringify(err));
       return false;
     }
   }
@@ -43,16 +43,67 @@ export class WatchSessionManager {
     try {
       const token = await this.pref.get(ACCESS_TOKEN_KEY, '') as string;
       const userId = await this.pref.get(USER_ID_KEY, '') as string;
-      
+
       if (token && userId) {
+        // Validate token is not expired before trusting it
+        if (!this.isTokenValid(token)) {
+          hilog.warn(DOMAIN, TAG, 'Stored token is expired or invalid, clearing session');
+          await this.clearSession();
+          return false;
+        }
         SupabaseClient.getInstance().setSession(token, userId);
         this.isAuthenticated = true;
+        hilog.info(DOMAIN, TAG, 'Restored existing session for user: ' + userId);
         return true;
       }
+      hilog.info(DOMAIN, TAG, 'No stored session found');
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'Failed to get credentials from preferences');
     }
     return false;
+  }
+
+  private isTokenValid(jwt: string): boolean {
+    try {
+      const parts = jwt.split('.');
+      if (parts.length !== 3) return false;
+
+      let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const pad = base64.length % 4;
+      if (pad) {
+        base64 += '='.repeat(4 - pad);
+      }
+
+      const buf = buffer.from(base64, 'base64');
+      const jsonString = buf.toString('utf-8');
+      const payload = JSON.parse(jsonString) as Record<string, Object>;
+
+      const exp = Number(payload['exp']);
+      if (!exp) return false;
+
+      // Token expired if exp is in the past (with 60s grace)
+      const nowSec = Math.floor(Date.now() / 1000);
+      return exp > (nowSec - 60);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'Failed to validate JWT: ' + JSON.stringify(e));
+      return false;
+    }
+  }
+
+  public async clearSession(): Promise<void> {
+    if (this.pref) {
+      try {
+        await this.pref.delete(ACCESS_TOKEN_KEY);
+        await this.pref.delete(REFRESH_TOKEN_KEY);
+        await this.pref.delete(USER_ID_KEY);
+        await this.pref.flush();
+      } catch (e) {
+        hilog.error(DOMAIN, TAG, 'Failed to clear session from preferences');
+      }
+    }
+    this.isAuthenticated = false;
+    SupabaseClient.getInstance().setSession('', '');
+    hilog.info(DOMAIN, TAG, 'Session cleared');
   }
 
   public async generatePairingCode(): Promise<string> {

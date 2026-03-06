@@ -13,15 +13,29 @@ struct Index {
   private swiperController: SwiperController = new SwiperController();
 
   async aboutToAppear() {
-    let context = getContext(this);
-    OfflineSyncManager.getInstance().init(context);
-    
-    const isAuth = await WatchSessionManager.getInstance().init(context);
-    this.isAuthenticated = isAuth;
+    try {
+      const context: Context = this.getUIContext().getHostContext()!;
+      await OfflineSyncManager.getInstance().init(context);
+
+      const isAuth = await WatchSessionManager.getInstance().init(context);
+      this.isAuthenticated = isAuth;
+
+      // Process any queued offline logs on startup
+      if (isAuth) {
+        await OfflineSyncManager.getInstance().processQueue();
+      }
+    } catch (err) {
+      // If init fails, default to unauthenticated (shows pairing)
+      this.isAuthenticated = false;
+    }
     this.isLoaded = true;
-    
-    // Listen for the PairingView signaling success
-    AppStorage.setOrCreate('PairingSuccess', false);
+  }
+
+  onPageShow() {
+    // Process offline queue whenever app comes to foreground
+    if (this.isAuthenticated || this.pairingSuccess) {
+      OfflineSyncManager.getInstance().processQueue();
+    }
   }
 
   build() {
@@ -36,7 +50,11 @@ struct Index {
           BubblesView()
           SmokesView()
         }
-        .indicator(true)          
+        .indicator(
+          new DotIndicator()
+            .color('#333333')
+            .selectedColor('#0277BD')
+        )
         .loop(false)              
         .duration(400)
         .itemSpace(0)

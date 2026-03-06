@@ -1,0 +1,64 @@
+{
+  "forms": [
+    {
+      "name": "DailyStats",
+      "displayName": "$string:daily_card_name",
+      "description": "$string:daily_card_desc",
+      "src": "./ets/cards/DailyCard.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 466,
+        "autoDesignWidth": true
+      },
+      "colorMode": "dark",
+      "isDefault": true,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "00:00",
+      "updateDuration": 1,
+      "defaultDimension": "2*2",
+      "supportDimensions": [
+        "2*2"
+      ]
+    },
+    {
+      "name": "WaterComplication",
+      "displayName": "$string:water_complication_name",
+      "description": "$string:water_complication_desc",
+      "src": "./ets/cards/WaterComplication.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 466,
+        "autoDesignWidth": true
+      },
+      "colorMode": "dark",
+      "isDefault": false,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "00:00",
+      "updateDuration": 1,
+      "defaultDimension": "1*1",
+      "supportDimensions": [
+        "1*1"
+      ]
+    },
+    {
+      "name": "SmokesComplication",
+      "displayName": "$string:smokes_complication_name",
+      "description": "$string:smokes_complication_desc",
+      "src": "./ets/cards/SmokesComplication.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 466,
+        "autoDesignWidth": true
+      },
+      "colorMode": "dark",
+      "isDefault": false,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "00:00",
+      "updateDuration": 1,
+      "defaultDimension": "1*1",
+      "supportDimensions": [
+        "1*1"
+      ]
+    }
+  ]
+}
