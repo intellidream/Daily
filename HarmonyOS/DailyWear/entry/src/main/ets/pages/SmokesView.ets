@@ -126,6 +126,19 @@ export struct SmokesView {
   build() {
     Scroll() {
       Column() {
+        // --- Header ---
+        Row() {
+          Text('🔥')
+            .fontSize(16)
+          Text('Smokes')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFFFFF')
+            .margin({ left: 4 })
+        }
+        .justifyContent(FlexAlign.Center)
+        .margin({ top: 8 })
+
         // --- Progress Ring ---
         Stack({ alignContent: Alignment.Center }) {
           // Background track
@@ -133,8 +146,8 @@ export struct SmokesView {
             .width(90)
             .height(90)
             .fill(Color.Transparent)
-            .stroke('#333333')
-            .strokeWidth(6)
+            .stroke('#4D4D4D')
+            .strokeWidth(8)
 
           // Smokes progress arc — drains from full to empty as smokes increase
           Circle()
@@ -142,7 +155,7 @@ export struct SmokesView {
             .height(90)
             .fill(Color.Transparent)
             .stroke(this.getSmokesColor())
-            .strokeWidth(6)
+            .strokeWidth(8)
             .strokeDashArray([
               Math.max(0, 1.0 - this.smokesTotal / Math.max(this.baseline, 1)) * 283,
               283
@@ -163,7 +176,7 @@ export struct SmokesView {
         }
         .width(100)
         .height(100)
-        .margin({ top: 12 })
+        .margin({ top: 8 })
 
         // --- Two Action Buttons ---
         Row() {
@@ -179,7 +192,7 @@ export struct SmokesView {
           .width(64)
           .height(52)
           .borderRadius(12)
-          .backgroundColor('#2A1010')
+          .backgroundColor('rgba(255, 68, 54, 0.15)')
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
           .onClick(() => { this.logSmoke('Cigarette'); })
@@ -190,13 +203,13 @@ export struct SmokesView {
               .fontSize(18)
             Text('Heat')
               .fontSize(11)
-              .fontColor('#2196F3')
+              .fontColor('#1E90FF')
               .fontWeight(FontWeight.Medium)
           }
           .width(64)
           .height(52)
           .borderRadius(12)
-          .backgroundColor('#0A1A2A')
+          .backgroundColor('rgba(30, 144, 255, 0.15)')
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
           .onClick(() => { this.logSmoke('Heated Tobacco'); })
@@ -268,21 +281,20 @@ export struct SmokesView {
                   .fontSize(14)
                   .margin({ right: 6 })
 
-                Column() {
-                  Text(`1 ${this.getSmokeType(log) === 'Heated Tobacco' ? 'Heat' : 'Cig'}`)
-                    .fontSize(12)
-                    .fontColor('#CCCCCC')
-                  Text(this.formatTime(log.logged_at))
-                    .fontSize(10)
-                    .fontColor('#666666')
-                }
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start)
+                Text(`1 ${this.getSmokeType(log) === 'Heated Tobacco' ? 'Heat' : 'Cig'}`)
+                  .fontSize(12)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#CCCCCC')
+                  .layoutWeight(1)
+
+                Text(this.formatTime(log.logged_at))
+                  .fontSize(10)
+                  .fontColor('#666666')
               }
               .width('90%')
-              .padding({ top: 4, bottom: 4, left: 8, right: 8 })
+              .padding({ top: 6, bottom: 6, left: 8, right: 8 })
               .borderRadius(8)
-              .backgroundColor('#111111')
+              .backgroundColor('rgba(255, 255, 255, 0.1)')
               .margin({ bottom: 3 })
               .gesture(
                 LongPressGesture({ repeat: false, duration: 600 })

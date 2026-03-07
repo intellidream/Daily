@@ -11,6 +11,7 @@ import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
 import io.ktor.client.HttpClient
@@ -23,13 +24,28 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 val Context.dataStore by preferencesDataStore(name = "daily_prefs")
 
-class WatchSessionManager(private val context: Context) {
+class WatchSessionManager private constructor(private val context: Context) {
+
+    companion object {
+        @Volatile
+        private var instance: WatchSessionManager? = null
+
+        fun getInstance(context: Context): WatchSessionManager {
+            return instance ?: synchronized(this) {
+                instance ?: WatchSessionManager(context.applicationContext).also {
+                    instance = it
+                    it.startSessionListener()
+                }
+            }
+        }
+    }
 
     private val supabaseUrl = "https://akkfouifxztnfwwiclwg.supabase.co"
     private val supabaseAnonKey = "sb_publishable_6FzrRSdmsH4arDhZS09PSQ_QK_I31DG"
@@ -84,8 +100,74 @@ class WatchSessionManager(private val context: Context) {
     private var pollJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    /**
+     * Listens to the Supabase Auth plugin's session status. When the plugin auto-refreshes
+     * tokens (e.g. before access-token expiry), the NEW tokens are persisted to DataStore
+     * so we never have stale credentials on disk.
+     */
+    private fun startSessionListener() {
+        scope.launch {
+            supabaseClient.auth.sessionStatus.collect { status ->
+                when (status) {
+                    is SessionStatus.Authenticated -> {
+                        val session = status.session
+                        context.dataStore.edit { prefs ->
+                            prefs[stringPreferencesKey("supabase_access_token")] = session.accessToken
+                            prefs[stringPreferencesKey("supabase_refresh_token")] = session.refreshToken
+                        }
+                        val uid = session.user?.id
+                        if (uid != null) {
+                            context.dataStore.edit { prefs ->
+                                prefs[stringPreferencesKey("supabase_user_id")] = uid
+                            }
+                            _currentUserId.value = uid
+                        }
+                        _isAuthenticated.value = true
+                        _isPairing.value = false
+                    }
+                    is SessionStatus.NotAuthenticated -> {
+                        // Only transition to unauthenticated if we previously thought we were
+                        // authenticated AND we don't have valid DataStore tokens to recover from.
+                        // The Auth plugin fires NotAuthenticated on first init before loading
+                        // from storage, so we must not react to that initial event.
+                        if (_isAuthenticated.value) {
+                            val prefs = context.dataStore.data.first()
+                            val savedUserId = prefs[stringPreferencesKey("supabase_user_id")]
+                            if (savedUserId.isNullOrEmpty()) {
+                                _isAuthenticated.value = false
+                                _currentUserId.value = null
+                            }
+                        }
+                    }
+                    else -> { /* LoadingFromStorage, NetworkError — no action */ }
+                }
+            }
+        }
+    }
+
     fun checkExistingSession() {
         scope.launch {
+            // 1. Check if the Auth plugin already has a valid session from its own storage.
+            //    This is the most reliable source because the plugin auto-persists refreshed tokens.
+            val existingSession = supabaseClient.auth.currentSessionOrNull()
+            if (existingSession != null) {
+                val uid = existingSession.user?.id
+                if (uid != null) {
+                    _currentUserId.value = uid
+                    _isAuthenticated.value = true
+                    _isPairing.value = false
+                    // Sync to DataStore so complication/tile services can read user_id
+                    context.dataStore.edit { prefs ->
+                        prefs[stringPreferencesKey("supabase_access_token")] = existingSession.accessToken
+                        prefs[stringPreferencesKey("supabase_refresh_token")] = existingSession.refreshToken
+                        prefs[stringPreferencesKey("supabase_user_id")] = uid
+                    }
+                    return@launch
+                }
+            }
+
+            // 2. Fall back to DataStore tokens (e.g. first launch after pairing, before Auth plugin
+            //    had a chance to persist to its own storage).
             val prefs = context.dataStore.data.first()
             val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
             val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
@@ -100,19 +182,15 @@ class WatchSessionManager(private val context: Context) {
                 try {
                     supabaseClient.auth.importAuthToken(accessToken, refreshToken)
                     
-                    // Attempt background refresh so API calls don't fail later
-                    supabaseClient.auth.refreshCurrentSession()
-                    
-                    val session = supabaseClient.auth.currentSessionOrNull()
-                    if (session != null) {
-                        context.dataStore.edit { editPrefs ->
-                            editPrefs[stringPreferencesKey("supabase_access_token")] = session.accessToken
-                            editPrefs[stringPreferencesKey("supabase_refresh_token")] = session.refreshToken
-                        }
+                    // Attempt background refresh — the session listener will persist new tokens
+                    try {
+                        supabaseClient.auth.refreshCurrentSession()
+                    } catch (e: Exception) {
+                        // Ignore background refresh failure — the token is already imported
+                        // and the session listener will capture any future refresh.
                     }
                 } catch (e: Exception) {
                     // Do not aggressively logout if network fails here. 
-                    // Let the offline manager handle API failures gracefully.
                 }
             } else {
                 generatePairingCode()
@@ -159,20 +237,14 @@ class WatchSessionManager(private val context: Context) {
                     val token = pairing.access_token
                     val refresh = pairing.refresh_token.orEmpty()
                     
+                    // importAuthToken triggers the session listener, which will persist
+                    // tokens to DataStore and update _isAuthenticated / _currentUserId.
                     supabaseClient.auth.importAuthToken(token, refresh)
                     val uid = supabaseClient.auth.currentUserOrNull()?.id
 
                     if (uid != null) {
-                        context.dataStore.edit { prefs ->
-                            prefs[stringPreferencesKey("supabase_access_token")] = token
-                            prefs[stringPreferencesKey("supabase_refresh_token")] = refresh
-                            prefs[stringPreferencesKey("supabase_user_id")] = uid
-                        }
-    
-                        _currentUserId.value = uid
-                        _isAuthenticated.value = true
-                        _isPairing.value = false
-    
+                        // Session listener handles DataStore persistence and state updates.
+                        // Just clean up the pairing row and stop polling.
                         supabaseClient.postgrest["watch_pairings"]
                             .delete { filter { eq("code", _pairingCode.value) } }
                             
@@ -195,27 +267,37 @@ class WatchSessionManager(private val context: Context) {
     }
 
     fun onAppResumed() {
-        if (_isAuthenticated.value) {
-            scope.launch {
+        // Since WatchSessionManager is now a singleton, the SupabaseClient and its
+        // auto-refresh coroutine survive Activity restarts. We just need to verify
+        // the session is still alive and nudge a refresh if needed.
+        scope.launch {
+            val session = supabaseClient.auth.currentSessionOrNull()
+            if (session != null) {
+                _isAuthenticated.value = true
+                _currentUserId.value = session.user?.id
+                // Trigger a background refresh to extend the session
                 try {
-                    val prefs = context.dataStore.data.first()
-                    val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
-                    val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
-                    
-                    if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty()) {
+                    supabaseClient.auth.refreshCurrentSession()
+                } catch (e: Exception) {
+                    // The session listener will handle persistence of refreshed tokens.
+                    // If refresh fails, the existing access token is still valid for a while.
+                }
+            } else if (_isAuthenticated.value) {
+                // Auth plugin lost its session — try recovering from DataStore
+                val prefs = context.dataStore.data.first()
+                val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
+                val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
+                
+                if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty()) {
+                    try {
                         supabaseClient.auth.importAuthToken(accessToken, refreshToken)
                         supabaseClient.auth.refreshCurrentSession()
-                        
-                        val session = supabaseClient.auth.currentSessionOrNull()
-                        if (session != null) {
-                            context.dataStore.edit { editPrefs ->
-                                editPrefs[stringPreferencesKey("supabase_access_token")] = session.accessToken
-                                editPrefs[stringPreferencesKey("supabase_refresh_token")] = session.refreshToken
-                            }
-                        }
+                    } catch (e: Exception) {
+                        // Token is truly expired/revoked
+                        logout()
                     }
-                } catch (ignored: Exception) {
-                    // Let the offline manager handle API failures gracefully.
+                } else {
+                    logout()
                 }
             }
         }

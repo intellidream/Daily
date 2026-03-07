@@ -5,6 +5,7 @@ let dailyCardStorage = new LocalStorage();
 struct DailyCard {
   @LocalStorageProp('waterTotal') waterTotal: number = 0;
   @LocalStorageProp('smokesTotal') smokesTotal: number = 0;
+  @LocalStorageProp('smokesBaseline') smokesBaseline: number = 20;
   @LocalStorageProp('isLoggedIn') isLoggedIn: boolean = false;
 
   build() {
@@ -21,11 +22,11 @@ struct DailyCard {
           Text(`${this.waterTotal}`)
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
-            .fontColor('#00BCD4')
+            .fontColor('#00FFFF')
             .margin({ left: 2 })
           Text('ml')
             .fontSize(10)
-            .fontColor('#00BCD4')
+            .fontColor('#00FFFF')
             .margin({ left: 1 })
         }
         .justifyContent(FlexAlign.Center)
@@ -53,8 +54,9 @@ struct DailyCard {
 
   private getSmokesColor(): string {
     if (this.smokesTotal === 0) return '#4CAF50';
-    if (this.smokesTotal >= 20) return '#F44336';
-    if (this.smokesTotal >= 10) return '#FF9800';
+    const ratio = this.smokesTotal / Math.max(this.smokesBaseline, 1);
+    if (ratio >= 1.0) return '#F44336';
+    if (ratio >= 0.5) return '#FF9800';
     return '#FFEB3B';
   }
 }

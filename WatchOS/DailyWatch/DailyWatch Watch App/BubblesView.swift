@@ -15,6 +15,8 @@ struct BubblesView: View {
     @State private var selectedLog: HabitLog?
     @State private var showDeleteConfirm: Bool = false
     
+    @Environment(\.scenePhase) private var scenePhase
+    
     init() {
         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
            let cachedGoalStr = groupPrefs.string(forKey: "water_goal"),
@@ -48,14 +50,52 @@ struct BubblesView: View {
         return fallbackFormatter.date(from: norm)
     }
     
-    struct DailyTotal: Identifiable {
-        let id = UUID()
+    struct DailyTotal: Identifiable, Codable {
+        var id = UUID()
         let date: Date
         let total: Double
     }
     
     struct DeleteUpdate: Encodable {
         let is_deleted = true
+    }
+    
+    struct BubblesCache: Codable {
+        let todayTotal: Int
+        let todayWater: Int
+        let todayCoffee: Int
+        let dailyGoal: Int
+        let historyLogs: [HabitLog]
+        let weeklyTotals: [DailyTotal]
+    }
+    
+    private func saveCache() {
+        let cache = BubblesCache(
+            todayTotal: todayTotal,
+            todayWater: todayWater,
+            todayCoffee: todayCoffee,
+            dailyGoal: dailyGoal,
+            historyLogs: historyLogs,
+            weeklyTotals: weeklyTotals
+        )
+        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+            if let data = try? JSONEncoder().encode(cache) {
+                groupPrefs.set(data, forKey: "bubbles_cache")
+            }
+        }
+    }
+    
+    private func loadCache() {
+        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
+           let data = groupPrefs.data(forKey: "bubbles_cache"),
+           let cache = try? JSONDecoder().decode(BubblesCache.self, from: data) {
+            self.todayTotal = cache.todayTotal
+            self.todayWater = cache.todayWater
+            self.todayCoffee = cache.todayCoffee
+            self.dailyGoal = cache.dailyGoal
+            self.historyLogs = cache.historyLogs
+            self.weeklyTotals = cache.weeklyTotals
+        }
     }
     
     var body: some View {
@@ -195,7 +235,14 @@ struct BubblesView: View {
             Button("Cancel", role: .cancel) {}
         }
         .onAppear {
+            loadCache()
             fetchData()
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active {
+                // Backgrounded->Active refresh
+                fetchData()
+            }
         }
     }
     
@@ -203,6 +250,10 @@ struct BubblesView: View {
         Task {
             do {
                 guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
+                
+                // Verify session before querying. If auth dropped, this throws and
+                // we gracefully exit without wiping our local cache!
+                _ = try await pClient.auth.session
                 
                 let calendar = Calendar.current
                 let todayStart = calendar.startOfDay(for: Date())
@@ -265,7 +316,7 @@ struct BubblesView: View {
                 var finalGoalInt = 2000
                 do {
                     let goals: [HabitGoal] = try await pClient
-                        .from("habit_goals")
+                        .from("habits_goals")
                         .select()
                         .eq("habit_type", value: "water")
                         .eq("is_deleted", value: false)
@@ -293,6 +344,7 @@ struct BubblesView: View {
                     self.todayWater = Int(tWater)
                     self.todayCoffee = Int(tCoffee)
                     self.dailyGoal = finalGoalInt
+                    self.saveCache()
                     WidgetCenter.shared.reloadAllTimelines() // Force complication update on load
                 }
             } catch {
@@ -315,6 +367,7 @@ struct BubblesView: View {
                 let newTotal = max(0, today.total - log.value)
                 self.weeklyTotals[self.weeklyTotals.count - 1] = DailyTotal(date: today.date, total: newTotal)
             }
+            self.saveCache()
         }
         
         Task {
@@ -359,6 +412,7 @@ struct BubblesView: View {
             if let today = self.weeklyTotals.last {
                 self.weeklyTotals[self.weeklyTotals.count - 1] = DailyTotal(date: today.date, total: today.total + Double(amount))
             }
+            self.saveCache()
         }
         
         Task {

@@ -27,7 +27,7 @@ import com.intellidream.daily.wearos.presentation.theme.DailyWearTheme
 @Composable
 fun DailyWearApp() {
     val context = LocalContext.current
-    val sessionManager = remember { WatchSessionManager(context) }
+    val sessionManager = remember { WatchSessionManager.getInstance(context) }
     val isAuthenticated by sessionManager.isAuthenticated.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
 

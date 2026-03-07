@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -129,8 +130,12 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 todayTotal = tWater + tCoffee
                 sessionManager.persistWaterTotal(todayTotal)
                 
-            } catch (ignored: Exception) {
-                // handle error
+            } catch (e: Exception) {
+                // If the token was injected but is irrecoverably expired, Supabase throws a 401 
+                // RestException which will be caught here. The message contains the HTTP code.
+                if (e.message?.contains("401") == true || e.message?.contains("Unauthorized") == true) {
+                    sessionManager.logout()
+                }
             }
         }
     }
@@ -254,8 +259,8 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                QuickAddMiniButton(Icons.Filled.WaterDrop, 300, Color.Cyan) { logWater(300, "Large Water") }
-                QuickAddMiniButton(Icons.Filled.WaterDrop, 150, Color.Cyan) { logWater(150, "Small Water") }
+                QuickAddMiniButton(Icons.Filled.WaterDrop, 300, Color.Cyan) { logWater(300, "Water") }
+                QuickAddMiniButton(Icons.Filled.LocalDrink, 150, Color.Cyan) { logWater(150, "Small Water") }
                 QuickAddMiniButton(Icons.Filled.LocalCafe, 100, Color(0xFFFFA500)) { logWater(100, "Coffee") }
             }
         }
@@ -268,9 +273,14 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
             items(historyLogs.size) { index ->
                 val log = historyLogs[index]
                 val isCoffee = log.metadata?.contains("Coffee") == true
+                val isSmallWater = log.metadata?.contains("Small Water") == true
+                val type = if (isCoffee) "Coffee" else if (isSmallWater) "Small Water" else "Water"
+                
+                // Parse the UTC date properly into the Local Device Timezone
                 val timeStr = remember(log.logged_at) {
                     try {
-                        val date = parseFormat.parse(log.logged_at.replace("Z", ""))
+                        val pureUTC = log.logged_at.replace("Z", "") + "Z" // ensure Z bounds
+                        val date = parseFormat.parse(pureUTC)
                         if (date != null) timeFormat.format(date) else ""
                     } catch (ignored: Exception) { "" }
                 }
@@ -284,17 +294,23 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                         .padding(12.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val rowIcon = when {
+                            isCoffee -> Icons.Filled.LocalCafe
+                            isSmallWater -> Icons.Filled.LocalDrink
+                            else -> Icons.Filled.WaterDrop
+                        }
                         Icon(
-                            imageVector = if (isCoffee) Icons.Filled.LocalCafe else Icons.Filled.WaterDrop,
-                            contentDescription = null,
+                            imageVector = rowIcon,
+                            contentDescription = type,
                             tint = if (isCoffee) Color(0xFFFFA500) else Color.Cyan,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "${log.value.toInt()} ${log.unit} ${if (isCoffee) "Coffee" else "Water"}",
+                            "${log.value.toInt()} ${log.unit} $type",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
                         )
                         Spacer(Modifier.weight(1f))
                         Text(timeStr, color = Color.Gray, fontSize = 10.sp)

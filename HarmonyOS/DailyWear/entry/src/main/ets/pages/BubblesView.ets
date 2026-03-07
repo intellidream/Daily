@@ -126,9 +126,30 @@ export struct BubblesView {
     return days[d.getDay()];
   }
 
+  private getWaterProgress(): number {
+    return Math.min(this.waterTotal / Math.max(this.waterGoal, 1), 1.0);
+  }
+
+  private getCoffeeProgress(): number {
+    return Math.min(this.coffeeTotal / Math.max(this.waterGoal * 0.25, 1), 1.0);
+  }
+
   build() {
     Scroll() {
       Column() {
+        // --- Header ---
+        Row() {
+          Text('💧')
+            .fontSize(16)
+          Text('Bubbles')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFFFFF')
+            .margin({ left: 4 })
+        }
+        .justifyContent(FlexAlign.Center)
+        .margin({ top: 8 })
+
         // --- Progress Ring ---
         Stack({ alignContent: Alignment.Center }) {
           // Background track
@@ -136,51 +157,53 @@ export struct BubblesView {
             .width(90)
             .height(90)
             .fill(Color.Transparent)
-            .stroke('#333333')
-            .strokeWidth(6)
+            .stroke('#4D4D4D')
+            .strokeWidth(10)
 
-          // Water progress arc (cyan)
+          // Water progress arc (cyan) — draws from 0 to waterProgress
           Circle()
             .width(90)
             .height(90)
             .fill(Color.Transparent)
-            .stroke('#00BCD4')
-            .strokeWidth(6)
+            .stroke('#00FFFF')
+            .strokeWidth(10)
             .strokeDashArray([
-              Math.min(this.waterTotal / Math.max(this.waterGoal, 1), 1.0) * 283,
+              this.getWaterProgress() * 283,
               283
             ])
             .strokeLineCap(LineCapStyle.Round)
             .rotate({ angle: -90 })
 
-          // Coffee progress arc (orange, slightly smaller)
-          Circle()
-            .width(76)
-            .height(76)
-            .fill(Color.Transparent)
-            .stroke('#FF9800')
-            .strokeWidth(5)
-            .strokeDashArray([
-              Math.min(this.coffeeTotal / Math.max(this.waterGoal * 0.25, 1), 1.0) * 239,
-              239
-            ])
-            .strokeLineCap(LineCapStyle.Round)
-            .rotate({ angle: -90 })
+          // Coffee arc (orange) — stacked after water on same ring
+          if (this.coffeeTotal > 0) {
+            Circle()
+              .width(90)
+              .height(90)
+              .fill(Color.Transparent)
+              .stroke('#FFA500')
+              .strokeWidth(10)
+              .strokeDashArray([
+                this.getCoffeeProgress() * 283,
+                283 - this.getCoffeeProgress() * 283
+              ])
+              .strokeLineCap(LineCapStyle.Round)
+              .rotate({ angle: -90 + this.getWaterProgress() * 360 })
+          }
 
           // Center text
           Column() {
             Text(`${this.waterTotal + this.coffeeTotal}`)
-              .fontSize(18)
+              .fontSize(20)
               .fontWeight(FontWeight.Bold)
               .fontColor('#FFFFFF')
             Text(`/ ${this.waterGoal}`)
-              .fontSize(11)
+              .fontSize(10)
               .fontColor('#888888')
           }
         }
         .width(100)
         .height(100)
-        .margin({ top: 12 })
+        .margin({ top: 8 })
 
         // --- Quick Add Buttons ---
         Row() {
@@ -190,13 +213,13 @@ export struct BubblesView {
               .fontSize(18)
             Text('300')
               .fontSize(11)
-              .fontColor('#00BCD4')
+              .fontColor('#00FFFF')
               .fontWeight(FontWeight.Medium)
           }
           .width(52)
           .height(52)
           .borderRadius(26)
-          .backgroundColor('#1A3A4A')
+          .backgroundColor('rgba(0, 255, 255, 0.15)')
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
           .onClick(() => { this.logWater(300, 'Large Water'); })
@@ -207,13 +230,13 @@ export struct BubblesView {
               .fontSize(14)
             Text('150')
               .fontSize(11)
-              .fontColor('#00BCD4')
+              .fontColor('#00FFFF')
               .fontWeight(FontWeight.Medium)
           }
           .width(52)
           .height(52)
           .borderRadius(26)
-          .backgroundColor('#1A3A4A')
+          .backgroundColor('rgba(0, 255, 255, 0.15)')
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
           .onClick(() => { this.logWater(150, 'Small Water'); })
@@ -224,13 +247,13 @@ export struct BubblesView {
               .fontSize(18)
             Text('100')
               .fontSize(11)
-              .fontColor('#FF9800')
+              .fontColor('#FFA500')
               .fontWeight(FontWeight.Medium)
           }
           .width(52)
           .height(52)
           .borderRadius(26)
-          .backgroundColor('#2A1F0A')
+          .backgroundColor('rgba(255, 165, 0, 0.15)')
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
           .onClick(() => { this.logWater(100, 'Coffee'); })
@@ -248,11 +271,11 @@ export struct BubblesView {
               .margin({ bottom: 6 })
 
             Stack({ alignContent: Alignment.Bottom }) {
-              // Goal line
+              // Goal line (blue, matching WatchOS)
               Row()
                 .width('100%')
                 .height(1)
-                .backgroundColor('#FF5252')
+                .backgroundColor('#2196F3')
                 .opacity(0.5)
                 .position({
                   y: `${Math.max(0, 100 - (this.waterGoal / this.getMaxWeeklyValue()) * 100)}%`
@@ -266,7 +289,7 @@ export struct BubblesView {
                       .width(14)
                       .height(`${Math.min((item.total / Math.max(this.getMaxWeeklyValue(), 1)) * 100, 100)}%`)
                       .borderRadius(3)
-                      .backgroundColor(item.date === this.getTodayDateStr() ? '#00BCD4' : '#0277BD')
+                      .backgroundColor(item.date === this.getTodayDateStr() ? '#00FFFF' : '#0277BD')
 
                     // Day label
                     Text(this.getDayLabel(item.date))
@@ -304,25 +327,20 @@ export struct BubblesView {
                   .fontSize(14)
                   .margin({ right: 6 })
 
-                Column() {
-                  Text(this.getDrinkType(log))
-                    .fontSize(12)
-                    .fontColor('#CCCCCC')
-                  Text(this.formatTime(log.logged_at))
-                    .fontSize(10)
-                    .fontColor('#666666')
-                }
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start)
-
-                Text(`${log.value} ml`)
+                Text(`${log.value} ml ${this.getDrinkType(log)}`)
                   .fontSize(12)
-                  .fontColor('#AAAAAA')
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#CCCCCC')
+                  .layoutWeight(1)
+
+                Text(this.formatTime(log.logged_at))
+                  .fontSize(10)
+                  .fontColor('#666666')
               }
               .width('90%')
-              .padding({ top: 4, bottom: 4, left: 8, right: 8 })
+              .padding({ top: 6, bottom: 6, left: 8, right: 8 })
               .borderRadius(8)
-              .backgroundColor('#111111')
+              .backgroundColor('rgba(255, 255, 255, 0.1)')
               .margin({ bottom: 3 })
               .gesture(
                 LongPressGesture({ repeat: false, duration: 600 })

@@ -18,7 +18,7 @@ struct WaterComplication {
         Text(`${this.waterTotal}`)
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#00BCD4')
+          .fontColor('#00FFFF')
       }
     }
     .width('100%')

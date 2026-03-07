@@ -4,12 +4,14 @@ let smokesCompStorage = new LocalStorage();
 @Component
 struct SmokesComplication {
   @LocalStorageProp('smokesTotal') smokesTotal: number = 0;
+  @LocalStorageProp('smokesBaseline') smokesBaseline: number = 20;
   @LocalStorageProp('isLoggedIn') isLoggedIn: boolean = false;
 
   private getSmokesColor(): string {
     if (this.smokesTotal === 0) return '#4CAF50';
-    if (this.smokesTotal >= 20) return '#F44336';
-    if (this.smokesTotal >= 10) return '#FF9800';
+    const ratio = this.smokesTotal / Math.max(this.smokesBaseline, 1);
+    if (ratio >= 1.0) return '#F44336';
+    if (ratio >= 0.5) return '#FF9800';
     return '#FFEB3B';
   }
 

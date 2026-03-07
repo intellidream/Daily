@@ -224,6 +224,13 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
             guard let client = self.supabaseClient else { return }
             
             for await state in client.auth.authStateChanges {
+                if state.event == .signedOut {
+                    DispatchQueue.main.async {
+                        self.logout()
+                    }
+                    continue
+                }
+                
                 if let session = state.session {
                     DispatchQueue.main.async {
                         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {

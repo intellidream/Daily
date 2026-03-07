@@ -61,6 +61,9 @@ class OfflineSyncManager {
                     return
                 }
                 
+                // Verify session explicitly before attempting an insert to avoid RLS loop
+                _ = try await pClient.auth.session
+                
                 // Attempt to insert all items in bulk
                 try await pClient.from("habits_logs").insert(queue).execute()
                 

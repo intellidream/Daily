@@ -18,8 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SmokingRooms
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -118,8 +118,12 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
                 todayTotal = logs.size
                 sessionManager.persistSmokesTotal(todayTotal)
 
-            } catch (ignored: Exception) {
-                // handle error
+            } catch (e: Exception) {
+                // If the token was injected but is irrecoverably expired, Supabase throws a 401 
+                // RestException which will be caught here. The message contains the HTTP code.
+                if (e.message?.contains("401") == true || e.message?.contains("Unauthorized") == true) {
+                    sessionManager.logout()
+                }
             }
         }
     }
@@ -128,12 +132,12 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
         fetchLogs()
     }
 
-    fun getSmokesColor(total: Int, baseline: Int): Color {
-        if (total == 0) return Color.Green
-        val ratio = total.toDouble() / maxOf(baseline, 1).toDouble()
-        if (ratio >= 1.0) return Color.Red
-        if (ratio >= 0.5) return Color(0xFFFFA500) // Orange
-        return Color.Yellow
+    val getSmokesColor: (Int, Int) -> Color = { total, goal ->
+        when {
+            total >= goal -> Color(0xFFE53935) // Muted Red
+            total >= goal * 0.8 -> Color(0xFFFB8C00) // Muted Orange
+            else -> Color(0xFFFFD54F) // Muted Yellow
+        }
     }
 
     val logSmoke: (String) -> Unit = { type ->
@@ -179,7 +183,7 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
         item {
             // Header
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                Icon(imageVector = Icons.Filled.SmokingRooms, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(16.dp))
+                Icon(imageVector = Icons.Filled.LocalFireDepartment, contentDescription = null, tint = getSmokesColor(todayTotal, dailyGoal), modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Smokes", fontWeight = FontWeight.Bold, color = Color.White)
             }
@@ -225,8 +229,8 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                SmokesMiniButton(Icons.Filled.SmokingRooms, "Cig", Color.Red) { logSmoke("Cigarette") }
-                SmokesMiniButton(Icons.Filled.LocalFireDepartment, "Heat", Color(0xFF1E90FF)) { logSmoke("Heated Tobacco") }
+                SmokesMiniButton(Icons.Filled.LocalFireDepartment, "Cig", Color(0xFFE53935)) { logSmoke("Cigarette") }
+                SmokesMiniButton(Icons.Filled.FlashOn, "Heat", Color(0xFF1E90FF)) { logSmoke("Heated Tobacco") }
             }
         }
 
@@ -239,9 +243,12 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
                 val log = historyLogs[index]
                 val type = if (log.metadata?.contains("Heated") == true) "Heated Tobacco" else "Cigarette"
                 val isHeated = type == "Heated Tobacco"
+                
+                // Parse the UTC date properly into the Local Device Timezone
                 val timeStr = remember(log.logged_at) {
                     try {
-                        val date = parseFormat.parse(log.logged_at.replace("Z", ""))
+                        val pureUTC = log.logged_at.replace("Z", "") + "Z" // ensure Z bounds
+                        val date = parseFormat.parse(pureUTC)
                         if (date != null) timeFormat.format(date) else ""
                     } catch (ignored: Exception) { "" }
                 }
@@ -256,16 +263,17 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = if (isHeated) Icons.Filled.LocalFireDepartment else Icons.Filled.SmokingRooms,
-                            contentDescription = null,
-                            tint = if (isHeated) Color(0xFF1E90FF) else Color.Red,
+                            imageVector = if (isHeated) Icons.Filled.FlashOn else Icons.Filled.LocalFireDepartment,
+                            contentDescription = type,
+                            tint = if (isHeated) Color(0xFF1E90FF) else Color(0xFFE53935),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            type,
+                            if (isHeated) "1 Heat" else "1 Cig",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
                         )
                         Spacer(Modifier.weight(1f))
                         Text(timeStr, color = Color.Gray, fontSize = 10.sp)

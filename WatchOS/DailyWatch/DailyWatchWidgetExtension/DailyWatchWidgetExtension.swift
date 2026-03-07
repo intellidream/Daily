@@ -7,26 +7,27 @@ import WidgetKit
 import SwiftUI
 import AppIntents
 
-struct Provider: AppIntentTimelineProvider {
+struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: ConfigurationAppIntent(), waterTotal: 850, smokesTotal: 3, waterGoal: 2000, smokesBaseline: 20, isLoggedIn: true)
+        SimpleEntry(date: Date(), waterTotal: 850, smokesTotal: 3, waterGoal: 2000, smokesBaseline: 20, isLoggedIn: true)
     }
 
-    func snapshot(for configuration: ConfigurationAppIntent, in context: Context) async -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: configuration, waterTotal: 850, smokesTotal: 3, waterGoal: 2000, smokesBaseline: 20, isLoggedIn: true)
+    func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
+        let entry = SimpleEntry(date: Date(), waterTotal: 850, smokesTotal: 3, waterGoal: 2000, smokesBaseline: 20, isLoggedIn: true)
+        completion(entry)
     }
     
-    func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
-        let baseEntry = await fetchTodayStats(configuration: configuration)
-        let currentDate = Date()
-        var entries: [SimpleEntry] = []
+    func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
+        Task {
+            let baseEntry = await fetchTodayStats()
+            let currentDate = Date()
+            var entries: [SimpleEntry] = []
         
         // Generate an entry every 5 minutes for the next 30 minutes to alternate views without network calls
         for minuteOffset in stride(from: 0, to: 35, by: 5) {
             let entryDate = Calendar.current.date(byAdding: .minute, value: minuteOffset, to: currentDate)!
             entries.append(SimpleEntry(
                 date: entryDate,
-                configuration: baseEntry.configuration,
                 waterTotal: baseEntry.waterTotal,
                 smokesTotal: baseEntry.smokesTotal,
                 waterGoal: baseEntry.waterGoal,
@@ -37,10 +38,12 @@ struct Provider: AppIntentTimelineProvider {
         
         // The policy determines when the OS provides next network sync cycle
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: currentDate)!
-        return Timeline(entries: entries, policy: .after(nextUpdate))
+        let timeline = Timeline(entries: entries, policy: .after(nextUpdate))
+        completion(timeline)
+        }
     }
     
-    private func fetchTodayStats(configuration: ConfigurationAppIntent) async -> SimpleEntry {
+    private func fetchTodayStats() async -> SimpleEntry {
         let date = Date()
         let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily")
         
@@ -51,7 +54,7 @@ struct Provider: AppIntentTimelineProvider {
         let smokesBaseline = Int(smokesBaselineStr) ?? 20
         
         guard let token = groupPrefs?.string(forKey: "supabase_access_token") else {
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: false)
+            return SimpleEntry(date: date, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: false)
         }
         
         let calendar = Calendar.current
@@ -64,7 +67,7 @@ struct Provider: AppIntentTimelineProvider {
         let endString = formatter.string(from: todayEnd)
         
         guard var components = URLComponents(string: "https://akkfouifxztnfwwiclwg.supabase.co/rest/v1/habits_logs") else {
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
+            return SimpleEntry(date: date, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         }
         components.queryItems = [
             URLQueryItem(name: "is_deleted", value: "eq.false"),
@@ -73,7 +76,7 @@ struct Provider: AppIntentTimelineProvider {
         ]
         
         guard let url = components.url else {
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
+            return SimpleEntry(date: date, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         }
         
         var req = URLRequest(url: url)
@@ -84,7 +87,7 @@ struct Provider: AppIntentTimelineProvider {
         do {
             let (data, rsp) = try await URLSession.shared.data(for: req)
             guard let httpResponse = rsp as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
+                return SimpleEntry(date: date, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
             }
             struct LogDto: Decodable { let habit_type: String?; let value: Double? }
             let logs = try JSONDecoder().decode([LogDto].self, from: data)
@@ -95,20 +98,15 @@ struct Provider: AppIntentTimelineProvider {
                 if log.habit_type == "water" { water += log.value ?? 0.0 }
                 if log.habit_type == "smokes" { smokes += log.value ?? 0.0 }
             }
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: Int(water), smokesTotal: Int(smokes), waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
+            return SimpleEntry(date: date, waterTotal: Int(water), smokesTotal: Int(smokes), waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         } catch {
-            return SimpleEntry(date: date, configuration: configuration, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
+            return SimpleEntry(date: date, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         }
-    }
-
-    func recommendations() -> [AppIntentRecommendation<ConfigurationAppIntent>] {
-        [AppIntentRecommendation(intent: ConfigurationAppIntent(), description: "Daily Logs")]
     }
 }
 
 struct SimpleEntry: TimelineEntry {
     let date: Date
-    let configuration: ConfigurationAppIntent
     let waterTotal: Int
     let smokesTotal: Int
     let waterGoal: Int
@@ -212,7 +210,7 @@ struct DailyWatchWidgetExtension: Widget {
     let kind: String = "DailyWatchWidgetExtension"
 
     var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: kind, intent: ConfigurationAppIntent.self, provider: Provider()) { entry in
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
             DailyWatchWidgetExtensionEntryView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
@@ -222,16 +220,8 @@ struct DailyWatchWidgetExtension: Widget {
     }
 }
 
-extension ConfigurationAppIntent {
-    fileprivate static var defaults: ConfigurationAppIntent {
-        let intent = ConfigurationAppIntent()
-        intent.favoriteEmoji = "💧"
-        return intent
-    }
-}
-
 #Preview(as: .accessoryRectangular) {
     DailyWatchWidgetExtension()
 } timeline: {
-    SimpleEntry(date: .now, configuration: .defaults, waterTotal: 850, smokesTotal: 2, waterGoal: 2000, smokesBaseline: 20, isLoggedIn: true)
+    SimpleEntry(date: .now, waterTotal: 850, smokesTotal: 2, waterGoal: 2000, smokesBaseline: 20, isLoggedIn: true)
 }

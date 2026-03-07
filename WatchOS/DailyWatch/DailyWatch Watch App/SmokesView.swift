@@ -13,6 +13,8 @@ struct SmokesView: View {
     @State private var selectedLog: HabitLog?
     @State private var showDeleteConfirm: Bool = false
     
+    @Environment(\.scenePhase) private var scenePhase
+    
     init() {
         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
            let cachedGoalStr = groupPrefs.string(forKey: "smokes_baseline"),
@@ -46,14 +48,46 @@ struct SmokesView: View {
         return fallbackFormatter.date(from: norm)
     }
     
-    struct DailyTotal: Identifiable {
-        let id = UUID()
+    struct DailyTotal: Identifiable, Codable {
+        var id = UUID()
         let date: Date
         let total: Double
     }
     
     struct DeleteUpdate: Encodable {
         let is_deleted = true
+    }
+    
+    struct SmokesCache: Codable {
+        let todayTotal: Int
+        let dailyGoal: Int
+        let historyLogs: [HabitLog]
+        let weeklyTotals: [DailyTotal]
+    }
+    
+    private func saveCache() {
+        let cache = SmokesCache(
+            todayTotal: todayTotal,
+            dailyGoal: dailyGoal,
+            historyLogs: historyLogs,
+            weeklyTotals: weeklyTotals
+        )
+        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+            if let data = try? JSONEncoder().encode(cache) {
+                groupPrefs.set(data, forKey: "smokes_cache")
+            }
+        }
+    }
+    
+    private func loadCache() {
+        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
+           let data = groupPrefs.data(forKey: "smokes_cache"),
+           let cache = try? JSONDecoder().decode(SmokesCache.self, from: data) {
+            self.todayTotal = cache.todayTotal
+            self.dailyGoal = cache.dailyGoal
+            self.historyLogs = cache.historyLogs
+            self.weeklyTotals = cache.weeklyTotals
+        }
     }
     
     private func getSmokesColor(total: Int, baseline: Int) -> Color {
@@ -194,7 +228,14 @@ struct SmokesView: View {
             Button("Cancel", role: .cancel) {}
         }
         .onAppear {
+            loadCache()
             fetchData()
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active {
+                // Backgrounded->Active refresh
+                fetchData()
+            }
         }
     }
     
@@ -202,6 +243,10 @@ struct SmokesView: View {
         Task {
             do {
                 guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
+                
+                // Verify session before querying. If auth dropped, this throws and
+                // we gracefully exit without wiping our local cache!
+                _ = try await pClient.auth.session
                 
                 let calendar = Calendar.current
                 let todayStart = calendar.startOfDay(for: Date())
@@ -280,6 +325,7 @@ struct SmokesView: View {
                     self.weeklyTotals = chartData
                     self.todayTotal = Int(sum)
                     self.dailyGoal = finalGoalInt
+                    self.saveCache()
                     WidgetCenter.shared.reloadAllTimelines() // Force complication update on load
                 }
             } catch {
@@ -299,6 +345,7 @@ struct SmokesView: View {
                 let newTotal = max(0, today.total - log.value)
                 self.weeklyTotals[self.weeklyTotals.count - 1] = DailyTotal(date: today.date, total: newTotal)
             }
+            self.saveCache()
         }
         
         Task {
@@ -337,6 +384,7 @@ struct SmokesView: View {
             if let today = self.weeklyTotals.last {
                 self.weeklyTotals[self.weeklyTotals.count - 1] = DailyTotal(date: today.date, total: today.total + 1.0)
             }
+            self.saveCache()
         }
         
         Task {

@@ -16,6 +16,7 @@ export default class DailyCardAbility extends FormExtensionAbility {
     const defaultData: Record<string, string | number | boolean> = {
       'waterTotal': 0,
       'smokesTotal': 0,
+      'smokesBaseline': 20,
       'isLoggedIn': false,
     };
 
@@ -50,6 +51,7 @@ export default class DailyCardAbility extends FormExtensionAbility {
         const data: Record<string, string | number | boolean> = {
           'waterTotal': 0,
           'smokesTotal': 0,
+          'smokesBaseline': 20,
           'isLoggedIn': false,
         };
         const bd: formBindingData.FormBindingData = formBindingData.createFormBindingData(JSON.stringify(data));
@@ -94,9 +96,32 @@ export default class DailyCardAbility extends FormExtensionAbility {
 
       httpRequest.destroy();
 
+      // Fetch smokes baseline from user_preferences
+      let smokesBaseline = 20;
+      const prefHttpRequest = http.createHttp();
+      const prefUrl = `${SUPABASE_URL}/rest/v1/user_preferences?select=smokes_baseline&id=eq.${userId}&limit=1`;
+      try {
+        const prefResponse = await prefHttpRequest.request(prefUrl, {
+          method: http.RequestMethod.GET,
+          header: headers,
+          expectDataType: http.HttpDataType.STRING,
+        });
+        if (prefResponse.responseCode === 200) {
+          const prefRows: Record<string, Object>[] = JSON.parse(prefResponse.result as string);
+          if (prefRows.length > 0 && prefRows[0]['smokes_baseline'] !== undefined) {
+            smokesBaseline = Number(prefRows[0]['smokes_baseline']);
+          }
+        }
+      } catch (prefErr) {
+        hilog.warn(DOMAIN, TAG, 'Failed to fetch smokes baseline: ' + JSON.stringify(prefErr));
+      } finally {
+        prefHttpRequest.destroy();
+      }
+
       const data: Record<string, string | number | boolean> = {
         'waterTotal': waterTotal,
         'smokesTotal': smokesTotal,
+        'smokesBaseline': smokesBaseline,
         'isLoggedIn': true,
       };
       const bd: formBindingData.FormBindingData = formBindingData.createFormBindingData(JSON.stringify(data));
