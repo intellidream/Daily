@@ -5,7 +5,7 @@
 @inject IAuthService AuthService
 @inject ISnackbar Snackbar
 @inject ISeederService SeederService
-@inject IDialogService DialogService
+@inject Supabase.Client SupabaseClient
 @implements IDisposable
 
 
@@ -56,10 +56,9 @@
                         </div>
                     </div>
 
-                    <div>
+                    <div style="flex-shrink: 0;">
                         @if (SettingsService.IsAuthenticated)
                         {
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mr-2" OnClick="@OpenWatchPairingDialog">Pair Watch</MudButton>
                             <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="@SignOut">Sign Out</MudButton>
                         }
                         else
@@ -159,6 +158,83 @@
                 </div>
             </MudPaper>
         </MudItem>
+
+        <!-- Smartwatch Pairing Section -->
+        @if (SettingsService.IsAuthenticated)
+        {
+            <MudItem xs="12">
+                <MudPaper Class="detail-tile rounded-xl pa-0" Elevation="3" Style="overflow: hidden;">
+                    <div class="pa-6 pb-4">
+                        <div class="d-flex align-center gap-3">
+                            <MudAvatar Size="Size.Large" Style="background: linear-gradient(135deg, #FF6B6B, #FF8E53);">
+                                <MudIcon Icon="@Icons.Material.Filled.Watch" Size="Size.Medium" Style="color: white;" />
+                            </MudAvatar>
+                            <div style="flex: 1; min-width: 0;">
+                                <MudText Typo="Typo.h6" Class="font-weight-bold">Smartwatch</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.6;">Pair your smartwatch to sync health &amp; habits</MudText>
+                            </div>
+                        </div>
+                    </div>
+                    <MudDivider Style="opacity: 0.1;" />
+                    <div class="pa-6">
+                        @if (!_showPairingInput)
+                        {
+                            <div class="d-flex flex-column flex-sm-row align-center gap-4" style="text-align: center;">
+                                <MudIcon Icon="@Icons.Material.Outlined.PhonelinkSetup" Style="font-size: 2.5rem; opacity: 0.25;" />
+                                <MudText Typo="Typo.body2" Style="opacity: 0.7; flex: 1;">
+                                    Open <strong>Daily</strong> on your smartwatch, then enter the 6-digit pairing code shown on screen.
+                                </MudText>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Link"
+                                           OnClick="ShowPairingInput"
+                                           Class="rounded-pill px-6"
+                                           Style="flex-shrink: 0;">
+                                    Pair Watch
+                                </MudButton>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-column flex-sm-row align-center gap-4">
+                                <MudTextField @ref="_pairingCodeField"
+                                              @bind-Value="_pairingCode"
+                                              Label="6-Digit Code"
+                                              Placeholder="000000"
+                                              Variant="Variant.Outlined"
+                                              MaxLength="6"
+                                              Immediate="true"
+                                              AutoFocus="true"
+                                              Margin="Margin.Dense"
+                                              Style="max-width: 220px; letter-spacing: 0.4em; font-size: 1.15rem; font-weight: 600;"
+                                              Class="flex-grow-1" />
+                                <div class="d-flex gap-2" style="flex-shrink: 0;">
+                                    <MudButton Variant="Variant.Text"
+                                               OnClick="@(() => { _showPairingInput = false; _pairingCode = string.Empty; StateHasChanged(); })">
+                                        Cancel
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Filled"
+                                               Color="Color.Primary"
+                                               OnClick="PairWatch"
+                                               Disabled="@(string.IsNullOrWhiteSpace(_pairingCode) || _pairingCode.Length != 6 || _isPairing)"
+                                               Class="rounded-pill px-6">
+                                        @if (_isPairing)
+                                        {
+                                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                            <MudText Class="ms-2">Pairing…</MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText>Connect</MudText>
+                                        }
+                                    </MudButton>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </MudPaper>
+            </MudItem>
+        }
 
         <!-- Notifications Section -->
         <MudItem xs="12">
@@ -362,12 +438,80 @@
     private async Task SignOut()
     {
         await AuthService.SignOutAsync();
+        _showPairingInput = false;
+        _pairingCode = string.Empty;
         Snackbar.Add("Signed out.", Severity.Info);
     }
 
-    private async Task OpenWatchPairingDialog()
+    private bool _showPairingInput;
+    private string _pairingCode = string.Empty;
+    private bool _isPairing;
+    private MudTextField<string> _pairingCodeField;
+    private bool _focusPairingCode;
+
+    private void ShowPairingInput()
     {
-        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
-        await DialogService.ShowAsync<Daily.Components.Dialogs.WatchPairingDialog>("Pair Apple Watch", options);
+        _showPairingInput = true;
+        _focusPairingCode = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusPairingCode && _pairingCodeField is not null)
+        {
+            _focusPairingCode = false;
+            await _pairingCodeField.FocusAsync();
+        }
+    }
+
+    private async Task PairWatch()
+    {
+        _isPairing = true;
+        StateHasChanged();
+
+        try
+        {
+            var currentSession = SupabaseClient.Auth.CurrentSession;
+            if (currentSession == null || string.IsNullOrEmpty(currentSession.AccessToken))
+            {
+                Snackbar.Add("You must be logged in to pair a Watch.", Severity.Error);
+                return;
+            }
+
+            var existingResponse = await SupabaseClient.From<WatchPairing>()
+                .Where(x => x.Code == _pairingCode)
+                .Get();
+
+            var existing = existingResponse.Models.FirstOrDefault();
+            if (existing == null)
+            {
+                Snackbar.Add($"Pairing code '{_pairingCode}' not found. Did the watch disconnect?", Severity.Error);
+                return;
+            }
+
+            existing.AccessToken = currentSession.AccessToken;
+            existing.RefreshToken = currentSession.RefreshToken;
+
+            var updateResponse = await SupabaseClient.From<WatchPairing>().Update(existing);
+
+            if (updateResponse.Models == null || updateResponse.Models.Count == 0)
+            {
+                Snackbar.Add("Database rejected the token update! (0 rows affected)", Severity.Error);
+                return;
+            }
+
+            Snackbar.Add("Watch paired successfully! Check your Apple Watch.", Severity.Success);
+            _showPairingInput = false;
+            _pairingCode = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Pairing failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPairing = false;
+            StateHasChanged();
+        }
     }
 }
