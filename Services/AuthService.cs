@@ -231,8 +231,8 @@ namespace Daily.Services
             }
         }
 
-        // Static TCS for manual callback handling
-        public static TaskCompletionSource<string>? GoogleAuthTcs;
+        // Static TCS for manual callback handling (volatile: written by UI thread, read by activation background thread)
+        public static volatile TaskCompletionSource<string>? GoogleAuthTcs;
 
         public string? GetProviderToken()
         {
