@@ -169,7 +169,7 @@ namespace Daily.Services
                         Daily.WinUI.AuthDebug.Log("[AuthService] Login Timed Out!");
                         #endif
                         GoogleAuthTcs.TrySetCanceled();
-                        await CommunityToolkit.Maui.Alerts.Toast.Make("Login Timed Out").Show();
+                        Console.WriteLine("[AuthService] Login Timed Out.");
                     }
                 }
                 catch (Exception ex)
@@ -178,7 +178,6 @@ namespace Daily.Services
                     #if WINDOWS
                     Daily.WinUI.AuthDebug.Log($"[AuthService] LAUNCHER FAILED: {ex}");
                     #endif
-                    await CommunityToolkit.Maui.Alerts.Toast.Make($"Launcher Error: {ex.Message}").Show();
                     throw;
                 }
                 finally
@@ -199,7 +198,7 @@ namespace Daily.Services
                 }
                 else
                 {
-                    await CommunityToolkit.Maui.Alerts.Toast.Make("Auth Failed: No code received").Show();
+                    Console.WriteLine("[AuthService] Auth Failed: No code received.");
                 }
 
                 // 4. Update Settings Service (Triggers UI update)
@@ -213,20 +212,19 @@ namespace Daily.Services
                 await Task.Delay(500); 
                 await _refreshService.TriggerDetailRefreshAsync();
                 
-                await CommunityToolkit.Maui.Alerts.Toast.Make("Login Successful!").Show();
+                Console.WriteLine("[AuthService] Login Successful.");
                 return _supabase.Auth.CurrentSession != null;
 
             }
             catch (TaskCanceledException)
             {
                 // User closed the window
-                await CommunityToolkit.Maui.Alerts.Toast.Make("Login Canceled").Show();
+                Console.WriteLine("[AuthService] Login Canceled.");
                 return false;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Login Failed: {ex.Message}");
-                await CommunityToolkit.Maui.Alerts.Toast.Make($"Login Exception: {ex.Message}").Show();
+                Console.WriteLine($"[AuthService] Login Failed: {ex.Message}");
                 return false;
             }
         }
