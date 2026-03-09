@@ -27,6 +27,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     private var baseClient: SupabaseClient
     private var pollTimer: Timer?
     private var authStateTask: Task<Void, Never>?
+    private var isRecoveringSession = false
     
     private override init() {
         let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
@@ -71,9 +72,17 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                         }
                     }
                 } catch {
-                    // Session restoration failed (e.g., refresh token is completely dead/revoked)
+                    // Session restoration failed — don't immediately logout.
+                    // The refresh token may still be valid; the auth listener or next
+                    // onAppBecameActive() will retry. Show authenticated UI optimistically
+                    // if we can extract a user ID from the stored JWT.
+                    print("Initial session restore failed: \(error). Will retry on next activation.")
                     DispatchQueue.main.async {
-                        self.logout()
+                        if let userId = self.extractUserId(from: accessToken) {
+                            self.currentUserId = userId
+                            self.isAuthenticated = true
+                            self.isPairing = false
+                        }
                     }
                 }
             }
@@ -180,6 +189,58 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         }
     }
     
+    // MARK: - Session Recovery
+    
+    /// Called when the watch app returns to the foreground. Proactively refreshes
+    /// the Supabase session so stale tokens from watchOS sleep don't cause 401s.
+    func onAppBecameActive() {
+        guard let client = self.supabaseClient, isAuthenticated else { return }
+        Task {
+            do {
+                try await client.auth.refreshSession()
+            } catch {
+                // SDK refresh failed — try full recovery from stored tokens
+                await recoverSessionFromStorage()
+            }
+        }
+    }
+    
+    /// Attempts to restore a valid Supabase session from locally stored tokens.
+    /// Uses the isRecoveringSession flag to prevent infinite loops when setSession()
+    /// itself triggers another .signedOut event.
+    private func recoverSessionFromStorage() async {
+        guard !isRecoveringSession else { return }
+        isRecoveringSession = true
+        defer { isRecoveringSession = false }
+        
+        guard let refreshToken = UserDefaults.standard.string(forKey: "supabase_refresh_token"),
+              !refreshToken.isEmpty else {
+            // No refresh token stored at all — truly logged out
+            DispatchQueue.main.async { self.logout() }
+            return
+        }
+        
+        let accessToken = UserDefaults.standard.string(forKey: "supabase_access_token") ?? ""
+        
+        if self.supabaseClient == nil {
+            let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+            self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
+            self.listenToAuthState()
+        }
+        
+        do {
+            try await self.supabaseClient?.auth.setSession(accessToken: accessToken, refreshToken: refreshToken)
+            // Success — the auth state listener will persist the new tokens and update UI
+        } catch {
+            // Recovery failed — don't logout. The refresh token may still be valid but
+            // network is temporarily unavailable (common on watchOS). We'll retry on
+            // the next onAppBecameActive() call or WCSession token push.
+            print("Session recovery failed: \(error). Will retry on next activation.")
+        }
+    }
+    
+    // MARK: - Logout
+    
     func logout() {
         authStateTask?.cancel()
         UserDefaults.standard.removeObject(forKey: "supabase_access_token")
@@ -220,14 +281,15 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         authStateTask?.cancel()
         authStateTask = Task { [weak self] in
             guard let self = self else { return }
-            // Wait for supabaseClient to be truly ready, if not already
             guard let client = self.supabaseClient else { return }
             
             for await state in client.auth.authStateChanges {
                 if state.event == .signedOut {
-                    DispatchQueue.main.async {
-                        self.logout()
-                    }
+                    // Don't immediately logout — attempt recovery from stored tokens.
+                    // watchOS often kills the SDK's refresh timer during sleep, causing
+                    // spurious signedOut events. Only logout if recovery completely fails.
+                    guard !self.isRecoveringSession else { continue }
+                    await self.recoverSessionFromStorage()
                     continue
                 }
                 
@@ -238,6 +300,15 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                         }
                         UserDefaults.standard.set(session.accessToken, forKey: "supabase_access_token")
                         UserDefaults.standard.set(session.refreshToken, forKey: "supabase_refresh_token")
+                        
+                        // Restore authenticated state if it was lost during recovery
+                        if !self.isAuthenticated {
+                            if let userId = self.extractUserId(from: session.accessToken) {
+                                self.currentUserId = userId
+                            }
+                            self.isAuthenticated = true
+                            self.isPairing = false
+                        }
                     }
                 }
             }

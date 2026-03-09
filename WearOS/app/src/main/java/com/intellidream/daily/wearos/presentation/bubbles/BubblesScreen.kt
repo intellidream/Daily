@@ -49,8 +49,10 @@ import com.google.android.horologist.compose.layout.rememberResponsiveColumnStat
 import com.intellidream.daily.wearos.data.OfflineSyncManager
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
@@ -72,6 +74,7 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
 
     val scope = rememberCoroutineScope()
     val columnState = rememberResponsiveColumnState()
+    val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
 
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val parseFormat = remember { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US) }
@@ -131,16 +134,17 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 sessionManager.persistWaterTotal(todayTotal)
                 
             } catch (e: Exception) {
-                // If the token was injected but is irrecoverably expired, Supabase throws a 401 
-                // RestException which will be caught here. The message contains the HTTP code.
-                if (e.message?.contains("401") == true || e.message?.contains("Unauthorized") == true) {
-                    sessionManager.logout()
-                }
+                // Token expired — attempt silent session refresh. The refreshed
+                // session will trigger dataRefreshTrigger via onAppResumed, which
+                // LaunchedEffect listens to and will re-invoke fetchLogs.
+                try {
+                    sessionManager.supabaseClient.auth.refreshCurrentSession()
+                } catch (_: Exception) { }
             }
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshTrigger) {
         fetchLogs()
     }
 

@@ -42,6 +42,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                 instance ?: WatchSessionManager(context.applicationContext).also {
                     instance = it
                     it.startSessionListener()
+                    it.checkExistingSession()
                 }
             }
         }
@@ -77,6 +78,10 @@ class WatchSessionManager private constructor(private val context: Context) {
     var cachedSmokesGoal: Int? = null
     var cachedSmokesLogs: List<HabitLog>? = null
 
+    // Bumped on every resume to tell screens to re-fetch data
+    private val _dataRefreshTrigger = MutableStateFlow(0)
+    val dataRefreshTrigger: StateFlow<Int> = _dataRefreshTrigger
+
     // For Complications and Tiles
     val waterTotalCacheKey = stringPreferencesKey("daily_water_total")
     val smokesTotalCacheKey = stringPreferencesKey("daily_smokes_total")
@@ -99,6 +104,7 @@ class WatchSessionManager private constructor(private val context: Context) {
 
     private var pollJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    @Volatile private var isRecovering = false
 
     /**
      * Listens to the Supabase Auth plugin's session status. When the plugin auto-refreshes
@@ -126,14 +132,32 @@ class WatchSessionManager private constructor(private val context: Context) {
                         _isPairing.value = false
                     }
                     is SessionStatus.NotAuthenticated -> {
-                        // Only transition to unauthenticated if we previously thought we were
-                        // authenticated AND we don't have valid DataStore tokens to recover from.
-                        // The Auth plugin fires NotAuthenticated on first init before loading
-                        // from storage, so we must not react to that initial event.
-                        if (_isAuthenticated.value) {
+                        // Attempt recovery from DataStore tokens regardless of current auth state.
+                        // The Auth plugin fires NotAuthenticated on process restart with expired tokens
+                        // AND when auto-refresh fails — we must recover in both cases.
+                        if (!isRecovering) {
                             val prefs = context.dataStore.data.first()
                             val savedUserId = prefs[stringPreferencesKey("supabase_user_id")]
-                            if (savedUserId.isNullOrEmpty()) {
+                            if (!savedUserId.isNullOrEmpty()) {
+                                val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
+                                val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
+                                if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty()) {
+                                    isRecovering = true
+                                    try {
+                                        supabaseClient.auth.importAuthToken(accessToken, refreshToken)
+                                        supabaseClient.auth.refreshCurrentSession()
+                                    } catch (e: Exception) {
+                                        // Recovery failed — keep _isAuthenticated optimistically true
+                                        // so screens can still show cached data. Will retry on next resume.
+                                        _isAuthenticated.value = true
+                                        _currentUserId.value = savedUserId
+                                        _isPairing.value = false
+                                    } finally {
+                                        isRecovering = false
+                                    }
+                                }
+                            } else if (_isAuthenticated.value) {
+                                // No stored user — truly logged out
                                 _isAuthenticated.value = false
                                 _currentUserId.value = null
                             }
@@ -179,6 +203,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                 _isAuthenticated.value = true
                 _isPairing.value = false
                 
+                isRecovering = true
                 try {
                     supabaseClient.auth.importAuthToken(accessToken, refreshToken)
                     
@@ -191,6 +216,8 @@ class WatchSessionManager private constructor(private val context: Context) {
                     }
                 } catch (e: Exception) {
                     // Do not aggressively logout if network fails here. 
+                } finally {
+                    isRecovering = false
                 }
             } else {
                 generatePairingCode()
@@ -282,23 +309,35 @@ class WatchSessionManager private constructor(private val context: Context) {
                     // The session listener will handle persistence of refreshed tokens.
                     // If refresh fails, the existing access token is still valid for a while.
                 }
-            } else if (_isAuthenticated.value) {
+            } else {
                 // Auth plugin lost its session — try recovering from DataStore
                 val prefs = context.dataStore.data.first()
                 val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
                 val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
+                val savedUserId = prefs[stringPreferencesKey("supabase_user_id")]
                 
                 if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty()) {
+                    // Keep user authenticated while we attempt recovery
+                    if (!savedUserId.isNullOrEmpty()) {
+                        _isAuthenticated.value = true
+                        _currentUserId.value = savedUserId
+                    }
                     try {
                         supabaseClient.auth.importAuthToken(accessToken, refreshToken)
                         supabaseClient.auth.refreshCurrentSession()
                     } catch (e: Exception) {
-                        // Token is truly expired/revoked
-                        logout()
+                        // Recovery failed — don't logout on transient network failures.
+                        // The refresh token may still be valid. Will retry on next resume.
                     }
-                } else {
-                    logout()
                 }
+            }
+
+            // Tell screens to re-fetch their data now that auth is fresh
+            _dataRefreshTrigger.value++
+
+            // Flush any logs that were queued while offline
+            if (_isAuthenticated.value) {
+                OfflineSyncManager.shared.syncPendingLogs(supabaseClient)
             }
         }
     }

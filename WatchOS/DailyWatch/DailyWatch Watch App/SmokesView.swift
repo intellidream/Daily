@@ -76,6 +76,8 @@ struct SmokesView: View {
             if let data = try? JSONEncoder().encode(cache) {
                 groupPrefs.set(data, forKey: "smokes_cache")
             }
+            // Simple integer total for widget/complication fallback
+            groupPrefs.set(todayTotal, forKey: "cached_smokes_total")
         }
     }
     
@@ -244,9 +246,14 @@ struct SmokesView: View {
             do {
                 guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
                 
-                // Verify session before querying. If auth dropped, this throws and
-                // we gracefully exit without wiping our local cache!
-                _ = try await pClient.auth.session
+                // Best-effort session refresh — don't abort data loading if auth is stale.
+                // watchOS aggressively suspends apps overnight; tokens may be expired but
+                // the refresh token is usually still valid for Supabase queries.
+                do {
+                    _ = try await pClient.auth.session
+                } catch {
+                    try? await pClient.auth.refreshSession()
+                }
                 
                 let calendar = Calendar.current
                 let todayStart = calendar.startOfDay(for: Date())
@@ -387,6 +394,12 @@ struct SmokesView: View {
             self.saveCache()
         }
         
+        // Release the tap-guard quickly so the user can log again without
+        // waiting for the network round-trip (which can stall on watchOS).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.isLogging = false
+        }
+        
         Task {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -403,10 +416,7 @@ struct SmokesView: View {
             )
             
             do {
-                guard let pClient = WatchSessionManager.shared.supabaseClient else {
-                    DispatchQueue.main.async { isLogging = false }
-                    return
-                }
+                guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
                 
                 DispatchQueue.main.async {
                     self.historyLogs.insert(newLog, at: 0)
@@ -414,8 +424,7 @@ struct SmokesView: View {
                 
                 try await pClient.from("habits_logs").insert(newLog).execute()
                 
-                DispatchQueue.main.async { 
-                    isLogging = false 
+                DispatchQueue.main.async {
                     WidgetCenter.shared.reloadAllTimelines()
                 }
             } catch {
@@ -425,9 +434,6 @@ struct SmokesView: View {
                 OfflineSyncManager.shared.enqueue(log: newLog)
                 
                 DispatchQueue.main.async {
-                    // Do not revert the UI, keep the optimistic local state
-                    // Just cleanly release the logging lock
-                    isLogging = false
                     WidgetCenter.shared.reloadAllTimelines()
                 }
             }

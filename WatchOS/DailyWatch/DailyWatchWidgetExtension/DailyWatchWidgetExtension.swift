@@ -87,7 +87,10 @@ struct Provider: TimelineProvider {
         do {
             let (data, rsp) = try await URLSession.shared.data(for: req)
             guard let httpResponse = rsp as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                return SimpleEntry(date: date, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
+                // API error (401, network, etc.) — fall back to last known cached totals
+                let cachedWater = groupPrefs?.integer(forKey: "cached_water_total") ?? 0
+                let cachedSmokes = groupPrefs?.integer(forKey: "cached_smokes_total") ?? 0
+                return SimpleEntry(date: date, waterTotal: cachedWater, smokesTotal: cachedSmokes, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
             }
             struct LogDto: Decodable { let habit_type: String?; let value: Double? }
             let logs = try JSONDecoder().decode([LogDto].self, from: data)
@@ -100,7 +103,10 @@ struct Provider: TimelineProvider {
             }
             return SimpleEntry(date: date, waterTotal: Int(water), smokesTotal: Int(smokes), waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         } catch {
-            return SimpleEntry(date: date, waterTotal: 0, smokesTotal: 0, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
+            // Network error — fall back to last known cached totals
+            let cachedWater = groupPrefs?.integer(forKey: "cached_water_total") ?? 0
+            let cachedSmokes = groupPrefs?.integer(forKey: "cached_smokes_total") ?? 0
+            return SimpleEntry(date: date, waterTotal: cachedWater, smokesTotal: cachedSmokes, waterGoal: waterGoal, smokesBaseline: smokesBaseline, isLoggedIn: true)
         }
     }
 }

@@ -17,6 +17,8 @@ struct DailyWatchApp: App {
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .active {
+                // Proactively refresh the Supabase session after watchOS sleep
+                sessionManager.onAppBecameActive()
                 // Eagerly try to flush any offline habits logged while disconnected
                 OfflineSyncManager.shared.processQueue()
             }

@@ -69,7 +69,10 @@ struct DailyProvider: TimelineProvider {
         do {
             let (data, rsp) = try await URLSession.shared.data(for: req)
             guard let httpResponse = rsp as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                return DailyEntry(date: date, waterTotal: 0, smokesTotal: 0, isLoggedIn: true)
+                // API error (401, network, etc.) — fall back to last known cached totals
+                let cachedWater = groupPrefs?.integer(forKey: "cached_water_total") ?? 0
+                let cachedSmokes = groupPrefs?.integer(forKey: "cached_smokes_total") ?? 0
+                return DailyEntry(date: date, waterTotal: cachedWater, smokesTotal: cachedSmokes, isLoggedIn: true)
             }
             struct LogDto: Decodable { let habit_type: String?; let value: Double? }
             let logs = try JSONDecoder().decode([LogDto].self, from: data)
@@ -82,7 +85,10 @@ struct DailyProvider: TimelineProvider {
             }
             return DailyEntry(date: date, waterTotal: Int(water), smokesTotal: Int(smokes), isLoggedIn: true)
         } catch {
-            return DailyEntry(date: date, waterTotal: 0, smokesTotal: 0, isLoggedIn: true)
+            // Network error — fall back to last known cached totals
+            let cachedWater = groupPrefs?.integer(forKey: "cached_water_total") ?? 0
+            let cachedSmokes = groupPrefs?.integer(forKey: "cached_smokes_total") ?? 0
+            return DailyEntry(date: date, waterTotal: cachedWater, smokesTotal: cachedSmokes, isLoggedIn: true)
         }
     }
 }
