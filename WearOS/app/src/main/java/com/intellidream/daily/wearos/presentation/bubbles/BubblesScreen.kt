@@ -77,7 +77,11 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
 
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val parseFormat = remember { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US) }
+    val parseFormat = remember {
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+    }
 
     val fetchLogs = {
         scope.launch {
@@ -278,7 +282,7 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 val log = historyLogs[index]
                 val isCoffee = log.metadata?.contains("Coffee") == true
                 val isSmallWater = log.metadata?.contains("Small Water") == true
-                val type = if (isCoffee) "Coffee" else if (isSmallWater) "Small Water" else "Water"
+                val type = if (isCoffee) "Coffee" else if (isSmallWater) "Small" else "Large"
                 
                 // Parse the UTC date properly into the Local Device Timezone
                 val timeStr = remember(log.logged_at) {

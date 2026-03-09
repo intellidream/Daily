@@ -72,7 +72,11 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
 
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val parseFormat = remember { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US) }
+    val parseFormat = remember {
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+    }
 
     val fetchLogs = {
         scope.launch {
