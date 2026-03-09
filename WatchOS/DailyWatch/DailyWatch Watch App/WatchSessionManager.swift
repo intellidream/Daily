@@ -11,6 +11,19 @@ struct WatchPairing: Codable {
     let created_at: String?
 }
 
+// Persistent pairing record — mirrors the paired_watches Supabase table
+struct PairedWatchRecord: Codable {
+    let id: String?
+    let user_id: String?
+    let platform: String?
+    let device_name: String?
+    let paired_at: String?
+    let last_token_push: String?
+    let pending_access_token: String?
+    let pending_refresh_token: String?
+    let is_active: Bool?
+}
+
 class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     static let shared = WatchSessionManager()
     
@@ -54,29 +67,39 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
             
             Task {
                 do {
-                    // This command tells the Supabase Swift library to take ownership of these tokens.
-                    // It will automatically refresh them in the background when they expire!
+                    // Hand tokens to the Supabase Auth module so it manages the session.
                     try await self.supabaseClient?.auth.setSession(accessToken: accessToken, refreshToken: refreshToken)
                     
+                    // CRITICAL: Always force an immediate refresh. The stored access token
+                    // is likely expired after watchOS sleep. setSession alone may accept
+                    // stale tokens without refreshing. This call uses the refresh_token
+                    // to obtain a brand-new access_token from Supabase.
+                    try? await self.supabaseClient?.auth.refreshSession()
+                    
                     DispatchQueue.main.async {
-                        // Extract user_id from the active JWT token
                         if let userId = self.extractUserId(from: accessToken) {
                             self.currentUserId = userId
                         }
                         self.isAuthenticated = true
                         self.isPairing = false
                         
-                        // Mirror the active token to the Widget Extension App Group
                         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
                             groupPrefs.set(accessToken, forKey: "supabase_access_token")
                         }
                     }
                 } catch {
-                    // Session restoration failed — don't immediately logout.
-                    // The refresh token may still be valid; the auth listener or next
-                    // onAppBecameActive() will retry. Show authenticated UI optimistically
-                    // if we can extract a user ID from the stored JWT.
-                    print("Initial session restore failed: \(error). Will retry on next activation.")
+                    // setSession failed — the access token is expired. Try refreshing
+                    // directly with the refresh token (which has a much longer lifetime).
+                    print("Initial session restore failed: \(error). Attempting direct refresh.")
+                    do {
+                        try await self.supabaseClient?.auth.setSession(accessToken: accessToken, refreshToken: refreshToken)
+                        try await self.supabaseClient?.auth.refreshSession()
+                    } catch {
+                        // Network likely unavailable (common on watchOS wake).
+                        // Show authenticated UI optimistically — onAppBecameActive() will
+                        // retry the refresh when connectivity is established.
+                        print("Direct refresh also failed: \(error). Will retry on activation.")
+                    }
                     DispatchQueue.main.async {
                         if let userId = self.extractUserId(from: accessToken) {
                             self.currentUserId = userId
@@ -172,6 +195,9 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                         
                         // Clean up the row
                         _ = try? await baseClient.from("watch_pairings").delete().eq("code", value: self.pairingCode).execute()
+                        
+                        // Register this pairing in the persistent paired_watches table
+                        await self.registerPairing(accessToken: token)
                     } else {
                         // Reached row but token is null, just wait
                     }
@@ -193,15 +219,22 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     
     /// Called when the watch app returns to the foreground. Proactively refreshes
     /// the Supabase session so stale tokens from watchOS sleep don't cause 401s.
+    /// Must NOT guard on isAuthenticated — after process kill + relaunch,
+    /// isAuthenticated may still be false even though valid tokens exist in UserDefaults.
     func onAppBecameActive() {
-        guard let client = self.supabaseClient, isAuthenticated else { return }
         Task {
-            do {
-                try await client.auth.refreshSession()
-            } catch {
-                // SDK refresh failed — try full recovery from stored tokens
-                await recoverSessionFromStorage()
+            // First, check for repair tokens pushed from the main app
+            await checkForRepairTokens()
+            
+            if let client = self.supabaseClient {
+                do {
+                    try await client.auth.refreshSession()
+                    return
+                } catch {
+                    // SDK refresh failed — fall through to storage recovery
+                }
             }
+            await recoverSessionFromStorage()
         }
     }
     
@@ -230,12 +263,25 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         
         do {
             try await self.supabaseClient?.auth.setSession(accessToken: accessToken, refreshToken: refreshToken)
+            // setSession loaded the tokens — now force a refresh so we get a
+            // brand-new access token. The stored one is almost certainly expired
+            // after watchOS suspended the app for hours.
+            try await self.supabaseClient?.auth.refreshSession()
             // Success — the auth state listener will persist the new tokens and update UI
         } catch {
             // Recovery failed — don't logout. The refresh token may still be valid but
             // network is temporarily unavailable (common on watchOS). We'll retry on
             // the next onAppBecameActive() call or WCSession token push.
             print("Session recovery failed: \(error). Will retry on next activation.")
+            // Even though refresh failed, set authenticated UI so the user can still
+            // interact with cached data. The auth listener or next activation will retry.
+            DispatchQueue.main.async {
+                if let userId = self.extractUserId(from: accessToken) {
+                    self.currentUserId = userId
+                    self.isAuthenticated = true
+                    self.isPairing = false
+                }
+            }
         }
     }
     
@@ -243,8 +289,20 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     
     func logout() {
         authStateTask?.cancel()
+        
+        // Deactivate the paired_watches record so the main app reflects the unpair
+        if let pairId = UserDefaults.standard.string(forKey: "paired_watch_id") {
+            Task {
+                _ = try? await baseClient.from("paired_watches")
+                    .update(["is_active": false])
+                    .eq("id", value: pairId)
+                    .execute()
+            }
+        }
+        
         UserDefaults.standard.removeObject(forKey: "supabase_access_token")
         UserDefaults.standard.removeObject(forKey: "supabase_refresh_token")
+        UserDefaults.standard.removeObject(forKey: "paired_watch_id")
         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
             groupPrefs.removeObject(forKey: "supabase_access_token")
         }
@@ -253,6 +311,119 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         self.currentUserId = nil
         self.supabaseClient = nil
         self.generatePairingCode()
+    }
+    
+    // MARK: - Paired Watches (Repair support)
+    
+    /// Registers this watch in the persistent paired_watches table after a successful pairing.
+    private func registerPairing(accessToken: String) async {
+        guard let userId = self.extractUserId(from: accessToken) else { return }
+        
+        let record: [String: String] = [
+            "user_id": userId.uuidString.lowercased(),
+            "platform": "watchos",
+            "device_name": "Apple Watch"
+        ]
+        
+        do {
+            // Use raw REST to get the inserted id back via Prefer: return=representation
+            guard var components = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/paired_watches"), resolvingAgainstBaseURL: false) else { return }
+            guard let url = components.url else { return }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+            request.httpBody = try JSONSerialization.data(withJSONObject: record)
+            
+            let (data, _) = try await URLSession.shared.data(for: request)
+            if let rows = try? JSONDecoder().decode([PairedWatchRecord].self, from: data),
+               let id = rows.first?.id {
+                UserDefaults.standard.set(id, forKey: "paired_watch_id")
+                print("Registered paired_watch id: \(id)")
+            }
+        } catch {
+            print("Failed to register pairing: \(error)")
+        }
+    }
+    
+    /// Checks the paired_watches table for pending repair tokens pushed from the main app.
+    /// If found, consumes them and replaces the current session.
+    private func checkForRepairTokens() async {
+        guard let pairId = UserDefaults.standard.string(forKey: "paired_watch_id") else { return }
+        
+        do {
+            guard var components = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/paired_watches"), resolvingAgainstBaseURL: false) else { return }
+            components.queryItems = [
+                URLQueryItem(name: "id", value: "eq.\(pairId)"),
+                URLQueryItem(name: "select", value: "pending_access_token,pending_refresh_token")
+            ]
+            guard let url = components.url else { return }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+            request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            
+            let (data, _) = try await URLSession.shared.data(for: request)
+            let rows = try JSONDecoder().decode([PairedWatchRecord].self, from: data)
+            
+            guard let row = rows.first,
+                  let token = row.pending_access_token, !token.isEmpty,
+                  let refresh = row.pending_refresh_token, !refresh.isEmpty else {
+                return  // No pending repair tokens
+            }
+            
+            print("Repair tokens found! Applying new session.")
+            
+            // Apply the fresh tokens
+            UserDefaults.standard.set(token, forKey: "supabase_access_token")
+            UserDefaults.standard.set(refresh, forKey: "supabase_refresh_token")
+            if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                groupPrefs.set(token, forKey: "supabase_access_token")
+            }
+            
+            if self.supabaseClient == nil {
+                let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+                self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
+                self.listenToAuthState()
+            }
+            
+            try? await self.supabaseClient?.auth.setSession(accessToken: token, refreshToken: refresh)
+            try? await self.supabaseClient?.auth.refreshSession()
+            
+            DispatchQueue.main.async {
+                if let userId = self.extractUserId(from: token) {
+                    self.currentUserId = userId
+                }
+                self.isAuthenticated = true
+                self.isPairing = false
+            }
+            
+            // Clear the pending tokens so we don't consume them again
+            guard var clearComponents = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/paired_watches"), resolvingAgainstBaseURL: false) else { return }
+            clearComponents.queryItems = [URLQueryItem(name: "id", value: "eq.\(pairId)")]
+            guard let clearUrl = clearComponents.url else { return }
+            
+            var clearRequest = URLRequest(url: clearUrl)
+            clearRequest.httpMethod = "PATCH"
+            clearRequest.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+            clearRequest.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+            clearRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            clearRequest.httpBody = try JSONSerialization.data(withJSONObject: [
+                "pending_access_token": NSNull(),
+                "pending_refresh_token": NSNull()
+            ] as [String : Any])
+            
+            _ = try? await URLSession.shared.data(for: clearRequest)
+            print("Repair tokens consumed and cleared.")
+        } catch {
+            print("Error checking repair tokens: \(error)")
+        }
     }
     
     private func extractUserId(from jwt: String) -> UUID? {

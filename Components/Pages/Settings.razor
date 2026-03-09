@@ -4,6 +4,7 @@
 @inject ISettingsService SettingsService
 @inject IAuthService AuthService
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject ISeederService SeederService
 @inject Supabase.Client SupabaseClient
 @implements IDisposable
@@ -176,6 +177,49 @@
                         </div>
                     </div>
                     <MudDivider Style="opacity: 0.1;" />
+
+                    @* ── Paired Watches List ── *@
+                    @if (_pairedWatches.Any())
+                    {
+                        @foreach (var watch in _pairedWatches)
+                        {
+                            <div class="px-6 py-4 d-flex align-center gap-4">
+                                <MudIcon Icon="@(watch.Platform == "watchos" ? Icons.Material.Filled.Watch : Icons.Material.Filled.Devices)"
+                                         Size="Size.Medium"
+                                         Style="opacity: 0.7;" />
+                                <div style="flex: 1; min-width: 0;">
+                                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
+                                        @(string.IsNullOrEmpty(watch.DeviceName) ? (watch.Platform == "watchos" ? "Apple Watch" : "Wear OS") : watch.DeviceName)
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Style="opacity: 0.5;">
+                                        Paired @(watch.PairedAt?.ToString("MMM d, yyyy") ?? "recently")
+                                        @if (watch.LastTokenPush.HasValue)
+                                        {
+                                            <text> · Last refreshed @(watch.LastTokenPush.Value.ToString("MMM d, h:mm tt"))</text>
+                                        }
+                                    </MudText>
+                                </div>
+                                <div class="d-flex gap-1" style="flex-shrink: 0;">
+                                    <MudTooltip Text="Push fresh auth tokens to this watch">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                                                       Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       Disabled="_isRepairingId == watch.Id"
+                                                       OnClick="@(() => RepairWatch(watch))" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Unpair this watch">
+                                        <MudIconButton Icon="@Icons.Material.Filled.LinkOff"
+                                                       Color="Color.Error"
+                                                       Size="Size.Small"
+                                                       OnClick="@(() => UnpairWatch(watch))" />
+                                    </MudTooltip>
+                                </div>
+                            </div>
+                            <MudDivider Style="opacity: 0.06;" />
+                        }
+                    }
+
+                    @* ── Pair New Watch ── *@
                     <div class="pa-6">
                         @if (!_showPairingInput)
                         {
@@ -196,19 +240,25 @@
                         }
                         else
                         {
-                            <div class="d-flex flex-column flex-sm-row align-center gap-4">
-                                <MudTextField @ref="_pairingCodeField"
-                                              @bind-Value="_pairingCode"
-                                              Label="6-Digit Code"
-                                              Placeholder="000000"
-                                              Variant="Variant.Outlined"
-                                              MaxLength="6"
-                                              Immediate="true"
-                                              AutoFocus="true"
-                                              Margin="Margin.Dense"
-                                              Style="max-width: 220px; letter-spacing: 0.4em; font-size: 1.15rem; font-weight: 600;"
-                                              Class="flex-grow-1" />
-                                <div class="d-flex gap-2" style="flex-shrink: 0;">
+                            <div class="d-flex flex-column gap-3">
+                                <div class="d-flex flex-column flex-sm-row align-center gap-4">
+                                    <MudTextField @ref="_pairingCodeField"
+                                                  @bind-Value="_pairingCode"
+                                                  Label="6-Digit Code"
+                                                  Placeholder="000000"
+                                                  Variant="Variant.Outlined"
+                                                  MaxLength="6"
+                                                  Immediate="true"
+                                                  AutoFocus="true"
+                                                  Margin="Margin.Dense"
+                                                  Style="max-width: 220px; letter-spacing: 0.4em; font-size: 1.15rem; font-weight: 600;"
+                                                  Class="flex-grow-1" />
+                                    <MudToggleGroup T="string" @bind-Value="_pairingPlatform" Color="Color.Primary" CheckMark="false" FixedContent="true" Class="border-solid" Style="border-color: rgba(255,255,255,0.1) !important;">
+                                        <MudToggleItem Value="@("watchos")" Text="Apple Watch" />
+                                        <MudToggleItem Value="@("wearos")" Text="Wear OS" />
+                                    </MudToggleGroup>
+                                </div>
+                                <div class="d-flex gap-2 justify-end">
                                     <MudButton Variant="Variant.Text"
                                                OnClick="@(() => { _showPairingInput = false; _pairingCode = string.Empty; StateHasChanged(); })">
                                         Cancel
@@ -382,6 +432,11 @@
         {
             DebugLogger.OnLogAdded += OnLogUpdated;
         }
+
+        if (SettingsService.IsAuthenticated)
+        {
+            await LoadPairedWatches();
+        }
     }
 
     private async Task SaveSettings()
@@ -445,14 +500,92 @@
 
     private bool _showPairingInput;
     private string _pairingCode = string.Empty;
+    private string _pairingPlatform = "watchos";
     private bool _isPairing;
     private MudTextField<string> _pairingCodeField;
     private bool _focusPairingCode;
+    private List<PairedWatch> _pairedWatches = new();
+    private string? _isRepairingId;
 
     private void ShowPairingInput()
     {
         _showPairingInput = true;
         _focusPairingCode = true;
+    }
+
+    private async Task LoadPairedWatches()
+    {
+        try
+        {
+            var userId = SettingsService.CurrentUserId;
+            if (string.IsNullOrEmpty(userId)) return;
+
+            var response = await SupabaseClient.From<PairedWatch>()
+                .Where(x => x.UserId == userId)
+                .Where(x => x.IsActive == true)
+                .Order("paired_at", Supabase.Postgrest.Constants.Ordering.Descending)
+                .Get();
+
+            _pairedWatches = response.Models;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Settings] Failed to load paired watches: {ex.Message}");
+        }
+    }
+
+    private async Task UnpairWatch(PairedWatch watch)
+    {
+        bool? confirmed = await DialogService.ShowMessageBox(
+            "Unpair Watch",
+            $"This will remove the pairing for {(string.IsNullOrEmpty(watch.DeviceName) ? (watch.Platform == "watchos" ? "Apple Watch" : "Wear OS") : watch.DeviceName)}. The watch will need to be re-paired to sync again.",
+            yesText: "Unpair", cancelText: "Cancel");
+
+        if (confirmed != true) return;
+
+        try
+        {
+            watch.IsActive = false;
+            await SupabaseClient.From<PairedWatch>().Update(watch);
+            _pairedWatches.Remove(watch);
+            Snackbar.Add("Watch unpaired.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to unpair: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RepairWatch(PairedWatch watch)
+    {
+        _isRepairingId = watch.Id;
+        StateHasChanged();
+
+        try
+        {
+            var currentSession = SupabaseClient.Auth.CurrentSession;
+            if (currentSession == null || string.IsNullOrEmpty(currentSession.AccessToken))
+            {
+                Snackbar.Add("You must be logged in to refresh watch tokens.", Severity.Error);
+                return;
+            }
+
+            watch.PendingAccessToken = currentSession.AccessToken;
+            watch.PendingRefreshToken = currentSession.RefreshToken;
+            watch.LastTokenPush = DateTime.UtcNow;
+            await SupabaseClient.From<PairedWatch>().Update(watch);
+
+            Snackbar.Add("Fresh tokens pushed! Open Daily on your watch to pick them up.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Repair failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isRepairingId = null;
+            StateHasChanged();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -500,7 +633,27 @@
                 return;
             }
 
-            Snackbar.Add("Watch paired successfully! Check your Apple Watch.", Severity.Success);
+            // Record this pairing in the persistent paired_watches table
+            try
+            {
+                var pairedWatch = new PairedWatch
+                {
+                    UserId = SettingsService.CurrentUserId,
+                    Platform = _pairingPlatform,
+                    DeviceName = _pairingPlatform == "watchos" ? "Apple Watch" : "Wear OS",
+                    IsActive = true
+                };
+                await SupabaseClient.From<PairedWatch>().Insert(pairedWatch);
+                await LoadPairedWatches();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Settings] Failed to record pairing: {ex.Message}");
+                // Non-fatal — the watch is already paired via watch_pairings
+            }
+
+            var watchLabel = _pairingPlatform == "watchos" ? "Apple Watch" : "Wear OS watch";
+            Snackbar.Add($"Watch paired successfully! Check your {watchLabel}.", Severity.Success);
             _showPairingInput = false;
             _pairingCode = string.Empty;
         }
