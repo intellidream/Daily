@@ -184,12 +184,12 @@
                         @foreach (var watch in _pairedWatches)
                         {
                             <div class="px-6 py-4 d-flex align-center gap-4">
-                                <MudIcon Icon="@(watch.Platform == "watchos" ? Icons.Material.Filled.Watch : Icons.Material.Filled.Devices)"
+                                <MudIcon Icon="@(watch.Platform == "watchos" ? Icons.Material.Filled.Watch : watch.Platform == "harmonyos" ? Icons.Material.Filled.Watch : Icons.Material.Filled.Devices)"
                                          Size="Size.Medium"
                                          Style="opacity: 0.7;" />
                                 <div style="flex: 1; min-width: 0;">
                                     <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
-                                        @(string.IsNullOrEmpty(watch.DeviceName) ? (watch.Platform == "watchos" ? "Apple Watch" : "Wear OS") : watch.DeviceName)
+                                        @(string.IsNullOrEmpty(watch.DeviceName) ? GetPlatformDisplayName(watch.Platform) : watch.DeviceName)
                                     </MudText>
                                     <MudText Typo="Typo.caption" Style="opacity: 0.5;">
                                         Paired @(watch.PairedAt?.ToString("MMM d, yyyy") ?? "recently")
@@ -256,6 +256,7 @@
                                     <MudToggleGroup T="string" @bind-Value="_pairingPlatform" Color="Color.Primary" CheckMark="false" FixedContent="true" Class="border-solid" Style="border-color: rgba(255,255,255,0.1) !important;">
                                         <MudToggleItem Value="@("watchos")" Text="Apple Watch" />
                                         <MudToggleItem Value="@("wearos")" Text="Wear OS" />
+                                        <MudToggleItem Value="@("harmonyos")" Text="HarmonyOS" />
                                     </MudToggleGroup>
                                 </div>
                                 <div class="d-flex gap-2 justify-end">
@@ -513,6 +514,14 @@
         _focusPairingCode = true;
     }
 
+    private static string GetPlatformDisplayName(string? platform) => platform switch
+    {
+        "watchos" => "Apple Watch",
+        "wearos" => "Wear OS",
+        "harmonyos" => "HarmonyOS Watch",
+        _ => "Watch"
+    };
+
     private async Task LoadPairedWatches()
     {
         try
@@ -538,7 +547,7 @@
     {
         bool? confirmed = await DialogService.ShowMessageBox(
             "Unpair Watch",
-            $"This will remove the pairing for {(string.IsNullOrEmpty(watch.DeviceName) ? (watch.Platform == "watchos" ? "Apple Watch" : "Wear OS") : watch.DeviceName)}. The watch will need to be re-paired to sync again.",
+            $"This will remove the pairing for {(string.IsNullOrEmpty(watch.DeviceName) ? GetPlatformDisplayName(watch.Platform) : watch.DeviceName)}. The watch will need to be re-paired to sync again.",
             yesText: "Unpair", cancelText: "Cancel");
 
         if (confirmed != true) return;
@@ -640,7 +649,7 @@
                 {
                     UserId = SettingsService.CurrentUserId,
                     Platform = _pairingPlatform,
-                    DeviceName = _pairingPlatform == "watchos" ? "Apple Watch" : "Wear OS",
+                    DeviceName = GetPlatformDisplayName(_pairingPlatform),
                     IsActive = true
                 };
                 await SupabaseClient.From<PairedWatch>().Insert(pairedWatch);
@@ -652,7 +661,7 @@
                 // Non-fatal — the watch is already paired via watch_pairings
             }
 
-            var watchLabel = _pairingPlatform == "watchos" ? "Apple Watch" : "Wear OS watch";
+            var watchLabel = GetPlatformDisplayName(_pairingPlatform) + " watch";
             Snackbar.Add($"Watch paired successfully! Check your {watchLabel}.", Severity.Success);
             _showPairingInput = false;
             _pairingCode = string.Empty;

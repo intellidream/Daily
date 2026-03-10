@@ -5,6 +5,11 @@ import { SupabaseHabitLog, DailyTotal } from '../models/HabitLog';
 const TAG = 'SupabaseClient';
 const DOMAIN = 0x0000;
 
+export class RefreshedTokens {
+  access_token: string = '';
+  refresh_token: string = '';
+}
+
 export class SupabaseClient {
   public static readonly SUPABASE_URL: string = 'https://akkfouifxztnfwwiclwg.supabase.co';
   public static readonly SUPABASE_ANON_KEY: string = 'sb_publishable_6FzrRSdmsH4arDhZS09PSQ_QK_I31DG';
@@ -356,6 +361,152 @@ export class SupabaseClient {
       return false;
     } catch (err) {
       hilog.error(DOMAIN, TAG, `Network error deleting from ${table}: ${JSON.stringify(err)}`);
+      return false;
+    } finally {
+      httpRequest.destroy();
+    }
+  }
+
+  /**
+   * Refreshes a Supabase session using a refresh token.
+   * Returns the new access_token and refresh_token, or null on failure.
+   */
+  public async refreshToken(refreshToken: string): Promise<RefreshedTokens | null> {
+    const httpRequest = http.createHttp();
+    const url = `${SupabaseClient.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`;
+
+    const headers: Record<string, string> = {
+      'apikey': SupabaseClient.SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json'
+    };
+
+    const body: Record<string, string> = { 'refresh_token': refreshToken };
+
+    try {
+      const response = await httpRequest.request(url, {
+        method: http.RequestMethod.POST,
+        header: headers,
+        extraData: JSON.stringify(body),
+        expectDataType: http.HttpDataType.STRING,
+      });
+
+      if (response.responseCode === 200) {
+        const result = JSON.parse(response.result as string) as Record<string, Object>;
+        const newAccess = result['access_token'] as string;
+        const newRefresh = result['refresh_token'] as string;
+        if (newAccess && newRefresh) {
+          hilog.info(DOMAIN, TAG, 'Token refresh succeeded');
+          const tokens = new RefreshedTokens();
+          tokens.access_token = newAccess;
+          tokens.refresh_token = newRefresh;
+          return tokens;
+        }
+      }
+      hilog.warn(DOMAIN, TAG, `Token refresh failed: HTTP ${response.responseCode}`);
+      return null;
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `Token refresh error: ${JSON.stringify(err)}`);
+      return null;
+    } finally {
+      httpRequest.destroy();
+    }
+  }
+
+  /**
+   * Inserts a row and returns the created record (uses Prefer: return=representation).
+   */
+  public async insertAndReturn(table: string, data: Record<string, Object | null>): Promise<Record<string, Object> | null> {
+    const httpRequest = http.createHttp();
+    const url = `${SupabaseClient.SUPABASE_URL}/rest/v1/${table}`;
+
+    if (this.userId && !data['user_id']) {
+      data['user_id'] = this.userId;
+    }
+
+    const headers = this.getHeaders('application/json');
+    headers['Prefer'] = 'return=representation';
+
+    try {
+      const response = await httpRequest.request(url, {
+        method: http.RequestMethod.POST,
+        header: headers,
+        extraData: JSON.stringify(data),
+        expectDataType: http.HttpDataType.STRING,
+      });
+
+      if (response.responseCode === 201 || response.responseCode === 200) {
+        const result: Record<string, Object>[] = JSON.parse(response.result as string);
+        if (result.length > 0) {
+          return result[0];
+        }
+      }
+      hilog.error(DOMAIN, TAG, `insertAndReturn failed: HTTP ${response.responseCode}`);
+      return null;
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `insertAndReturn error: ${JSON.stringify(err)}`);
+      return null;
+    } finally {
+      httpRequest.destroy();
+    }
+  }
+
+  /**
+   * Selects rows from a table with query filters (e.g. "id=eq.abc&is_active=eq.true").
+   */
+  public async selectRows(table: string, filters: string): Promise<Record<string, Object>[]> {
+    const httpRequest = http.createHttp();
+    const url = `${SupabaseClient.SUPABASE_URL}/rest/v1/${table}?select=*&${filters}`;
+
+    try {
+      const response = await httpRequest.request(url, {
+        method: http.RequestMethod.GET,
+        header: this.getHeaders(),
+        expectDataType: http.HttpDataType.STRING,
+      });
+
+      if (response.responseCode === 200) {
+        return JSON.parse(response.result as string) as Record<string, Object>[];
+      }
+      return [];
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `selectRows error: ${JSON.stringify(err)}`);
+      return [];
+    } finally {
+      httpRequest.destroy();
+    }
+  }
+
+  /**
+   * Updates rows in a table matching a filter via Supabase REST.
+   * HarmonyOS HTTP module lacks RequestMethod.PATCH, so we use a custom
+   * request method string through the underlying API.
+   */
+  public async updateRows(table: string, filterColumn: string, filterValue: string,
+    data: Record<string, Object | null>): Promise<boolean> {
+    const httpRequest = http.createHttp();
+    const url = `${SupabaseClient.SUPABASE_URL}/rest/v1/${table}?${filterColumn}=eq.${filterValue}`;
+
+    const headers = this.getHeaders('application/json');
+    headers['Prefer'] = 'return=minimal';
+
+    try {
+      // Use PUT with X-HTTP-Method-Override to emulate PATCH
+      headers['X-HTTP-Method-Override'] = 'PATCH';
+      const response = await httpRequest.request(url, {
+        method: http.RequestMethod.PUT,
+        header: headers,
+        extraData: JSON.stringify(data),
+        expectDataType: http.HttpDataType.STRING,
+      });
+
+      if (response.responseCode === 200 || response.responseCode === 204) {
+        hilog.info(DOMAIN, TAG, `Updated rows in ${table}`);
+        return true;
+      }
+      hilog.error(DOMAIN, TAG, `Update failed: HTTP ${response.responseCode}`);
+      return false;
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `Update error: ${JSON.stringify(err)}`);
       return false;
     } finally {
       httpRequest.destroy();

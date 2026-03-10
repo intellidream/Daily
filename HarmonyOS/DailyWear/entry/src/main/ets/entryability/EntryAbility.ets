@@ -1,6 +1,7 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { WatchSessionManager } from '../utils/WatchSessionManager';
 
 const DOMAIN = 0x0000;
 
@@ -39,8 +40,9 @@ export default class EntryAbility extends UIAbility {
   }
 
   onForeground(): void {
-    // Ability has brought to foreground
+    // Ability has brought to foreground — refresh session and check for repair tokens
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
+    WatchSessionManager.getInstance().onAppResumed();
   }
 
   onBackground(): void {
