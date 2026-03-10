@@ -72,3 +72,29 @@ create policy "Anon update paired watches clear tokens"
 
 -- Index for fast lookups by user
 create index if not exists idx_paired_watches_user_id on public.paired_watches(user_id);
+
+-- RPC functions for watch apps that lack HTTP PATCH support (HarmonyOS).
+-- These are callable via POST to /rest/v1/rpc/<name>.
+
+-- Deactivate a paired watch record (used by watch logout)
+create or replace function public.deactivate_paired_watch(watch_id uuid)
+returns void
+language sql
+security definer
+as $$
+  update public.paired_watches
+  set is_active = false
+  where id = watch_id;
+$$;
+
+-- Clear pending repair tokens after the watch has consumed them
+create or replace function public.clear_repair_tokens(watch_id uuid)
+returns void
+language sql
+security definer
+as $$
+  update public.paired_watches
+  set pending_access_token = null,
+      pending_refresh_token = null
+  where id = watch_id;
+$$;

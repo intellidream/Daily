@@ -113,8 +113,8 @@ export class WatchSessionManager {
       try {
         const pairedWatchId = await this.pref.get(PAIRED_WATCH_ID_KEY, '') as string;
         if (pairedWatchId) {
-          await SupabaseClient.getInstance().updateRows(
-            'paired_watches', 'id', pairedWatchId, { 'is_active': false }
+          await SupabaseClient.getInstance().callRpc(
+            'deactivate_paired_watch', { 'watch_id': pairedWatchId }
           );
         }
       } catch (e) {
@@ -210,11 +210,13 @@ export class WatchSessionManager {
             // Clean up the row
             await SupabaseClient.getInstance().deleteRow('watch_pairings', 'code', this.pairingCode);
 
+            // Set the authenticated session on the client BEFORE registering
+            // so insertAndReturn uses the user's JWT, not the anon key
+            SupabaseClient.getInstance().setSession(token, userId || '');
+            this.isAuthenticated = true;
+
             // Register this device in the persistent paired_watches table
             await this.registerPairing(userId || '');
-            
-            // Re-init client with token
-            await this.checkExistingSession();
             
             // Notify UI
             AppStorage.setOrCreate('PairingSuccess', true);
@@ -377,9 +379,8 @@ export class WatchSessionManager {
         await this.refreshSession(pendingRefresh, userId);
 
         // Clear the pending tokens so we don't re-apply on next resume
-        await SupabaseClient.getInstance().updateRows(
-          'paired_watches', 'id', pairedWatchId,
-          { 'pending_access_token': null, 'pending_refresh_token': null }
+        await SupabaseClient.getInstance().callRpc(
+          'clear_repair_tokens', { 'watch_id': pairedWatchId }
         );
 
         hilog.info(DOMAIN, TAG, 'Repair tokens applied and cleared');

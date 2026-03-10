@@ -477,36 +477,29 @@ export class SupabaseClient {
   }
 
   /**
-   * Updates rows in a table matching a filter via Supabase REST.
-   * HarmonyOS HTTP module lacks RequestMethod.PATCH, so we use a custom
-   * request method string through the underlying API.
+   * Calls a Supabase RPC function via POST to /rest/v1/rpc/<name>.
+   * Used on HarmonyOS because the HTTP module lacks RequestMethod.PATCH.
    */
-  public async updateRows(table: string, filterColumn: string, filterValue: string,
-    data: Record<string, Object | null>): Promise<boolean> {
+  public async callRpc(functionName: string, params: Record<string, Object | null>): Promise<boolean> {
     const httpRequest = http.createHttp();
-    const url = `${SupabaseClient.SUPABASE_URL}/rest/v1/${table}?${filterColumn}=eq.${filterValue}`;
-
-    const headers = this.getHeaders('application/json');
-    headers['Prefer'] = 'return=minimal';
+    const url = `${SupabaseClient.SUPABASE_URL}/rest/v1/rpc/${functionName}`;
 
     try {
-      // Use PUT with X-HTTP-Method-Override to emulate PATCH
-      headers['X-HTTP-Method-Override'] = 'PATCH';
       const response = await httpRequest.request(url, {
-        method: http.RequestMethod.PUT,
-        header: headers,
-        extraData: JSON.stringify(data),
+        method: http.RequestMethod.POST,
+        header: this.getHeaders('application/json'),
+        extraData: JSON.stringify(params),
         expectDataType: http.HttpDataType.STRING,
       });
 
       if (response.responseCode === 200 || response.responseCode === 204) {
-        hilog.info(DOMAIN, TAG, `Updated rows in ${table}`);
+        hilog.info(DOMAIN, TAG, `RPC ${functionName} succeeded`);
         return true;
       }
-      hilog.error(DOMAIN, TAG, `Update failed: HTTP ${response.responseCode}`);
+      hilog.error(DOMAIN, TAG, `RPC ${functionName} failed: HTTP ${response.responseCode}`);
       return false;
     } catch (err) {
-      hilog.error(DOMAIN, TAG, `Update error: ${JSON.stringify(err)}`);
+      hilog.error(DOMAIN, TAG, `RPC ${functionName} error: ${JSON.stringify(err)}`);
       return false;
     } finally {
       httpRequest.destroy();
