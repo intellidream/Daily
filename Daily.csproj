@@ -28,9 +28,11 @@
         <ApplicationIdGuid>CF599689-A512-4217-AB3F-9DA62A197D63</ApplicationIdGuid>
         <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
         <AndroidFastDeployment>false</AndroidFastDeployment>
-        <!-- Versions -->
-        <ApplicationDisplayVersion>1.1.103</ApplicationDisplayVersion>
+				<!-- Versions -->
+				<ApplicationDisplayVersion>1.1.103</ApplicationDisplayVersion>
 		<ApplicationVersion>103</ApplicationVersion>
+				<Version>1.1.103</Version>
+				<PackageVersion>1.1.103</PackageVersion>
 
         <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
 
