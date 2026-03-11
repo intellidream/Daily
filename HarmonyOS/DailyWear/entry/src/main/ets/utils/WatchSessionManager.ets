@@ -47,31 +47,13 @@ export class WatchSessionManager {
       const userId = await this.pref.get(USER_ID_KEY, '') as string;
 
       if (token && userId) {
-        if (this.isTokenValid(token)) {
-          // Token still valid — use it immediately
-          SupabaseClient.getInstance().setSession(token, userId);
-          this.isAuthenticated = true;
-          hilog.info(DOMAIN, TAG, 'Restored existing session for user: ' + userId);
-
-          // Proactively refresh in the background to extend the session
-          if (refresh) {
-            this.refreshSession(refresh, userId);
-          }
-          return true;
-        }
-
-        // Token expired — attempt refresh instead of clearing
-        if (refresh) {
-          hilog.info(DOMAIN, TAG, 'Token expired, attempting refresh');
-          const refreshed = await this.refreshSession(refresh, userId);
-          if (refreshed) {
-            return true;
-          }
-        }
-
-        hilog.warn(DOMAIN, TAG, 'Token expired and refresh failed, clearing session');
-        await this.clearSession();
-        return false;
+        // Optimistically set the session so the UI can load cached data.
+        // We no longer validate expiration here because we rely on the
+        // main app pushing repair tokens, which requires the session to stay intact.
+        SupabaseClient.getInstance().setSession(token, userId);
+        this.isAuthenticated = true;
+        hilog.info(DOMAIN, TAG, 'Optimistically loaded existing session for user: ' + userId);
+        return true;
       }
       hilog.info(DOMAIN, TAG, 'No stored session found');
     } catch (e) {
@@ -306,9 +288,10 @@ export class WatchSessionManager {
       const userId = await this.pref.get(USER_ID_KEY, '') as string;
 
       if (token && refresh && userId) {
-        // Always force-refresh on resume — the access token is almost certainly
-        // expired after HarmonyOS suspends the app
-        await this.refreshSession(refresh, userId);
+        // We no longer force-refresh on resume.
+        // The watch relies entirely on `checkForRepairTokens()` which will update the 
+        // token if the main app pushed a new one.
+        // await this.refreshSession(refresh, userId);
       }
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'onAppResumed error: ' + JSON.stringify(e));
@@ -376,7 +359,8 @@ export class WatchSessionManager {
         this.isAuthenticated = true;
 
         // Refresh to get a fully valid session
-        await this.refreshSession(pendingRefresh, userId);
+        // We no longer actively refresh the pushed token. We just use what MAUI gave us.
+        // await this.refreshSession(pendingRefresh, userId);
 
         // Clear the pending tokens so we don't re-apply on next resume
         await SupabaseClient.getInstance().callRpc(

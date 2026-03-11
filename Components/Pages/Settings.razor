@@ -642,24 +642,11 @@
                 return;
             }
 
-            // Record this pairing in the persistent paired_watches table
-            try
-            {
-                var pairedWatch = new PairedWatch
-                {
-                    UserId = SettingsService.CurrentUserId,
-                    Platform = _pairingPlatform,
-                    DeviceName = GetPlatformDisplayName(_pairingPlatform),
-                    IsActive = true
-                };
-                await SupabaseClient.From<PairedWatch>().Insert(pairedWatch);
-                await LoadPairedWatches();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Settings] Failed to record pairing: {ex.Message}");
-                // Non-fatal — the watch is already paired via watch_pairings
-            }
+            // The watch itself will register its device in the persistent paired_watches table
+            // immediately after successfully consuming these tokens.
+            // We just need to reload the UI to show it a second later.
+            await Task.Delay(1000);
+            await LoadPairedWatches();
 
             var watchLabel = GetPlatformDisplayName(_pairingPlatform) + " watch";
             Snackbar.Add($"Watch paired successfully! Check your {watchLabel}.", Severity.Success);

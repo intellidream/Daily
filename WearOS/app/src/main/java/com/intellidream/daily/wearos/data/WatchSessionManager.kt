@@ -17,6 +17,11 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.header
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
+import io.ktor.http.contentType
+import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,7 +58,9 @@ class WatchSessionManager private constructor(private val context: Context) {
     private val supabaseAnonKey = "sb_publishable_6FzrRSdmsH4arDhZS09PSQ_QK_I31DG"
 
     val supabaseClient: SupabaseClient = createSupabaseClient(supabaseUrl, supabaseAnonKey) {
-        install(Auth)
+        install(Auth) {
+            alwaysAutoRefresh = false
+        }
         install(Postgrest)
     }
 
@@ -124,7 +131,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                             prefs[stringPreferencesKey("supabase_access_token")] = session.accessToken
                             prefs[stringPreferencesKey("supabase_refresh_token")] = session.refreshToken
                         }
-                        val uid = session.user?.id
+                        val uid = session.user?.id ?: extractUserId(session.accessToken)
                         if (uid != null) {
                             context.dataStore.edit { prefs ->
                                 prefs[stringPreferencesKey("supabase_user_id")] = uid
@@ -148,7 +155,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                                     isRecovering = true
                                     try {
                                         supabaseClient.auth.importAuthToken(accessToken, refreshToken)
-                                        supabaseClient.auth.refreshCurrentSession()
+                                        // AutoRefresh is false, relying on Token Pushes
                                     } catch (e: Exception) {
                                         // Recovery failed — keep _isAuthenticated optimistically true
                                         // so screens can still show cached data. Will retry on next resume.
@@ -177,7 +184,7 @@ class WatchSessionManager private constructor(private val context: Context) {
             // 1. Check if the Auth plugin already has a cached session.
             val existingSession = supabaseClient.auth.currentSessionOrNull()
             if (existingSession != null) {
-                val uid = existingSession.user?.id
+                val uid = existingSession.user?.id ?: extractUserId(existingSession.accessToken)
                 if (uid != null) {
                     // Show authenticated UI immediately using cached data
                     _currentUserId.value = uid
@@ -189,15 +196,11 @@ class WatchSessionManager private constructor(private val context: Context) {
                         prefs[stringPreferencesKey("supabase_refresh_token")] = existingSession.refreshToken
                         prefs[stringPreferencesKey("supabase_user_id")] = uid
                     }
-                    // CRITICAL: Always force-refresh the session. The cached access token
-                    // is very likely expired after WearOS Doze/process death. Without
-                    // this, the first API call returns 401 and the session appears "lost".
-                    try {
-                        supabaseClient.auth.refreshCurrentSession()
-                    } catch (e: Exception) {
-                        // Refresh failed (network, etc.) — the session listener will
-                        // retry when connectivity is restored. Don't clear auth state.
-                    }
+                    // We rely on pushing tokens from MAUI instead
+                    // try {
+                    //    supabaseClient.auth.refreshCurrentSession()
+                    // } catch (e: Exception) {
+                    // }
                     return@launch
                 }
             }
@@ -207,7 +210,15 @@ class WatchSessionManager private constructor(private val context: Context) {
             val prefs = context.dataStore.data.first()
             val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
             val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
-            val savedUserId = prefs[stringPreferencesKey("supabase_user_id")]
+            var savedUserId = prefs[stringPreferencesKey("supabase_user_id")]
+            
+            if (savedUserId.isNullOrEmpty() && !accessToken.isNullOrEmpty()) {
+                // Self-heal from previous bug where user_id wasn't saved reliably
+                savedUserId = extractUserId(accessToken)
+                if (savedUserId != null) {
+                    context.dataStore.edit { p -> p[stringPreferencesKey("supabase_user_id")] = savedUserId }
+                }
+            }
 
             if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty() && !savedUserId.isNullOrEmpty()) {
                 // Optimistic UI loading instantly
@@ -218,8 +229,6 @@ class WatchSessionManager private constructor(private val context: Context) {
                 isRecovering = true
                 try {
                     supabaseClient.auth.importAuthToken(accessToken, refreshToken)
-                    // Force-refresh to get a fresh access token
-                    supabaseClient.auth.refreshCurrentSession()
                 } catch (e: Exception) {
                     // Do not aggressively logout if network fails here.
                     // The session listener's NotAuthenticated handler will retry.
@@ -274,7 +283,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                     // importAuthToken triggers the session listener, which will persist
                     // tokens to DataStore and update _isAuthenticated / _currentUserId.
                     supabaseClient.auth.importAuthToken(token, refresh)
-                    val uid = supabaseClient.auth.currentUserOrNull()?.id
+                    val uid = extractUserId(token)
 
                     if (uid != null) {
                         // Session listener handles DataStore persistence and state updates.
@@ -283,9 +292,10 @@ class WatchSessionManager private constructor(private val context: Context) {
                             .delete { filter { eq("code", _pairingCode.value) } }
 
                         // Register this device in the persistent paired_watches table
-                        registerPairing(token)
+                        registerPairing(token, uid)
                             
                         pollJob?.cancel()
+                        _dataRefreshTrigger.value++
                     }
                 }
             } else {
@@ -311,19 +321,11 @@ class WatchSessionManager private constructor(private val context: Context) {
             // Step 0: Check if the main app pushed repair tokens (fresh credentials)
             checkForRepairTokens()
 
-            // Step 1: Try refreshing the in-memory session first (cheapest path)
+            // Step 1: Try importing the in-memory session
             val session = supabaseClient.auth.currentSessionOrNull()
             if (session != null) {
                 _isAuthenticated.value = true
-                _currentUserId.value = session.user?.id
-                try {
-                    supabaseClient.auth.refreshCurrentSession()
-                } catch (e: Exception) {
-                    // In-memory refresh failed — fall through to full DataStore recovery.
-                    // The in-memory refresh token might be stale if the process was
-                    // partially killed. Recover from DataStore which has the latest tokens.
-                    recoverFromDataStore()
-                }
+                _currentUserId.value = session.user?.id ?: extractUserId(session.accessToken)
             } else {
                 // Auth plugin has no session at all — full recovery from DataStore
                 recoverFromDataStore()
@@ -360,7 +362,6 @@ class WatchSessionManager private constructor(private val context: Context) {
             isRecovering = true
             try {
                 supabaseClient.auth.importAuthToken(accessToken, refreshToken)
-                supabaseClient.auth.refreshCurrentSession()
                 // Success — the session listener will persist the new tokens
             } catch (e: Exception) {
                 // Recovery failed — don't logout on transient network failures.
@@ -376,25 +377,47 @@ class WatchSessionManager private constructor(private val context: Context) {
      * pairing. Saves the returned record ID to DataStore so we can check for repair
      * tokens on future app resumes.
      */
-    private suspend fun registerPairing(accessToken: String) {
+    private suspend fun registerPairing(accessToken: String, userId: String) {
         try {
             val deviceName = android.os.Build.MODEL ?: "Wear OS"
-            val record = PairedWatch(
-                user_id = _currentUserId.value,
-                platform = "wearos",
-                device_name = deviceName,
-                is_active = true
-            )
-            val inserted = supabaseClient.postgrest["paired_watches"]
-                .insert(record) { select() }
-                .decodeSingle<PairedWatch>()
 
-            val id = inserted.id
-            if (id != null) {
-                context.dataStore.edit { prefs ->
-                    prefs[pairedWatchIdKey] = id
+            val client = HttpClient(CIO) {
+                install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
+                    kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
                 }
             }
+            
+            val jsonBody = """
+                {
+                    "user_id": "$userId",
+                    "platform": "wearos",
+                    "device_name": "$deviceName",
+                    "is_active": true
+                }
+            """.trimIndent()
+
+            val response = client.request(supabaseUrl + "/rest/v1/paired_watches") {
+                method = io.ktor.http.HttpMethod.Post
+                header("Authorization", "Bearer $accessToken")
+                header("apikey", supabaseAnonKey)
+                header("Prefer", "return=representation")
+                contentType(io.ktor.http.ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+
+            if (response.status.value in 200..299) {
+                val responseText = response.bodyAsText()
+                val jsonArray = kotlinx.serialization.json.Json.parseToJsonElement(responseText) as? kotlinx.serialization.json.JsonArray
+                val firstObj = jsonArray?.firstOrNull() as? kotlinx.serialization.json.JsonObject
+                val id = firstObj?.get("id")?.jsonPrimitive?.content
+                
+                if (id != null) {
+                    context.dataStore.edit { prefs ->
+                        prefs[pairedWatchIdKey] = id
+                    }
+                }
+            }
+            client.close()
         } catch (e: Exception) {
             // Non-critical — pairing still works without the persistent record
         }
@@ -420,7 +443,6 @@ class WatchSessionManager private constructor(private val context: Context) {
             if (!pendingAccess.isNullOrEmpty() && !pendingRefresh.isNullOrEmpty()) {
                 // Apply the fresh tokens
                 supabaseClient.auth.importAuthToken(pendingAccess, pendingRefresh)
-                supabaseClient.auth.refreshCurrentSession()
 
                 // Clear the pending tokens so we don't re-apply on next resume
                 supabaseClient.postgrest["paired_watches"]
@@ -459,6 +481,24 @@ class WatchSessionManager private constructor(private val context: Context) {
             _isAuthenticated.value = false
             _currentUserId.value = null
             generatePairingCode()
+        }
+    }
+
+    private fun extractUserId(jwt: String): String? {
+        try {
+            val parts = jwt.split(".")
+            if (parts.size != 3) return null
+            var base64 = parts[1].replace("-", "+").replace("_", "/")
+            val pad = base64.length % 4
+            if (pad > 0) {
+                base64 += "=".repeat(4 - pad)
+            }
+            val jsonBytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+            val jsonString = String(jsonBytes, Charsets.UTF_8)
+            val jsonObject = kotlinx.serialization.json.Json.parseToJsonElement(jsonString) as kotlinx.serialization.json.JsonObject
+            return jsonObject["sub"]?.jsonPrimitive?.content
+        } catch (e: Exception) {
+            return null
         }
     }
 }

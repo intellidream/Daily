@@ -29,6 +29,7 @@ fun DailyWearApp() {
     val context = LocalContext.current
     val sessionManager = remember { WatchSessionManager.getInstance(context) }
     val isAuthenticated by sessionManager.isAuthenticated.collectAsState()
+    val isPairing by sessionManager.isPairing.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
@@ -60,8 +61,11 @@ fun DailyWearApp() {
                         1 -> SmokesScreen(sessionManager)
                     }
                 }
-            } else {
+            } else if (isPairing) {
                 PairingScreen(sessionManager)
+            } else {
+                // Empty background while waiting for DataStore to load
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background))
             }
         }
     }

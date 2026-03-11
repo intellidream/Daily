@@ -43,7 +43,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     private var isRecoveringSession = false
     
     private override init() {
-        let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+        let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(autoRefreshToken: false, emitLocalSessionAsInitialSession: true))
         self.baseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
         super.init()
         
@@ -61,7 +61,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
            let refreshToken = UserDefaults.standard.string(forKey: "supabase_refresh_token") {
             
             // Initialize the main client right away so auth can take over
-            let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+            let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(autoRefreshToken: false, emitLocalSessionAsInitialSession: true))
             self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
             self.listenToAuthState()
             
@@ -70,11 +70,10 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                     // Hand tokens to the Supabase Auth module so it manages the session.
                     try await self.supabaseClient?.auth.setSession(accessToken: accessToken, refreshToken: refreshToken)
                     
-                    // CRITICAL: Always force an immediate refresh. The stored access token
-                    // is likely expired after watchOS sleep. setSession alone may accept
-                    // stale tokens without refreshing. This call uses the refresh_token
-                    // to obtain a brand-new access_token from Supabase.
-                    try? await self.supabaseClient?.auth.refreshSession()
+                    // We no longer forcefully refresh tokens on wake. 
+                    // Instead, we rely on the Central Hub (MAUI App) pushing fresh tokens
+                    // to the paired_watches table and checkForRepairTokens() picking them up.
+                    // try? await self.supabaseClient?.auth.refreshSession()
                     
                     DispatchQueue.main.async {
                         if let userId = self.extractUserId(from: accessToken) {
@@ -88,18 +87,9 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                         }
                     }
                 } catch {
-                    // setSession failed — the access token is expired. Try refreshing
-                    // directly with the refresh token (which has a much longer lifetime).
-                    print("Initial session restore failed: \(error). Attempting direct refresh.")
-                    do {
-                        try await self.supabaseClient?.auth.setSession(accessToken: accessToken, refreshToken: refreshToken)
-                        try await self.supabaseClient?.auth.refreshSession()
-                    } catch {
-                        // Network likely unavailable (common on watchOS wake).
-                        // Show authenticated UI optimistically — onAppBecameActive() will
-                        // retry the refresh when connectivity is established.
-                        print("Direct refresh also failed: \(error). Will retry on activation.")
-                    }
+                    // setSession failed — the access token or format is invalid.
+                    // We will retry on activation if networking was unavailable.
+                    print("Initial session restore failed: \(error). Will retry on activation.")
                     DispatchQueue.main.async {
                         if let userId = self.extractUserId(from: accessToken) {
                             self.currentUserId = userId
@@ -122,8 +112,24 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         
         Task {
             do {
-                let pairing = WatchPairing(code: self.pairingCode, access_token: nil, refresh_token: nil, created_at: nil)
-                try await baseClient.from("watch_pairings").insert(pairing).execute()
+                let dict: [String: String] = ["code": self.pairingCode]
+                
+                guard var components = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/watch_pairings"), resolvingAgainstBaseURL: false) else { return }
+                guard let url = components.url else { return }
+                
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+                request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try JSONSerialization.data(withJSONObject: dict)
+                
+                let (_, response) = try await URLSession.shared.data(for: request)
+                
+                if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    throw NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP Error \(httpResponse.statusCode)"])
+                }
+                
                 self.startPolling()
             } catch {
                 DispatchQueue.main.async {
@@ -170,7 +176,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                         }
                         
                         // Hand the tokens over to the official Auth module so it manages refreshing
-                        let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+                        let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(autoRefreshToken: false, emitLocalSessionAsInitialSession: true))
                         self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
                         self.listenToAuthState()
                         
@@ -202,9 +208,15 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                         // Reached row but token is null, just wait
                     }
                 } else {
-                     DispatchQueue.main.async {
-                         self.errorMessage = "Row deleted/missing"
-                     }
+                    // The row disappears when the Phone app claims it OR if we explicitly delete it after success.
+                    // We only consider it an error if we are still actively "Pairing".
+                    DispatchQueue.main.async {
+                        if self.isPairing {
+                            self.errorMessage = "Row deleted/missing. Retrying..."
+                            self.pollTimer?.invalidate()
+                            self.generatePairingCode()
+                        }
+                    }
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -226,14 +238,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
             // First, check for repair tokens pushed from the main app
             await checkForRepairTokens()
             
-            if let client = self.supabaseClient {
-                do {
-                    try await client.auth.refreshSession()
-                    return
-                } catch {
-                    // SDK refresh failed — fall through to storage recovery
-                }
-            }
+            // We no longer attempt to force a network refresh here.
             await recoverSessionFromStorage()
         }
     }
@@ -256,17 +261,13 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         let accessToken = UserDefaults.standard.string(forKey: "supabase_access_token") ?? ""
         
         if self.supabaseClient == nil {
-            let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+            let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(autoRefreshToken: false, emitLocalSessionAsInitialSession: true))
             self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
             self.listenToAuthState()
         }
         
         do {
             try await self.supabaseClient?.auth.setSession(accessToken: accessToken, refreshToken: refreshToken)
-            // setSession loaded the tokens — now force a refresh so we get a
-            // brand-new access token. The stored one is almost certainly expired
-            // after watchOS suspended the app for hours.
-            try await self.supabaseClient?.auth.refreshSession()
             // Success — the auth state listener will persist the new tokens and update UI
         } catch {
             // Recovery failed — don't logout. The refresh token may still be valid but
@@ -388,13 +389,12 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
             }
             
             if self.supabaseClient == nil {
-                let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+                let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(autoRefreshToken: false, emitLocalSessionAsInitialSession: true))
                 self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
                 self.listenToAuthState()
             }
             
             try? await self.supabaseClient?.auth.setSession(accessToken: token, refreshToken: refresh)
-            try? await self.supabaseClient?.auth.refreshSession()
             
             DispatchQueue.main.async {
                 if let userId = self.extractUserId(from: token) {
@@ -411,7 +411,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
             
             var clearRequest = URLRequest(url: clearUrl)
             clearRequest.httpMethod = "PATCH"
-            clearRequest.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+            clearRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             clearRequest.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
             clearRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
             clearRequest.httpBody = try JSONSerialization.data(withJSONObject: [
@@ -525,7 +525,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         Task {
             do {
                 if self.supabaseClient == nil {
-                     let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true))
+                     let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(autoRefreshToken: false, emitLocalSessionAsInitialSession: true))
                      self.supabaseClient = SupabaseClient(supabaseURL: self.supabaseUrl, supabaseKey: self.supabaseAnonKey, options: options)
                      self.listenToAuthState()
                 }

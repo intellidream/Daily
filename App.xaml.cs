@@ -1,4 +1,5 @@
-﻿using Daily.Services;
+using Daily.Services;
+using Daily.Models;
 using System.Runtime.InteropServices;
 #if WINDOWS
 using Microsoft.UI;
@@ -108,6 +109,53 @@ namespace Daily
                 await _habitsService.InitializeAsync();
                 
                 _syncService.StartBackgroundSync();
+
+                // Token Push Logic (Option B) - Keep watches alive without Token Rotation
+                _supabase.Auth.AddStateChangedListener(async (sender, state) =>
+                {
+                    if (state == global::Supabase.Gotrue.Constants.AuthState.SignedIn || 
+                        state == global::Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
+                    {
+                        var session = _supabase.Auth.CurrentSession;
+                        if (session != null && !string.IsNullOrEmpty(session.AccessToken) && !string.IsNullOrEmpty(session.RefreshToken))
+                        {
+                            try
+                            {
+                                // Push the new token pair to all active watches for this user
+                                var userId = session.User?.Id;
+                                if (!string.IsNullOrEmpty(userId))
+                                {
+                                    // 1. Fetch active watches
+                                    var response = await _supabase.From<PairedWatch>()
+                                        .Where(x => x.UserId == userId)
+                                        .Where(x => x.IsActive == true)
+                                        .Get();
+
+                                    var watches = response.Models;
+                                    if (watches != null && watches.Any())
+                                    {
+                                        _logger.Log($"[App] Pushing fresh tokens to {watches.Count} paired watches...");
+                                        
+                                        // 2. Update them
+                                        foreach(var w in watches)
+                                        {
+                                            w.PendingAccessToken = session.AccessToken;
+                                            w.PendingRefreshToken = session.RefreshToken;
+                                            w.LastTokenPush = DateTime.UtcNow;
+                                        }
+
+                                        await _supabase.From<PairedWatch>().Upsert(watches);
+                                        _logger.Log("[App] Token push successful.");
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Log($"[App] Failed to push tokens to watches: {ex.Message}");
+                            }
+                        }
+                    }
+                });
             });
 
             _trayService.Initialize();
