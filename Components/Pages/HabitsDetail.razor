@@ -634,7 +634,7 @@
      private Color _waterHealthColor = Color.Error;
  
      // Shared UI Data
-     private List<ChartSeries> _series = new();
+     private List<ChartSeries<double>> _series = new();
     private string[] _xAxisLabels = Array.Empty<string>();
     
     // Liquid Visualization Data (Water Only)
@@ -962,7 +962,7 @@
                     data[i] = 0;
                 }
             }
-            _series = new List<ChartSeries> { new ChartSeries { Name = $"Intake ({_unit})", Data = data } };
+            _series = new List<ChartSeries<double>> { new ChartSeries<double> { Name = $"Intake ({_unit})", Data = data } };
             
             // --- B. HEATMAP (Last 120 Days) ---
             _heatmapItems.Clear();
@@ -1017,10 +1017,10 @@
                 dataAvoided[i] = avoided;
             }
             
-            _series = new List<ChartSeries>
+            _series = new List<ChartSeries<double>>
             {
-                new ChartSeries { Name = "Smoked", Data = dataSmoked }, 
-                new ChartSeries { Name = "Avoided", Data = dataAvoided } 
+                new ChartSeries<double> { Name = "Smoked", Data = dataSmoked }, 
+                new ChartSeries<double> { Name = "Avoided", Data = dataAvoided } 
             };
             
             // --- B. HEATMAP (Last 120 Days) ---
