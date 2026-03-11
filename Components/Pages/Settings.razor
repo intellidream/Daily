@@ -1,6 +1,7 @@
 @using Daily.Models
 @using Daily.Configuration
 @using Daily.Services
+@inject IRefreshService RefreshService
 @inject ISettingsService SettingsService
 @inject IAuthService AuthService
 @inject ISnackbar Snackbar
@@ -184,7 +185,7 @@
                         @foreach (var watch in _pairedWatches)
                         {
                             <div class="px-6 py-4 d-flex align-center gap-4">
-                                <MudIcon Icon="@(watch.Platform == "watchos" ? Icons.Material.Filled.Watch : watch.Platform == "harmonyos" ? Icons.Material.Filled.Watch : Icons.Material.Filled.Devices)"
+                                <MudIcon Icon="@GetPlatformIcon(watch.Platform)"
                                          Size="Size.Medium"
                                          Style="opacity: 0.7;" />
                                 <div style="flex: 1; min-width: 0;">
@@ -207,12 +208,20 @@
                                                        Disabled="_isRepairingId == watch.Id"
                                                        OnClick="@(() => RepairWatch(watch))" />
                                     </MudTooltip>
-                                    <MudTooltip Text="Unpair this watch">
-                                        <MudIconButton Icon="@Icons.Material.Filled.LinkOff"
-                                                       Color="Color.Error"
-                                                       Size="Size.Small"
-                                                       OnClick="@(() => UnpairWatch(watch))" />
-                                    </MudTooltip>
+                                    @if (_unpairingWatchId == watch.Id)
+                                    {
+                                        <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" OnClick="@(() => ConfirmUnpair(watch))" Class="mx-1">Confirm</MudButton>
+                                        <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small" OnClick="@(() => _unpairingWatchId = null)">Cancel</MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudTooltip Text="Unpair this watch">
+                                            <MudIconButton Icon="@Icons.Material.Filled.LinkOff"
+                                                           Color="Color.Error"
+                                                           Size="Size.Small"
+                                                           OnClick="@(() => _unpairingWatchId = watch.Id)" />
+                                        </MudTooltip>
+                                    }
                                 </div>
                             </div>
                             <MudDivider Style="opacity: 0.06;" />
@@ -253,7 +262,7 @@
                                                   Margin="Margin.Dense"
                                                   Style="max-width: 220px; letter-spacing: 0.4em; font-size: 1.15rem; font-weight: 600;"
                                                   Class="flex-grow-1" />
-                                    <MudToggleGroup T="string" @bind-Value="_pairingPlatform" Color="Color.Primary" CheckMark="false" FixedContent="true" Class="border-solid" Style="border-color: rgba(255,255,255,0.1) !important;">
+                                    <MudToggleGroup T="string" Value="@_pairingPlatform" ValueChanged="@OnPlatformChanged" Color="Color.Primary" CheckMark="false" FixedContent="true" Class="border-solid" Style="border-color: rgba(255,255,255,0.1) !important;">
                                         <MudToggleItem Value="@("watchos")" Text="Apple Watch" />
                                         <MudToggleItem Value="@("wearos")" Text="Wear OS" />
                                         <MudToggleItem Value="@("harmonyos")" Text="HarmonyOS" />
@@ -413,6 +422,7 @@
     public void Dispose()
     {
         SettingsService.OnSettingsChanged -= OnSettingsChanged;
+        RefreshService.RefreshRequested -= OnRefreshRequested;
         if (DebugLogger != null)
         {
             DebugLogger.OnLogAdded -= OnLogUpdated;
@@ -424,10 +434,20 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private async Task OnRefreshRequested()
+    {
+        if (SettingsService.IsAuthenticated)
+        {
+            await LoadPairedWatches();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await SettingsService.InitializeAsync();
         SettingsService.OnSettingsChanged += OnSettingsChanged;
+        RefreshService.RefreshRequested += OnRefreshRequested;
         
         if (DebugLogger != null)
         {
@@ -507,12 +527,28 @@
     private bool _focusPairingCode;
     private List<PairedWatch> _pairedWatches = new();
     private string? _isRepairingId;
+    private string? _unpairingWatchId;
 
     private void ShowPairingInput()
     {
         _showPairingInput = true;
         _focusPairingCode = true;
     }
+
+    private void OnPlatformChanged(string newValue)
+    {
+        _pairingPlatform = newValue;
+        _focusPairingCode = true;
+        StateHasChanged();
+    }
+
+    private static string GetPlatformIcon(string? platform) => platform switch
+    {
+        "watchos" => Icons.Custom.Brands.Apple,
+        "wearos" => Icons.Custom.Brands.Google,
+        "harmonyos" => Icons.Material.Filled.Watch,
+        _ => Icons.Material.Filled.Devices
+    };
 
     private static string GetPlatformDisplayName(string? platform) => platform switch
     {
@@ -543,15 +579,8 @@
         }
     }
 
-    private async Task UnpairWatch(PairedWatch watch)
+    private async Task ConfirmUnpair(PairedWatch watch)
     {
-        bool? confirmed = await DialogService.ShowMessageBox(
-            "Unpair Watch",
-            $"This will remove the pairing for {(string.IsNullOrEmpty(watch.DeviceName) ? GetPlatformDisplayName(watch.Platform) : watch.DeviceName)}. The watch will need to be re-paired to sync again.",
-            yesText: "Unpair", cancelText: "Cancel");
-
-        if (confirmed != true) return;
-
         try
         {
             watch.IsActive = false;
@@ -562,6 +591,10 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to unpair: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _unpairingWatchId = null;
         }
     }
 
@@ -642,11 +675,18 @@
                 return;
             }
 
-            // The watch itself will register its device in the persistent paired_watches table
-            // immediately after successfully consuming these tokens.
-            // We just need to reload the UI to show it a second later.
-            await Task.Delay(1000);
-            await LoadPairedWatches();
+            // Polling to detect when the watch actually saves itself to the database
+            for (int i = 0; i < 4; i++)
+            {
+                await Task.Delay(1500); // Wait 1.5s
+                await LoadPairedWatches();
+                
+                // If a watch matching the platform just appeared in the last 2 minutes, assume success and stop polling
+                if (_pairedWatches.Any(w => w.Platform == _pairingPlatform && w.PairedAt > DateTime.UtcNow.AddMinutes(-2)))
+                {
+                    break;
+                }
+            }
 
             var watchLabel = GetPlatformDisplayName(_pairingPlatform) + " watch";
             Snackbar.Add($"Watch paired successfully! Check your {watchLabel}.", Severity.Success);
