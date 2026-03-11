@@ -226,8 +226,9 @@ export struct BubblesView {
 
           // Small Water
           Column() {
-            Text('💧')
-              .fontSize(14)
+            Image($r('app.media.cup_icon'))
+              .width(16)
+              .height(16)
             Text('150')
               .fontSize(11)
               .fontColor('#00FFFF')
@@ -243,8 +244,9 @@ export struct BubblesView {
 
           // Coffee
           Column() {
-            Text('☕')
-              .fontSize(18)
+            Image($r('app.media.coffee_icon'))
+              .width(20)
+              .height(20)
             Text('100')
               .fontSize(11)
               .fontColor('#FFA500')
@@ -323,11 +325,23 @@ export struct BubblesView {
 
             ForEach(this.todayLogs, (log: SupabaseHabitLog) => {
               Row() {
-                Text(this.getDrinkType(log).includes('Coffee') ? '☕' : '💧')
-                  .fontSize(14)
-                  .margin({ right: 6 })
+                if (this.getDrinkType(log).includes('Coffee')) {
+                  Image($r('app.media.coffee_icon'))
+                    .width(16)
+                    .height(16)
+                    .margin({ right: 6 })
+                } else if (this.getDrinkType(log) === 'Small Water') {
+                  Image($r('app.media.cup_icon'))
+                    .width(16)
+                    .height(16)
+                    .margin({ right: 6 })
+                } else {
+                  Text('💧')
+                    .fontSize(14)
+                    .margin({ right: 6 })
+                }
 
-                Text(`${log.value} ml ${this.getDrinkType(log)}`)
+                Text(`${log.value} ml ${this.getDrinkType(log).includes('Coffee') ? 'Coffee' : (this.getDrinkType(log) === 'Small Water' ? 'Small' : 'Large')}`)
                   .fontSize(12)
                   .fontWeight(FontWeight.Medium)
                   .fontColor('#CCCCCC')

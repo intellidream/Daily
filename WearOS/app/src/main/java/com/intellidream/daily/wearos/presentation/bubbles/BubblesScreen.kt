@@ -61,6 +61,9 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import com.google.android.horologist.annotations.ExperimentalHorologistApi
+import androidx.compose.foundation.layout.fillMaxHeight
+
+data class DailyTotal(val date: String, val total: Double, val label: String)
 
 @OptIn(ExperimentalHorologistApi::class)
 @Composable
@@ -71,12 +74,15 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
     var todayWater by remember { mutableIntStateOf(historyLogs.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }) }
     var todayCoffee by remember { mutableIntStateOf(historyLogs.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }) }
     var todayTotal by remember { mutableIntStateOf(todayWater + todayCoffee) }
+    var weeklyTotals by remember { mutableStateOf<List<DailyTotal>>(emptyList()) }
 
     val scope = rememberCoroutineScope()
     val columnState = rememberResponsiveColumnState()
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
 
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val localFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    val dayFormat = remember { SimpleDateFormat("EEE", Locale.getDefault()) }
     val parseFormat = remember {
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
@@ -104,34 +110,68 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
             }
 
             try {
-                // Fetch today's logs
+                // Fetch last 7 days of logs
                 val calendar = java.util.Calendar.getInstance()
                 calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
                 calendar.set(java.util.Calendar.MINUTE, 0)
                 calendar.set(java.util.Calendar.SECOND, 0)
                 
+                val todayStart = calendar.time
                 val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
                 format.timeZone = TimeZone.getTimeZone("UTC")
-                val startOfDay = format.format(calendar.time)
+                
+                calendar.add(java.util.Calendar.DAY_OF_YEAR, -6)
+                val sevenDaysAgoStr = format.format(calendar.time)
 
                 val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
                     .select {
                         filter {
                             eq("habit_type", "water")
                             eq("is_deleted", false)
-                            gte("logged_at", startOfDay)
+                            gte("logged_at", sevenDaysAgoStr)
                         }
                     }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
 
-                historyLogs = logs
-                sessionManager.cachedBubblesLogs = logs
+                val totalsMap = mutableMapOf<String, Double>()
+                val daysList = mutableListOf<DailyTotal>()
+                
+                // Initialize last 7 days with 0
+                for (i in 6 downTo 0) {
+                    val c = java.util.Calendar.getInstance()
+                    c.add(java.util.Calendar.DAY_OF_YEAR, -i)
+                    val dStr = localFormat.format(c.time)
+                    val lbl = dayFormat.format(c.time).take(3)
+                    totalsMap[dStr] = 0.0
+                    daysList.add(DailyTotal(dStr, 0.0, lbl))
+                }
+
+                val todayStr = localFormat.format(todayStart)
+                val todayLogsList = mutableListOf<HabitLog>()
                 
                 var tWater = 0
                 var tCoffee = 0
+                
                 for (log in logs) {
-                    val isCoffee = log.metadata?.contains("Coffee") == true
-                    if (isCoffee) tCoffee += log.value.toInt() else tWater += log.value.toInt()
+                    try {
+                        val pureUTC = log.logged_at.replace("Z", "") + "Z"
+                        val date = parseFormat.parse(pureUTC)
+                        if (date != null) {
+                            val dStr = localFormat.format(date)
+                            if (totalsMap.containsKey(dStr)) {
+                                totalsMap[dStr] = (totalsMap[dStr] ?: 0.0) + log.value
+                            }
+                            if (dStr == todayStr) {
+                                todayLogsList.add(log)
+                                val isCoffee = log.metadata?.contains("Coffee") == true
+                                if (isCoffee) tCoffee += log.value.toInt() else tWater += log.value.toInt()
+                            }
+                        }
+                    } catch (e: Exception) {}
                 }
+                
+                weeklyTotals = daysList.map { it.copy(total = totalsMap[it.date] ?: 0.0) }
+                historyLogs = todayLogsList
+                sessionManager.cachedBubblesLogs = todayLogsList
                 todayWater = tWater
                 todayCoffee = tCoffee
                 todayTotal = tWater + tCoffee
@@ -262,7 +302,6 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
         }
 
         item {
-            // Buttons
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -270,6 +309,61 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
                 QuickAddMiniButton(Icons.Filled.WaterDrop, 300, Color.Cyan) { logWater(300, "Water") }
                 QuickAddMiniButton(Icons.Filled.LocalDrink, 150, Color.Cyan) { logWater(150, "Small Water") }
                 QuickAddMiniButton(Icons.Filled.LocalCafe, 100, Color(0xFFFFA500)) { logWater(100, "Coffee") }
+            }
+        }
+        
+        if (weeklyTotals.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(8.dp))
+                ListHeader { Text("THIS WEEK", color = Color.Gray, fontSize = 10.sp) }
+            }
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 24.dp)) {
+                    val maxVal = maxOf(dailyGoal.toDouble(), weeklyTotals.maxOfOrNull { it.total } ?: 1.0)
+                    
+                    // Goal Line
+                    val goalY = 1f - (dailyGoal / maxVal).toFloat().coerceIn(0f, 1f)
+                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawLine(
+                            color = Color.Cyan.copy(alpha = 0.5f),
+                            start = androidx.compose.ui.geometry.Offset(0f, size.height * goalY),
+                            end = androidx.compose.ui.geometry.Offset(size.width, size.height * goalY),
+                            strokeWidth = 2f
+                        )
+                    }
+                    
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        val todayStr = localFormat.format(Date())
+                        weeklyTotals.forEach { day ->
+                            val heightFrac = (day.total / maxVal).toFloat().coerceIn(0f, 1f)
+                            val isToday = day.date == todayStr
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Bottom,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.BottomCenter
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(12.dp)
+                                            .fillMaxHeight(heightFrac)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(if (isToday) Color.Cyan else Color(0xFF0277BD))
+                                    )
+                                }
+                                Spacer(Modifier.height(2.dp))
+                                Text(day.label, fontSize = 8.sp, color = Color.Gray)
+                            }
+                        }
+                    }
+                }
             }
         }
 

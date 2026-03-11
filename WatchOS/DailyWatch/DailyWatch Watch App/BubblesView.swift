@@ -203,11 +203,15 @@ struct BubblesView: View {
                         ForEach(historyLogs) { log in
                             HStack {
                                 let type = parseMetadata(log.metadata)?["drink"] ?? "Water"
-                                Image(systemName: type.contains("Coffee") ? "cup.and.saucer.fill" : "drop.fill")
-                                    .foregroundColor(type.contains("Coffee") ? .orange : .cyan)
+                                let isCoffee = type.contains("Coffee")
+                                let isSmall = type == "Small Water"
+                                let displayType = isCoffee ? "Coffee" : (isSmall ? "Small" : "Large")
+                                
+                                Image(systemName: isCoffee ? "cup.and.saucer.fill" : "drop.fill")
+                                    .foregroundColor(isCoffee ? .orange : .cyan)
                                     .font(.system(size: 12))
                                 
-                                Text("\(Int(log.value)) \(log.unit) " + (type.contains("Coffee") ? "Coffee" : "Water"))
+                                Text("\(Int(log.value)) \(log.unit) \(displayType)")
                                     .font(.system(size: 12, weight: .medium, design: .rounded))
                                 Spacer()
                                 Text(formatTime(dateString: log.logged_at))
