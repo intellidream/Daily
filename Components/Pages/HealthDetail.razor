@@ -336,47 +336,193 @@
     <MudItem xs="12">
         <MudExpansionPanels Elevation="0" Class="rounded-xl overflow-hidden" Style="background: transparent;">
             <MudExpansionPanel Text="7-Day Trends" IsInitiallyExpanded="true" Style="background: rgba(255,255,255,0.05);">
-                <MudGrid Spacing="4">
-                    @if (_stepsHistory.Any())
-                    {
-                        <MudItem xs="12" md="4">
-                            <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
-                                <MudText Typo="Typo.subtitle2" Class="mb-2 font-weight-bold" Style="opacity: 0.8;">Steps</MudText>
-                                <MudChart ChartType="ChartType.Line" ChartSeries="@(new List<ChartSeries<double>> { new() { Name = "Steps", Data = _stepsHistory.ToArray() } })" 
-                                          XAxisLabels="@_historyLabels" Width="100%" Height="160px" 
-                                          ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#FF9800" } })" />
-                            </MudPaper>
-                        </MudItem>
-                    }
-                    @if (_sleepHistory.Any())
-                    {
-                        <MudItem xs="12" md="4">
-                            <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
-                                <MudText Typo="Typo.subtitle2" Class="mb-2 font-weight-bold" Style="opacity: 0.8;">Sleep (hrs)</MudText>
-                                <MudChart ChartType="ChartType.Line" ChartSeries="@(new List<ChartSeries<double>> { new() { Name = "Sleep", Data = _sleepHistory.ToArray() } })" 
-                                          XAxisLabels="@_historyLabels" Width="100%" Height="160px" 
-                                          ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#7C4DFF" } })" />
-                            </MudPaper>
-                        </MudItem>
-                    }
-                    @if (_hrHistory.Any())
-                    {
-                        <MudItem xs="12" md="4">
-                            <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
-                                <MudText Typo="Typo.subtitle2" Class="mb-2 font-weight-bold" Style="opacity: 0.8;">Heart Rate (bpm)</MudText>
-                                <MudChart ChartType="ChartType.Line" ChartSeries="@(new List<ChartSeries<double>> { new() { Name = "HR", Data = _hrHistory.ToArray() } })" 
-                                          XAxisLabels="@_historyLabels" Width="100%" Height="160px" 
-                                          ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#FF5252" } })" />
-                            </MudPaper>
-                        </MudItem>
-                    }
-                    @if (!_stepsHistory.Any() && !_sleepHistory.Any() && !_hrHistory.Any())
-                    {
-                        <MudItem xs="12">
-                            <MudText Typo="Typo.body2" Style="opacity: 0.5; text-align: center;">No trend data available yet. Sync from a mobile device to start tracking.</MudText>
-                        </MudItem>
-                    }
-                </MudGrid>
+                @if (_stepsHistory.Any() || _sleepHistory.Any() || _hrHistory.Any())
+                {
+                    <MudGrid Spacing="4">
+                        <!-- STEPS TREND -->
+                        @if (_stepsHistory.Any())
+                        {
+                            <MudItem xs="12">
+                                <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
+                                    <div class="d-flex align-center justify-space-between mb-3">
+                                        <div class="d-flex align-center gap-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Size="Size.Small" Style="color: #FF9800;"/>
+                                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Steps</MudText>
+                                        </div>
+                                        <div class="d-flex align-center gap-1">
+                                            <MudIcon Icon="@GetTrendIcon(_stepsHistory)" Size="Size.Small" Style="@GetTrendColor(_stepsHistory)"/>
+                                            <MudText Typo="Typo.caption" Style="@GetTrendColor(_stepsHistory)">@GetTrendPercent(_stepsHistory)</MudText>
+                                        </div>
+                                    </div>
+                                    <MudChart ChartType="ChartType.Line" ChartSeries="@(new List<ChartSeries<double>> { new() { Name = "Steps", Data = _stepsHistory.ToArray() } })" 
+                                              XAxisLabels="@_historyLabels" Width="100%" Height="140px" 
+                                              ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#FF9800" } })" />
+                                    <!-- Stats Grid -->
+                                    <div class="d-flex align-center justify-space-around mt-3 pa-2 rounded-lg" style="background: rgba(255,152,0,0.06);">
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">AVG</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold">@FormatNumber(_stepsAvg)</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">BEST</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: #4CAF50;">@FormatNumber(_stepsMax)</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">LOW</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: #FF5252;">@FormatNumber(_stepsMin)</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">TOTAL</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold">@FormatNumber(_stepsTotal)</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">TODAY</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: #FF9800;">@FormatNumber(_stepsHistory.LastOrDefault())</MudText>
+                                        </div>
+                                    </div>
+                                    <!-- Daily Breakdown -->
+                                    <div class="d-flex align-center justify-space-between mt-2 gap-1">
+                                        @for (int si = 0; si < _historyLabels.Length && si < _stepsBarPcts.Count; si++)
+                                        {
+                                            var idx = si;
+                                            <div class="d-flex flex-column align-center" style="flex: 1;">
+                                                <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">@FormatNumber(_stepsHistory[idx])</MudText>
+                                                <div style="width: 16px; height: 50px; border-radius: 4px; background: rgba(255,152,0,0.15); position: relative; overflow: hidden;">
+                                                    <div style="position: absolute; bottom: 0; width: 100%; height: @(_stepsBarPcts[idx])%; background: #FF9800; border-radius: 4px;"></div>
+                                                </div>
+                                                <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">@_historyLabels[idx]</MudText>
+                                            </div>
+                                        }
+                                    </div>
+                                </MudPaper>
+                            </MudItem>
+                        }
+
+                        <!-- SLEEP TREND -->
+                        @if (_sleepHistory.Any())
+                        {
+                            <MudItem xs="12">
+                                <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
+                                    <div class="d-flex align-center justify-space-between mb-3">
+                                        <div class="d-flex align-center gap-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Bedtime" Size="Size.Small" Style="color: #7C4DFF;"/>
+                                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Sleep (hours)</MudText>
+                                        </div>
+                                        <div class="d-flex align-center gap-1">
+                                            <MudIcon Icon="@GetTrendIcon(_sleepHistory)" Size="Size.Small" Style="@GetTrendColor(_sleepHistory)"/>
+                                            <MudText Typo="Typo.caption" Style="@GetTrendColor(_sleepHistory)">@GetTrendPercent(_sleepHistory)</MudText>
+                                        </div>
+                                    </div>
+                                    <MudChart ChartType="ChartType.Line" ChartSeries="@(new List<ChartSeries<double>> { new() { Name = "Sleep", Data = _sleepHistory.ToArray() } })" 
+                                              XAxisLabels="@_historyLabels" Width="100%" Height="140px" 
+                                              ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#7C4DFF" } })" />
+                                    <!-- Stats -->
+                                    <div class="d-flex align-center justify-space-around mt-3 pa-2 rounded-lg" style="background: rgba(124,77,255,0.06);">
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">AVG</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold">@(_sleepAvg.ToString("N1"))h</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">BEST</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: #4CAF50;">@(_sleepMax.ToString("N1"))h</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">LOW</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: #FF5252;">@(_sleepMin.ToString("N1"))h</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">TODAY</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: #7C4DFF;">@(_sleepHistory.LastOrDefault().ToString("N1"))h</MudText>
+                                        </div>
+                                    </div>
+                                    <!-- Daily Breakdown -->
+                                    <div class="d-flex align-center justify-space-between mt-2 gap-1">
+                                        @for (int sli = 0; sli < _historyLabels.Length && sli < _sleepBarPcts.Count; sli++)
+                                        {
+                                            var idx = sli;
+                                            <div class="d-flex flex-column align-center" style="flex: 1;">
+                                                <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">@(_sleepHistory[idx].ToString("N1"))h</MudText>
+                                                <div style="width: 16px; height: 50px; border-radius: 4px; background: rgba(124,77,255,0.15); position: relative; overflow: hidden;">
+                                                    <div style="position: absolute; bottom: 0; width: 100%; height: @(_sleepBarPcts[idx])%; background: #7C4DFF; border-radius: 4px;"></div>
+                                                </div>
+                                                <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">@_historyLabels[idx]</MudText>
+                                            </div>
+                                        }
+                                    </div>
+                                </MudPaper>
+                            </MudItem>
+                        }
+
+                        <!-- HEART RATE TREND -->
+                        @if (_hrHistory.Any())
+                        {
+                            <MudItem xs="12">
+                                <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
+                                    <div class="d-flex align-center justify-space-between mb-3">
+                                        <div class="d-flex align-center gap-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Small" Style="color: #FF5252;"/>
+                                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Heart Rate (bpm)</MudText>
+                                        </div>
+                                        <div class="d-flex align-center gap-1">
+                                            <MudIcon Icon="@GetTrendIcon(_hrHistory)" Size="Size.Small" Style="@GetTrendColor(_hrHistory)"/>
+                                            <MudText Typo="Typo.caption" Style="@GetTrendColor(_hrHistory)">@GetTrendPercent(_hrHistory)</MudText>
+                                        </div>
+                                    </div>
+                                    <MudChart ChartType="ChartType.Line" ChartSeries="@(new List<ChartSeries<double>> { new() { Name = "HR", Data = _hrHistory.ToArray() } })" 
+                                              XAxisLabels="@_historyLabels" Width="100%" Height="140px" 
+                                              ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#FF5252" } })" />
+                                    <!-- Stats -->
+                                    <div class="d-flex align-center justify-space-around mt-3 pa-2 rounded-lg" style="background: rgba(255,82,82,0.06);">
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">AVG</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold">@(_hrAvg.ToString("N0")) bpm</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">HIGH</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: #FF5252;">@(_hrMax.ToString("N0")) bpm</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">LOW</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: #4CAF50;">@(_hrMin.ToString("N0")) bpm</MudText>
+                                        </div>
+                                        <MudDivider Vertical="true" FlexItem="true" />
+                                        <div class="d-flex flex-column align-center">
+                                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 9px;">TODAY</MudText>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: #FF5252;">@(_hrHistory.LastOrDefault().ToString("N0")) bpm</MudText>
+                                        </div>
+                                    </div>
+                                    <!-- Daily Breakdown -->
+                                    <div class="d-flex align-center justify-space-between mt-2 gap-1">
+                                        @for (int hi = 0; hi < _historyLabels.Length && hi < _hrBarPcts.Count; hi++)
+                                        {
+                                            var idx = hi;
+                                            <div class="d-flex flex-column align-center" style="flex: 1;">
+                                                <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">@(_hrHistory[idx] > 0 ? _hrHistory[idx].ToString("N0") : "--")</MudText>
+                                                <div style="width: 16px; height: 50px; border-radius: 4px; background: rgba(255,82,82,0.15); position: relative; overflow: hidden;">
+                                                    <div style="position: absolute; bottom: 0; width: 100%; height: @(_hrBarPcts[idx])%; background: #FF5252; border-radius: 4px;"></div>
+                                                </div>
+                                                <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">@_historyLabels[idx]</MudText>
+                                            </div>
+                                        }
+                                    </div>
+                                </MudPaper>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Style="opacity: 0.5; text-align: center; padding: 16px;">No trend data available yet. Sync from a mobile device to start tracking.</MudText>
+                }
             </MudExpansionPanel>
         </MudExpansionPanels>
     </MudItem>
@@ -413,6 +559,14 @@
     private List<double> _sleepHistory = new();
     private List<double> _hrHistory = new();
     private string[] _historyLabels = Array.Empty<string>();
+
+    // Pre-computed bar chart data (avoid expensive LINQ in render)
+    private List<double> _stepsBarPcts = new();
+    private List<double> _sleepBarPcts = new();
+    private List<double> _hrBarPcts = new();
+    private double _stepsMax, _stepsAvg, _stepsMin, _stepsTotal;
+    private double _sleepMax, _sleepAvg, _sleepMin;
+    private double _hrMax, _hrAvg, _hrMin;
 
     // Diagnostics
     private string _debugLog = "";
@@ -476,8 +630,11 @@
                 StateHasChanged();
             });
 
-            // Load trend history in background
-            await LoadTrendHistory();
+            // Load trend history in background (fire-and-forget to avoid blocking UI)
+            _ = Task.Run(async () => {
+                try { await LoadTrendHistory(); }
+                catch (Exception tex) { Console.WriteLine($"Trend history error: {tex.Message}"); }
+            });
         }
         catch (Exception ex)
         {
@@ -546,7 +703,6 @@
             var sleepData = await HealthService.GetHistoryAsync(VitalType.SleepDuration, 7);
             var hrData = await HealthService.GetHistoryAsync(VitalType.HeartRate, 7);
 
-            // Build 7-day label array
             var labels = new List<string>();
             var stepsVals = new List<double>();
             var sleepVals = new List<double>();
@@ -558,7 +714,7 @@
                 labels.Add(day.ToString("ddd"));
                 stepsVals.Add(stepsData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0);
                 var sleepMin = sleepData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
-                sleepVals.Add(Math.Round(sleepMin / 60.0, 1)); // Convert to hours
+                sleepVals.Add(Math.Round(sleepMin / 60.0, 1));
                 hrVals.Add(hrData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0);
             }
 
@@ -566,6 +722,31 @@
             _stepsHistory = stepsVals.Any(v => v > 0) ? stepsVals : new List<double>();
             _sleepHistory = sleepVals.Any(v => v > 0) ? sleepVals : new List<double>();
             _hrHistory = hrVals.Any(v => v > 0) ? hrVals : new List<double>();
+
+            // Pre-compute stats to avoid LINQ in render loop
+            if (_stepsHistory.Any())
+            {
+                _stepsMax = _stepsHistory.Max();
+                _stepsMin = _stepsHistory.Where(v => v > 0).DefaultIfEmpty(0).Min();
+                _stepsAvg = _stepsHistory.Where(v => v > 0).DefaultIfEmpty(0).Average();
+                _stepsTotal = _stepsHistory.Sum();
+                _stepsBarPcts = _stepsHistory.Select(v => _stepsMax > 0 ? v / _stepsMax * 100 : 0).ToList();
+            }
+            if (_sleepHistory.Any())
+            {
+                _sleepMax = _sleepHistory.Max();
+                _sleepMin = _sleepHistory.Where(v => v > 0).DefaultIfEmpty(0).Min();
+                _sleepAvg = _sleepHistory.Where(v => v > 0).DefaultIfEmpty(0).Average();
+                _sleepBarPcts = _sleepHistory.Select(v => _sleepMax > 0 ? v / _sleepMax * 100 : 0).ToList();
+            }
+            if (_hrHistory.Any())
+            {
+                _hrMax = _hrHistory.Max();
+                _hrMin = _hrHistory.Where(v => v > 0).DefaultIfEmpty(0).Min();
+                _hrAvg = _hrHistory.Where(v => v > 0).DefaultIfEmpty(0).Average();
+                var range = _hrMax - _hrMin;
+                _hrBarPcts = _hrHistory.Select(v => range > 0 ? (v - _hrMin) / range * 100 : 50).ToList();
+            }
 
             await InvokeAsync(StateHasChanged);
         }
@@ -612,6 +793,46 @@
         else if (source == "Manual") color = "#E91E63"; // Pink
         
         return $"width: 8px; height: 8px; border-radius: 50%; background-color: {color}; display: inline-block;";
+    }
+
+    // Trend Analysis Helpers
+    private double GetAvg(List<double> data) => data.Where(v => v > 0).DefaultIfEmpty(0).Average();
+    private double GetMax(List<double> data) => data.DefaultIfEmpty(0).Max();
+    private double GetMinNonZero(List<double> data) => data.Where(v => v > 0).DefaultIfEmpty(0).Min();
+
+    private string GetTrendIcon(List<double> data)
+    {
+        if (data.Count < 2) return Icons.Material.Filled.Remove;
+        // Compare last 3 days avg to first 3 days avg
+        var recentAvg = data.Skip(Math.Max(0, data.Count - 3)).Where(v => v > 0).DefaultIfEmpty(0).Average();
+        var olderAvg = data.Take(3).Where(v => v > 0).DefaultIfEmpty(0).Average();
+        if (olderAvg == 0) return Icons.Material.Filled.Remove;
+        var change = (recentAvg - olderAvg) / olderAvg;
+        if (change > 0.05) return Icons.Material.Filled.TrendingUp;
+        if (change < -0.05) return Icons.Material.Filled.TrendingDown;
+        return Icons.Material.Filled.TrendingFlat;
+    }
+
+    private string GetTrendColor(List<double> data)
+    {
+        if (data.Count < 2) return "color: grey;";
+        var recentAvg = data.Skip(Math.Max(0, data.Count - 3)).Where(v => v > 0).DefaultIfEmpty(0).Average();
+        var olderAvg = data.Take(3).Where(v => v > 0).DefaultIfEmpty(0).Average();
+        if (olderAvg == 0) return "color: grey;";
+        var change = (recentAvg - olderAvg) / olderAvg;
+        if (change > 0.05) return "color: #4CAF50;";
+        if (change < -0.05) return "color: #FF5252;";
+        return "color: grey;";
+    }
+
+    private string GetTrendPercent(List<double> data)
+    {
+        if (data.Count < 2) return "—";
+        var recentAvg = data.Skip(Math.Max(0, data.Count - 3)).Where(v => v > 0).DefaultIfEmpty(0).Average();
+        var olderAvg = data.Take(3).Where(v => v > 0).DefaultIfEmpty(0).Average();
+        if (olderAvg == 0) return "—";
+        var pct = (recentAvg - olderAvg) / olderAvg * 100;
+        return $"{(pct > 0 ? "+" : "")}{pct:N0}%";
     }
 
     public void Dispose()

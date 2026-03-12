@@ -322,16 +322,25 @@ namespace Daily.Services.Health
                 var start = DateTime.UtcNow.Date.AddDays(-days);
                 var end = DateTime.UtcNow.Date.AddDays(1);
 
+                var startStr = start.ToString("yyyy-MM-dd");
+                var endStr = end.ToString("yyyy-MM-dd");
+
+                Console.WriteLine($"[Health History] Querying {typeString} from {startStr} to {endStr}");
+
                 var result = await _supabase.From<VitalMetric>()
-                    .Where(v => v.TypeString == typeString && v.Date >= start && v.Date < end)
+                    .Filter("type", Supabase.Postgrest.Constants.Operator.Equals, typeString)
+                    .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
+                    .Filter("date", Supabase.Postgrest.Constants.Operator.LessThan, endStr)
                     .Order("date", Supabase.Postgrest.Constants.Ordering.Ascending)
                     .Get();
 
+                Console.WriteLine($"[Health History] Got {result.Models.Count} records for {typeString}");
                 return result.Models;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Failed to fetch history for {type}");
+                Console.WriteLine($"[Health History] ERROR for {type}: {ex.Message}");
                 return new List<VitalMetric>();
             }
         }
