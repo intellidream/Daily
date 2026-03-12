@@ -335,7 +335,7 @@
     <!-- 7-Day Trends -->
     <MudItem xs="12">
         <MudExpansionPanels Elevation="0" Class="rounded-xl overflow-hidden" Style="background: transparent;">
-            <MudExpansionPanel Text="7-Day Trends" IsInitiallyExpanded="true" Style="background: rgba(255,255,255,0.05);">
+            <MudExpansionPanel Text="Past 7 Days" IsInitiallyExpanded="true" Style="background: rgba(255,255,255,0.05);">
                 @if (_stepsHistory.Any() || _sleepHistory.Any() || _hrHistory.Any())
                 {
                     <div class="d-flex flex-column gap-4">
@@ -701,7 +701,7 @@
             var sleepVals = new List<double>();
             var hrVals = new List<double>();
 
-            for (int i = 6; i >= 0; i--)
+            for (int i = 7; i >= 1; i--)
             {
                 var day = DateTime.Today.AddDays(-i);
                 labels.Add(day.ToString("ddd"));

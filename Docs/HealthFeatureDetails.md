@@ -195,3 +195,17 @@ Full Micros: Magnesium, Zinc, Calcium added alongside existing Sugar/Iron/VitC/C
 
 CalculateSyncedAgo + GetSyncCaption now fall back to UpdatedAt when SyncedAt is null (for your older data)
 GetHistoryAsync now uses DateTime.UtcNow.Date instead of DateTime.Today to correctly match Supabase-stored UTC dates, which should surface your existing historical data
+
+### 7-Day Trends fallback — One fix:
+
+Is it stilll useful to keep in 7-Day Trend data for today, it seems it's never populated in the current day and just gets the graph to go down in an unrealistic manner, what do you think?
+
+Great observation — you're absolutely right. Today's data is always partial (the day isn't over), so it drags the trend line down artificially. Plus, today's values are already displayed prominently in the hero section above. The trend should show the previous 6 completed days only.
+
+Let me fix that:
+
+Simple fix — change the loop to start from 7 days ago through yesterday (skip today), and update the heading to say "Past 7 Days":
+
+Done — simple two-line change. The trend now shows yesterday through 7 days ago (7 completed days), skipping today entirely. The section is also renamed to "Past 7 Days" to make this clearer.
+
+Today's live values are already shown prominently in the hero section at the top, so there's no data loss — just a more accurate trend line that won't dip artificially from incomplete daily totals.
