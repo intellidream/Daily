@@ -21,6 +21,12 @@
                          <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: white !important;">
                              Vitals
                          </MudText>
+                         <div class="d-flex align-center gap-1 ml-auto">
+                             <MudText Typo="Typo.caption" Style="color: white; opacity: 0.7;">Today</MudText>
+                             <MudTooltip Text="@_sourceTooltip">
+                                 <div style="@GetSourceDotStyle(_dominantSource)"></div>
+                             </MudTooltip>
+                         </div>
                      </div>
                  </MudCarouselItem>
             </MudCarousel>
@@ -115,6 +121,10 @@
     private string _stepsSource, _caloriesSource, _sleepSource;
     private string _bpmSource, _weightSource, _bpSource;
 
+    // Dominant Source
+    private string _dominantSource = "Mixed";
+    private string _sourceTooltip = "Source: Multiple";
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -148,6 +158,19 @@
                 _carbs = GetVal(metrics, VitalType.Carbs);
                 _prot = GetVal(metrics, VitalType.Protein);
                 _fat = GetVal(metrics, VitalType.Fat);
+
+                // Dominant Source
+                var sourced = metrics.Where(m => !string.IsNullOrEmpty(m.SourceDevice)).ToList();
+                if (sourced.Any())
+                {
+                    int iosCount = sourced.Count(m => m.SourceDevice == "iOS");
+                    int androidCount = sourced.Count(m => m.SourceDevice == "Health Connect" || m.SourceDevice == "Android");
+                    int total = sourced.Count;
+                    if (total > 0 && (double)iosCount / total >= 0.70) _dominantSource = "iOS";
+                    else if (total > 0 && (double)androidCount / total >= 0.70) _dominantSource = "Health Connect";
+                    else _dominantSource = "Mixed";
+                    _sourceTooltip = $"iOS: {iosCount}, Android: {androidCount}";
+                }
 
                 StateHasChanged();
             });

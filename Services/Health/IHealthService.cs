@@ -28,5 +28,10 @@ namespace Daily.Services.Health
         /// Direct fetch from native store (bypass Sync/Supabase) for UI display.
         /// </summary>
         Task<List<VitalMetric>> FetchMetricsAsync(DateTime date);
+
+        /// <summary>
+        /// Retrieves daily values for a specific metric type over a date range (for trend charts).
+        /// </summary>
+        Task<List<VitalMetric>> GetHistoryAsync(VitalType type, int days = 7);
     }
 }

@@ -94,6 +94,9 @@ namespace Daily.Models.Health
         [Column("updated_at")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("synced_at")]
+        public DateTime? SyncedAt { get; set; }
+
         // Helper property for Enum handling
         [Newtonsoft.Json.JsonIgnore]
         public VitalType Type

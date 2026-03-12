@@ -249,6 +249,7 @@ namespace Daily.Services.Health
                         {
                             local.UserId = uid;
                             local.UpdatedAt = DateTime.UtcNow;
+                            local.SyncedAt = DateTime.Now; // Local device time
 
                             var remote = existingMetrics.FirstOrDefault(e => e.Date == local.Date && e.TypeString == local.TypeString);
                             if (remote != null)
@@ -311,6 +312,28 @@ namespace Daily.Services.Health
                      var sync = _serviceProvider.GetService<ISyncService>();
                      sync?.Log($"[Health] {msg}");
                 }
+        }
+
+        public async Task<List<VitalMetric>> GetHistoryAsync(VitalType type, int days = 7)
+        {
+            try
+            {
+                var typeString = type.ToString();
+                var start = DateTime.UtcNow.Date.AddDays(-days);
+                var end = DateTime.UtcNow.Date.AddDays(1);
+
+                var result = await _supabase.From<VitalMetric>()
+                    .Where(v => v.TypeString == typeString && v.Date >= start && v.Date < end)
+                    .Order("date", Supabase.Postgrest.Constants.Ordering.Ascending)
+                    .Get();
+
+                return result.Models;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to fetch history for {type}");
+                return new List<VitalMetric>();
+            }
         }
 
         private bool IsCumulative(string typeString)

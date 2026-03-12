@@ -21,11 +21,17 @@
                     <MudText Typo="Typo.h4" Class="font-weight-bold">Activity</MudText>
                 </div>
                 <!-- Source Dot for Aggregate -->
-                <div class="d-flex align-center gap-2">
-                    <MudText Typo="Typo.h6" Style="opacity: 0.7;">Today</MudText>
-                     <MudTooltip Text="Source: Multiple">
-                        <div style="@GetSourceDotStyle("Mixed")"></div>
-                    </MudTooltip>
+                <div class="d-flex flex-column align-end gap-0">
+                    <div class="d-flex align-center gap-2">
+                        <MudText Typo="Typo.h6" Style="opacity: 0.7;">Today</MudText>
+                        <MudTooltip Text="@_sourceTooltip">
+                            <div style="@GetSourceDotStyle(_dominantSource)"></div>
+                        </MudTooltip>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_syncedAgoText))
+                    {
+                        <MudText Typo="Typo.caption" Style="opacity: 0.45; font-size: 10px;">@_syncedAgoText</MudText>
+                    }
                 </div>
             </div>
 
@@ -33,43 +39,53 @@
             <div class="d-flex flex-column flex-md-row align-center justify-space-around z-10 my-4 gap-4">
                 <!-- Steps -->
                 <div class="d-flex flex-column align-center relative">
-                     <div style="@GetSourceDotStyle(_stepsSource); position: absolute; top: -5px; right: -5px;"></div>
+                     @{ var stepsM = GetMetric(VitalType.Steps); }
+                     <div style="@GetSourceDotStyle(stepsM?.SourceDevice); position: absolute; top: -5px; right: -5px;"></div>
                      <MudText Typo="Typo.caption" Style="opacity: 0.6; text-transform: uppercase; letter-spacing: 1px;">STEPS</MudText>
-                    <MudText Typo="Typo.h3" Class="font-weight-bold">@FormatNumber(_steps)</MudText>
+                    <MudText Typo="Typo.h3" Class="font-weight-bold">@FormatNumber(stepsM?.Value ?? 0)</MudText>
+                    @if (!string.IsNullOrEmpty(GetSyncCaption(stepsM))) { <MudText Typo="Typo.caption" Style="opacity: 0.35; font-size: 9px;">@GetSyncCaption(stepsM)</MudText> }
                 </div>
 
                 <!-- Calories Ring -->
                 <div class="d-flex flex-column align-center mx-4 relative">
-                     <div style="@GetSourceDotStyle(_caloriesSource); position: absolute; top: 0; right: 0; z-index: 20;"></div>
-                     <MudProgressCircular Value="@GetPercent(_calories, 2500)" Size="Size.Large" Color="Color.Warning" StrokeWidth="8" Style="height: 120px; width: 120px;">
+                     @{ var calM = GetMetric(VitalType.ActiveEnergy); }
+                     <div style="@GetSourceDotStyle(calM?.SourceDevice); position: absolute; top: 0; right: 0; z-index: 20;"></div>
+                     <MudProgressCircular Value="@GetPercent(calM?.Value ?? 0, 2500)" Size="Size.Large" Color="Color.Warning" StrokeWidth="8" Style="height: 120px; width: 120px;">
                          <div class="d-flex flex-column align-center">
-                            <MudText Typo="Typo.h5" Class="font-weight-bold">@FormatNumber(_calories)</MudText>
+                            <MudText Typo="Typo.h5" Class="font-weight-bold">@FormatNumber(calM?.Value ?? 0)</MudText>
                             <MudText Typo="Typo.caption">Kcal</MudText>
                          </div>
                      </MudProgressCircular>
+                     @if (!string.IsNullOrEmpty(GetSyncCaption(calM))) { <MudText Typo="Typo.caption" Style="opacity: 0.35; font-size: 9px;">@GetSyncCaption(calM)</MudText> }
                 </div>
 
                 <!-- Sleep -->
                 <div class="d-flex flex-column align-center relative">
-                    <div style="@GetSourceDotStyle(_sleepSource); position: absolute; top: -5px; right: -5px;"></div>
+                    @{ var sleepM = GetMetric(VitalType.SleepDuration); }
+                    <div style="@GetSourceDotStyle(sleepM?.SourceDevice); position: absolute; top: -5px; right: -5px;"></div>
                     <MudText Typo="Typo.caption" Style="opacity: 0.6; text-transform: uppercase; letter-spacing: 1px;">SLEEP</MudText>
-                    <MudText Typo="Typo.h3" Class="font-weight-bold">@FormatSleep(_sleepMinutes)</MudText>
+                    <MudText Typo="Typo.h3" Class="font-weight-bold">@FormatSleep(sleepM?.Value ?? 0)</MudText>
+                    @if (!string.IsNullOrEmpty(GetSyncCaption(sleepM))) { <MudText Typo="Typo.caption" Style="opacity: 0.35; font-size: 9px;">@GetSyncCaption(sleepM)</MudText> }
                 </div>
             </div>
 
             <!-- Activity Sub-Metrics -->
             <div class="d-flex justify-space-around mt-auto pa-4 rounded-xl z-10" style="background: rgba(255,255,255,0.05);">
-                 <div class="d-flex flex-column align-center">
+                 @{ var distM = GetMetric(VitalType.Distance); var floorM = GetMetric(VitalType.FloorsClimbed); var speedM = GetMetric(VitalType.WalkingSpeed); }
+                 <div class="d-flex flex-column align-center relative">
+                     <div style="@GetSourceDotStyle(distM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                      <MudIcon Icon="@Icons.Material.Filled.Map" Color="Color.Success" Size="Size.Small" Class="mb-1"/>
-                     <MudText Typo="Typo.body1" Class="font-weight-bold">@(_distanceMeters > 0 ? Math.Round(_distanceMeters/1000.0, 2) + "km" : "--")</MudText>
+                     <MudText Typo="Typo.body1" Class="font-weight-bold">@(distM?.Value > 0 ? Math.Round(distM.Value/1000.0, 2) + "km" : "--")</MudText>
                  </div>
-                 <div class="d-flex flex-column align-center">
+                 <div class="d-flex flex-column align-center relative">
+                     <div style="@GetSourceDotStyle(floorM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                      <MudIcon Icon="@Icons.Material.Filled.Stairs" Color="Color.Info" Size="Size.Small" Class="mb-1"/>
-                     <MudText Typo="Typo.body1" Class="font-weight-bold">@(_floors > 0 ? _floors.ToString() : "--")</MudText>
+                     <MudText Typo="Typo.body1" Class="font-weight-bold">@(floorM?.Value > 0 ? floorM.Value.ToString() : "--")</MudText>
                  </div>
-                  <div class="d-flex flex-column align-center">
+                  <div class="d-flex flex-column align-center relative">
+                     <div style="@GetSourceDotStyle(speedM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                      <MudIcon Icon="@Icons.Material.Filled.Speed" Color="Color.Warning" Size="Size.Small" Class="mb-1"/>
-                     <MudText Typo="Typo.body1" Class="font-weight-bold">@(_speed > 0 ? _speed + " m/s" : "--")</MudText>
+                     <MudText Typo="Typo.body1" Class="font-weight-bold">@(speedM?.Value > 0 ? speedM.Value + " m/s" : "--")</MudText>
                  </div>
             </div>
 
@@ -84,124 +100,219 @@
         <MudGrid Spacing="4">
             <!-- Heart Rate -->
             <MudItem xs="6">
+                @{ var hrM = GetMetric(VitalType.HeartRate); }
                 <MudPaper Class="detail-tile rounded-xl pa-4 d-flex flex-column align-center justify-center relative" Elevation="3" Style="height: 140px;">
-                    <div style="@GetSourceDotStyle(_bpmSource); position: absolute; top: 12px; right: 12px;"></div>
+                    <div style="@GetSourceDotStyle(hrM?.SourceDevice); position: absolute; top: 12px; right: 12px;"></div>
                     <MudIcon Icon="@Icons.Material.Filled.Favorite" Color="Color.Error" Class="mb-2" />
                     <MudText Typo="Typo.caption" Style="opacity: 0.6; text-transform: uppercase;">HEART RATE</MudText>
-                    <MudText Typo="Typo.h5" Class="font-weight-bold">@(_bpm > 0 ? _bpm + " bpm" : "--")</MudText>
+                    <MudText Typo="Typo.h5" Class="font-weight-bold">@(hrM?.Value > 0 ? hrM.Value + " bpm" : "--")</MudText>
+                    @if (!string.IsNullOrEmpty(GetSyncCaption(hrM))) { <MudText Typo="Typo.caption" Style="opacity: 0.35; font-size: 9px;">@GetSyncCaption(hrM)</MudText> }
                 </MudPaper>
             </MudItem>
 
             <!-- Weight -->
             <MudItem xs="6">
+                @{ var weightM = GetMetric(VitalType.Weight); }
                 <MudPaper Class="detail-tile rounded-xl pa-4 d-flex flex-column align-center justify-center relative" Elevation="3" Style="height: 140px;">
-                    <div style="@GetSourceDotStyle(_weightSource); position: absolute; top: 12px; right: 12px;"></div>
+                    <div style="@GetSourceDotStyle(weightM?.SourceDevice); position: absolute; top: 12px; right: 12px;"></div>
                     <MudIcon Icon="@Icons.Material.Filled.MonitorWeight" Color="Color.Primary" Class="mb-2" />
                     <MudText Typo="Typo.caption" Style="opacity: 0.6; text-transform: uppercase;">WEIGHT</MudText>
-                    <MudText Typo="Typo.h5" Class="font-weight-bold">@(_weightKg > 0 ? _weightKg + " kg" : "--")</MudText>
+                    <MudText Typo="Typo.h5" Class="font-weight-bold">@(weightM?.Value > 0 ? weightM.Value + " kg" : "--")</MudText>
+                    @if (!string.IsNullOrEmpty(GetSyncCaption(weightM))) { <MudText Typo="Typo.caption" Style="opacity: 0.35; font-size: 9px;">@GetSyncCaption(weightM)</MudText> }
                 </MudPaper>
             </MudItem>
 
             <!-- HRV -->
             <MudItem xs="6">
+                @{ var hrvM = GetMetric(VitalType.HeartRateVariabilitySDNN) ?? GetMetric(VitalType.HeartRateVariabilityRMSSD); }
                 <MudPaper Class="detail-tile rounded-xl pa-4 d-flex flex-column align-center justify-center relative" Elevation="3" Style="height: 140px;">
-                     <div style="@GetSourceDotStyle(_hrvSource); position: absolute; top: 12px; right: 12px;"></div>
+                     <div style="@GetSourceDotStyle(hrvM?.SourceDevice); position: absolute; top: 12px; right: 12px;"></div>
                     <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Secondary" Class="mb-2" />
                     <MudText Typo="Typo.caption" Style="opacity: 0.6; text-transform: uppercase;">HRV</MudText>
-                    <MudText Typo="Typo.h5" Class="font-weight-bold">@(_hrv > 0 ? _hrv + " ms" : "--")</MudText>
+                    <MudText Typo="Typo.h5" Class="font-weight-bold">@(hrvM?.Value > 0 ? hrvM.Value + " ms" : "--")</MudText>
+                    @if (!string.IsNullOrEmpty(GetSyncCaption(hrvM))) { <MudText Typo="Typo.caption" Style="opacity: 0.35; font-size: 9px;">@GetSyncCaption(hrvM)</MudText> }
                 </MudPaper>
             </MudItem>
 
             <!-- Blood Pressure -->
              <MudItem xs="6">
+                @{ var bpSysM = GetMetric(VitalType.BloodPressureSystolic); var bpDiaM = GetMetric(VitalType.BloodPressureDiastolic); }
                 <MudPaper Class="detail-tile rounded-xl pa-4 d-flex flex-column align-center justify-center relative" Elevation="3" Style="height: 140px;">
-                    <div style="@GetSourceDotStyle(_bpSource); position: absolute; top: 12px; right: 12px;"></div>
+                    <div style="@GetSourceDotStyle(bpSysM?.SourceDevice); position: absolute; top: 12px; right: 12px;"></div>
                     <MudIcon Icon="@Icons.Material.Filled.Compress" Color="Color.Error" Class="mb-2" />
                     <MudText Typo="Typo.caption" Style="opacity: 0.6; text-transform: uppercase;">BP</MudText>
-                    <MudText Typo="Typo.h5" Class="font-weight-bold">@GetBPString()</MudText>
+                    <MudText Typo="Typo.h5" Class="font-weight-bold">@(bpSysM?.Value > 0 && bpDiaM?.Value > 0 ? $"{bpSysM.Value}/{bpDiaM.Value}" : "--")</MudText>
+                    @if (!string.IsNullOrEmpty(GetSyncCaption(bpSysM))) { <MudText Typo="Typo.caption" Style="opacity: 0.35; font-size: 9px;">@GetSyncCaption(bpSysM)</MudText> }
                 </MudPaper>
             </MudItem>
-            
+
+            <!-- Expanded Vitals Row: RHR, RespRate, SpO2, Glucose -->
+            <MudItem xs="12">
+                <MudPaper Class="detail-tile rounded-xl pa-4 d-flex align-center justify-space-around relative" Elevation="3" Style="min-height: 80px;">
+                    @{ var rhrM = GetMetric(VitalType.RestingHeartRate); var respM = GetMetric(VitalType.RespiratoryRate); var oxyM = GetMetric(VitalType.OxygenSaturation); var glucM = GetMetric(VitalType.BloodGlucose); }
+                    <div class="d-flex flex-column align-center relative">
+                        <div style="@GetSourceDotStyle(rhrM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.6;">RHR</MudText>
+                        <MudText Typo="Typo.h6" Class="font-weight-bold">@(rhrM?.Value > 0 ? rhrM.Value + " bpm" : "--")</MudText>
+                    </div>
+                    <MudDivider Vertical="true" FlexItem="true" />
+                    <div class="d-flex flex-column align-center relative">
+                        <div style="@GetSourceDotStyle(respM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.6;">RESP</MudText>
+                        <MudText Typo="Typo.h6" Class="font-weight-bold">@(respM?.Value > 0 ? respM.Value + " br/m" : "--")</MudText>
+                    </div>
+                    <MudDivider Vertical="true" FlexItem="true" />
+                    <div class="d-flex flex-column align-center relative">
+                        <div style="@GetSourceDotStyle(oxyM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.6;">SpO2</MudText>
+                        <MudText Typo="Typo.h6" Class="font-weight-bold">@(oxyM?.Value > 0 ? oxyM.Value + "%" : "--")</MudText>
+                    </div>
+                    <MudDivider Vertical="true" FlexItem="true" />
+                    <div class="d-flex flex-column align-center relative">
+                        <div style="@GetSourceDotStyle(glucM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.6;">GLUCOSE</MudText>
+                        <MudText Typo="Typo.h6" Class="font-weight-bold">@(glucM?.Value > 0 ? glucM.Value + " mg/dL" : "--")</MudText>
+                    </div>
+                </MudPaper>
+            </MudItem>
+
             <!-- Body Composition Row -->
             <MudItem xs="12">
+                 @{ var bfM = GetMetric(VitalType.BodyFatPercentage); var lmM = GetMetric(VitalType.LeanBodyMass); var heightM = GetMetric(VitalType.Height); }
                  <MudPaper Class="detail-tile rounded-xl pa-4 d-flex align-center justify-space-around relative" Elevation="3" Style="height: 100px;">
-                     <div class="d-flex flex-column align-center">
+                     <div class="d-flex flex-column align-center relative">
+                         <div style="@GetSourceDotStyle(bfM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                          <MudText Typo="Typo.caption" Style="opacity: 0.6;">BODY FAT</MudText>
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_bodyFat > 0 ? _bodyFat + "%" : "--")</MudText>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(bfM?.Value > 0 ? bfM.Value + "%" : "--")</MudText>
                      </div>
                      <MudDivider Vertical="true" FlexItem="true" />
                       <div class="d-flex flex-column align-center">
                          <MudText Typo="Typo.caption" Style="opacity: 0.6;">BMI</MudText>
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_bmi > 0 ? _bmi.ToString("N1") : "--")</MudText>
+                         @{ var w = GetMetric(VitalType.Weight)?.Value ?? 0; var h = heightM?.Value ?? 0; var bmi = w > 0 && h > 0 ? w / (h * h) : 0; }
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(bmi > 0 ? bmi.ToString("N1") : "--")</MudText>
                      </div>
                      <MudDivider Vertical="true" FlexItem="true" />
-                      <div class="d-flex flex-column align-center">
+                      <div class="d-flex flex-column align-center relative">
+                         <div style="@GetSourceDotStyle(lmM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                          <MudText Typo="Typo.caption" Style="opacity: 0.6;">LEAN MASS</MudText>
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_leanMass > 0 ? _leanMass + "kg" : "--")</MudText>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(lmM?.Value > 0 ? lmM.Value + "kg" : "--")</MudText>
                      </div>
                  </MudPaper>
             </MudItem>
 
-            <!-- Sleep & Mind Row -->
+            <!-- Sleep Stages (shown if any stage data exists) -->
+            @{ var deepM = GetMetric(VitalType.SleepDeep); var lightM = GetMetric(VitalType.SleepLight); var remM = GetMetric(VitalType.SleepREM); var awakeM = GetMetric(VitalType.SleepAwake); }
+            @if (deepM?.Value > 0 || lightM?.Value > 0 || remM?.Value > 0 || awakeM?.Value > 0)
+            {
+                <MudItem xs="12">
+                    <MudPaper Class="detail-tile rounded-xl pa-4 d-flex flex-column gap-1 relative" Elevation="3">
+                        <div class="d-flex align-center gap-2 mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Bedtime" Color="Color.Info" Size="Size.Small"/>
+                            <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Sleep Stages</MudText>
+                        </div>
+                        <div class="d-flex align-center justify-space-around">
+                            <div class="d-flex flex-column align-center relative">
+                                <div style="@GetSourceDotStyle(deepM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
+                                <MudText Typo="Typo.caption" Style="color: #3F51B5;">DEEP</MudText>
+                                <MudText Typo="Typo.h6" Class="font-weight-bold">@(deepM?.Value > 0 ? FormatSleep(deepM.Value) : "--")</MudText>
+                            </div>
+                            <MudDivider Vertical="true" FlexItem="true" />
+                            <div class="d-flex flex-column align-center relative">
+                                <div style="@GetSourceDotStyle(lightM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
+                                <MudText Typo="Typo.caption" Style="color: #7C4DFF;">LIGHT</MudText>
+                                <MudText Typo="Typo.h6" Class="font-weight-bold">@(lightM?.Value > 0 ? FormatSleep(lightM.Value) : "--")</MudText>
+                            </div>
+                            <MudDivider Vertical="true" FlexItem="true" />
+                            <div class="d-flex flex-column align-center relative">
+                                <div style="@GetSourceDotStyle(remM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
+                                <MudText Typo="Typo.caption" Style="color: #00BCD4;">REM</MudText>
+                                <MudText Typo="Typo.h6" Class="font-weight-bold">@(remM?.Value > 0 ? FormatSleep(remM.Value) : "--")</MudText>
+                            </div>
+                            <MudDivider Vertical="true" FlexItem="true" />
+                            <div class="d-flex flex-column align-center relative">
+                                <div style="@GetSourceDotStyle(awakeM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
+                                <MudText Typo="Typo.caption" Style="color: #FF9800;">AWAKE</MudText>
+                                <MudText Typo="Typo.h6" Class="font-weight-bold">@(awakeM?.Value > 0 ? FormatSleep(awakeM.Value) : "--")</MudText>
+                            </div>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+            }
+
+            <!-- Sleep & Mind & Temp & Hydration Row -->
              <MudItem xs="12">
+                 @{ var mindM = GetMetric(VitalType.MindfulSession); var tempM = GetMetric(VitalType.BodyTemperature); var h2oM = GetMetric(VitalType.Hydration); }
                  <MudPaper Class="detail-tile rounded-xl pa-4 d-flex align-center justify-space-around relative" Elevation="3" Style="height: 100px;">
-                     <div class="d-flex flex-column align-center">
+                     <div class="d-flex flex-column align-center relative">
+                         <div style="@GetSourceDotStyle(mindM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                          <div style="display:flex; align-items:center; gap:4px">
                             <MudIcon Icon="@Icons.Material.Filled.SelfImprovement" Color="Color.Info" Size="Size.Small"/>
                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">MIND</MudText>
                          </div>
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_mindMinutes > 0 ? _mindMinutes + "m" : "--")</MudText>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(mindM?.Value > 0 ? mindM.Value + "m" : "--")</MudText>
                      </div>
                      <MudDivider Vertical="true" FlexItem="true" />
-                      <div class="d-flex flex-column align-center">
+                      <div class="d-flex flex-column align-center relative">
+                         <div style="@GetSourceDotStyle(tempM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                          <div style="display:flex; align-items:center; gap:4px">
                              <MudIcon Icon="@Icons.Material.Filled.DeviceThermostat" Color="Color.Warning" Size="Size.Small"/>
                              <MudText Typo="Typo.caption" Style="opacity: 0.6;">TEMP</MudText>
                          </div>
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_temp > 0 ? _temp + "°C" : "--")</MudText>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(tempM?.Value > 0 ? tempM.Value + "°C" : "--")</MudText>
                      </div>
                      <MudDivider Vertical="true" FlexItem="true" />
-                      <div class="d-flex flex-column align-center">
+                      <div class="d-flex flex-column align-center relative">
+                         <div style="@GetSourceDotStyle(h2oM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                          <div style="display:flex; align-items:center; gap:4px">
                             <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Color="Color.Primary" Size="Size.Small"/>
                             <MudText Typo="Typo.caption" Style="opacity: 0.6;">H2O</MudText>
                          </div>
-                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(_hydration > 0 ? _hydration + "L" : "--")</MudText>
+                         <MudText Typo="Typo.h6" Class="font-weight-bold">@(h2oM?.Value > 0 ? h2oM.Value + "L" : "--")</MudText>
                      </div>
                  </MudPaper>
             </MudItem>
 
             <!-- Nutrition Summary -->
             <MudItem xs="12">
+                 @{ var carbsM = GetMetric(VitalType.Carbs); var protM = GetMetric(VitalType.Protein); var fatM = GetMetric(VitalType.Fat); }
                  <MudPaper Class="detail-tile rounded-xl pa-4 d-flex flex-column gap-2 relative" Elevation="3">
                      <!-- Macros -->
                      <div class="d-flex align-center justify-space-around mb-2">
-                         <div class="d-flex flex-column align-center">
+                         <div class="d-flex flex-column align-center relative">
+                             <div style="@GetSourceDotStyle(carbsM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                              <MudText Typo="Typo.caption" Style="color: #4caf50;">CARBS</MudText>
-                             <MudText Typo="Typo.h6" Class="font-weight-bold">@(_carbs > 0 ? _carbs + "g" : "--")</MudText>
+                             <MudText Typo="Typo.h6" Class="font-weight-bold">@(carbsM?.Value > 0 ? carbsM.Value + "g" : "--")</MudText>
                          </div>
-                          <div class="d-flex flex-column align-center">
+                          <div class="d-flex flex-column align-center relative">
+                             <div style="@GetSourceDotStyle(protM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                              <MudText Typo="Typo.caption" Style="color: #ff9800;">PROT</MudText>
-                             <MudText Typo="Typo.h6" Class="font-weight-bold">@(_prot > 0 ? _prot + "g" : "--")</MudText>
+                             <MudText Typo="Typo.h6" Class="font-weight-bold">@(protM?.Value > 0 ? protM.Value + "g" : "--")</MudText>
                          </div>
-                          <div class="d-flex flex-column align-center">
+                          <div class="d-flex flex-column align-center relative">
+                             <div style="@GetSourceDotStyle(fatM?.SourceDevice); position: absolute; top: -4px; right: -4px;"></div>
                              <MudText Typo="Typo.caption" Style="color: #f44336;">FAT</MudText>
-                             <MudText Typo="Typo.h6" Class="font-weight-bold">@(_fat > 0 ? _fat + "g" : "--")</MudText>
+                             <MudText Typo="Typo.h6" Class="font-weight-bold">@(fatM?.Value > 0 ? fatM.Value + "g" : "--")</MudText>
                          </div>
                      </div>
                      <MudDivider Light="true"/>
                      <!-- Micros -->
-                     <div class="d-flex align-center justify-space-around mt-1">
-                          <MudText Typo="Typo.caption" Style="opacity:0.6">Sug: @(_sugar > 0 ? _sugar+"g" : "-")</MudText>
-                          <MudText Typo="Typo.caption" Style="opacity:0.6">Iron: @(_iron > 0 ? _iron+"mg" : "-")</MudText>
-                          <MudText Typo="Typo.caption" Style="opacity:0.6">VitC: @(_vitC > 0 ? _vitC+"mg" : "-")</MudText>
-                          <MudText Typo="Typo.caption" Style="opacity:0.6">Caff: @(_caffeine > 0 ? _caffeine+"mg" : "-")</MudText>
+                     @{ var sugarM = GetMetric(VitalType.Sugar); var ironM = GetMetric(VitalType.Iron); var vitCM = GetMetric(VitalType.VitaminC); var caffM = GetMetric(VitalType.Caffeine); }
+                     @{ var magM = GetMetric(VitalType.Magnesium); var zincM = GetMetric(VitalType.Zinc); var calcM = GetMetric(VitalType.Calcium); }
+                     <div class="d-flex align-center justify-space-around mt-1 flex-wrap gap-2">
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">Sug: @(sugarM?.Value > 0 ? sugarM.Value+"g" : "-")</MudText>
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">Iron: @(ironM?.Value > 0 ? ironM.Value+"mg" : "-")</MudText>
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">VitC: @(vitCM?.Value > 0 ? vitCM.Value+"mg" : "-")</MudText>
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">Caff: @(caffM?.Value > 0 ? caffM.Value+"mg" : "-")</MudText>
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">Mg: @(magM?.Value > 0 ? magM.Value+"mg" : "-")</MudText>
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">Zn: @(zincM?.Value > 0 ? zincM.Value+"mg" : "-")</MudText>
+                          <MudText Typo="Typo.caption" Style="opacity:0.6">Ca: @(calcM?.Value > 0 ? calcM.Value+"mg" : "-")</MudText>
                      </div>
                  </MudPaper>
             </MudItem>
 
             <!-- Cycle Tracking (Conditional) -->
-            @if (_mensFlow || _ovulationRes > 0 || _sexualActivity)
+            @{ var mensM = GetMetric(VitalType.MenstruationFlow); var ovuM = GetMetric(VitalType.OvulationTest); var sexM = GetMetric(VitalType.SexualActivity); }
+            @if (mensM?.Value > 0 || ovuM?.Value > 0 || sexM?.Value > 0)
             {
                 <MudItem xs="12">
                     <MudPaper Class="detail-tile rounded-xl pa-4 d-flex align-center justify-space-between relative" Elevation="3" Style="background: rgba(233, 30, 99, 0.1);">
@@ -210,15 +321,64 @@
                             <MudText Typo="Typo.h6" Color="Color.Secondary" Class="font-weight-bold">Cycle</MudText>
                         </div>
                         <div class="d-flex gap-4">
-                             @if(_mensFlow) { <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled">Flow</MudChip> }
-                             @if(_ovulationRes == 1) { <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled">Ovulation (+)</MudChip> }
-                             @if(_sexualActivity) { <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Activity</MudChip> }
+                             @if(mensM?.Value > 0) { <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled">Flow</MudChip> }
+                             @if(ovuM?.Value == 1) { <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled">Ovulation (+)</MudChip> }
+                             @if(sexM?.Value > 0) { <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Activity</MudChip> }
                         </div>
                     </MudPaper>
                 </MudItem>
             }
 
         </MudGrid>
+    </MudItem>
+
+    <!-- 7-Day Trends -->
+    <MudItem xs="12">
+        <MudExpansionPanels Elevation="0" Class="rounded-xl overflow-hidden" Style="background: transparent;">
+            <MudExpansionPanel Text="7-Day Trends" IsInitiallyExpanded="true" Style="background: rgba(255,255,255,0.05);">
+                <MudGrid Spacing="4">
+                    @if (_stepsHistory.Any())
+                    {
+                        <MudItem xs="12" md="4">
+                            <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
+                                <MudText Typo="Typo.subtitle2" Class="mb-2 font-weight-bold" Style="opacity: 0.8;">Steps</MudText>
+                                <MudChart ChartType="ChartType.Line" ChartSeries="@(new List<ChartSeries<double>> { new() { Name = "Steps", Data = _stepsHistory.ToArray() } })" 
+                                          XAxisLabels="@_historyLabels" Width="100%" Height="160px" 
+                                          ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#FF9800" } })" />
+                            </MudPaper>
+                        </MudItem>
+                    }
+                    @if (_sleepHistory.Any())
+                    {
+                        <MudItem xs="12" md="4">
+                            <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
+                                <MudText Typo="Typo.subtitle2" Class="mb-2 font-weight-bold" Style="opacity: 0.8;">Sleep (hrs)</MudText>
+                                <MudChart ChartType="ChartType.Line" ChartSeries="@(new List<ChartSeries<double>> { new() { Name = "Sleep", Data = _sleepHistory.ToArray() } })" 
+                                          XAxisLabels="@_historyLabels" Width="100%" Height="160px" 
+                                          ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#7C4DFF" } })" />
+                            </MudPaper>
+                        </MudItem>
+                    }
+                    @if (_hrHistory.Any())
+                    {
+                        <MudItem xs="12" md="4">
+                            <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
+                                <MudText Typo="Typo.subtitle2" Class="mb-2 font-weight-bold" Style="opacity: 0.8;">Heart Rate (bpm)</MudText>
+                                <MudChart ChartType="ChartType.Line" ChartSeries="@(new List<ChartSeries<double>> { new() { Name = "HR", Data = _hrHistory.ToArray() } })" 
+                                          XAxisLabels="@_historyLabels" Width="100%" Height="160px" 
+                                          ChartOptions="@(new ChartOptions { ChartPalette = new[] { "#FF5252" } })" />
+                            </MudPaper>
+                        </MudItem>
+                    }
+                    @if (!_stepsHistory.Any() && !_sleepHistory.Any() && !_hrHistory.Any())
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Style="opacity: 0.5; text-align: center;">No trend data available yet. Sync from a mobile device to start tracking.</MudText>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
     </MudItem>
 
     <!-- Diagnostics Footer -->
@@ -240,26 +400,20 @@
 @implements IDisposable
 
 @code {
-    // Metrics Fields
-    private double _steps, _calories, _sleepMinutes;
-    private double _distanceMeters, _floors, _speed;
-    private double _bpm, _rhr, _hrv, _respRate;
-    private double _temp, _oxy, _bpSys, _bpDia, _glucose;
-    private double _weightKg, _bodyFat, _leanMass, _height, _boneMass, _bmi;
-    private double _carbs, _fat, _prot, _caffeine, _hydration, _sugar;
-    private double _vitC, _vitA, _iron, _mag, _zinc, _calc;
-    
-    // Cycle & Mind
-    private bool _mensFlow;
-    private int _ovulationRes; // enum
-    private bool _sexualActivity;
-    private double _mindMinutes;
+    // Store all metrics as VitalMetric objects for source dots + sync times
+    private List<VitalMetric> _metrics = new();
 
-    // Source Fields
-    private string _stepsSource, _caloriesSource, _sleepSource;
-    private string _bpmSource, _weightSource, _hrvSource, _bpSource;
-    private string _bodySource, _nutSource, _cycleSource; // Aggregated source flags
-    
+    // Dominant Source & SyncedAt
+    private string _dominantSource = "Mixed";
+    private string _sourceTooltip = "Source: Multiple";
+    private string _syncedAgoText = "";
+
+    // 7-Day Trend History
+    private List<double> _stepsHistory = new();
+    private List<double> _sleepHistory = new();
+    private List<double> _hrHistory = new();
+    private string[] _historyLabels = Array.Empty<string>();
+
     // Diagnostics
     private string _debugLog = "";
     private bool _isSyncing = false;
@@ -311,71 +465,19 @@
         {
             await InvokeAsync(async () => 
             {
-                var metrics = await HealthService.FetchMetricsAsync(DateTime.Now);
+                _metrics = await HealthService.FetchMetricsAsync(DateTime.Now);
 
-                // Activity
-                (_steps, _stepsSource) = GetValAndSource(metrics, VitalType.Steps);
-                (_calories, _caloriesSource) = GetValAndSource(metrics, VitalType.ActiveEnergy); 
-                (_sleepMinutes, _sleepSource) = GetValAndSource(metrics, VitalType.SleepDuration);
+                // Dominant Source Calculation (>70% threshold)
+                CalculateDominantSource(_metrics);
 
-                // Expanded Activity
-                _distanceMeters = GetVal(metrics, VitalType.Distance);
-                _floors = GetVal(metrics, VitalType.FloorsClimbed);
-                _speed = GetVal(metrics, VitalType.WalkingSpeed);
-                
-                // Heart & Vitals
-                (_bpm, _bpmSource) = GetValAndSource(metrics, VitalType.HeartRate);
-                _rhr = GetVal(metrics, VitalType.RestingHeartRate);
-                
-                // HRV Priority: SDNN (iOS default) > RMSSD (Android default)
-                var sdnn = GetValAndSource(metrics, VitalType.HeartRateVariabilitySDNN);
-                var rmssd = GetValAndSource(metrics, VitalType.HeartRateVariabilityRMSSD);
-                if (sdnn.Item1 > 0) (_hrv, _hrvSource) = sdnn;
-                else (_hrv, _hrvSource) = rmssd;
-
-                _respRate = GetVal(metrics, VitalType.RespiratoryRate);
-                
-                double bpSys = 0; string bpSrc = "";
-                (bpSys, bpSrc) = GetValAndSource(metrics, VitalType.BloodPressureSystolic);
-                _bpSys = bpSys; _bpSource = bpSrc; 
-                _bpDia = GetVal(metrics, VitalType.BloodPressureDiastolic);
-                
-                _oxy = GetVal(metrics, VitalType.OxygenSaturation);
-                _temp = GetVal(metrics, VitalType.BodyTemperature);
-
-                // Body
-                (_weightKg, _weightSource) = GetValAndSource(metrics, VitalType.Weight);
-                _bodyFat = GetVal(metrics, VitalType.BodyFatPercentage);
-                _leanMass = GetVal(metrics, VitalType.LeanBodyMass);
-                _height = GetVal(metrics, VitalType.Height);
-                _boneMass = GetVal(metrics, VitalType.BoneMass);
-                
-                // BMI Calculation
-                if (_weightKg > 0 && _height > 0) _bmi = _weightKg / (_height * _height);
-                else _bmi = 0;
-
-                // Nutrition
-                _carbs = GetVal(metrics, VitalType.Carbs);
-                _fat = GetVal(metrics, VitalType.Fat);
-                _prot = GetVal(metrics, VitalType.Protein);
-                _caffeine = GetVal(metrics, VitalType.Caffeine);
-                _sugar = GetVal(metrics, VitalType.Sugar);
-                _hydration = GetVal(metrics, VitalType.Hydration);
-                
-                _vitC = GetVal(metrics, VitalType.VitaminC);
-                _iron = GetVal(metrics, VitalType.Iron);
-                _mag = GetVal(metrics, VitalType.Magnesium);
-                
-                // Cycle
-                _mensFlow = GetVal(metrics, VitalType.MenstruationFlow) > 0;
-                _sexualActivity = GetVal(metrics, VitalType.SexualActivity) > 0;
-                _ovulationRes = (int)GetVal(metrics, VitalType.OvulationTest);
-                
-                // Mind
-                _mindMinutes = GetVal(metrics, VitalType.MindfulSession);
+                // SyncedAt (with updated_at fallback)
+                CalculateSyncedAgo(_metrics);
 
                 StateHasChanged();
             });
+
+            // Load trend history in background
+            await LoadTrendHistory();
         }
         catch (Exception ex)
         {
@@ -383,16 +485,107 @@
         }
     }
 
-    private double GetVal(List<VitalMetric> metrics, VitalType type)
+    /// <summary>
+    /// Get a specific metric from the loaded list. Returns null if not found or value is 0.
+    /// </summary>
+    private VitalMetric GetMetric(VitalType type)
     {
-         var m = metrics.FirstOrDefault(x => x.TypeString == type.ToString());
-         return m?.Value ?? 0;
+        var m = _metrics.FirstOrDefault(x => x.TypeString == type.ToString());
+        return m?.Value > 0 ? m : null;
     }
 
-    private (double, string) GetValAndSource(List<VitalMetric> metrics, VitalType type)
+    private void CalculateDominantSource(List<VitalMetric> metrics)
     {
-         var m = metrics.FirstOrDefault(x => x.TypeString == type.ToString());
-         return (m?.Value ?? 0, m?.SourceDevice ?? "");
+        var sourced = metrics.Where(m => !string.IsNullOrEmpty(m.SourceDevice)).ToList();
+        if (!sourced.Any()) { _dominantSource = "Mixed"; _sourceTooltip = "No source data"; return; }
+
+        int iosCount = sourced.Count(m => m.SourceDevice == "iOS");
+        int androidCount = sourced.Count(m => m.SourceDevice == "Health Connect" || m.SourceDevice == "Android");
+        int total = sourced.Count;
+
+        double iosPercent = total > 0 ? (double)iosCount / total : 0;
+        double androidPercent = total > 0 ? (double)androidCount / total : 0;
+
+        if (iosPercent >= 0.70) _dominantSource = "iOS";
+        else if (androidPercent >= 0.70) _dominantSource = "Health Connect";
+        else _dominantSource = "Mixed";
+
+        _sourceTooltip = $"iOS: {iosCount}, Android: {androidCount}";
+        if (total - iosCount - androidCount > 0)
+            _sourceTooltip += $", Other: {total - iosCount - androidCount}";
+    }
+
+    private void CalculateSyncedAgo(List<VitalMetric> metrics)
+    {
+        // Try SyncedAt first, fallback to UpdatedAt for older data
+        var latestSync = metrics
+            .Select(m => m.SyncedAt ?? (DateTime?)m.UpdatedAt)
+            .Where(t => t.HasValue)
+            .OrderByDescending(t => t)
+            .FirstOrDefault();
+
+        if (latestSync != null)
+        {
+            var ago = DateTime.UtcNow - latestSync.Value;
+            if (ago.TotalMinutes < 1) _syncedAgoText = "Synced just now";
+            else if (ago.TotalMinutes < 60) _syncedAgoText = $"Synced {(int)ago.TotalMinutes}m ago";
+            else if (ago.TotalHours < 24) _syncedAgoText = $"Synced {(int)ago.TotalHours}h ago";
+            else _syncedAgoText = $"Synced {(int)ago.TotalDays}d ago";
+        }
+        else
+        {
+            _syncedAgoText = "";
+        }
+    }
+
+    private async Task LoadTrendHistory()
+    {
+        try 
+        {
+            var stepsData = await HealthService.GetHistoryAsync(VitalType.Steps, 7);
+            var sleepData = await HealthService.GetHistoryAsync(VitalType.SleepDuration, 7);
+            var hrData = await HealthService.GetHistoryAsync(VitalType.HeartRate, 7);
+
+            // Build 7-day label array
+            var labels = new List<string>();
+            var stepsVals = new List<double>();
+            var sleepVals = new List<double>();
+            var hrVals = new List<double>();
+
+            for (int i = 6; i >= 0; i--)
+            {
+                var day = DateTime.Today.AddDays(-i);
+                labels.Add(day.ToString("ddd"));
+                stepsVals.Add(stepsData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0);
+                var sleepMin = sleepData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
+                sleepVals.Add(Math.Round(sleepMin / 60.0, 1)); // Convert to hours
+                hrVals.Add(hrData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0);
+            }
+
+            _historyLabels = labels.ToArray();
+            _stepsHistory = stepsVals.Any(v => v > 0) ? stepsVals : new List<double>();
+            _sleepHistory = sleepVals.Any(v => v > 0) ? sleepVals : new List<double>();
+            _hrHistory = hrVals.Any(v => v > 0) ? hrVals : new List<double>();
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading trend history: {ex}");
+        }
+    }
+
+
+    private string GetSyncCaption(VitalMetric m)
+    {
+        if (m == null) return "";
+        var ts = m.SyncedAt ?? (DateTime?)m.UpdatedAt;
+        if (ts == null) return "";
+        var ago = DateTime.UtcNow - ts.Value;
+        if (ago.TotalMinutes < 1) return "just now";
+        if (ago.TotalMinutes < 60) return $"{(int)ago.TotalMinutes}m ago";
+        if (ago.TotalHours < 24) return $"{(int)ago.TotalHours}h ago";
+        return $"{(int)ago.TotalDays}d ago";
     }
 
     private int GetPercent(double current, double goal)
@@ -409,12 +602,6 @@
         if (minutes <= 0) return "--";
         var ts = TimeSpan.FromMinutes(minutes);
         return $"{ts.Hours}h {ts.Minutes}m";
-    }
-
-    private string GetBPString()
-    {
-        if (_bpSys > 0 && _bpDia > 0) return $"{_bpSys}/{_bpDia}";
-        return "--";
     }
     
     private string GetSourceDotStyle(string source)

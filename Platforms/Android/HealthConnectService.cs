@@ -386,6 +386,17 @@ namespace Daily.Platforms.Android
                      }
                 } catch {}
 
+                // 15b. Resting Heart Rate (Average)
+                try {
+                     var rhrResponse = await ReadRecordsInternal<RestingHeartRateRecord>();
+                     var rhrList = GetRecordsList(rhrResponse);
+                     if (rhrList.Count > 0) {
+                         double rhrSum = 0;
+                         foreach (RestingHeartRateRecord record in rhrList) rhrSum += record.BeatsPerMinute;
+                         metrics.Add(new VitalMetric { TypeString = VitalType.RestingHeartRate.ToString(), Value = Math.Round(rhrSum / rhrList.Count), Unit = "bpm", Date = date, SourceDevice = "Health Connect" });
+                     }
+                } catch {}
+
                 // 16. Respiratory Rate (Average)
                 try {
                      var rrResponse = await ReadRecordsInternal<RespiratoryRateRecord>();
@@ -476,6 +487,20 @@ namespace Daily.Platforms.Android
                     var sexResponse = await ReadRecordsInternal<SexualActivityRecord>();
                     if (GetRecordsList(sexResponse).Count > 0)
                          metrics.Add(new VitalMetric { TypeString = VitalType.SexualActivity.ToString(), Value = 1, Unit = "event", Date = date, SourceDevice = "Health Connect" });
+                } catch {}
+
+                // -- MINDFULNESS --
+                try {
+                    var mindResponse = await ReadRecordsInternal<MindfulnessSessionRecord>();
+                    var mindList = GetRecordsList(mindResponse);
+                    double totalMindMinutes = 0;
+                    foreach (MindfulnessSessionRecord record in mindList)
+                    {
+                        var duration = Java.Time.Duration.Between(record.StartTime, record.EndTime);
+                        totalMindMinutes += duration.Seconds / 60.0;
+                    }
+                    if (totalMindMinutes > 0)
+                        metrics.Add(new VitalMetric { TypeString = VitalType.MindfulSession.ToString(), Value = Math.Round(totalMindMinutes), Unit = "min", Date = date, SourceDevice = "Health Connect" });
                 } catch {}
 
 
