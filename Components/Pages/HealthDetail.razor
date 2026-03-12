@@ -338,12 +338,10 @@
             <MudExpansionPanel Text="7-Day Trends" IsInitiallyExpanded="true" Style="background: rgba(255,255,255,0.05);">
                 @if (_stepsHistory.Any() || _sleepHistory.Any() || _hrHistory.Any())
                 {
-                    <MudGrid Spacing="4">
-                        <!-- STEPS TREND -->
+                    <div class="d-flex flex-column gap-4">
                         @if (_stepsHistory.Any())
                         {
-                            <MudItem xs="12">
-                                <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
+                            <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
                                     <div class="d-flex align-center justify-space-between mb-3">
                                         <div class="d-flex align-center gap-2">
                                             <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Size="Size.Small" Style="color: #FF9800;"/>
@@ -398,15 +396,13 @@
                                             </div>
                                         }
                                     </div>
-                                </MudPaper>
-                            </MudItem>
+                            </MudPaper>
                         }
 
                         <!-- SLEEP TREND -->
                         @if (_sleepHistory.Any())
                         {
-                            <MudItem xs="12">
-                                <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
+                            <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
                                     <div class="d-flex align-center justify-space-between mb-3">
                                         <div class="d-flex align-center gap-2">
                                             <MudIcon Icon="@Icons.Material.Filled.Bedtime" Size="Size.Small" Style="color: #7C4DFF;"/>
@@ -456,15 +452,13 @@
                                             </div>
                                         }
                                     </div>
-                                </MudPaper>
-                            </MudItem>
+                            </MudPaper>
                         }
 
                         <!-- HEART RATE TREND -->
                         @if (_hrHistory.Any())
                         {
-                            <MudItem xs="12">
-                                <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
+                            <MudPaper Class="pa-4 rounded-xl detail-tile" Elevation="2">
                                     <div class="d-flex align-center justify-space-between mb-3">
                                         <div class="d-flex align-center gap-2">
                                             <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Small" Style="color: #FF5252;"/>
@@ -514,10 +508,9 @@
                                             </div>
                                         }
                                     </div>
-                                </MudPaper>
-                            </MudItem>
+                            </MudPaper>
                         }
-                    </MudGrid>
+                    </div>
                 }
                 else
                 {
