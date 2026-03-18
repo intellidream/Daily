@@ -153,24 +153,26 @@
             <MudItem xs="12">
                 <MudExpansionPanels Elevation="0" Class="w-100 mt-2" Dense="true" DisableBorders="true" Style="background: transparent;">
                     <MudExpansionPanel Text="Bulk Add Mode" Style="background: rgba(255,255,255,0.05); border-radius: 12px;">
-                         <div class="d-flex flex-wrap align-center justify-space-between w-100 gap-4">
+                         <div class="d-flex flex-column gap-4 pa-2">
                               <!-- Type Selection: Custom Chip Row -->
-                              <div class="d-flex flex-wrap gap-2 flex-grow-1">
+                              <div class="d-flex flex-wrap gap-2">
                                   @foreach (var drink in _drinkTypes)
                                   {
                                       var isSelected = _bulkDrinkType?.Name == drink.Name;
-                                      <MudChip T="string" Color="@Color.Primary" Variant="@(isSelected ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkDrinkType = drink)" Style="@($"border-left: 4px solid {drink.HexColor} !important; cursor: pointer;")">
+                                      <MudChip T="string" Color="@Color.Primary" Variant="@(isSelected ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkDrinkType = drink)" Style="@($"border-left: 4px solid {drink.HexColor} !important; cursor: pointer; border-radius: 8px;")" Class="pa-4">
                                           <div class="d-flex align-center gap-2">
                                               <MudIcon Icon="@drink.Icon" Size="Size.Small" Style="@($"color: {(isSelected ? "white" : drink.HexColor)};")" />
-                                              <MudText Typo="Typo.caption" Class="font-weight-bold">@drink.Name</MudText>
+                                              <MudText Typo="Typo.subtitle2" Class="font-weight-bold">@drink.Name</MudText>
                                           </div>
                                       </MudChip>
                                   }
                               </div>
                               
-                              <div class="d-flex align-center gap-2 flex-wrap flex-grow-0">
-                                   <MudNumericField T="int" @bind-Value="_bulkDrinkCount" Label="Count" Variant="Variant.Outlined" Min="1" Max="20" Style="max-width: 100px;" />
-                                   <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddBulkDrinks" Disabled="@_isLoading" Style="height: 56px;">Add</MudButton>
+                              <MudDivider Class="opacity-50" />
+                              
+                              <div class="d-flex align-stretch gap-3 w-100">
+                                   <MudNumericField T="int" @bind-Value="_bulkDrinkCount" Label="Count" Variant="Variant.Outlined" Min="1" Max="20" Class="flex-grow-1" />
+                                   <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddBulkDrinks" Disabled="@_isLoading" Size="Size.Large" Class="px-8 rounded-lg font-weight-bold shadow-sm" Style="height: auto;">ADD LOGS</MudButton>
                               </div>
                          </div>
                     </MudExpansionPanel>
@@ -444,18 +446,40 @@
             <MudItem xs="12">
                 <MudExpansionPanels Elevation="0" Class="w-100 mt-2" Dense="true" DisableBorders="true" Style="background: transparent;">
                     <MudExpansionPanel Text="Bulk Add Mode" Style="background: rgba(255,255,255,0.05); border-radius: 12px;">
-                         <div class="d-flex flex-wrap align-center justify-space-between w-100 gap-4">
+                         <div class="d-flex flex-column gap-4 pa-2">
                               <!-- Type Selection: Custom Chip Row -->
-                              <div class="d-flex flex-wrap gap-2 flex-grow-1">
-                                  <MudChip T="string" Color="Color.Error" Variant="@(_bulkSmokeType == "Cigarette" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Cigarette")" Style="cursor: pointer;">Cigarette</MudChip>
-                                  <MudChip T="string" Color="Color.Info" Variant="@(_bulkSmokeType == "Heated Tobacco" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Heated Tobacco")" Style="cursor: pointer;">Heated Tobacco</MudChip>
-                                  <MudChip T="string" Color="Color.Warning" Variant="@(_bulkSmokeType == "Rolled" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Rolled")" Style="cursor: pointer;">Rolled</MudChip>
-                                  <MudChip T="string" Color="Color.Secondary" Variant="@(_bulkSmokeType == "Cigarillo" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Cigarillo")" Style="cursor: pointer;">Cigarillo</MudChip>
+                              <div class="d-flex flex-wrap gap-2">
+                                  <MudChip T="string" Color="Color.Error" Variant="@(_bulkSmokeType == "Cigarette" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Cigarette")" Style="cursor: pointer; border-left: 4px solid #F44336 !important; border-radius: 8px;" Class="pa-4">
+                                      <div class="d-flex align-center gap-2">
+                                          <MudIcon Icon="@Icons.Material.Filled.SmokingRooms" Size="Size.Small" Style="@($"color: {(_bulkSmokeType == "Cigarette" ? "white" : "#F44336")};")" />
+                                          <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Cigarette</MudText>
+                                      </div>
+                                  </MudChip>
+                                  <MudChip T="string" Color="Color.Info" Variant="@(_bulkSmokeType == "Heated Tobacco" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Heated Tobacco")" Style="cursor: pointer; border-left: 4px solid #29B6F6 !important; border-radius: 8px;" Class="pa-4">
+                                      <div class="d-flex align-center gap-2">
+                                          <MudIcon Icon="@Icons.Material.Filled.VapeFree" Size="Size.Small" Style="@($"color: {(_bulkSmokeType == "Heated Tobacco" ? "white" : "#29B6F6")};")" />
+                                          <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Heated Tobacco</MudText>
+                                      </div>
+                                  </MudChip>
+                                  <MudChip T="string" Color="Color.Warning" Variant="@(_bulkSmokeType == "Rolled" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Rolled")" Style="cursor: pointer; border-left: 4px solid #FF9800 !important; border-radius: 8px;" Class="pa-4">
+                                      <div class="d-flex align-center gap-2">
+                                          <MudIcon Icon="@Icons.Material.Filled.Create" Size="Size.Small" Style="@($"color: {(_bulkSmokeType == "Rolled" ? "white" : "#FF9800")};")" />
+                                          <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Rolled</MudText>
+                                      </div>
+                                  </MudChip>
+                                  <MudChip T="string" Color="Color.Secondary" Variant="@(_bulkSmokeType == "Cigarillo" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Cigarillo")" Style="cursor: pointer; border-left: 4px solid #9C27B0 !important; border-radius: 8px;" Class="pa-4">
+                                      <div class="d-flex align-center gap-2">
+                                          <MudIcon Icon="@Icons.Material.Filled.JoinInner" Size="Size.Small" Style="@($"color: {(_bulkSmokeType == "Cigarillo" ? "white" : "#9C27B0")};")" />
+                                          <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Cigarillo</MudText>
+                                      </div>
+                                  </MudChip>
                               </div>
                               
-                              <div class="d-flex align-center gap-2 flex-wrap flex-grow-0">
-                                   <MudNumericField T="int" @bind-Value="_bulkSmokeCount" Label="Count" Variant="Variant.Outlined" Min="1" Max="100" Style="max-width: 100px;" />
-                                   <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddBulkSmokes" Disabled="@_isLoading" Style="height: 56px;">Add</MudButton>
+                              <MudDivider Class="opacity-50" />
+                              
+                              <div class="d-flex align-stretch gap-3 w-100">
+                                   <MudNumericField T="int" @bind-Value="_bulkSmokeCount" Label="Count" Variant="Variant.Outlined" Min="1" Max="100" Class="flex-grow-1" />
+                                   <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddBulkSmokes" Disabled="@_isLoading" Size="Size.Large" Class="px-8 rounded-lg font-weight-bold shadow-sm" Style="height: auto;">ADD LOGS</MudButton>
                               </div>
                          </div>
                     </MudExpansionPanel>
