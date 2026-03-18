@@ -95,6 +95,7 @@
     private double _scrollLeft;
     private bool _isDragging = false;
     private bool _hasRendered = false;
+    private DateTime? _lastSelectedDate;
 
     protected override void OnParametersSet()
     {
@@ -122,9 +123,14 @@
     protected override async Task OnParametersSetAsync()
     {
         // Re-scroll if the selected date changed externally after initial render
-        if (_hasRendered)
+        if (_hasRendered && _lastSelectedDate != SelectedDate)
         {
+            _lastSelectedDate = SelectedDate;
             await ScrollToSelected();
+        }
+        else if (!_hasRendered)
+        {
+            _lastSelectedDate = SelectedDate;
         }
     }
 
@@ -247,10 +253,10 @@
             ");
             
             await JSRuntime.InvokeVoidAsync("initFilmStripDragRobust", _componentId);
+            
+            await ScrollToSelected();
+            _hasRendered = true;
         }
-        
-        await ScrollToSelected();
-        _hasRendered = true;
     }
 
     private void OnMouseMove(MouseEventArgs e) {}

@@ -112,6 +112,7 @@
                 </MudPaper>
             </MudItem>
 
+
             <!-- History Chart -->
             <MudItem xs="12">
                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
@@ -147,6 +148,34 @@
                     </MudPaper>
                 </MudItem>
             }
+
+            <!-- Bulk Insert Expander (Water) -->
+            <MudItem xs="12">
+                <MudExpansionPanels Elevation="0" Class="w-100 mt-2" Dense="true" DisableBorders="true" Style="background: transparent;">
+                    <MudExpansionPanel Text="Bulk Add Mode" Style="background: rgba(255,255,255,0.05); border-radius: 12px;">
+                         <div class="d-flex flex-wrap align-center justify-space-between w-100 gap-4">
+                              <!-- Type Selection: Custom Chip Row -->
+                              <div class="d-flex flex-wrap gap-2 flex-grow-1">
+                                  @foreach (var drink in _drinkTypes)
+                                  {
+                                      var isSelected = _bulkDrinkType?.Name == drink.Name;
+                                      <MudChip T="string" Color="@Color.Primary" Variant="@(isSelected ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkDrinkType = drink)" Style="@($"border-left: 4px solid {drink.HexColor} !important; cursor: pointer;")">
+                                          <div class="d-flex align-center gap-2">
+                                              <MudIcon Icon="@drink.Icon" Size="Size.Small" Style="@($"color: {(isSelected ? "white" : drink.HexColor)};")" />
+                                              <MudText Typo="Typo.caption" Class="font-weight-bold">@drink.Name</MudText>
+                                          </div>
+                                      </MudChip>
+                                  }
+                              </div>
+                              
+                              <div class="d-flex align-center gap-2 flex-wrap flex-grow-0">
+                                   <MudNumericField T="int" @bind-Value="_bulkDrinkCount" Label="Count" Variant="Variant.Outlined" Min="1" Max="20" Style="max-width: 100px;" />
+                                   <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddBulkDrinks" Disabled="@_isLoading" Style="height: 56px;">Add</MudButton>
+                              </div>
+                         </div>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudItem>
 
             <!-- Configuration Tile -->
             <MudItem xs="12">
@@ -281,7 +310,7 @@
                      }
                 </MudPaper>
             </MudItem>
-            
+
              <!-- Savings & Stats -->
             <MudItem xs="12">
                 <MudPaper Class="pa-6 rounded-xl detail-tile" Elevation="3">
@@ -410,6 +439,28 @@
                     </MudPaper>
                 </MudItem>
             }
+
+            <!-- Bulk Insert Expander (Smokes) -->
+            <MudItem xs="12">
+                <MudExpansionPanels Elevation="0" Class="w-100 mt-2" Dense="true" DisableBorders="true" Style="background: transparent;">
+                    <MudExpansionPanel Text="Bulk Add Mode" Style="background: rgba(255,255,255,0.05); border-radius: 12px;">
+                         <div class="d-flex flex-wrap align-center justify-space-between w-100 gap-4">
+                              <!-- Type Selection: Custom Chip Row -->
+                              <div class="d-flex flex-wrap gap-2 flex-grow-1">
+                                  <MudChip T="string" Color="Color.Error" Variant="@(_bulkSmokeType == "Cigarette" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Cigarette")" Style="cursor: pointer;">Cigarette</MudChip>
+                                  <MudChip T="string" Color="Color.Info" Variant="@(_bulkSmokeType == "Heated Tobacco" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Heated Tobacco")" Style="cursor: pointer;">Heated Tobacco</MudChip>
+                                  <MudChip T="string" Color="Color.Warning" Variant="@(_bulkSmokeType == "Rolled" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Rolled")" Style="cursor: pointer;">Rolled</MudChip>
+                                  <MudChip T="string" Color="Color.Secondary" Variant="@(_bulkSmokeType == "Cigarillo" ? Variant.Filled : Variant.Outlined)" OnClick="@(() => _bulkSmokeType = "Cigarillo")" Style="cursor: pointer;">Cigarillo</MudChip>
+                              </div>
+                              
+                              <div class="d-flex align-center gap-2 flex-wrap flex-grow-0">
+                                   <MudNumericField T="int" @bind-Value="_bulkSmokeCount" Label="Count" Variant="Variant.Outlined" Min="1" Max="100" Style="max-width: 100px;" />
+                                   <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddBulkSmokes" Disabled="@_isLoading" Style="height: 56px;">Add</MudButton>
+                              </div>
+                         </div>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudItem>
 
             <!-- Configuration (Moved Up) -->
             <MudItem xs="12">
@@ -597,6 +648,9 @@
      private int _progressPercentage => _goalValue > 0 ? (int)((_currentValue / _goalValue) * 100) : 0;
      private List<HabitLog> _todaysLogs = new();
      
+     private DrinkType? _bulkDrinkType;
+     private int _bulkDrinkCount = 1;
+
      // Smokes Data
      private int _smokesCurrentValue = 0;
      private int _smokesBaseline = 20;
@@ -605,6 +659,8 @@
      private string _smokesCurrency = "USD";
      private DateTime? _smokesQuitDate;
      private Dictionary<string, int> _smokesBreakdown = new();
+     private string _bulkSmokeType = "Cigarette";
+     private int _bulkSmokeCount = 1;
 
      private List<HabitLog> _smokesLogs = new();
      private DateTime? _viewDate = DateTime.Now;
@@ -653,6 +709,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _bulkDrinkType = _drinkTypes.FirstOrDefault();
         HabitsService.OnHabitsUpdated += RefreshDataVoid;
         HabitsService.OnViewTypeChanged += OnViewTypeChanged;
         RefreshService.DetailRefreshRequested += RefreshDataAsync;
@@ -823,6 +880,30 @@
           _isLoading = false;
           StateHasChanged();
     }
+
+    private async Task AddBulkSmokes()
+    {
+        if (_bulkSmokeCount <= 0) return;
+        
+        await FeedbackService.PlaySmokeFeedbackAsync();
+        _isLoading = true;
+        StateHasChanged();
+        
+        var date = _viewDate ?? DateTime.Now;
+        if (date.Date != DateTime.Now.Date) date = date.Date.AddHours(12);
+        else date = DateTime.Now;
+        
+        string metadata = "{ \"type\": \"" + _bulkSmokeType + "\" }";
+        
+        await HabitsService.AddLogAsync("smokes", _bulkSmokeCount, "cig", date, metadata);
+        
+        await LoadData();
+        _bulkSmokeCount = 1; // reset count
+        
+        _isLoading = false;
+        StateHasChanged();
+        Snackbar.Add($"Added {_bulkSmokeCount} {_bulkSmokeType}s", Severity.Success);
+    }
     
     private void UpdateHealthStatus()
     {
@@ -906,12 +987,30 @@
     
     private string GetTotalSavings()
     {
-        return GetTodaySavings(); // Temporary placeholder till we aggregate
+        if (!_smokesQuitDate.HasValue) return $"{_smokesCurrency} 0";
+        
+        var startDate = _smokesQuitDate.Value.Date;
+        var endDate = DateTime.Today;
+        var totalDays = (endDate - startDate).TotalDays + 1; // Inclusive
+        
+        if (totalDays <= 0) return $"{_smokesCurrency} 0";
+        
+        var totalExpectedSmokes = totalDays * _smokesBaseline;
+        var actualSmokes = _smokesBreakdown.Sum(x => x.Value);
+        
+        var avoided = totalExpectedSmokes - actualSmokes;
+        if (avoided < 0) avoided = 0;
+        
+        var costPerCig = _smokesPackCost / Math.Max(1, _smokesPackSize);
+        var saved = avoided * costPerCig;
+        
+        return $"{_smokesCurrency} {saved:F0}";
     }
     
     private string GetMonthlyProjection()
     {
-         var avoidedDaily = Math.Max(0, _smokesBaseline - _smokesCurrentValue);
+         var median = GetMedianSmokes();
+         var avoidedDaily = Math.Max(0, _smokesBaseline - median);
          var costPerCig = _smokesPackCost / Math.Max(1, _smokesPackSize);
          var dailySaved = avoidedDaily * costPerCig;
          return $"{_smokesCurrency} {(dailySaved * 30):F0}";
@@ -919,7 +1018,8 @@
     
     private string GetYearlyProjection()
     {
-         var avoidedDaily = Math.Max(0, _smokesBaseline - _smokesCurrentValue);
+         var median = GetMedianSmokes();
+         var avoidedDaily = Math.Max(0, _smokesBaseline - median);
          var costPerCig = _smokesPackCost / Math.Max(1, _smokesPackSize);
          var dailySaved = avoidedDaily * costPerCig;
          return $"{_smokesCurrency} {(dailySaved * 365):F0}";
@@ -1104,6 +1204,32 @@
 
         await HabitsService.AddLogAsync("water", drink.Amount, _unit, date, "{ \"drink\": \"" + drink.Name + "\" }");
         Snackbar.Add($"Added {drink.Amount}{_unit} of {drink.Name}", Severity.Success);
+    }
+
+    private async Task AddBulkDrinks()
+    {
+        if (_bulkDrinkType == null || _bulkDrinkCount <= 0) return;
+        
+        await FeedbackService.PlayWaterFeedbackAsync();
+        _isLoading = true;
+        StateHasChanged();
+        
+        var date = _viewDate ?? DateTime.Now;
+        if (date.Date != DateTime.Now.Date) date = date.Date.AddHours(12);
+        else date = DateTime.Now;
+        
+        string metadata = "{ \"drink\": \"" + _bulkDrinkType.Name + "\" }";
+        double totalAmount = _bulkDrinkType.Amount * _bulkDrinkCount;
+        
+        await HabitsService.AddLogAsync("water", totalAmount, _unit, date, metadata);
+        
+        await LoadData();
+        int addedCount = _bulkDrinkCount; // storing info for snackbar before reset
+        _bulkDrinkCount = 1; // reset
+        
+        _isLoading = false;
+        StateHasChanged();
+        Snackbar.Add($"Added {addedCount} {_bulkDrinkType.Name}s ({totalAmount}{_unit})", Severity.Success);
     }
 
     private async Task DeleteLog(HabitLog log)
