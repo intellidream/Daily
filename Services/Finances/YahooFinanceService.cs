@@ -120,6 +120,7 @@ public class YahooFinanceService
                                      {
                                          Symbol = result["symbol"]?.ToString() ?? symbol,
                                          CurrentPrice = (decimal?)result["regularMarketPrice"]?["raw"] ?? 0m,
+                                         Change = (decimal?)result["regularMarketChange"]?["raw"] ?? 0m,
                                          PercentChange = (decimal?)result["regularMarketChangePercent"]?["raw"] ?? 0m,
                                          CompanyName = result["shortName"]?.ToString() ?? result["longName"]?.ToString() ?? symbol,
                                          Currency = result["currency"]?.ToString(),
@@ -164,7 +165,9 @@ public class YahooFinanceService
                 
                 // If we get here, parsing failed but request succeeded.
                 // Could be that Yahoo returned a different structure or captcha page.
-                _logger.LogWarning($"[YahooFinanceService] Failed to parse content for {symbol}.");
+                var scriptCount = scripts.Length;
+                var hasQuoteResponse = html.Contains("quoteResponse");
+                _logger.LogWarning($"[YahooFinanceService] Failed to parse content for {symbol}. Scripts found: {scriptCount}, Contains quoteResponse: {hasQuoteResponse}, HTML length: {html.Length}");
                 return null;
             }
             catch (Exception ex)

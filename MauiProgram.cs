@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using H.NotifyIcon;
 using CommunityToolkit.Maui;
@@ -153,6 +153,8 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.Finances.YahooFinanceService>();
             builder.Services.AddSingleton<Daily.Services.Finances.FinnhubService>();
             builder.Services.AddSingleton<Daily.Services.Finances.IFinancesService, Daily.Services.Finances.FinancesService>();
+            builder.Services.AddSingleton<Daily.Services.Finances.IMacroService, Daily.Services.Finances.MacroService>();
+            builder.Services.AddSingleton<Daily.Services.Finances.IHeatmapService, Daily.Services.Finances.HeatmapService>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

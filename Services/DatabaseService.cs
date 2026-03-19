@@ -47,6 +47,8 @@ namespace Daily.Services
                 var res6 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalTransaction>().ConfigureAwait(false);
                 var res7 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalSecurity>().ConfigureAwait(false);
                 var res8 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalHolding>().ConfigureAwait(false);
+                var res9 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalMacroIndicator>().ConfigureAwait(false);
+                var res10 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalCountryEconomicData>().ConfigureAwait(false);
                 
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
                 try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar").ConfigureAwait(false); } catch { /* Ignore if exists */ }

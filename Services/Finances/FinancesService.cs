@@ -16,7 +16,7 @@ namespace Daily.Services.Finances
         private readonly IDatabaseService _databaseService;
 
         public event Action OnViewTypeChanged;
-        private string _currentViewType = "Stocks";
+        private string _currentViewType = "World";
         public string CurrentViewType
         {
             get => _currentViewType;

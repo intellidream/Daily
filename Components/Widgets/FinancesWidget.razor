@@ -2,19 +2,30 @@
 @using Daily.Services.Finances
 @using Daily.Services
 @inject IFinancesService FinancesService
+@inject IMacroService MacroService
+@inject IHeatmapService HeatmapService
 @inject IWindowManagerService WindowManager
 @inject IRefreshService RefreshService
 @inject NavigationManager NavManager
 
 <!-- Widget Container -->
-<div class="d-flex flex-column h-100 w-100 gap-2 cursor-pointer" @onclick="@(() => NavManager.NavigateTo("/finance"))">
+<div class="d-flex flex-column h-100 w-100 gap-2">
     <!-- Header / Carousel -->
     <div class="d-flex align-center mb-1 flex-shrink-0" style="gap: 2px;">
          <div class="flex-grow-1" style="min-width: 0;">
              <MudCarousel TData="object" SelectedIndex="@_currentSlide" SelectedIndexChanged="@OnCarouselIndexChanged" 
                           ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
                           Class="flex-grow-1 rounded-pill mud-theme-primary">
-                  <!-- Slide 1: Stocks -->
+                  <!-- Slide 1: World -->
+                  <MudCarouselItem Transition="Transition.Slide">
+                      <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                          <MudIcon Icon="@Icons.Material.Filled.Public" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                          <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: white !important;">
+                              World
+                          </MudText>
+                      </div>
+                  </MudCarouselItem>
+                  <!-- Slide 2: Stocks -->
                   <MudCarouselItem Transition="Transition.Slide">
                       <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
                           <MudIcon Icon="@Icons.Material.Filled.ShowChart" Class="mr-2" Size="Size.Small" Style="color: white;" />
@@ -23,7 +34,7 @@
                           </MudText>
                       </div>
                   </MudCarouselItem>
-                  <!-- Slide 2: Money -->
+                  <!-- Slide 3: Money -->
                    <MudCarouselItem Transition="Transition.Slide">
                       <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
                           <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Class="mr-2" Size="Size.Small" Style="color: white;" />
@@ -43,6 +54,76 @@
     <!-- Content Area -->
     <div class="d-flex flex-column flex-grow-1 overflow-auto pa-1" style="scrollbar-width: none;">
         @if (_currentSlide == 0)
+        {
+            <!-- WORLD VIEW -->
+            if (_loading)
+            {
+                <div class="d-flex align-center justify-center h-100">
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Primary" />
+                </div>
+            }
+            else if (_macroIndicators.Any())
+            {
+                <div class="d-flex flex-column gap-1">
+                    @foreach (var indicator in _macroIndicators.Take(4))
+                    {
+                        var isPositive = indicator.Change >= 0;
+                        var color = isPositive ? "#4CAF50" : "#F44336";
+                        var icon = isPositive ? Icons.Material.Filled.ArrowDropUp : Icons.Material.Filled.ArrowDropDown;
+                        var bgColor = isPositive ? "rgba(76, 175, 80, 0.1)" : "rgba(244, 67, 54, 0.1)";
+
+                        <div class="d-flex align-center justify-space-between pa-2 px-3 rounded-lg flex-grow-1" style="@($"background: {bgColor}; min-height: 52px;")">
+                            <div class="d-flex align-center gap-3" style="overflow: hidden;">
+                                <div class="d-flex align-center justify-center rounded" style="width: 32px; height: 32px; min-width: 32px; font-size: 1.3rem;">
+                                    @indicator.Emoji
+                                </div>
+                                <div class="d-flex flex-column justify-center" style="overflow: hidden;">
+                                    <MudText Typo="Typo.h6" Class="font-weight-bold" Style="line-height: 1.2;">@indicator.Name</MudText>
+                                    <MudText Typo="Typo.caption" Style="opacity: 0.7; font-size: 0.7rem;" Class="text-truncate">@indicator.Pillar</MudText>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-column align-end justify-center flex-shrink-0 ml-2">
+                                <MudText Typo="Typo.body1" Class="font-weight-bold" Style="line-height: 1.2;">
+                                    @indicator.CurrentPrice.ToString("N2") <span style="font-size: 0.7em;">@indicator.CurrencySymbol</span>
+                                </MudText>
+                                <div class="d-flex align-center">
+                                    <MudIcon Icon="@icon" Size="Size.Small" Style="@($"color: {color}; margin-right: -2px; font-size: 1rem;")" />
+                                    <MudText Typo="Typo.caption" Class="font-weight-bold" Style="@($"color: {color}; font-size: 0.75rem;")">
+                                        @Math.Abs(indicator.PercentChange).ToString("F2")%
+                                    </MudText>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="d-flex align-center justify-center h-100">
+                    <MudText Typo="Typo.caption" Style="opacity: 0.6;">No macro data available</MudText>
+                </div>
+            }
+
+            @* Heatmap World Map — Collapsible *@
+            @if (_heatmapData.Any())
+            {
+                <div class="mt-1 rounded-lg" style="background: rgba(128,128,128,0.04); overflow: hidden; position: relative; z-index: 1;">
+                    <div class="d-flex align-center gap-2 pa-1 px-2" style="position: relative; z-index: 2;">
+                        <div style="flex: 1; height: 5px; border-radius: 3px; background: linear-gradient(to right, #F44336, #FF9800, #FFC107, #8BC34A, #4CAF50, #2E7D32);"></div>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 0.65rem; white-space: nowrap;">Real Interest Rate</MudText>
+                        <MudIconButton Icon="@(_mapExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                       Size="Size.Small"
+                                       Style="padding: 2px; opacity: 0.6;"
+                                       OnClick="ToggleMap" />
+                    </div>
+                    @if (_mapExpanded)
+                    {
+                        <Daily.Components.Shared.WorldMapSvg Data="@_heatmapData" />
+                    }
+                </div>
+            }
+        }
+        else if (_currentSlide == 1)
         {
             <!-- STOCKS VIEW -->
             if (_loading)
@@ -104,7 +185,7 @@
                 </div>
             }
         }
-        else
+        else if (_currentSlide == 2)
         {
             <!-- MONEY VIEW -->
              <div class="d-flex flex-column align-center justify-center h-100 text-center gap-1">
@@ -128,6 +209,15 @@
 
     private int _currentSlide = 0;
     private bool _loading = false;
+    private bool _mapExpanded = false;
+
+    private void ToggleMap()
+    {
+        _mapExpanded = !_mapExpanded;
+        StateHasChanged();
+    }
+    private List<MacroIndicator> _macroIndicators = new();
+    private List<CountryEconomicData> _heatmapData = new();
     private List<StockQuote> _stocks = new();
     private List<LocalAccount> _accounts = new();
     private decimal _netWorth = 0;
@@ -144,6 +234,13 @@
     private void OnCarouselIndexChanged(int index)
     {
         _currentSlide = index;
+        FinancesService.CurrentViewType = index switch
+        {
+            0 => "World",
+            1 => "Stocks",
+            2 => "Money",
+            _ => "World"
+        };
     }
     
     private async Task RefreshData()
@@ -159,11 +256,15 @@
         
         try 
         {
-            // 1. Money/NetWorth
+            // 1. Macro Indicators (World)
+            _macroIndicators = await MacroService.GetMacroIndicatorsAsync();
+            _heatmapData = await HeatmapService.GetGlobalHeatmapDataAsync();
+
+            // 2. Money/NetWorth
             _netWorth = await FinancesService.GetNetWorthAsync();
             _accounts = await FinancesService.GetAccountsAsync();
 
-            // 2. Stocks (Holdings)
+            // 3. Stocks (Holdings)
             var holdings = await FinancesService.GetHoldingsWithQuotesAsync();
             if (holdings.Any())
             {
@@ -182,5 +283,15 @@
         
         _loading = false;
         await InvokeAsync(StateHasChanged);
+    }
+
+    private string GetCountryFlag(string countryCode)
+    {
+        if (string.IsNullOrEmpty(countryCode) || countryCode.Length != 2) return "🏳️";
+        var upper = countryCode.ToUpperInvariant();
+        return string.Concat(
+            char.ConvertFromUtf32(0x1F1E6 - 'A' + upper[0]),
+            char.ConvertFromUtf32(0x1F1E6 - 'A' + upper[1])
+        );
     }
 }

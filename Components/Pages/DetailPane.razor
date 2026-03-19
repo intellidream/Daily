@@ -180,6 +180,14 @@
                                Class="flex-grow-1 rounded-pill mud-theme-primary">
                       <MudCarouselItem Transition="Transition.Slide">
                           <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                              <MudIcon Icon="@Icons.Material.Filled.Public" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                              <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
+                                  World
+                              </MudText>
+                          </div>
+                      </MudCarouselItem>
+                      <MudCarouselItem Transition="Transition.Slide">
+                          <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
                               <MudIcon Icon="@Icons.Material.Filled.ShowChart" Class="mr-2" Size="Size.Small" Style="color: white;" />
                               <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
                                   Stocks
@@ -549,7 +557,12 @@
         // Sync Finances Index
         if (NavService.CurrentView == "Finances")
         {
-            var targetIndex = FinancesService.CurrentViewType == "Money" ? 1 : 0;
+            var targetIndex = FinancesService.CurrentViewType switch
+            {
+                "Money" => 2,
+                "Stocks" => 1,
+                _ => 0 // World
+            };
             if (_selectedFinancesIndex != targetIndex)
             {
                 _selectedFinancesIndex = targetIndex;
@@ -586,7 +599,13 @@
     private void OnFinancesCarouselIndexChanged(int index)
     {
         _selectedFinancesIndex = index;
-        FinancesService.CurrentViewType = index == 1 ? "Money" : "Stocks";
+        FinancesService.CurrentViewType = index switch
+        {
+            0 => "World",
+            1 => "Stocks",
+            2 => "Money",
+            _ => "World"
+        };
     }
 
     private async void OnFeedChangedHandler()
