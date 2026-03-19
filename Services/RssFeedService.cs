@@ -14,13 +14,37 @@ namespace Daily.Services
     {
         public List<FeedSource> Feeds { get; } = new()
         {
-            new FeedSource { Name = "Republica", Url = "https://republica.ro/rss", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=republica.ro&sz=64" },
-            new FeedSource { Name = "Digi24", Url = "https://www.digi24.ro/rss", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=digi24.ro&sz=64" },
-            new FeedSource { Name = "Ziarul Financiar", Url = "https://www.zf.ro/rss/", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=zf.ro&sz=64" },
-            new FeedSource { Name = "Zona IT", Url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", Type = FeedType.WpJson, IconUrl = "https://www.google.com/s2/favicons?domain=zonait.ro&sz=64" },
-            new FeedSource { Name = "BBC News", Url = "https://feeds.bbci.co.uk/news/rss.xml", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=bbc.com&sz=64" },
-            new FeedSource { Name = "Google News", Url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=news.google.com&sz=64" },
-            new FeedSource { Name = "Windows Central", Url = "https://www.windowscentral.com/feeds.xml", Type = FeedType.Rss, IconUrl = "https://www.google.com/s2/favicons?domain=windowscentral.com&sz=64" }
+            // 🇷🇴 Local
+            new FeedSource { Name = "Republica", Url = "https://republica.ro/rss", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=republica.ro&sz=64" },
+            new FeedSource { Name = "Digi24", Url = "https://www.digi24.ro/rss", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=digi24.ro&sz=64" },
+            new FeedSource { Name = "Ziarul Financiar", Url = "https://www.zf.ro/rss/", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=zf.ro&sz=64" },
+            new FeedSource { Name = "HotNews", Url = "https://www.hotnews.ro/rss", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=hotnews.ro&sz=64" },
+            new FeedSource { Name = "Biziday", Url = "https://www.biziday.ro/feed/", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=biziday.ro&sz=64" },
+            new FeedSource { Name = "Economica.net", Url = "https://www.economica.net/rss", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=economica.net&sz=64" },
+
+            // 📈 Markets
+            new FeedSource { Name = "Wall Street Journal", Url = "https://feeds.a.dj.com/rss/RSSWorldNews.xml", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=wsj.com&sz=64" },
+            new FeedSource { Name = "CNBC", Url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=cnbc.com&sz=64" },
+            new FeedSource { Name = "Financial Times", Url = "https://www.ft.com/rss/home", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=ft.com&sz=64" },
+            new FeedSource { Name = "The Economist", Url = "https://www.economist.com/finance-and-economics/rss.xml", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=economist.com&sz=64" },
+
+            // 🌍 World
+            new FeedSource { Name = "BBC News", Url = "https://feeds.bbci.co.uk/news/rss.xml", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=bbc.com&sz=64" },
+            new FeedSource { Name = "Reuters", Url = "https://news.google.com/rss/search?q=source:Reuters&hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=reuters.com&sz=64" },
+            new FeedSource { Name = "Associated Press", Url = "https://news.google.com/rss/search?q=source:Associated+Press&hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=apnews.com&sz=64" },
+            new FeedSource { Name = "New York Times", Url = "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=nytimes.com&sz=64" },
+            new FeedSource { Name = "NPR", Url = "https://feeds.npr.org/1001/rss.xml", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=npr.org&sz=64" },
+            new FeedSource { Name = "Euronews", Url = "https://www.euronews.com/rss", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=euronews.com&sz=64" },
+            new FeedSource { Name = "Politico Europe", Url = "https://www.politico.eu/feed/", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=politico.eu&sz=64" },
+            new FeedSource { Name = "Deutsche Welle", Url = "https://rss.dw.com/rdf/rss-en-all", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=dw.com&sz=64" },
+            new FeedSource { Name = "Google News", Url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=news.google.com&sz=64" },
+
+            // 💡 Tech
+            new FeedSource { Name = "TechCrunch", Url = "https://techcrunch.com/feed/", Type = FeedType.Rss, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=techcrunch.com&sz=64" },
+            new FeedSource { Name = "The Verge", Url = "https://www.theverge.com/rss/index.xml", Type = FeedType.Rss, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=theverge.com&sz=64" },
+            new FeedSource { Name = "Ars Technica", Url = "https://feeds.arstechnica.com/arstechnica/index", Type = FeedType.Rss, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=arstechnica.com&sz=64" },
+            new FeedSource { Name = "Zona IT", Url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", Type = FeedType.WpJson, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=zonait.ro&sz=64" },
+            new FeedSource { Name = "Windows Central", Url = "https://www.windowscentral.com/feeds.xml", Type = FeedType.Rss, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=windowscentral.com&sz=64" }
         };
 
         public FeedSource CurrentFeed { get; private set; }

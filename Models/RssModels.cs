@@ -8,12 +8,21 @@ namespace Daily.Models
         WpJson
     }
 
+    public enum FeedCategory
+    {
+        Local,
+        Markets,
+        World,
+        Tech
+    }
+
     public class FeedSource
     {
         public string Name { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
         public string IconUrl { get; set; } = string.Empty;
         public FeedType Type { get; set; }
+        public FeedCategory Category { get; set; }
 
         public override bool Equals(object? o)
         {
