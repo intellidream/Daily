@@ -50,6 +50,9 @@ namespace Daily.Services
                 var res9 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalMacroIndicator>().ConfigureAwait(false);
                 var res10 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalCountryEconomicData>().ConfigureAwait(false);
                 
+                // Smart Agent
+                await _connection.CreateTableAsync<LocalBehaviorEvent>().ConfigureAwait(false);
+                
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
                 try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar").ConfigureAwait(false); } catch { /* Ignore if exists */ }
                 

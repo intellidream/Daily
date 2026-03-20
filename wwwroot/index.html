@@ -166,6 +166,14 @@
             },
             removeClassFromBody: function (className) {
                 document.body.classList.remove(className);
+            },
+            scrollToWidget: function (elementId) {
+                var el = document.getElementById(elementId);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.add('widget-highlighted');
+                    setTimeout(function () { el.classList.remove('widget-highlighted'); }, 4500);
+                }
             }
         };
 

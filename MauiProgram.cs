@@ -101,6 +101,7 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.ISystemMonitorService, Daily.Services.SystemMonitorService>();
             builder.Services.AddSingleton<Daily.Services.IHabitsService, Daily.Services.HabitsService>();
             builder.Services.AddSingleton<Daily.Services.IDatabaseService, Daily.Services.DatabaseService>();
+            builder.Services.AddSingleton<Daily.Services.ISmartAgentService, Daily.Services.SmartAgentService>();
             builder.Services.AddSingleton<Daily.Services.IRenderedHtmlService, Daily.Services.MauiWebViewRenderedHtmlService>();
             
             Console.WriteLine("[MauiProgram] Registering Health Services...");

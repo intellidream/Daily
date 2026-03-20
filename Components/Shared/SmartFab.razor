@@ -1,0 +1,114 @@
+@using Daily.Services
+@inject ISmartAgentService SmartAgent
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+@if (_suggestion != null)
+{
+    <div class="smart-fab-container @(_isExpanded ? "expanded" : "")" @onclick="HandleClick" @onclick:stopPropagation="true">
+        @* AI badge *@
+        <div class="smart-fab-badge">
+            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" Style="font-size: 12px;" />
+        </div>
+
+        @* Main FAB *@
+        <div class="smart-fab @(_suggestion.Confidence >= 0.7 ? "glow" : "") @(_animateIn ? "animate-in" : "")">
+            <MudIcon Icon="@_suggestion.Icon" Size="Size.Medium" Color="Color.Inherit" />
+        </div>
+
+        @* Tooltip label *@
+        @if (_isExpanded)
+        {
+            <div class="smart-fab-label" @onclick="HandleClick" @onclick:stopPropagation="true">
+                @_suggestion.Label
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private WidgetSuggestion? _suggestion;
+    private bool _isExpanded;
+    private bool _animateIn;
+    private System.Threading.Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SmartAgent.OnSuggestionChanged += OnSuggestionChanged;
+
+        await SmartAgent.InitializeAsync();
+        _suggestion = await SmartAgent.GetSuggestionAsync();
+
+        // Refresh suggestion every 10 minutes
+        _refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await RefreshSuggestion();
+        }, null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
+
+        // Animate in after brief delay
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(2000);
+            _animateIn = true;
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private async void OnSuggestionChanged()
+    {
+        await RefreshSuggestion();
+    }
+
+    private async Task RefreshSuggestion()
+    {
+        var newSuggestion = await SmartAgent.GetSuggestionAsync();
+        if (newSuggestion?.WidgetType != _suggestion?.WidgetType)
+        {
+            _suggestion = newSuggestion;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task HandleClick()
+    {
+        if (_suggestion == null) return;
+
+        if (!_isExpanded)
+        {
+            _isExpanded = true;
+            StateHasChanged();
+
+            // Auto-collapse after 3 seconds
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                _isExpanded = false;
+                await InvokeAsync(StateHasChanged);
+            });
+            return;
+        }
+
+        // Second click: scroll to widget and record positive feedback
+        _isExpanded = false;
+        StateHasChanged();
+
+        var elementId = $"widget-{_suggestion.WidgetType}";
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("dailyInterop.scrollToWidget", elementId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SmartFab] Scroll failed: {ex.Message}");
+        }
+
+        // Positive feedback: user followed the suggestion
+        await SmartAgent.RecordEventAsync(_suggestion.WidgetType, "suggested_click");
+    }
+
+    public void Dispose()
+    {
+        SmartAgent.OnSuggestionChanged -= OnSuggestionChanged;
+        _refreshTimer?.Dispose();
+    }
+}

@@ -5,6 +5,7 @@
 @inject IRefreshService RefreshService
 @inject IWindowManagerService WindowManager
 @inject IJSRuntime JSRuntime
+@inject ISmartAgentService SmartAgent
 
 <div class="d-flex align-center my-2 flex-grow-1" style="width: 100%; gap: 2px;">
     <div class="flex-grow-1" style="min-width: 0;">
@@ -200,6 +201,7 @@
     private void OpenItem(RssItem item)
     {
         WindowManager.OpenDetail("RssFeed", item.Title, item);
+        _ = SmartAgent.RecordEventAsync("RssFeedWidget", "read_article");
     }
 }
 

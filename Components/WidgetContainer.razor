@@ -2,11 +2,12 @@
 @using Daily.Services
 @inject IWidgetService WidgetService
 @inject IWindowManagerService WindowManager
+@inject ISmartAgentService SmartAgent
 
 <div class="masonry-grid">
     @foreach (var widget in _widgets)
     {
-        <div class="masonry-item @(IsFullWidth(widget) ? "span-all" : "")">
+        <div id="widget-@widget.ComponentType" class="masonry-item @(IsFullWidth(widget) ? "span-all" : "")">
             <MudPaper Class="pa-4 detail-tile rounded-xl" Elevation="3" Square="false" Style="">
                 @if (widget.ComponentType != "RssFeedWidget" && widget.ComponentType != "WeatherWidget" && widget.ComponentType != "HabitsWidget" && widget.ComponentType != "MediaWidget" && widget.ComponentType != "HealthWidget" && widget.ComponentType != "FinancesWidget")
                 {
@@ -119,8 +120,15 @@
         StateHasChanged();
     }
 
+    private async Task TrackWidgetInteraction(string componentType)
+    {
+        try { await SmartAgent.RecordEventAsync(componentType, "detail_open"); }
+        catch (Exception ex) { Console.WriteLine($"[WidgetContainer] Track failed: {ex.Message}"); }
+    }
+
     private void OpenWidgetDetail(WidgetModel widget)
     {
+        _ = TrackWidgetInteraction(widget.ComponentType);
         if (widget.ComponentType == "SystemInfoWidget")
         {
             WindowManager.OpenDetail("SystemInfo", widget.Title);

@@ -6,6 +6,7 @@
 @inject ISettingsService SettingsService
 @inject IWindowManagerService WindowManager
 @inject IFeedbackService FeedbackService
+@inject ISmartAgentService SmartAgent
 @implements IDisposable
 
 <div class="d-flex align-center mb-1 flex-grow-1" style="width: 100%; gap: 2px;">
@@ -503,6 +504,7 @@
         {
             await HabitsService.AddLogAsync("water", amount, unit, DateTime.Now, "{ \"drink\": \"" + name + "\" }");
             await FeedbackService.PlayWaterFeedbackAsync();
+            _ = SmartAgent.RecordEventAsync("HabitsWidget", "log_water");
         }
         catch (Exception ex)
         {
@@ -517,6 +519,7 @@
          {
              await HabitsService.AddLogAsync("smokes", 1, "cig", DateTime.Now, metadata);
              await FeedbackService.PlaySmokeFeedbackAsync();
+             _ = SmartAgent.RecordEventAsync("HabitsWidget", "log_smoke");
          }
          catch (Exception ex)
          {

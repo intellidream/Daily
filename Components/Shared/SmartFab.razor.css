@@ -1,0 +1,136 @@
+/* Smart Floating Action Button */
+
+.smart-fab-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.smart-fab {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.3s ease;
+    opacity: 0;
+    transform: scale(0);
+}
+
+.smart-fab.animate-in {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.smart-fab:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.smart-fab:active {
+    transform: scale(0.95);
+}
+
+/* AI glow pulse for high confidence */
+.smart-fab.glow {
+    animation: fab-glow-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes fab-glow-pulse {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
+                    0 0 0 0 rgba(var(--mud-palette-primary-rgb, 89, 74, 226), 0.4);
+    }
+    50% {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
+                    0 0 0 12px rgba(var(--mud-palette-primary-rgb, 89, 74, 226), 0);
+    }
+}
+
+/* AI sparkle badge */
+.smart-fab-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff6b6b, #ffa500, #ffe066);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(255, 107, 107, 0.5);
+    z-index: 1;
+    animation: badge-sparkle 3s ease-in-out infinite;
+}
+
+@keyframes badge-sparkle {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+}
+
+/* Expanded label pill */
+.smart-fab-label {
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    white-space: nowrap;
+    animation: label-slide-in 0.3s ease-out;
+    pointer-events: auto;
+}
+
+@keyframes label-slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Highlighted widget border when agent suggests it */
+.widget-highlighted {
+    animation: widget-highlight-glow 2s ease-in-out 2;
+    border-radius: 16px;
+}
+
+@keyframes widget-highlight-glow {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb, 89, 74, 226), 0);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(var(--mud-palette-primary-rgb, 89, 74, 226), 0.35);
+    }
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+    .smart-fab-container {
+        bottom: 16px;
+        right: 16px;
+    }
+
+    .smart-fab {
+        width: 48px;
+        height: 48px;
+    }
+}

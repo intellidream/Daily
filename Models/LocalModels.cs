@@ -108,4 +108,25 @@ namespace Daily.Models
         [Indexed]
         public DateTime? SyncedAt { get; set; } // Null = Dirty
     }
+
+    [Table("behavior_events")]
+    public class LocalBehaviorEvent
+    {
+        [PrimaryKey, AutoIncrement]
+        public int Id { get; set; }
+
+        [Indexed]
+        public string UserId { get; set; }
+
+        [Indexed]
+        public string WidgetType { get; set; } // e.g. "HabitsWidget", "RssFeedWidget"
+
+        public string Action { get; set; } // e.g. "view", "log", "click"
+
+        public int DayOfWeek { get; set; } // 0=Sun..6=Sat
+
+        public int HourOfDay { get; set; } // 0-23
+
+        public DateTime Timestamp { get; set; }
+    }
 }
