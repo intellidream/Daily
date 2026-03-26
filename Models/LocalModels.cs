@@ -129,4 +129,24 @@ namespace Daily.Models
 
         public DateTime Timestamp { get; set; }
     }
+
+    [Table("navigation_transitions")]
+    public class LocalNavigationTransition
+    {
+        [PrimaryKey, AutoIncrement]
+        public int Id { get; set; }
+
+        [Indexed]
+        public string UserId { get; set; }
+
+        [Indexed]
+        public string FromWidget { get; set; }
+
+        [Indexed]
+        public string ToWidget { get; set; }
+
+        public int DayOfWeek { get; set; }
+        public int HourOfDay { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
 }

@@ -52,6 +52,7 @@ namespace Daily.Services
                 
                 // Smart Agent
                 await _connection.CreateTableAsync<LocalBehaviorEvent>().ConfigureAwait(false);
+                await _connection.CreateTableAsync<LocalNavigationTransition>().ConfigureAwait(false);
                 
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
                 try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar").ConfigureAwait(false); } catch { /* Ignore if exists */ }

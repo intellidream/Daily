@@ -48,6 +48,11 @@
     animation: fab-glow-pulse 2.5s ease-in-out infinite;
 }
 
+/* Subtle glow for transition-based suggestions */
+.smart-fab.glow-subtle {
+    animation: fab-glow-subtle 3s ease-in-out infinite;
+}
+
 @keyframes fab-glow-pulse {
     0%, 100% {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
@@ -56,6 +61,17 @@
     50% {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
                     0 0 0 12px rgba(var(--mud-palette-primary-rgb, 89, 74, 226), 0);
+    }
+}
+
+@keyframes fab-glow-subtle {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
+                    0 0 0 0 rgba(100, 200, 255, 0.3);
+    }
+    50% {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
+                    0 0 0 8px rgba(100, 200, 255, 0);
     }
 }
 
@@ -75,6 +91,12 @@
     box-shadow: 0 2px 6px rgba(255, 107, 107, 0.5);
     z-index: 1;
     animation: badge-sparkle 3s ease-in-out infinite;
+}
+
+/* Direction badge for transition-based suggestions */
+.smart-fab-badge.transition-badge {
+    background: linear-gradient(135deg, #64b5f6, #42a5f5, #1e88e5);
+    box-shadow: 0 2px 6px rgba(66, 165, 245, 0.5);
 }
 
 @keyframes badge-sparkle {

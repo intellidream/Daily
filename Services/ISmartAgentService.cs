@@ -6,28 +6,30 @@ namespace Daily.Services
         public double Confidence { get; set; }
         public string Icon { get; set; } = "";
         public string Label { get; set; } = "";
+        public bool IsTransitionBased { get; set; }
     }
 
     public interface ISmartAgentService
     {
-        /// <summary>
-        /// Records a user interaction with a widget.
-        /// </summary>
         Task RecordEventAsync(string widgetType, string action = "view");
 
         /// <summary>
-        /// Returns the best suggestion for right now based on learned patterns.
+        /// Returns the best suggestion based on time patterns + current context.
         /// </summary>
-        Task<WidgetSuggestion?> GetSuggestionAsync();
+        Task<WidgetSuggestion?> GetSuggestionAsync(string? currentVisibleWidget = null);
 
-        /// <summary>
-        /// Initializes the service (loads data from SQLite).
-        /// </summary>
         Task InitializeAsync();
 
         /// <summary>
-        /// Fires when the suggestion changes.
+        /// Records a navigation transition: user scrolled from one widget to another.
         /// </summary>
+        Task RecordTransitionAsync(string fromWidget, string toWidget);
+
+        /// <summary>
+        /// Whether the service has loaded and the user is authenticated.
+        /// </summary>
+        bool IsReady { get; }
+
         event Action? OnSuggestionChanged;
     }
 }

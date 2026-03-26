@@ -11,11 +11,14 @@ namespace Daily.Services
         private string? _userId;
 
         public event Action? OnSuggestionChanged;
+        public bool IsReady => _initialized && !string.IsNullOrEmpty(_userId);
 
         // Frequency map: (DayOfWeek, HourBucket) -> WidgetType -> count
         private readonly Dictionary<(int Day, int HourBucket), Dictionary<string, int>> _frequencyMap = new();
 
-        // Widget metadata for icon/label mapping
+        // Transition map: FromWidget -> ToWidget -> count (Markov chain)
+        private readonly Dictionary<string, Dictionary<string, int>> _transitionMap = new();
+
         private static readonly Dictionary<string, (string Icon, string Label)> WidgetMeta = new()
         {
             ["HabitsWidget"] = (Icons.Material.Filled.LocalDrink, "Log habits"),
@@ -29,13 +32,12 @@ namespace Daily.Services
             ["SystemInfoWidget"] = (Icons.Material.Filled.Memory, "System info"),
         };
 
-        // Time-of-day priors: give a baseline boost to certain widgets at certain hours
         private static readonly Dictionary<string, (int StartHour, int EndHour, double Boost)[]> TimePriors = new()
         {
-            ["HealthWidget"] = new[] { (6, 10, 0.3) },          // Mornings -> Vitals
-            ["HabitsWidget"] = new[] { (7, 11, 0.2), (18, 23, 0.2) }, // Morning & evening -> Habits
-            ["RssFeedWidget"] = new[] { (7, 9, 0.15), (12, 14, 0.15), (19, 22, 0.15) }, // Commute & lunch & evening -> News
-            ["FinancesWidget"] = new[] { (8, 10, 0.1), (16, 18, 0.1) }, // Market hours
+            ["HealthWidget"] = new[] { (6, 10, 0.3) },
+            ["HabitsWidget"] = new[] { (7, 11, 0.2), (18, 23, 0.2) },
+            ["RssFeedWidget"] = new[] { (7, 9, 0.15), (12, 14, 0.15), (19, 22, 0.15) },
+            ["FinancesWidget"] = new[] { (8, 10, 0.1), (16, 18, 0.1) },
         };
 
         public SmartAgentService(IDatabaseService db, Supabase.Client supabase)
@@ -50,20 +52,28 @@ namespace Daily.Services
 
             await _db.InitializeAsync();
             await _db.Connection.CreateTableAsync<LocalBehaviorEvent>();
+            await _db.Connection.CreateTableAsync<LocalNavigationTransition>();
 
             _userId = _supabase.Auth?.CurrentUser?.Id;
             if (string.IsNullOrEmpty(_userId)) return;
 
-            // Load last 30 days of events into frequency map
             var cutoff = DateTime.UtcNow.AddDays(-30);
+
+            // Load behavior events
             var events = await _db.Connection.Table<LocalBehaviorEvent>()
                 .Where(e => e.UserId == _userId && e.Timestamp > cutoff)
                 .ToListAsync();
 
             foreach (var ev in events)
-            {
                 AddToFrequencyMap(ev.DayOfWeek, ev.HourOfDay, ev.WidgetType);
-            }
+
+            // Load navigation transitions
+            var transitions = await _db.Connection.Table<LocalNavigationTransition>()
+                .Where(t => t.UserId == _userId && t.Timestamp > cutoff)
+                .ToListAsync();
+
+            foreach (var tr in transitions)
+                AddToTransitionMap(tr.FromWidget, tr.ToWidget);
 
             _initialized = true;
         }
@@ -89,7 +99,6 @@ namespace Daily.Services
             await _db.Connection.InsertAsync(ev);
             AddToFrequencyMap(ev.DayOfWeek, ev.HourOfDay, ev.WidgetType);
 
-            // Prune old events (keep last 90 days)
             var pruneDate = now.AddDays(-90);
             await _db.Connection.Table<LocalBehaviorEvent>()
                 .DeleteAsync(e => e.Timestamp < pruneDate);
@@ -97,36 +106,59 @@ namespace Daily.Services
             OnSuggestionChanged?.Invoke();
         }
 
-        public Task<WidgetSuggestion?> GetSuggestionAsync()
+        public async Task RecordTransitionAsync(string fromWidget, string toWidget)
+        {
+            _userId = _supabase.Auth?.CurrentUser?.Id;
+            if (string.IsNullOrEmpty(_userId)) return;
+            if (fromWidget == toWidget) return;
+
+            if (!_initialized) await InitializeAsync();
+
+            var now = DateTime.UtcNow;
+            var tr = new LocalNavigationTransition
+            {
+                UserId = _userId,
+                FromWidget = fromWidget,
+                ToWidget = toWidget,
+                DayOfWeek = (int)now.DayOfWeek,
+                HourOfDay = now.Hour,
+                Timestamp = now
+            };
+
+            await _db.Connection.InsertAsync(tr);
+            AddToTransitionMap(fromWidget, toWidget);
+
+            var pruneDate = now.AddDays(-90);
+            await _db.Connection.Table<LocalNavigationTransition>()
+                .DeleteAsync(t => t.Timestamp < pruneDate);
+        }
+
+        public Task<WidgetSuggestion?> GetSuggestionAsync(string? currentVisibleWidget = null)
         {
             _userId = _supabase.Auth?.CurrentUser?.Id;
             if (string.IsNullOrEmpty(_userId))
                 return Task.FromResult<WidgetSuggestion?>(null);
 
-            var now = DateTime.Now; // Local time for user context
+            var now = DateTime.Now;
             var day = (int)now.DayOfWeek;
             var hour = now.Hour;
             var bucket = GetHourBucket(hour);
 
-            // Score each widget
-            var scores = new Dictionary<string, double>();
+            // --- 1. Score each widget by time-based frequency ---
+            var timeScores = new Dictionary<string, double>();
 
             foreach (var widget in WidgetMeta.Keys)
             {
                 double score = 0;
 
-                // 1. Frequency-based score from learned patterns
                 var key = (day, bucket);
                 if (_frequencyMap.TryGetValue(key, out var widgetCounts))
                 {
                     var total = widgetCounts.Values.Sum();
                     if (total > 0 && widgetCounts.TryGetValue(widget, out var count))
-                    {
                         score = (double)count / total;
-                    }
                 }
 
-                // Also check adjacent buckets with decay
                 foreach (var adjBucket in new[] { bucket - 1, bucket + 1 })
                 {
                     var adjKey = (day, adjBucket);
@@ -134,13 +166,10 @@ namespace Daily.Services
                     {
                         var adjTotal = adjCounts.Values.Sum();
                         if (adjTotal > 0 && adjCounts.TryGetValue(widget, out var adjCount))
-                        {
                             score += 0.3 * ((double)adjCount / adjTotal);
-                        }
                     }
                 }
 
-                // 2. Time-of-day prior boost
                 if (TimePriors.TryGetValue(widget, out var priors))
                 {
                     foreach (var (startH, endH, boost) in priors)
@@ -153,41 +182,100 @@ namespace Daily.Services
                     }
                 }
 
-                scores[widget] = score;
+                timeScores[widget] = score;
             }
 
-            // Pick highest scoring widget
-            var best = scores.OrderByDescending(kv => kv.Value).FirstOrDefault();
+            var bestTime = timeScores.OrderByDescending(kv => kv.Value).First();
 
-            if (best.Value < 0.05) // Minimum threshold
+            // --- 2. Transition-based suggestion ("from here, you usually go to...") ---
+            WidgetSuggestion? transitionSuggestion = null;
+            if (!string.IsNullOrEmpty(currentVisibleWidget) &&
+                _transitionMap.TryGetValue(currentVisibleWidget, out var destinations))
             {
-                // Fallback: use pure time-of-day heuristic
-                var fallback = GetTimeBasedFallback(hour);
-                if (fallback != null && WidgetMeta.TryGetValue(fallback, out var meta))
+                var totalTransitions = destinations.Values.Sum();
+                if (totalTransitions >= 3) // Need at least 3 transitions to be meaningful
+                {
+                    var bestDest = destinations
+                        .Where(kv => kv.Key != currentVisibleWidget)
+                        .OrderByDescending(kv => kv.Value)
+                        .FirstOrDefault();
+
+                    if (bestDest.Key != null)
+                    {
+                        var transitionConfidence = (double)bestDest.Value / totalTransitions;
+                        if (transitionConfidence >= 0.25 && WidgetMeta.TryGetValue(bestDest.Key, out var tMeta))
+                        {
+                            transitionSuggestion = new WidgetSuggestion
+                            {
+                                WidgetType = bestDest.Key,
+                                Confidence = transitionConfidence,
+                                Icon = tMeta.Icon,
+                                Label = $"Go to {tMeta.Label}",
+                                IsTransitionBased = true
+                            };
+                        }
+                    }
+                }
+            }
+
+            // --- 3. Decision: use time-based if strong, otherwise transition, otherwise fallback ---
+
+            // Strong time signal beats transition
+            if (bestTime.Value >= 0.3 && WidgetMeta.TryGetValue(bestTime.Key, out var bestMeta))
+            {
+                // Don't suggest the widget the user is already looking at
+                if (bestTime.Key != currentVisibleWidget)
                 {
                     return Task.FromResult<WidgetSuggestion?>(new WidgetSuggestion
                     {
-                        WidgetType = fallback,
-                        Confidence = 0.3,
-                        Icon = meta.Icon,
-                        Label = meta.Label
+                        WidgetType = bestTime.Key,
+                        Confidence = Math.Min(bestTime.Value, 1.0),
+                        Icon = bestMeta.Icon,
+                        Label = bestMeta.Label
                     });
                 }
-                return Task.FromResult<WidgetSuggestion?>(null);
             }
 
-            if (WidgetMeta.TryGetValue(best.Key, out var bestMeta))
+            // Use transition suggestion if available
+            if (transitionSuggestion != null)
+                return Task.FromResult<WidgetSuggestion?>(transitionSuggestion);
+
+            // Weak time signal (still better than nothing)
+            if (bestTime.Value >= 0.05 && WidgetMeta.TryGetValue(bestTime.Key, out var weakMeta))
+            {
+                if (bestTime.Key != currentVisibleWidget)
+                {
+                    return Task.FromResult<WidgetSuggestion?>(new WidgetSuggestion
+                    {
+                        WidgetType = bestTime.Key,
+                        Confidence = Math.Min(bestTime.Value, 1.0),
+                        Icon = weakMeta.Icon,
+                        Label = weakMeta.Label
+                    });
+                }
+            }
+
+            // Fallback: time-of-day heuristic
+            var fallback = GetTimeBasedFallback(hour);
+            if (fallback != null && fallback != currentVisibleWidget && WidgetMeta.TryGetValue(fallback, out var fMeta))
             {
                 return Task.FromResult<WidgetSuggestion?>(new WidgetSuggestion
                 {
-                    WidgetType = best.Key,
-                    Confidence = Math.Min(best.Value, 1.0),
-                    Icon = bestMeta.Icon,
-                    Label = bestMeta.Label
+                    WidgetType = fallback,
+                    Confidence = 0.2,
+                    Icon = fMeta.Icon,
+                    Label = fMeta.Label
                 });
             }
 
-            return Task.FromResult<WidgetSuggestion?>(null);
+            // Absolute fallback: generic "explore" state (prevents FAB from disappearing)
+            return Task.FromResult<WidgetSuggestion?>(new WidgetSuggestion
+            {
+                WidgetType = "",
+                Confidence = 0.0,
+                Icon = Icons.Material.Filled.AutoAwesome,
+                Label = "What's next?"
+            });
         }
 
         private void AddToFrequencyMap(int day, int hour, string widgetType)
@@ -203,20 +291,27 @@ namespace Daily.Services
             widgetCounts[widgetType] = count + 1;
         }
 
-        /// <summary>
-        /// Groups hours into 2-hour buckets for smoother patterns.
-        /// 0-1 -> 0, 2-3 -> 1, ... 22-23 -> 11
-        /// </summary>
+        private void AddToTransitionMap(string from, string to)
+        {
+            if (!_transitionMap.TryGetValue(from, out var destinations))
+            {
+                destinations = new Dictionary<string, int>();
+                _transitionMap[from] = destinations;
+            }
+            destinations.TryGetValue(to, out var count);
+            destinations[to] = count + 1;
+        }
+
         private static int GetHourBucket(int hour) => hour / 2;
 
         private static string? GetTimeBasedFallback(int hour) => hour switch
         {
-            >= 6 and <= 9 => "HealthWidget",     // Morning -> Vitals
-            >= 10 and <= 11 => "HabitsWidget",    // Late morning -> Habits
-            >= 12 and <= 14 => "RssFeedWidget",   // Lunch -> News
-            >= 15 and <= 17 => "FinancesWidget",  // Afternoon -> Markets
-            >= 18 and <= 21 => "HabitsWidget",    // Evening -> Habits
-            _ => "RssFeedWidget",                  // Night/early morning -> Read
+            >= 6 and <= 9 => "HealthWidget",
+            >= 10 and <= 11 => "HabitsWidget",
+            >= 12 and <= 14 => "RssFeedWidget",
+            >= 15 and <= 17 => "FinancesWidget",
+            >= 18 and <= 21 => "HabitsWidget",
+            _ => "RssFeedWidget",
         };
     }
 }

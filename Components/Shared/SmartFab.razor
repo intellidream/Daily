@@ -3,55 +3,137 @@
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
-@if (_suggestion != null)
-{
-    <div class="smart-fab-container @(_isExpanded ? "expanded" : "")" @onclick="HandleClick" @onclick:stopPropagation="true">
-        @* AI badge *@
-        <div class="smart-fab-badge">
-            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" Style="font-size: 12px;" />
-        </div>
-
-        @* Main FAB *@
-        <div class="smart-fab @(_suggestion.Confidence >= 0.7 ? "glow" : "") @(_animateIn ? "animate-in" : "")">
-            <MudIcon Icon="@_suggestion.Icon" Size="Size.Medium" Color="Color.Inherit" />
-        </div>
-
-        @* Tooltip label *@
-        @if (_isExpanded)
-        {
-            <div class="smart-fab-label" @onclick="HandleClick" @onclick:stopPropagation="true">
-                @_suggestion.Label
-            </div>
-        }
+<div class="smart-fab-container @(_isExpanded ? "expanded" : "")" @onclick="HandleClick" @onclick:stopPropagation="true">
+    @* AI badge *@
+    <div class="smart-fab-badge @(_suggestion?.IsTransitionBased == true ? "transition-badge" : "")">
+        <MudIcon Icon="@(_suggestion?.IsTransitionBased == true ? Icons.Material.Filled.TrendingFlat : Icons.Material.Filled.AutoAwesome)" 
+                 Size="Size.Small" Style="font-size: 12px;" />
     </div>
-}
+
+    @* Main FAB *@
+    <div class="smart-fab @GlowClass @(_animateIn ? "animate-in" : "")">
+        <MudIcon Icon="@FabIcon" Size="Size.Medium" Color="Color.Inherit" />
+    </div>
+
+    @* Tooltip label *@
+    @if (_isExpanded && _suggestion != null)
+    {
+        <div class="smart-fab-label" @onclick="HandleClick" @onclick:stopPropagation="true">
+            @_suggestion.Label
+        </div>
+    }
+</div>
 
 @code {
     private WidgetSuggestion? _suggestion;
     private bool _isExpanded;
     private bool _animateIn;
+    private string? _currentVisibleWidget;
+    private string? _previousVisibleWidget;
     private System.Threading.Timer? _refreshTimer;
+    private System.Threading.Timer? _initRetryTimer;
+    private DotNetObjectReference<SmartFab>? _dotNetRef;
+    private bool _observerInitialized;
+
+    private string FabIcon => _suggestion?.Icon ?? Icons.Material.Filled.AutoAwesome;
+    private string GlowClass => _suggestion switch
+    {
+        { Confidence: >= 0.7 } => "glow",
+        { IsTransitionBased: true, Confidence: >= 0.3 } => "glow-subtle",
+        _ => ""
+    };
 
     protected override async Task OnInitializedAsync()
     {
         SmartAgent.OnSuggestionChanged += OnSuggestionChanged;
+        _dotNetRef = DotNetObjectReference.Create(this);
 
-        await SmartAgent.InitializeAsync();
-        _suggestion = await SmartAgent.GetSuggestionAsync();
+        await TryInitialize();
 
-        // Refresh suggestion every 10 minutes
+        // Refresh suggestion every 5 minutes
         _refreshTimer = new System.Threading.Timer(async _ =>
         {
             await RefreshSuggestion();
-        }, null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
+        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
         // Animate in after brief delay
         _ = Task.Run(async () =>
         {
-            await Task.Delay(2000);
+            await Task.Delay(1500);
             _animateIn = true;
             await InvokeAsync(StateHasChanged);
         });
+    }
+
+    private async Task TryInitialize()
+    {
+        await SmartAgent.InitializeAsync();
+        _suggestion = await SmartAgent.GetSuggestionAsync(_currentVisibleWidget);
+
+        if (!SmartAgent.IsReady)
+        {
+            // Auth not ready yet — retry every 5 seconds for up to 60 seconds
+            var retryCount = 0;
+            _initRetryTimer = new System.Threading.Timer(async _ =>
+            {
+                retryCount++;
+                await SmartAgent.InitializeAsync();
+
+                if (SmartAgent.IsReady)
+                {
+                    _initRetryTimer?.Dispose();
+                    _initRetryTimer = null;
+                    _suggestion = await SmartAgent.GetSuggestionAsync(_currentVisibleWidget);
+                    await InvokeAsync(StateHasChanged);
+                }
+                else if (retryCount >= 12)
+                {
+                    _initRetryTimer?.Dispose();
+                    _initRetryTimer = null;
+                }
+            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_observerInitialized)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("dailyInterop.initWidgetObserver", _dotNetRef);
+                _observerInitialized = true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartFab] Observer init failed: {ex.Message}");
+            }
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnWidgetVisible(string widgetType)
+    {
+        if (string.IsNullOrEmpty(widgetType) || widgetType == _currentVisibleWidget) return;
+
+        _previousVisibleWidget = _currentVisibleWidget;
+        _currentVisibleWidget = widgetType;
+
+        // Record the transition (from → to)
+        if (!string.IsNullOrEmpty(_previousVisibleWidget))
+        {
+            try
+            {
+                await SmartAgent.RecordTransitionAsync(_previousVisibleWidget, _currentVisibleWidget);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartFab] Transition record failed: {ex.Message}");
+            }
+        }
+
+        // Refresh suggestion with new context
+        await RefreshSuggestion();
     }
 
     private async void OnSuggestionChanged()
@@ -61,8 +143,9 @@
 
     private async Task RefreshSuggestion()
     {
-        var newSuggestion = await SmartAgent.GetSuggestionAsync();
-        if (newSuggestion?.WidgetType != _suggestion?.WidgetType)
+        var newSuggestion = await SmartAgent.GetSuggestionAsync(_currentVisibleWidget);
+        if (newSuggestion?.WidgetType != _suggestion?.WidgetType ||
+            newSuggestion?.IsTransitionBased != _suggestion?.IsTransitionBased)
         {
             _suggestion = newSuggestion;
             await InvokeAsync(StateHasChanged);
@@ -71,14 +154,13 @@
 
     private async Task HandleClick()
     {
-        if (_suggestion == null) return;
+        if (_suggestion == null || string.IsNullOrEmpty(_suggestion.WidgetType)) return;
 
         if (!_isExpanded)
         {
             _isExpanded = true;
             StateHasChanged();
 
-            // Auto-collapse after 3 seconds
             _ = Task.Run(async () =>
             {
                 await Task.Delay(3000);
@@ -102,7 +184,6 @@
             Console.WriteLine($"[SmartFab] Scroll failed: {ex.Message}");
         }
 
-        // Positive feedback: user followed the suggestion
         await SmartAgent.RecordEventAsync(_suggestion.WidgetType, "suggested_click");
     }
 
@@ -110,5 +191,13 @@
     {
         SmartAgent.OnSuggestionChanged -= OnSuggestionChanged;
         _refreshTimer?.Dispose();
+        _initRetryTimer?.Dispose();
+        _dotNetRef?.Dispose();
+
+        try
+        {
+            _ = JSRuntime.InvokeVoidAsync("dailyInterop.disposeWidgetObserver");
+        }
+        catch { /* Component disposing, ignore */ }
     }
 }
