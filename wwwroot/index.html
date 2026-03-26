@@ -177,6 +177,7 @@
             },
             _widgetObserver: null,
             _widgetDotNetRef: null,
+            _widgetTimeout: null,
             initWidgetObserver: function (dotNetRef) {
                 this._widgetDotNetRef = dotNetRef;
                 if (this._widgetObserver) this._widgetObserver.disconnect();
@@ -194,7 +195,13 @@
                         var id = bestEntry.target.id;
                         if (id && id.startsWith('widget-')) {
                             var widgetType = id.replace('widget-', '');
-                            dotNetRef.invokeMethodAsync('OnWidgetVisible', widgetType);
+                            
+                            if (window.dailyInterop._widgetTimeout) {
+                                clearTimeout(window.dailyInterop._widgetTimeout);
+                            }
+                            window.dailyInterop._widgetTimeout = setTimeout(function() {
+                                dotNetRef.invokeMethodAsync('OnWidgetVisible', widgetType);
+                            }, 1500);
                         }
                     }
                 }, { threshold: [0.3, 0.5, 0.7], rootMargin: '0px' });

@@ -200,10 +200,10 @@ namespace Daily.Services
                         .OrderByDescending(kv => kv.Value)
                         .FirstOrDefault();
 
-                    if (bestDest.Key != null)
+                    if (bestDest.Key != null && bestDest.Value >= 2)
                     {
                         var transitionConfidence = (double)bestDest.Value / totalTransitions;
-                        if (transitionConfidence >= 0.25 && WidgetMeta.TryGetValue(bestDest.Key, out var tMeta))
+                        if (transitionConfidence >= 0.40 && WidgetMeta.TryGetValue(bestDest.Key, out var tMeta))
                         {
                             transitionSuggestion = new WidgetSuggestion
                             {
@@ -218,10 +218,14 @@ namespace Daily.Services
                 }
             }
 
-            // --- 3. Decision: use time-based if strong, otherwise transition, otherwise fallback ---
+            // --- 3. Decision: use transition if available, otherwise strong time-based, otherwise fallback ---
 
-            // Strong time signal beats transition
-            if (bestTime.Value >= 0.3 && WidgetMeta.TryGetValue(bestTime.Key, out var bestMeta))
+            // Use transition suggestion first if available (immediate context beats time-of-day)
+            if (transitionSuggestion != null)
+                return Task.FromResult<WidgetSuggestion?>(transitionSuggestion);
+
+            // Strong time signal
+            if (bestTime.Value >= 0.25 && WidgetMeta.TryGetValue(bestTime.Key, out var bestMeta))
             {
                 // Don't suggest the widget the user is already looking at
                 if (bestTime.Key != currentVisibleWidget)
@@ -235,10 +239,6 @@ namespace Daily.Services
                     });
                 }
             }
-
-            // Use transition suggestion if available
-            if (transitionSuggestion != null)
-                return Task.FromResult<WidgetSuggestion?>(transitionSuggestion);
 
             // Weak time signal (still better than nothing)
             if (bestTime.Value >= 0.05 && WidgetMeta.TryGetValue(bestTime.Key, out var weakMeta))
