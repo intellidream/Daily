@@ -162,11 +162,17 @@ Transition suggestion (Context) → Strong time signal (≥0.25) → Weak time s
 1. **First tap** → Expands to show a label pill (e.g. "Log habits"). Auto-collapses after 3 seconds.
 2. **Second tap** (while expanded) → Scrolls to the suggested widget with smooth animation + highlight glow. Records a `suggested_click` event as positive feedback.
 
-#### Scroll Spy (IntersectionObserver)
+#### Viewport-Center & Click Tracking
 
-The FAB registers a JS `IntersectionObserver` on all elements with `id^="widget-"` in the DOM. When a widget becomes the most visible (≥30% intersection ratio), a **1.5-second dwell timer** starts. If the widget remains the most visible element for 1.5 seconds, the `OnWidgetVisible` callback fires:
+The FAB uses a combination of mathematical scroll tracking and click intent to determine what you are looking at:
 
-1. Records the navigation transition (previous → current widget). (The dwell timer prevents aggressive "scroll pollution" when rapidly swiping past widgets).
+1. **Center-Distance Scroll Tracker**: A `scroll` listener (with an 800ms debounce) calculates the exact absolute center point of every widget. The widget whose center is closest to the middle of the viewport wins.
+2. **Global Click Intent**: A `mousedown` listener running in the capture phase catches any click inside a widget. Clicking instantly proves intent, overriding the scroll timer and making that widget active.
+3. **Smart Light**: The currently tracked widget is given the `.widget-active-light` CSS class, applying a subtle glowing border so the user visually knows what the algorithm is observing. 
+
+When a widget becomes active via either method, the `OnWidgetVisible` callback fires:
+
+1. Records the navigation transition (previous → current widget).
 2. Re-evaluates the suggestion with the new `currentVisibleWidget` context.
 
 #### Authentication Retry
@@ -196,7 +202,7 @@ Three functions under `window.dailyInterop`:
 Smooth-scrolls to the widget and adds a temporary `widget-highlighted` class (removed after 4.5s).
 
 #### `initWidgetObserver(dotNetRef)`
-Creates an `IntersectionObserver` with thresholds `[0.3, 0.5, 0.7]`. Observes all `[id^="widget-"]` elements. On highest intersection, sets a 1500ms debounce timer before calling `dotNetRef.invokeMethodAsync('OnWidgetVisible', widgetType)`. This ensures user intent before recording a transition.
+Hooks up `scroll` and `mousedown` event listeners. Calculates `distance = Math.abs(viewportCenter - widgetCenter)` on scroll stop (800ms debounce). Calls `setSmartLight(widgetType)` to apply the CSS glow and triggers `dotNetRef.invokeMethodAsync('OnWidgetVisible', widgetType)`.
 
 #### `disposeWidgetObserver()`
 Disconnects the observer and clears references. Called on component disposal.

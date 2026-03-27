@@ -116,6 +116,19 @@
         .compact-selector-menu .mud-list {
             background-color: var(--mud-palette-surface) !important;
         }
+
+        /* SmartButton Active Widget Highlight */
+        .widget-active-light > div {
+            box-shadow: 0 0 15px rgba(89, 74, 226, 0.4) !important;
+            border: 1px solid rgba(89, 74, 226, 0.4) !important;
+            transition: box-shadow 0.4s ease, border-color 0.4s ease;
+        }
+        @media (prefers-color-scheme: dark) {
+            .widget-active-light > div {
+                box-shadow: 0 0 15px rgba(126, 111, 255, 0.3) !important;
+                border: 1px solid rgba(126, 111, 255, 0.3) !important;
+            }
+        }
     </style>
 </head>
 
@@ -175,45 +188,98 @@
                     setTimeout(function () { el.classList.remove('widget-highlighted'); }, 4500);
                 }
             },
-            _widgetObserver: null,
+            _activeWidget: null,
             _widgetDotNetRef: null,
             _widgetTimeout: null,
+            _scrollHandler: null,
+            _clickHandler: null,
+            
+            setSmartLight: function(widgetId) {
+                document.querySelectorAll('.widget-active-light').forEach(function(el) {
+                    el.classList.remove('widget-active-light');
+                });
+                var el = document.getElementById('widget-' + widgetId);
+                if (el) {
+                    el.classList.add('widget-active-light');
+                }
+            },
+
             initWidgetObserver: function (dotNetRef) {
                 this._widgetDotNetRef = dotNetRef;
-                if (this._widgetObserver) this._widgetObserver.disconnect();
+                
+                var updateActiveWidget = function() {
+                    var widgets = document.querySelectorAll('[id^="widget-"]');
+                    var bestWidget = null;
+                    var minDistance = Infinity;
+                    var viewportCenter = window.innerHeight / 2;
 
-                this._widgetObserver = new IntersectionObserver(function (entries) {
-                    var bestEntry = null;
-                    var bestRatio = 0;
-                    entries.forEach(function (entry) {
-                        if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
-                            bestRatio = entry.intersectionRatio;
-                            bestEntry = entry;
+                    widgets.forEach(function(w) {
+                        var rect = w.getBoundingClientRect();
+                        var widgetCenter = rect.top + (rect.height / 2);
+                        var distance = Math.abs(viewportCenter - widgetCenter);
+                        
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            bestWidget = w;
                         }
                     });
-                    if (bestEntry) {
-                        var id = bestEntry.target.id;
-                        if (id && id.startsWith('widget-')) {
-                            var widgetType = id.replace('widget-', '');
-                            
+
+                    if (bestWidget) {
+                        var widgetType = bestWidget.id.replace('widget-', '');
+                        if (window.dailyInterop._activeWidget !== widgetType) {
+                            window.dailyInterop._activeWidget = widgetType;
+                            window.dailyInterop.setSmartLight(widgetType);
+                            dotNetRef.invokeMethodAsync('OnWidgetVisible', widgetType);
+                        }
+                    }
+                };
+
+                // Clear previous handlers if re-initializing
+                this.disposeWidgetObserver();
+
+                this._scrollHandler = function() {
+                    if (window.dailyInterop._widgetTimeout) {
+                        clearTimeout(window.dailyInterop._widgetTimeout);
+                    }
+                    window.dailyInterop._widgetTimeout = setTimeout(function() {
+                        updateActiveWidget();
+                    }, 800); // Wait 800ms after scrolling stops
+                };
+
+                this._clickHandler = function(e) {
+                    var widget = e.target.closest('[id^="widget-"]');
+                    if (widget) {
+                        var widgetType = widget.id.replace('widget-', '');
+                        if (window.dailyInterop._activeWidget !== widgetType) {
+                            window.dailyInterop._activeWidget = widgetType;
+                            window.dailyInterop.setSmartLight(widgetType);
+                            // Clear scroll debounce so it doesn't double-fire if they click while scrolling
                             if (window.dailyInterop._widgetTimeout) {
                                 clearTimeout(window.dailyInterop._widgetTimeout);
                             }
-                            window.dailyInterop._widgetTimeout = setTimeout(function() {
-                                dotNetRef.invokeMethodAsync('OnWidgetVisible', widgetType);
-                            }, 1500);
+                            dotNetRef.invokeMethodAsync('OnWidgetVisible', widgetType);
                         }
                     }
-                }, { threshold: [0.3, 0.5, 0.7], rootMargin: '0px' });
+                };
 
-                document.querySelectorAll('[id^="widget-"]').forEach(function (el) {
-                    dailyInterop._widgetObserver.observe(el);
-                });
+                window.addEventListener('scroll', this._scrollHandler, { passive: true });
+                document.addEventListener('mousedown', this._clickHandler, true); // Capture phase click tracking
+                
+                // Initial check after render
+                setTimeout(updateActiveWidget, 1000);
             },
             disposeWidgetObserver: function () {
-                if (this._widgetObserver) {
-                    this._widgetObserver.disconnect();
-                    this._widgetObserver = null;
+                if (this._scrollHandler) {
+                    window.removeEventListener('scroll', this._scrollHandler);
+                    this._scrollHandler = null;
+                }
+                if (this._clickHandler) {
+                    document.removeEventListener('mousedown', this._clickHandler, true);
+                    this._clickHandler = null;
+                }
+                if (window.dailyInterop._widgetTimeout) {
+                    clearTimeout(window.dailyInterop._widgetTimeout);
+                    window.dailyInterop._widgetTimeout = null;
                 }
                 this._widgetDotNetRef = null;
             }
