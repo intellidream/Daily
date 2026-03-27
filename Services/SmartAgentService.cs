@@ -13,11 +13,11 @@ namespace Daily.Services
         public event Action? OnSuggestionChanged;
         public bool IsReady => _initialized && !string.IsNullOrEmpty(_userId);
 
-        // Frequency map: (DayOfWeek, HourBucket) -> WidgetType -> count
-        private readonly Dictionary<(int Day, int HourBucket), Dictionary<string, int>> _frequencyMap = new();
+        // Frequency map: (DayOfWeek, HourBucket) -> WidgetType -> weight
+        private readonly Dictionary<(int Day, int HourBucket), Dictionary<string, double>> _frequencyMap = new();
 
-        // Transition map: FromWidget -> ToWidget -> count (Markov chain)
-        private readonly Dictionary<string, Dictionary<string, int>> _transitionMap = new();
+        // Transition map: FromWidget -> ToWidget -> weight (Markov chain)
+        private readonly Dictionary<string, Dictionary<string, double>> _transitionMap = new();
 
         private static readonly Dictionary<string, (string Icon, string Label)> WidgetMeta = new()
         {
@@ -58,6 +58,7 @@ namespace Daily.Services
             if (string.IsNullOrEmpty(_userId)) return;
 
             var cutoff = DateTime.UtcNow.AddDays(-30);
+            var now = DateTime.UtcNow;
 
             // Load behavior events
             var events = await _db.Connection.Table<LocalBehaviorEvent>()
@@ -65,7 +66,11 @@ namespace Daily.Services
                 .ToListAsync();
 
             foreach (var ev in events)
-                AddToFrequencyMap(ev.DayOfWeek, ev.HourOfDay, ev.WidgetType);
+            {
+                var daysOld = (now - ev.Timestamp).TotalDays;
+                var weight = Math.Pow(0.8, Math.Max(0, daysOld));
+                AddToFrequencyMap(ev.DayOfWeek, ev.HourOfDay, ev.WidgetType, weight);
+            }
 
             // Load navigation transitions
             var transitions = await _db.Connection.Table<LocalNavigationTransition>()
@@ -73,7 +78,11 @@ namespace Daily.Services
                 .ToListAsync();
 
             foreach (var tr in transitions)
-                AddToTransitionMap(tr.FromWidget, tr.ToWidget);
+            {
+                var daysOld = (now - tr.Timestamp).TotalDays;
+                var weight = Math.Pow(0.8, Math.Max(0, daysOld));
+                AddToTransitionMap(tr.FromWidget, tr.ToWidget, weight);
+            }
 
             _initialized = true;
         }
@@ -97,7 +106,7 @@ namespace Daily.Services
             };
 
             await _db.Connection.InsertAsync(ev);
-            AddToFrequencyMap(ev.DayOfWeek, ev.HourOfDay, ev.WidgetType);
+            AddToFrequencyMap(ev.DayOfWeek, ev.HourOfDay, ev.WidgetType, 1.0);
 
             var pruneDate = now.AddDays(-90);
             await _db.Connection.Table<LocalBehaviorEvent>()
@@ -126,7 +135,7 @@ namespace Daily.Services
             };
 
             await _db.Connection.InsertAsync(tr);
-            AddToTransitionMap(fromWidget, toWidget);
+            AddToTransitionMap(fromWidget, toWidget, 1.0);
 
             var pruneDate = now.AddDays(-90);
             await _db.Connection.Table<LocalNavigationTransition>()
@@ -193,14 +202,14 @@ namespace Daily.Services
                 _transitionMap.TryGetValue(currentVisibleWidget, out var destinations))
             {
                 var totalTransitions = destinations.Values.Sum();
-                if (totalTransitions >= 3) // Need at least 3 transitions to be meaningful
+                if (totalTransitions >= 2.0) // Relaxed from 3 since we use decimal weights
                 {
                     var bestDest = destinations
                         .Where(kv => kv.Key != currentVisibleWidget)
                         .OrderByDescending(kv => kv.Value)
                         .FirstOrDefault();
 
-                    if (bestDest.Key != null && bestDest.Value >= 2)
+                    if (bestDest.Key != null && bestDest.Value >= 1.5) // Relaxed from 2 to account for decay
                     {
                         var transitionConfidence = (double)bestDest.Value / totalTransitions;
                         if (transitionConfidence >= 0.40 && WidgetMeta.TryGetValue(bestDest.Key, out var tMeta))
@@ -278,28 +287,28 @@ namespace Daily.Services
             });
         }
 
-        private void AddToFrequencyMap(int day, int hour, string widgetType)
+        private void AddToFrequencyMap(int day, int hour, string widgetType, double weight = 1.0)
         {
             var bucket = GetHourBucket(hour);
             var key = (day, bucket);
             if (!_frequencyMap.TryGetValue(key, out var widgetCounts))
             {
-                widgetCounts = new Dictionary<string, int>();
+                widgetCounts = new Dictionary<string, double>();
                 _frequencyMap[key] = widgetCounts;
             }
             widgetCounts.TryGetValue(widgetType, out var count);
-            widgetCounts[widgetType] = count + 1;
+            widgetCounts[widgetType] = count + weight;
         }
 
-        private void AddToTransitionMap(string from, string to)
+        private void AddToTransitionMap(string from, string to, double weight = 1.0)
         {
             if (!_transitionMap.TryGetValue(from, out var destinations))
             {
-                destinations = new Dictionary<string, int>();
+                destinations = new Dictionary<string, double>();
                 _transitionMap[from] = destinations;
             }
             destinations.TryGetValue(to, out var count);
-            destinations[to] = count + 1;
+            destinations[to] = count + weight;
         }
 
         private static int GetHourBucket(int hour) => hour / 2;

@@ -99,7 +99,7 @@ The core "brain" uses three layers of prediction, evaluated in priority order:
 
 #### Layer 1: Time-Based Frequency Map
 
-A dictionary keyed by `(DayOfWeek, HourBucket)` where `HourBucket = hour / 2` (12 buckets per day). Each bucket maps widget names to interaction counts.
+A dictionary keyed by `(DayOfWeek, HourBucket)` where `HourBucket = hour / 2` (12 buckets per day). Each bucket maps widget names to an exponentially decayed interaction weight, meaning recent events score substantially higher than old ones.
 
 **Scoring:**
 1. Exact bucket match: `count / total` in that bucket
@@ -114,12 +114,12 @@ A widget with score ≥ 0.3 is considered a **strong** time-based suggestion.
 
 #### Layer 2: Markov Transition Map (Context-First)
 
-A dictionary keyed by `FromWidget` → `ToWidget` → count. Records where the user deliberately navigates after viewing a specific widget.
+A dictionary keyed by `FromWidget` → `ToWidget` → decaying weight score. Records where the user deliberately navigates. It uses an **Exponential Recency Decay** (`Weight = pow(0.8, DaysOld)`) formula on SQLite load, so old habits are quickly forgotten and the system organically learns new habits.
 
 **Rules:**
-- Needs ≥ 3 total transitions from a widget to activate
-- Best destination must have been chosen ≥ 2 times
-- Best destination must have ≥ 40% of total transitions (confidence threshold)
+- Needs a combined weight score of `≥ 2.0` across all destinations from a widget to activate.
+- Best destination must hold a combined weight score of `≥ 1.5` (approx. 2 recent clicks).
+- Best destination must hold `≥ 40%` of the total transition weight (confidence threshold).
 - Produces suggestions like "Go to Read news" with the `IsTransitionBased` flag
 
 #### Layer 3: Fallback Heuristics
