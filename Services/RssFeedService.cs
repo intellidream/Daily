@@ -23,18 +23,12 @@ namespace Daily.Services
             new FeedSource { Name = "Economica.net", Url = "https://www.economica.net/rss", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=economica.net&sz=64" },
 
             // 📈 Markets
-            new FeedSource { Name = "Wall Street Journal", Url = "https://feeds.a.dj.com/rss/RSSWorldNews.xml", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=wsj.com&sz=64" },
             new FeedSource { Name = "CNBC", Url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=cnbc.com&sz=64" },
-            new FeedSource { Name = "Financial Times", Url = "https://www.ft.com/rss/home", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=ft.com&sz=64" },
             new FeedSource { Name = "The Economist", Url = "https://www.economist.com/finance-and-economics/rss.xml", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=economist.com&sz=64" },
 
             // 🌍 World
             new FeedSource { Name = "BBC News", Url = "https://feeds.bbci.co.uk/news/rss.xml", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=bbc.com&sz=64" },
-            new FeedSource { Name = "Reuters", Url = "https://news.google.com/rss/search?q=source:Reuters&hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=reuters.com&sz=64" },
-            new FeedSource { Name = "Associated Press", Url = "https://news.google.com/rss/search?q=source:Associated+Press&hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=apnews.com&sz=64" },
-            new FeedSource { Name = "New York Times", Url = "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=nytimes.com&sz=64" },
             new FeedSource { Name = "NPR", Url = "https://feeds.npr.org/1001/rss.xml", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=npr.org&sz=64" },
-            new FeedSource { Name = "Euronews", Url = "https://www.euronews.com/rss", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=euronews.com&sz=64" },
             new FeedSource { Name = "Politico Europe", Url = "https://www.politico.eu/feed/", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=politico.eu&sz=64" },
             new FeedSource { Name = "Deutsche Welle", Url = "https://rss.dw.com/rdf/rss-en-all", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=dw.com&sz=64" },
             new FeedSource { Name = "Google News", Url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=news.google.com&sz=64" },
@@ -137,17 +131,25 @@ namespace Daily.Services
             var doc = XDocument.Parse(xml);
             XNamespace media = "http://search.yahoo.com/mrss/";
             XNamespace contentNs = "http://purl.org/rss/1.0/modules/content/";
+            XNamespace dc = "http://purl.org/dc/elements/1.1/";
 
-            var channelImage = doc.Descendants("channel").Elements().FirstOrDefault(e => e.Name.LocalName == "image")?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value;
+            var channelImage = doc.Descendants().FirstOrDefault(e => e.Name.LocalName == "channel" || e.Name.LocalName == "feed")
+                ?.Elements().FirstOrDefault(e => e.Name.LocalName == "image" || e.Name.LocalName == "logo" || e.Name.LocalName == "icon")
+                ?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value
+                ?? doc.Descendants().FirstOrDefault(e => e.Name.LocalName == "logo" || e.Name.LocalName == "icon")?.Value;
 
             // Atomic Swap
-            Items = doc.Descendants("item").Select(item =>
+            Items = doc.Descendants().Where(e => e.Name.LocalName == "item" || e.Name.LocalName == "entry").Select(item =>
             {
-                var title = item.Element("title")?.Value ?? "No Title";
-                var link = item.Element("link")?.Value ?? "";
-                var description = item.Element("description")?.Value;
-                var pubDateStr = item.Element("pubDate")?.Value;
-                var contentEncoded = item.Element(contentNs + "encoded")?.Value;
+                var title = item.Elements().FirstOrDefault(e => e.Name.LocalName == "title")?.Value ?? "No Title";
+
+                var linkEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "link");
+                var link = linkEl?.Attribute("href")?.Value;
+                if (string.IsNullOrEmpty(link)) link = linkEl?.Value ?? "";
+
+                var description = item.Elements().FirstOrDefault(e => e.Name.LocalName == "description" || e.Name.LocalName == "summary")?.Value;
+                var pubDateStr = item.Elements().FirstOrDefault(e => e.Name.LocalName == "pubDate" || e.Name.LocalName == "published" || e.Name.LocalName == "updated" || e.Name == dc + "date")?.Value;
+                var contentEncoded = item.Elements().FirstOrDefault(e => e.Name == contentNs + "encoded" || e.Name.LocalName == "content")?.Value;
 
                 string? imageUrl = null;
 
@@ -165,13 +167,17 @@ namespace Daily.Services
                     imageUrl = mediaThumbnail?.Attribute("url")?.Value;
                 }
 
-                // 3. Enclosure
+                // 3. Enclosure or Atom Rel=Enclosure
                 if (string.IsNullOrEmpty(imageUrl))
                 {
-                    var enclosure = item.Element("enclosure");
-                    if (enclosure != null && enclosure.Attribute("type")?.Value?.StartsWith("image/") == true)
+                    var enclosure = item.Elements().FirstOrDefault(e => e.Name.LocalName == "enclosure" || (e.Name.LocalName == "link" && e.Attribute("rel")?.Value == "enclosure"));
+                    if (enclosure != null)
                     {
-                        imageUrl = enclosure.Attribute("url")?.Value;
+                        var type = enclosure.Attribute("type")?.Value;
+                        if (string.IsNullOrEmpty(type) || type.StartsWith("image/"))
+                        {
+                            imageUrl = enclosure.Attribute("url")?.Value ?? enclosure.Attribute("href")?.Value;
+                        }
                     }
                 }
 
@@ -184,7 +190,7 @@ namespace Daily.Services
                         imageUrl = match.Groups[1].Value;
                     }
                 }
-                
+
                 // 5. Regex in Content Encoded
                 if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(contentEncoded))
                 {
@@ -194,13 +200,13 @@ namespace Daily.Services
                         imageUrl = match.Groups[1].Value;
                     }
                 }
-                
+
                 // 6. Author Extraction
-                XNamespace dc = "http://purl.org/dc/elements/1.1/";
-                var author = item.Element(dc + "creator")?.Value;
+                var author = item.Elements().FirstOrDefault(e => e.Name == dc + "creator")?.Value;
                 if (string.IsNullOrEmpty(author))
                 {
-                    author = item.Element("author")?.Value;
+                    var authorEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "author");
+                    author = authorEl?.Elements().FirstOrDefault(e => e.Name.LocalName == "name")?.Value ?? authorEl?.Value;
                 }
 
                 return new RssItem

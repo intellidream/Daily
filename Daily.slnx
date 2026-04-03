@@ -1,6 +1,5 @@
 <Solution>
   <Project Path="Daily.csproj">
-    <Platform Solution="Debug|*" Project="ARM64" />
     <Deploy />
   </Project>
 </Solution>
