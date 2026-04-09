@@ -49,10 +49,19 @@
                                 OnClick="@(() => WindowManagerService.MoveMainWindowToNextDisplay())" />
              </MudTooltip>
 
-             <MudTooltip Text="Exit Daily">
+             <MudTooltip Text="@(Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.WinUI ? "Hide to Tray" : "Exit Daily")">
                  <MudIconButton Icon="@Icons.Material.Filled.Close" 
                                 Color="Color.Inherit" 
-                                OnClick="@(() => Application.Current?.Quit())" />
+                                OnClick="@(() => {
+                                    if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.WinUI)
+                                    {
+                                        WindowManagerService.HideMainWindow();
+                                    }
+                                    else
+                                    {
+                                        Application.Current?.Quit();
+                                    }
+                                })" />
              </MudTooltip>
         }
     </MudAppBar>

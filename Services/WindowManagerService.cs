@@ -27,6 +27,7 @@ namespace Daily.Services
         void OpenDetail(string view, string title = "Detail View", object? data = null);
         void CloseDetailWindow();
         void MoveMainWindowToNextDisplay();
+        void HideMainWindow();
     }
 
     public class WindowManagerService : IWindowManagerService
@@ -74,6 +75,23 @@ namespace Daily.Services
             {
                 ApplyThemeToTitleBar(nativeWindow, e.RequestedTheme);
             }
+#endif
+        }
+
+        public void HideMainWindow()
+        {
+#if WINDOWS
+            var mainWindow = Application.Current?.Windows.FirstOrDefault(w => w != _detailWindow && w != null);
+            if (mainWindow != null && mainWindow.Handler?.PlatformView is Microsoft.UI.Xaml.Window nativeWindow)
+            {
+                var handle = WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow);
+                var id = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(handle);
+                var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(id);
+                appWindow.Hide();
+            }
+#elif MACCATALYST
+            // Normally Mac handles this, but implemented for fallback
+            (Application.Current as App)?.ToggleWindow(); 
 #endif
         }
 

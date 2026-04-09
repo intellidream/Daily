@@ -9,11 +9,21 @@ namespace Daily
         private readonly IBackButtonService _backButtonService;
         private bool _isRefreshing;
 
+        public ICommand ShowCommand { get; }
+        public ICommand ExitCommand { get; }
+
         public MainPage(IRefreshService refreshService, IBackButtonService backButtonService, IRenderedHtmlService renderedHtmlService)
         {
             InitializeComponent();
             _refreshService = refreshService;
             _backButtonService = backButtonService;
+
+            ShowCommand = new Command(() => {
+                var trayService = Application.Current?.Handler?.MauiContext?.Services.GetService<ITrayService>();
+                trayService?.ClickHandler?.Invoke();
+            });
+            ExitCommand = new Command(() => Application.Current?.Quit());
+
             BindingContext = this;
 
             // Attach RenderedHtmlService to hidden WebView

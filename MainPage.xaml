@@ -4,6 +4,7 @@
              xmlns:local="clr-namespace:Daily"
              xmlns:components="clr-namespace:Daily.Components"
              xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             xmlns:tb="https://notifyicon.com/"
              x:Class="Daily.MainPage">
 
     <ContentPage.Behaviors>
@@ -27,6 +28,24 @@
 
     <!--<RefreshView x:Name="refreshView" Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing, Mode=TwoWay}" RefreshColor="#594AE2" BackgroundColor="Transparent">-->
     <Grid>
+        <!-- Windows Taskbar Integration -->
+        <OnPlatform x:TypeArguments="View">
+            <On Platform="WinUI">
+                <tb:TaskbarIcon
+                    IconSource="appicon_windows.ico"
+                    x:Name="TrayIcon"
+                    ToolTipText="Daily"
+                    LeftClickCommand="{Binding ShowCommand}">
+                    <FlyoutBase.ContextFlyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Text="Show" Command="{Binding ShowCommand}" />
+                            <MenuFlyoutItem Text="Exit" Command="{Binding ExitCommand}" />
+                        </MenuFlyout>
+                    </FlyoutBase.ContextFlyout>
+                </tb:TaskbarIcon>
+            </On>
+        </OnPlatform>
+
         <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" BackgroundColor="Transparent">
             <BlazorWebView.RootComponents>
                 <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
