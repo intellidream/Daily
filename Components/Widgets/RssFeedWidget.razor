@@ -9,42 +9,94 @@
 
 <div class="d-flex align-center my-2 flex-grow-1" style="width: 100%; gap: 2px;">
     <div class="flex-grow-1" style="min-width: 0;">
-        <MudCarousel TData="object" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
-                     SelectedIndex="@_selectedFeedIndex" SelectedIndexChanged="@OnCarouselIndexChanged" 
-                     Class="flex-grow-1 rounded-pill mud-theme-primary">
-            @foreach (var feed in RssService.Feeds)
-            {
-                <MudCarouselItem Transition="Transition.Slide">
-                    <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
-                        @if (!string.IsNullOrEmpty(feed.IconUrl))
-                        {
-                            <MudImage Src="@feed.IconUrl" Width="20" Height="20" Class="mr-3 flex-shrink-0" ObjectFit="ObjectFit.Contain" />
-                        }
-                        <div style="min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" class="mr-3 flex-shrink-1 text-center">
-                            <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 1.1em; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                @feed.Name
-                            </MudText>
+        @if (_showPublications)
+        {
+            <div class="d-flex align-center justify-center rounded-pill mud-theme-primary px-4" style="height: 40px; width: 100%;">
+                <MudIcon Icon="@Icons.Material.Filled.Newspaper" Size="Size.Small" Style="color: white;" Class="mr-2" />
+                <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 1.1em; color: white;">
+                    Publications
+                </MudText>
+            </div>
+        }
+        else
+        {
+            <MudCarousel TData="object" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                         SelectedIndex="@_selectedFeedIndex" SelectedIndexChanged="@OnCarouselIndexChanged" 
+                         Class="flex-grow-1 rounded-pill mud-theme-primary">
+                @foreach (var feed in RssService.Feeds)
+                {
+                    <MudCarouselItem Transition="Transition.Slide">
+                        <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                            @if (!string.IsNullOrEmpty(feed.IconUrl))
+                            {
+                                <MudImage Src="@feed.IconUrl" Width="20" Height="20" Class="mr-3 flex-shrink-0" ObjectFit="ObjectFit.Contain" />
+                            }
+                            <div style="min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" class="mr-3 flex-shrink-1 text-center">
+                                <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 1.1em; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    @feed.Name
+                                </MudText>
+                            </div>
+                            <div @onclick="@(async () => await ForceRefreshFeed(feed))" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1 flex-shrink-0 ml-2">
+                                 <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Title="Refresh" Style="color: white;" />
+                            </div>
                         </div>
-                        <div @onclick="@(async () => await ForceRefreshFeed(feed))" @onclick:stopPropagation class="d-flex align-center justify-center rounded-circle hover-darken cursor-pointer pa-1 flex-shrink-0 ml-2">
-                             <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Title="Refresh" Style="color: white;" />
-                        </div>
-                    </div>
-                </MudCarouselItem>
-            }
-        </MudCarousel>
+                    </MudCarouselItem>
+                }
+            </MudCarousel>
+        }
     </div>
-    
-    @if (HeaderAction != null)
-    {
-        <div class="flex-shrink-0 d-flex align-center">
-             @HeaderAction
-        </div>
-    }
+
+    <div class="flex-shrink-0 d-flex align-center">
+        <MudIconButton Icon="@(_showPublications ? Icons.Material.Filled.Close : Icons.Material.Filled.List)" 
+                       Size="Size.Medium" OnClick="@TogglePublications" 
+                       Color="@(_showPublications ? Color.Error : Color.Primary)"
+                       Title="@(_showPublications ? "Close publications" : "Browse publications")" />
+        @if (HeaderAction != null)
+        {
+            @HeaderAction
+        }
+    </div>
 </div>
 
 <div style="height: 460px; overflow: hidden; display: flex; flex-direction: column;">
 
-    @if (RssService.IsLoading)
+    @if (_showPublications)
+    {
+        <div style="flex-grow: 1; overflow-y: auto;">
+            @foreach (var category in Enum.GetValues<FeedCategory>())
+            {
+                var feedsInCategory = RssService.Feeds.Where(f => f.Category == category).ToList();
+                if (feedsInCategory.Any())
+                {
+                    <MudText Typo="Typo.overline" Class="px-2 pt-3 pb-1" Style="opacity: 0.6; font-weight: 700; letter-spacing: 0.1em;">
+                        @GetCategoryLabel(category)
+                    </MudText>
+                    <MudDivider Class="mx-2 mb-1" />
+                    @foreach (var feed in feedsInCategory)
+                    {
+                        var isSelected = RssService.CurrentFeed == feed;
+                        <div class="d-flex align-center gap-3 px-3 py-2 cursor-pointer publication-item @(isSelected ? "publication-selected" : "")"
+                             @onclick="@(() => SelectPublication(feed))">
+                            @if (!string.IsNullOrEmpty(feed.IconUrl))
+                            {
+                                <MudImage Src="@feed.IconUrl" Width="24" Height="24" ObjectFit="ObjectFit.Contain" Class="rounded flex-shrink-0" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.RssFeed" Size="Size.Small" Class="flex-shrink-0" />
+                            }
+                            <MudText Typo="Typo.body2" Style="@(isSelected ? "font-weight: 700;" : "")">@feed.Name</MudText>
+                            @if (isSelected)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Primary" Class="ml-auto" />
+                            }
+                        </div>
+                    }
+                }
+            }
+        </div>
+    }
+    else if (RssService.IsLoading)
     {
         <div class="d-flex justify-center align-center" style="height: 100%; width: 100%;">
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
@@ -111,6 +163,7 @@
 
     private int _currentPage = 1;
     private const int _pageSize = 5;
+    private bool _showPublications = false;
 
     private int _pageCount => RssService.Items != null ? (int)Math.Ceiling((double)RssService.Items.Count / _pageSize) : 0;
 
@@ -203,6 +256,33 @@
         WindowManager.OpenDetail("RssFeed", item.Title, item);
         _ = SmartAgent.RecordEventAsync("RssFeedWidget", "read_article");
     }
+
+    private void TogglePublications()
+    {
+        _showPublications = !_showPublications;
+        StateHasChanged();
+    }
+
+    private void SelectPublication(FeedSource feed)
+    {
+        _showPublications = false;
+        _currentPage = 1;
+        var index = RssService.Feeds.IndexOf(feed);
+        if (index >= 0)
+        {
+            _selectedFeedIndex = index;
+        }
+        RssService.SelectFeed(feed);
+    }
+
+    private static string GetCategoryLabel(FeedCategory category) => category switch
+    {
+        FeedCategory.Local => "🇷🇴 Local",
+        FeedCategory.Markets => "📈 Markets",
+        FeedCategory.World => "🌍 World",
+        FeedCategory.Tech => "💡 Tech",
+        _ => category.ToString()
+    };
 }
 
 <style>
@@ -223,5 +303,18 @@
 
     body[data-theme='dark'] .rss-chip {
         background-color: var(--mud-palette-action-disabled-background);
+    }
+
+    .publication-item {
+        border-radius: 8px;
+        transition: background-color 0.15s ease;
+    }
+
+    .publication-item:hover {
+        background-color: var(--mud-palette-action-default-hover);
+    }
+
+    .publication-selected {
+        background-color: var(--mud-palette-primary-hover);
     }
 </style>
