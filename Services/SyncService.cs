@@ -180,7 +180,10 @@ namespace Daily.Services
             await ConsolidateHistoryAsync(userId); 
             await PushSummariesAsync(userId);
 
-            // 5. Data Safety / Cost Management: Always check if we can prune old remote logs
+            // 5. Push Saved Articles (Read Later / Favorites)
+            await PushSavedArticlesAsync(userId);
+
+            // 6. Data Safety / Cost Management: Always check if we can prune old remote logs
             await PruneRemoteLogsAsync(userId);
         }
 
@@ -280,6 +283,9 @@ namespace Daily.Services
 
             // 4. Pull Summaries
             totalPulled += await PullSummariesAsync(userId);
+
+            // 5. Pull Saved Articles (Read Later / Favorites)
+            totalPulled += await PullSavedArticlesAsync(userId);
 
             return totalPulled;
         }
@@ -964,5 +970,61 @@ namespace Daily.Services
             CreatedAt = r.CreatedAt,
             UpdatedAt = r.UpdatedAt
         };
+
+        // --- Saved Articles (Read Later / Favorites) Sync ---
+
+        private async Task PushSavedArticlesAsync(string userId)
+        {
+            try
+            {
+                var dirty = await _databaseService.Connection.Table<LocalSavedArticle>()
+                    .Where(a => a.SyncedAt == null && a.UserId == userId)
+                    .ToListAsync();
+
+                if (dirty.Any())
+                {
+                    Console.WriteLine($"[SyncService] Pushing {dirty.Count} saved articles...");
+                    var remote = dirty.Select(d => d.ToDomain()).ToList();
+                    await _supabase.From<SavedArticle>().Upsert(remote);
+
+                    foreach (var d in dirty)
+                    {
+                        d.SyncedAt = DateTime.UtcNow;
+                        await _databaseService.Connection.UpdateAsync(d);
+                    }
+                    Console.WriteLine("[SyncService] Push Saved Articles Success.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SyncService] Push Saved Articles Failed: {ex.Message}");
+            }
+        }
+
+        private async Task<int> PullSavedArticlesAsync(string userId)
+        {
+            try
+            {
+                Console.WriteLine($"[SyncService] Pulling Saved Articles for User: {userId}...");
+                var response = await _supabase.From<SavedArticle>().Get();
+
+                Console.WriteLine($"[SyncService] Pulled {response.Models.Count} saved articles from Cloud.");
+
+                foreach (var remote in response.Models)
+                {
+                    var local = remote.ToLocal();
+                    local.SyncedAt = DateTime.UtcNow;
+                    await _databaseService.Connection.InsertOrReplaceAsync(local);
+                }
+
+                Console.WriteLine("[SyncService] Pull Saved Articles Complete.");
+                return response.Models.Count;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SyncService] Pull Saved Articles Error: {ex.Message}");
+                return 0;
+            }
+        }
     }
 }

@@ -2,6 +2,7 @@
 @using Daily.Models
 @using MudBlazor
 @inject IRssFeedService RssService
+@inject IRssArticleService ArticleService
 @inject IDetailNavigationService NavService
 @inject IBackButtonService _backButtonService
 @inject IRefreshService RefreshService
@@ -19,7 +20,7 @@
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2 flex-shrink-0" />
         }
 
-        @if (ShowPublications)
+        @if (OverlayMode == RssOverlayMode.Publications)
         {
             <!-- Publications Picker -->
             <div style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;" class="px-4 pb-4">
@@ -58,6 +59,102 @@
                 }
             </div>
         }
+        else if (OverlayMode == RssOverlayMode.ReadLater)
+        {
+            <!-- Read Later List -->
+            <div style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;" class="px-4 pb-4">
+                @if (!ArticleService.ReadLaterItems.Any())
+                {
+                    <div class="d-flex justify-center align-center" style="height: 200px;">
+                        <MudText Color="Color.Secondary">No articles saved for later.</MudText>
+                    </div>
+                }
+                else
+                {
+                    <MudGrid Spacing="4">
+                    @foreach (var dateGroup in ArticleService.ReadLaterItems.GroupBy(a => a.CreatedAt.ToLocalTime().Date).OrderByDescending(g => g.Key))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.overline" Class="px-2 pt-2 pb-1" Style="opacity: 0.6; font-weight: 700; letter-spacing: 0.1em;">
+                                @dateGroup.Key.ToString("D")
+                            </MudText>
+                            <MudDivider Class="mx-2 mb-2" />
+                        </MudItem>
+                        @foreach (var article in dateGroup)
+                        {
+                            <MudItem xs="12">
+                                <MudPaper Class="pa-3 cursor-pointer hover-scale tile-glass rounded-xl" @onclick="@(() => OpenSavedItem(article))">
+                                    <div class="d-flex gap-4 align-center">
+                                        @if (!string.IsNullOrEmpty(article.PublicationIconUrl))
+                                        {
+                                            <div class="rounded-lg flex-shrink-0 d-flex justify-center align-center" style="width: 60px; height: 50px;">
+                                                <MudImage Src="@article.PublicationIconUrl" Width="40" Height="40" ObjectFit="ObjectFit.Contain" />
+                                            </div>
+                                        }
+                                        <div class="d-flex flex-column flex-grow-1" style="min-width: 0;">
+                                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600; line-height: 1.2;">@article.Title</MudText>
+                                            <MudText Typo="Typo.caption" Class="mt-1" Style="opacity: 0.7;">@article.PublicationName • @article.ArticleDate.ToString("g")</MudText>
+                                        </div>
+                                        <MudIconButton Icon="@Icons.Material.Filled.BookmarkRemove" Size="Size.Small" Color="Color.Warning"
+                                                       OnClick="@(async () => await RemoveSaved(article.ArticleUrl, SavedArticleType.ReadLater))"
+                                                       OnClick:stopPropagation="true" Title="Remove" />
+                                    </div>
+                                </MudPaper>
+                            </MudItem>
+                        }
+                    }
+                    </MudGrid>
+                }
+            </div>
+        }
+        else if (OverlayMode == RssOverlayMode.Favorites)
+        {
+            <!-- Favorites List -->
+            <div style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;" class="px-4 pb-4">
+                @if (!ArticleService.FavoriteItems.Any())
+                {
+                    <div class="d-flex justify-center align-center" style="height: 200px;">
+                        <MudText Color="Color.Secondary">No favorite articles yet.</MudText>
+                    </div>
+                }
+                else
+                {
+                    <MudGrid Spacing="4">
+                    @foreach (var pubGroup in ArticleService.FavoriteItems.GroupBy(a => a.PublicationName).OrderBy(g => g.Key))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.overline" Class="px-2 pt-2 pb-1" Style="opacity: 0.6; font-weight: 700; letter-spacing: 0.1em;">
+                                @pubGroup.Key
+                            </MudText>
+                            <MudDivider Class="mx-2 mb-2" />
+                        </MudItem>
+                        @foreach (var article in pubGroup.OrderByDescending(a => a.ArticleDate))
+                        {
+                            <MudItem xs="12">
+                                <MudPaper Class="pa-3 cursor-pointer hover-scale tile-glass rounded-xl" @onclick="@(() => OpenSavedItem(article))">
+                                    <div class="d-flex gap-4 align-center">
+                                        @if (!string.IsNullOrEmpty(article.ImageUrl))
+                                        {
+                                            <div style="flex-shrink: 0;">
+                                                <MudImage Src="@article.ImageUrl" Width="@(_isMobile ? 80 : 200)" Height="@(_isMobile ? 54 : 135)" ObjectFit="ObjectFit.Cover" Class="rounded-xl elevation-2" />
+                                            </div>
+                                        }
+                                        <div class="d-flex flex-column flex-grow-1" style="min-width: 0;">
+                                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600; line-height: 1.2;">@article.Title</MudText>
+                                            <MudText Typo="Typo.caption" Class="mt-1" Style="opacity: 0.7;">@article.ArticleDate.ToString("g")</MudText>
+                                        </div>
+                                        <MudIconButton Icon="@Icons.Material.Filled.StarBorder" Size="Size.Small" Color="Color.Warning"
+                                                       OnClick="@(async () => await RemoveSaved(article.ArticleUrl, SavedArticleType.Favorite))"
+                                                       OnClick:stopPropagation="true" Title="Remove from favorites" />
+                                    </div>
+                                </MudPaper>
+                            </MudItem>
+                        }
+                    }
+                    </MudGrid>
+                }
+            </div>
+        }
         else
         {
             <!-- Articles List -->
@@ -87,6 +184,16 @@
                                                      @((MarkupString)StripHtml(item.Description))
                                                  </MudText>
                                             }
+                                        </div>
+                                        <div class="d-flex flex-column flex-shrink-0 justify-center" style="gap: 2px;">
+                                            <MudIconButton Icon="@(ArticleService.IsSaved(item.Link, SavedArticleType.ReadLater) ? Icons.Material.Filled.Bookmark : Icons.Material.Filled.BookmarkBorder)" 
+                                                           Size="Size.Small" Color="@(ArticleService.IsSaved(item.Link, SavedArticleType.ReadLater) ? Color.Primary : Color.Default)"
+                                                           OnClick="@(async () => await ToggleSave(item, SavedArticleType.ReadLater))" OnClick:stopPropagation="true"
+                                                           Title="Read Later" />
+                                            <MudIconButton Icon="@(ArticleService.IsSaved(item.Link, SavedArticleType.Favorite) ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)" 
+                                                           Size="Size.Small" Color="@(ArticleService.IsSaved(item.Link, SavedArticleType.Favorite) ? Color.Warning : Color.Default)"
+                                                           OnClick="@(async () => await ToggleSave(item, SavedArticleType.Favorite))" OnClick:stopPropagation="true"
+                                                           Title="Favorite" />
                                         </div>
                                     </div>
                                 </MudPaper>
@@ -139,7 +246,7 @@
                                  {
                                      <MudImage Src="@RssService.CurrentFeed.IconUrl" Width="20" Height="20" Class="me-2 rounded-circle" ObjectFit="ObjectFit.Cover" />
                                  }
-                                 <MudText Typo="Typo.caption" Style="opacity: 0.8;">
+                                 <MudText Typo="Typo.caption" Style="opacity: 0.8;" Class="flex-grow-1">
                                      <span class="fw-bold">@RssService.CurrentFeed?.Name</span>
                                      @if (!string.IsNullOrEmpty(_selectedItem.Author))
                                      {
@@ -147,6 +254,14 @@
                                      } 
                                      • @_selectedItem.PublishDate.ToString("f")
                                  </MudText>
+                                 <MudIconButton Icon="@(ArticleService.IsSaved(_selectedItem.Link, SavedArticleType.ReadLater) ? Icons.Material.Filled.Bookmark : Icons.Material.Filled.BookmarkBorder)" 
+                                                Size="Size.Small" Color="@(ArticleService.IsSaved(_selectedItem.Link, SavedArticleType.ReadLater) ? Color.Primary : Color.Default)"
+                                                OnClick="@(async () => await ToggleSave(_selectedItem, SavedArticleType.ReadLater))"
+                                                Title="Read Later" />
+                                 <MudIconButton Icon="@(ArticleService.IsSaved(_selectedItem.Link, SavedArticleType.Favorite) ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)" 
+                                                Size="Size.Small" Color="@(ArticleService.IsSaved(_selectedItem.Link, SavedArticleType.Favorite) ? Color.Warning : Color.Default)"
+                                                OnClick="@(async () => await ToggleSave(_selectedItem, SavedArticleType.Favorite))"
+                                                Title="Favorite" />
                             </div>
     
                             <!-- Featured Image (Only if NOT in Reader Mode or if desired) -->
@@ -214,8 +329,8 @@
 </style>
 
 @code {
-    [Parameter] public bool ShowPublications { get; set; }
-    [Parameter] public EventCallback<bool> ShowPublicationsChanged { get; set; }
+    [Parameter] public RssOverlayMode OverlayMode { get; set; }
+    [Parameter] public EventCallback<RssOverlayMode> OverlayModeChanged { get; set; }
 
     private RssItem? _selectedItem = null;
     private bool _isArticleLoading = false;
@@ -228,10 +343,10 @@
     private const int _pageSize = 10;
     private int _pageCount => RssService.Items != null ? (int)Math.Ceiling((double)RssService.Items.Count / _pageSize) : 0;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone;
-        
+
         if (Application.Current != null)
         {
             _isDarkMode = Application.Current.RequestedTheme == AppTheme.Dark;
@@ -240,15 +355,18 @@
 
         RssService.OnItemsUpdated += StateHasChanged;
         RssService.OnFeedChanged += OnFeedChanged;
+        ArticleService.OnItemsChanged += OnArticleItemsChanged;
         NavService.OnArticleLinkChanged += OnArticleLinkChanged;
         NavService.OnBrowserStateChanged += OnBrowserStateChanged;
         NavService.OnReaderModeChanged += OnReaderModeChanged;
         RefreshService.DetailRefreshRequested += OnDetailRefresh;
-        
+
+        await ArticleService.InitializeAsync();
+
         // Check if we were navigated to with a specific item
         if (NavService.CurrentData is RssItem item)
         {
-            _ = OpenItem(item);
+            await OpenItem(item);
         }
         else if (!string.IsNullOrEmpty(NavService.CurrentArticleLink))
         {
@@ -256,7 +374,7 @@
             var existingItem = RssService.Items.FirstOrDefault(i => i.Link == NavService.CurrentArticleLink);
             if (existingItem != null)
             {
-                _ = OpenItem(existingItem);
+                await OpenItem(existingItem);
             }
         }
     }
@@ -275,11 +393,17 @@
         }
         RssService.OnItemsUpdated -= StateHasChanged;
         RssService.OnFeedChanged -= OnFeedChanged;
+        ArticleService.OnItemsChanged -= OnArticleItemsChanged;
         NavService.OnArticleLinkChanged -= OnArticleLinkChanged;
         NavService.OnBrowserStateChanged -= OnBrowserStateChanged;
         NavService.OnReaderModeChanged -= OnReaderModeChanged;
         RefreshService.DetailRefreshRequested -= OnDetailRefresh;
         _backButtonService.Unregister(OnBackNative);
+    }
+
+    private void OnArticleItemsChanged()
+    {
+        InvokeAsync(StateHasChanged);
     }
     
     private void OnFeedChanged()
@@ -419,9 +543,35 @@
 
     private async Task SelectPublication(FeedSource feed)
     {
-        await ShowPublicationsChanged.InvokeAsync(false);
+        await OverlayModeChanged.InvokeAsync(RssOverlayMode.None);
         _currentPage = 1;
         RssService.SelectFeed(feed);
+    }
+
+    private void OpenSavedItem(LocalSavedArticle article)
+    {
+        var rssItem = new RssItem
+        {
+            Title = article.Title,
+            Link = article.ArticleUrl,
+            PublishDate = article.ArticleDate,
+            ImageUrl = article.ImageUrl,
+            Description = article.Description,
+            Author = article.Author
+        };
+        _ = OpenItem(rssItem);
+    }
+
+    private async Task ToggleSave(RssItem item, SavedArticleType type)
+    {
+        var pubName = RssService.CurrentFeed?.Name ?? "Unknown";
+        var pubIcon = RssService.CurrentFeed?.IconUrl;
+        await ArticleService.ToggleArticleAsync(item, pubName, pubIcon, type);
+    }
+
+    private async Task RemoveSaved(string articleUrl, SavedArticleType type)
+    {
+        await ArticleService.RemoveArticleAsync(articleUrl, type);
     }
 
     private static string GetCategoryLabel(FeedCategory category) => category switch

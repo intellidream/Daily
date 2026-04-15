@@ -1,4 +1,6 @@
 using System;
+using Supabase.Postgrest.Attributes;
+using Supabase.Postgrest.Models;
 
 namespace Daily.Models
 {
@@ -14,6 +16,69 @@ namespace Daily.Models
         Markets,
         World,
         Tech
+    }
+
+    public enum RssOverlayMode
+    {
+        None,
+        Publications,
+        ReadLater,
+        Favorites
+    }
+
+    public enum SavedArticleType
+    {
+        ReadLater,
+        Favorite
+    }
+
+    [Table("rss_saved_articles")]
+    public class SavedArticle : BaseModel
+    {
+        [PrimaryKey("id")]
+        public Guid Id { get; set; }
+
+        [Column("user_id")]
+        public Guid UserId { get; set; }
+
+        [Column("article_url")]
+        public string ArticleUrl { get; set; } = string.Empty;
+
+        [Column("title")]
+        public string Title { get; set; } = string.Empty;
+
+        [Column("image_url")]
+        public string? ImageUrl { get; set; }
+
+        [Column("description")]
+        public string? Description { get; set; }
+
+        [Column("author")]
+        public string? Author { get; set; }
+
+        [Column("publication_name")]
+        public string PublicationName { get; set; } = string.Empty;
+
+        [Column("publication_icon_url")]
+        public string? PublicationIconUrl { get; set; }
+
+        [Column("article_type")]
+        public string ArticleType { get; set; } = "ReadLater"; // "ReadLater" or "Favorite"
+
+        [Column("article_date")]
+        public DateTime ArticleDate { get; set; }
+
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; }
+
+        [Column("updated_at")]
+        public DateTime? UpdatedAt { get; set; }
+
+        [Column("is_deleted")]
+        public bool IsDeleted { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        public DateTime? SyncedAt { get; set; }
     }
 
     public class FeedSource

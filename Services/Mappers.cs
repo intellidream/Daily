@@ -191,7 +191,7 @@ namespace Daily.Services
         }
 
         // --- Helpers ---
-        
+
         private static Guid GenerateGuid(string input)
         {
             using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
@@ -199,6 +199,52 @@ namespace Daily.Services
                 byte[] hash = md5.ComputeHash(System.Text.Encoding.Default.GetBytes(input));
                 return new Guid(hash);
             }
+        }
+
+        // --- SavedArticle ---
+
+        public static SavedArticle ToDomain(this LocalSavedArticle local)
+        {
+            return new SavedArticle
+            {
+                Id = Guid.Parse(local.Id),
+                UserId = Guid.Parse(local.UserId),
+                ArticleUrl = local.ArticleUrl,
+                Title = local.Title,
+                ImageUrl = local.ImageUrl,
+                Description = local.Description,
+                Author = local.Author,
+                PublicationName = local.PublicationName,
+                PublicationIconUrl = local.PublicationIconUrl,
+                ArticleType = local.ArticleType,
+                ArticleDate = SafeUtc(local.ArticleDate),
+                CreatedAt = SafeUtc(local.CreatedAt),
+                UpdatedAt = SafeUtc(local.UpdatedAt),
+                IsDeleted = local.IsDeleted,
+                SyncedAt = SafeUtc(local.SyncedAt)
+            };
+        }
+
+        public static LocalSavedArticle ToLocal(this SavedArticle domain)
+        {
+            return new LocalSavedArticle
+            {
+                Id = domain.Id.ToString(),
+                UserId = domain.UserId.ToString(),
+                ArticleUrl = domain.ArticleUrl,
+                Title = domain.Title,
+                ImageUrl = domain.ImageUrl,
+                Description = domain.Description,
+                Author = domain.Author,
+                PublicationName = domain.PublicationName,
+                PublicationIconUrl = domain.PublicationIconUrl,
+                ArticleType = domain.ArticleType,
+                ArticleDate = domain.ArticleDate.ToUniversalTime(),
+                CreatedAt = domain.CreatedAt.ToUniversalTime(),
+                UpdatedAt = domain.UpdatedAt?.ToUniversalTime(),
+                IsDeleted = domain.IsDeleted,
+                SyncedAt = domain.SyncedAt?.ToUniversalTime()
+            };
         }
     }
 }

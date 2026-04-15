@@ -149,4 +149,37 @@ namespace Daily.Models
         public int HourOfDay { get; set; }
         public DateTime Timestamp { get; set; }
     }
+
+    [Table("rss_saved_articles")]
+    public class LocalSavedArticle
+    {
+        [PrimaryKey]
+        public string Id { get; set; } // UUID as string
+
+        [Indexed]
+        public string UserId { get; set; }
+
+        [Indexed]
+        public string ArticleUrl { get; set; } = string.Empty;
+
+        public string Title { get; set; } = string.Empty;
+        public string? ImageUrl { get; set; }
+        public string? Description { get; set; }
+        public string? Author { get; set; }
+
+        [Indexed]
+        public string PublicationName { get; set; } = string.Empty;
+        public string? PublicationIconUrl { get; set; }
+
+        [Indexed]
+        public string ArticleType { get; set; } = "ReadLater"; // "ReadLater" or "Favorite"
+
+        public DateTime ArticleDate { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+
+        [Indexed]
+        public DateTime? SyncedAt { get; set; } // Null = Dirty
+        public bool IsDeleted { get; set; }
+    }
 }

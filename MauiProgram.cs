@@ -139,6 +139,7 @@ namespace Daily
             builder.Services.AddSingleton<Daily.Services.IRssFeedService, Daily.Services.RssFeedService>();
             // Register Concrete execution to use the SAME instance (prevent split singleton)
             builder.Services.AddSingleton<Daily.Services.RssFeedService>(sp => (Daily.Services.RssFeedService)sp.GetRequiredService<Daily.Services.IRssFeedService>());
+            builder.Services.AddSingleton<Daily.Services.IRssArticleService, Daily.Services.RssArticleService>();
             builder.Services.AddSingleton<Daily.Services.ISettingsService, Daily.Services.SettingsService>();
             builder.Services.AddSingleton<Daily.Services.IAuthService, Daily.Services.AuthService>();
             builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
