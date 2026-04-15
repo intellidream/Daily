@@ -62,7 +62,7 @@
 
     @if (_showPublications)
     {
-        <div style="flex-grow: 1; overflow-y: auto;">
+        <div style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;" class="pb-3">
             @foreach (var category in Enum.GetValues<FeedCategory>())
             {
                 var feedsInCategory = RssService.Feeds.Where(f => f.Category == category).ToList();

@@ -22,7 +22,7 @@
         @if (ShowPublications)
         {
             <!-- Publications Picker -->
-            <div style="flex-grow: 1; overflow-y: auto;" class="px-4">
+            <div style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;" class="px-4 pb-4">
                 @foreach (var category in Enum.GetValues<FeedCategory>())
                 {
                     var feedsInCategory = RssService.Feeds.Where(f => f.Category == category).ToList();
@@ -61,7 +61,7 @@
         else
         {
             <!-- Articles List -->
-            <div style="flex-grow: 1; overflow-y: auto;" class="px-4">
+            <div style="flex-grow: 1; overflow-y: auto;" class="px-4 pb-4">
                 <MudGrid Spacing="4">
                     @if (RssService.Items != null)
                     {
