@@ -15,7 +15,7 @@
             <div class="d-flex align-center justify-center rounded-pill mud-theme-primary px-4" style="height: 40px; width: 100%;">
                 <MudIcon Icon="@Icons.Material.Filled.Newspaper" Size="Size.Small" Style="color: white;" Class="mr-2" />
                 <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 1.1em; color: white;">
-                    Publications
+                    News
                 </MudText>
             </div>
         }
@@ -24,7 +24,7 @@
             <div class="d-flex align-center justify-center rounded-pill mud-theme-primary px-4" style="height: 40px; width: 100%;">
                 <MudIcon Icon="@Icons.Material.Filled.BookmarkBorder" Size="Size.Small" Style="color: white;" Class="mr-2" />
                 <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 1.1em; color: white;">
-                    Read Later (@ArticleService.ReadLaterItems.Count)
+                    Later (@ArticleService.ReadLaterItems.Count)
                 </MudText>
             </div>
         }
@@ -33,7 +33,7 @@
             <div class="d-flex align-center justify-center rounded-pill mud-theme-primary px-4" style="height: 40px; width: 100%;">
                 <MudIcon Icon="@Icons.Material.Filled.Star" Size="Size.Small" Style="color: white;" Class="mr-2" />
                 <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 1.1em; color: white;">
-                    Favorites (@ArticleService.FavoriteItems.Count)
+                    Favs (@ArticleService.FavoriteItems.Count)
                 </MudText>
             </div>
         }
@@ -84,18 +84,18 @@
 
 @if (_showRssMenu)
 {
-    <div class="d-flex gap-1 px-1 pb-1 flex-wrap">
+    <div class="d-flex gap-1 px-1 pb-1 flex-wrap justify-center">
         <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Newspaper" Color="Color.Primary"
                    OnClick="@(() => { _showRssMenu = false; SetOverlayMode(RssOverlayMode.Publications); })" Style="text-transform: none; font-size: 0.75rem;">
-            Publications
+            News
         </MudButton>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.BookmarkBorder" Color="Color.Primary"
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.BookmarkBorder" Color="Color.Error"
                    OnClick="@(() => { _showRssMenu = false; SetOverlayMode(RssOverlayMode.ReadLater); })" Style="text-transform: none; font-size: 0.75rem;">
-            Read Later (@ArticleService.ReadLaterItems.Count)
+            Later (@ArticleService.ReadLaterItems.Count)
         </MudButton>
         <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Star" Color="Color.Warning"
                    OnClick="@(() => { _showRssMenu = false; SetOverlayMode(RssOverlayMode.Favorites); })" Style="text-transform: none; font-size: 0.75rem;">
-            Favorites (@ArticleService.FavoriteItems.Count)
+            Favs (@ArticleService.FavoriteItems.Count)
         </MudButton>
     </div>
 }
@@ -175,7 +175,7 @@
                                     <MudText Typo="Typo.body2" Style="line-height: 1.2; max-height: 2.4em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">@article.Title</MudText>
                                     <MudText Typo="Typo.caption" Style="font-size: 0.7rem; opacity: 0.8;" Class="mt-0">@article.PublicationName</MudText>
                                 </div>
-                                <MudIconButton Icon="@Icons.Material.Filled.BookmarkRemove" Size="Size.Small" Color="Color.Warning"
+                                <MudIconButton Icon="@Icons.Material.Filled.BookmarkRemove" Size="Size.Small" Color="Color.Error"
                                                OnClick="@(async () => await RemoveSaved(article.ArticleUrl, SavedArticleType.ReadLater))"
                                                OnClick:stopPropagation="true" Title="Remove" />
                             </div>
@@ -273,7 +273,7 @@
                         </div>
                         <div class="d-flex flex-column flex-shrink-0" style="gap: 0;">
                             <MudIconButton Icon="@(ArticleService.IsSaved(item.Link, SavedArticleType.ReadLater) ? Icons.Material.Filled.Bookmark : Icons.Material.Filled.BookmarkBorder)" 
-                                           Size="Size.Small" Color="@(ArticleService.IsSaved(item.Link, SavedArticleType.ReadLater) ? Color.Primary : Color.Default)"
+                                           Size="Size.Small" Color="@(ArticleService.IsSaved(item.Link, SavedArticleType.ReadLater) ? Color.Error : Color.Default)"
                                            OnClick="@(async () => await ToggleSave(item, SavedArticleType.ReadLater))" OnClick:stopPropagation="true"
                                            Title="Read Later" Style="padding: 2px;" />
                             <MudIconButton Icon="@(ArticleService.IsSaved(item.Link, SavedArticleType.Favorite) ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)" 

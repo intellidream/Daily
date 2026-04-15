@@ -22,7 +22,7 @@
 
         @if (OverlayMode == RssOverlayMode.Publications)
         {
-            <!-- Publications Picker -->
+            <!-- News Picker -->
             <div style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;" class="px-4 pb-4">
                 @foreach (var category in Enum.GetValues<FeedCategory>())
                 {
@@ -61,7 +61,7 @@
         }
         else if (OverlayMode == RssOverlayMode.ReadLater)
         {
-            <!-- Read Later List -->
+            <!-- Later List -->
             <div style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;" class="px-4 pb-4">
                 @if (!ArticleService.ReadLaterItems.Any())
                 {
@@ -95,7 +95,7 @@
                                             <MudText Typo="Typo.subtitle1" Style="font-weight: 600; line-height: 1.2;">@article.Title</MudText>
                                             <MudText Typo="Typo.caption" Class="mt-1" Style="opacity: 0.7;">@article.PublicationName • @article.ArticleDate.ToString("g")</MudText>
                                         </div>
-                                        <MudIconButton Icon="@Icons.Material.Filled.BookmarkRemove" Size="Size.Small" Color="Color.Warning"
+                                        <MudIconButton Icon="@Icons.Material.Filled.BookmarkRemove" Size="Size.Small" Color="Color.Error"
                                                        OnClick="@(async () => await RemoveSaved(article.ArticleUrl, SavedArticleType.ReadLater))"
                                                        OnClick:stopPropagation="true" Title="Remove" />
                                     </div>
@@ -109,7 +109,7 @@
         }
         else if (OverlayMode == RssOverlayMode.Favorites)
         {
-            <!-- Favorites List -->
+            <!-- Favs List -->
             <div style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;" class="px-4 pb-4">
                 @if (!ArticleService.FavoriteItems.Any())
                 {
@@ -187,7 +187,7 @@
                                         </div>
                                         <div class="d-flex flex-column flex-shrink-0 justify-center" style="gap: 2px;">
                                             <MudIconButton Icon="@(ArticleService.IsSaved(item.Link, SavedArticleType.ReadLater) ? Icons.Material.Filled.Bookmark : Icons.Material.Filled.BookmarkBorder)" 
-                                                           Size="Size.Small" Color="@(ArticleService.IsSaved(item.Link, SavedArticleType.ReadLater) ? Color.Primary : Color.Default)"
+                                                           Size="Size.Small" Color="@(ArticleService.IsSaved(item.Link, SavedArticleType.ReadLater) ? Color.Error : Color.Default)"
                                                            OnClick="@(async () => await ToggleSave(item, SavedArticleType.ReadLater))" OnClick:stopPropagation="true"
                                                            Title="Read Later" />
                                             <MudIconButton Icon="@(ArticleService.IsSaved(item.Link, SavedArticleType.Favorite) ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)" 
@@ -255,9 +255,9 @@
                                      • @_selectedItem.PublishDate.ToString("f")
                                  </MudText>
                                  <MudIconButton Icon="@(ArticleService.IsSaved(_selectedItem.Link, SavedArticleType.ReadLater) ? Icons.Material.Filled.Bookmark : Icons.Material.Filled.BookmarkBorder)" 
-                                                Size="Size.Small" Color="@(ArticleService.IsSaved(_selectedItem.Link, SavedArticleType.ReadLater) ? Color.Primary : Color.Default)"
-                                                OnClick="@(async () => await ToggleSave(_selectedItem, SavedArticleType.ReadLater))"
-                                                Title="Read Later" />
+                                                 Size="Size.Small" Color="@(ArticleService.IsSaved(_selectedItem.Link, SavedArticleType.ReadLater) ? Color.Error : Color.Default)"
+                                                 OnClick="@(async () => await ToggleSave(_selectedItem, SavedArticleType.ReadLater))"
+                                                 Title="Read Later" />
                                  <MudIconButton Icon="@(ArticleService.IsSaved(_selectedItem.Link, SavedArticleType.Favorite) ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)" 
                                                 Size="Size.Small" Color="@(ArticleService.IsSaved(_selectedItem.Link, SavedArticleType.Favorite) ? Color.Warning : Color.Default)"
                                                 OnClick="@(async () => await ToggleSave(_selectedItem, SavedArticleType.Favorite))"
