@@ -15,11 +15,8 @@ namespace Daily.Platforms.Windows
             if (_trayIcon == null)
             {
                 var menu = new MenuFlyout();
-                var showItem = new MenuFlyoutItem { Text = "Show" };
-                showItem.Clicked += (s, e) => ClickHandler?.Invoke();
-                
-                var exitItem = new MenuFlyoutItem { Text = "Exit" };
-                exitItem.Clicked += (s, e) => Application.Current?.Quit();
+                var showItem = new MenuFlyoutItem { Text = "Show", Command = new Command(() => ClickHandler?.Invoke()) };
+                var exitItem = new MenuFlyoutItem { Text = "Exit", Command = new Command(() => Application.Current?.Quit()) };
                 
                 menu.Add(showItem);
                 menu.Add(exitItem);
