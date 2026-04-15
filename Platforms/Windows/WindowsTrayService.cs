@@ -28,9 +28,10 @@ namespace Daily.Platforms.Windows
                 {
                     IconSource = "appicon_windows.ico",
                     ToolTipText = "Daily",
-                    ContextFlyout = menu,
                     LeftClickCommand = new Command(() => ClickHandler?.Invoke())
                 };
+
+                FlyoutBase.SetContextFlyout(_trayIcon, menu);
 
                 // Create the native tray icon
                 _trayIcon.ForceCreate();
