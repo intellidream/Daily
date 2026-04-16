@@ -217,7 +217,9 @@ namespace Daily.Services
                     ImageUrl = imageUrl ?? channelImage,
                     Description = description,
                     Content = contentEncoded,
-                    Author = author
+                    Author = author,
+                    PublicationName = feed.Name,
+                    PublicationIconUrl = feed.IconUrl
                 };
             }).ToList();
         }
@@ -284,7 +286,9 @@ namespace Daily.Services
                      ImageUrl = imageUrl,
                      Description = excerpt,
                      Content = content,
-                     Author = author
+                     Author = author,
+                     PublicationName = feed.Name,
+                     PublicationIconUrl = feed.IconUrl
                 });
             }
             // Atomic Swap
@@ -307,7 +311,9 @@ namespace Daily.Services
                             Content = renderedArticle.Content,
                             Description = renderedArticle.Excerpt ?? renderedArticle.TextContent,
                             Author = renderedArticle.Byline,
-                            PublishDate = DateTime.Now
+                            PublishDate = DateTime.Now,
+                            PublicationName = CurrentFeed?.Name,
+                            PublicationIconUrl = CurrentFeed?.IconUrl
                         };
                     }
                 }
@@ -417,7 +423,9 @@ namespace Daily.Services
                         Description = article.Excerpt,
                         ImageUrl = featImg,
                         PublishDate = article.PublicationDate ?? DateTime.Now,
-                        Author = author
+                        Author = author,
+                        PublicationName = CurrentFeed?.Name,
+                        PublicationIconUrl = CurrentFeed?.IconUrl
                     };
                 }
             }

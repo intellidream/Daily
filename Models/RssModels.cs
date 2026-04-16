@@ -108,5 +108,8 @@ namespace Daily.Models
         public string? Description { get; set; } // Summary/Excerpt
         public string? Content { get; set; }     // Full Content
         public string? Author { get; set; }
+
+        public string? PublicationName { get; set; }
+        public string? PublicationIconUrl { get; set; }
     }
 }

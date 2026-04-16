@@ -242,12 +242,12 @@
                         else
                         {
                              <div class="d-flex align-center mb-6">
-                                 @if (!string.IsNullOrEmpty(RssService.CurrentFeed?.IconUrl))
+                                 @if (!string.IsNullOrEmpty(_selectedItem.PublicationIconUrl ?? RssService.CurrentFeed?.IconUrl))
                                  {
-                                     <MudImage Src="@RssService.CurrentFeed.IconUrl" Width="20" Height="20" Class="me-2 rounded-circle" ObjectFit="ObjectFit.Cover" />
+                                     <MudImage Src="@(_selectedItem.PublicationIconUrl ?? RssService.CurrentFeed?.IconUrl)" Width="20" Height="20" Class="me-2 rounded-circle" ObjectFit="ObjectFit.Cover" />
                                  }
                                  <MudText Typo="Typo.caption" Style="opacity: 0.8;" Class="flex-grow-1">
-                                     <span class="fw-bold">@RssService.CurrentFeed?.Name</span>
+                                     <span class="fw-bold">@(_selectedItem.PublicationName ?? RssService.CurrentFeed?.Name)</span>
                                      @if (!string.IsNullOrEmpty(_selectedItem.Author))
                                      {
                                          <span> • @_selectedItem.Author</span>
@@ -557,7 +557,9 @@
             PublishDate = article.ArticleDate,
             ImageUrl = article.ImageUrl,
             Description = article.Description,
-            Author = article.Author
+            Author = article.Author,
+            PublicationName = article.PublicationName,
+            PublicationIconUrl = article.PublicationIconUrl
         };
         _ = OpenItem(rssItem);
     }

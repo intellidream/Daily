@@ -419,7 +419,9 @@
             PublishDate = article.ArticleDate,
             ImageUrl = article.ImageUrl,
             Description = article.Description,
-            Author = article.Author
+            Author = article.Author,
+            PublicationName = article.PublicationName,
+            PublicationIconUrl = article.PublicationIconUrl
         };
         WindowManager.OpenDetail("RssFeed", rssItem.Title, rssItem);
         _ = SmartAgent.RecordEventAsync("RssFeedWidget", "read_saved_article");

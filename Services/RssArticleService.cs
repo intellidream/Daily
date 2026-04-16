@@ -152,7 +152,7 @@ namespace Daily.Services
             }
             else
             {
-                await SaveArticleAsync(item, publicationName, publicationIconUrl, type);
+                await SaveArticleAsync(item, item.PublicationName ?? publicationName, item.PublicationIconUrl ?? publicationIconUrl, type);
             }
         }
     }
