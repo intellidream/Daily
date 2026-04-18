@@ -106,6 +106,9 @@
         
         // Safety: If start is invalid or future, default to 30 days back
         if (start == DateTime.MinValue || start > end) start = end.AddDays(-30);
+
+        // Ensure start is at least 30 days ago to always allow some history
+        if ((end - start).TotalDays < 30) start = end.AddDays(-30);
         
         // If range is suspiciously small (e.g. < 5 days), maybe User just started? 
         // We stick to the request: "from started date... up to current date".

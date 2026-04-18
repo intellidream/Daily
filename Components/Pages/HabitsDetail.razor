@@ -285,7 +285,7 @@
                     <!-- Moved Date Picker Here per user request for bigger size & centering -->
                     <!-- Custom Film Strip Date Selector -->
                     <div class="d-flex justify-center w-100 mt-4">
-                        <DateFilmStrip StartDate="@((_smokesQuitDate.HasValue && _smokesQuitDate.Value < DateTime.Today ? _smokesQuitDate.Value : DateTime.Today.AddDays(-30)))" 
+                        <DateFilmStrip StartDate="@((_smokesQuitDate.HasValue ? _smokesQuitDate.Value : DateTime.Today.AddDays(-30)))" 
                                       EndDate="@DateTime.Today"
                                       SelectedDate="@(_viewDate ?? DateTime.Today)"
                                       SelectedDateChanged="@(d => OnViewDateChanged(d))" />
