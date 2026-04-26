@@ -49,14 +49,14 @@ namespace Daily.Services
         {
             if (_syncTimer == null)
             {
-                // Sync every 60 seconds
+                // Sync every 15 minutes (900000 ms)
                 _syncTimer = new System.Threading.Timer(async _ => 
                 {
                     if (_supabase.Auth.CurrentSession != null)
                     {
                         await SyncAsync();
                     }
-                }, null, 10000, 60000); 
+                }, null, 10000, 900000); 
                 Console.WriteLine("[SyncService] Background Sync Started.");
             }
         }
@@ -200,6 +200,9 @@ namespace Daily.Services
 
             int totalPulled = 0;
 
+            var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+            DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
             // 1. Pull Logs (Paginated to get all ~90 days of history ~2000 items)
             try {
                 Console.Error.WriteLine($"[SyncService] Pulling Logs for User: {userId}...");
@@ -212,10 +215,15 @@ namespace Daily.Services
                 {
                     Console.Error.WriteLine($"[SyncService] Pulling Logs range {rangeStart}-{rangeEnd}...");
                     
-                    var response = await _supabase.From<HabitLog>()
-                        .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending)
-                        .Range(rangeStart, rangeEnd)
-                        .Get();
+                    var query = _supabase.From<HabitLog>()
+                        .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending);
+                    
+                    if (lastPull > DateTime.MinValue)
+                    {
+                        query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                    }
+
+                    var response = await query.Range(rangeStart, rangeEnd).Get();
 
                     int count = response.Models.Count;
                     if (count > 0)
@@ -256,9 +264,12 @@ namespace Daily.Services
             // 2. Pull Goals
             try {
                 Console.WriteLine($"[SyncService] Pulling Goals for User: {userId}...");
-                var goalResponse = await _supabase.From<HabitGoal>()
-                    //.Where(x => x.UserId == Guid.Parse(userId)) // REMOVED: Rely on RLS
-                    .Get();
+                var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<HabitGoal>)_supabase.From<HabitGoal>();
+                if (lastPull > DateTime.MinValue)
+                {
+                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                }
+                var goalResponse = await query.Get();
 
                 Console.WriteLine($"[SyncService] Pulled {goalResponse.Models.Count} goals from Cloud.");
                 totalPulled += goalResponse.Models.Count;
@@ -286,6 +297,12 @@ namespace Daily.Services
 
             // 5. Pull Saved Articles (Read Later / Favorites)
             totalPulled += await PullSavedArticlesAsync(userId);
+
+            if (totalPulled >= 0)
+            {
+                // Using UtcNow as the marker for the NEXT sync
+                Microsoft.Maui.Storage.Preferences.Default.Set("SyncService_LastPullTime", DateTime.UtcNow.ToString("O"));
+            }
 
             return totalPulled;
         }
@@ -444,9 +461,15 @@ namespace Daily.Services
         {
              try {
                 Console.WriteLine($"[SyncService] Pulling Preferences for User: {userId}...");
-                var response = await _supabase.From<UserPreferences>()
-                    .Where(x => x.Id == userId) // Valid for string ID
-                    .Get();
+                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
+                var query = _supabase.From<UserPreferences>()
+                    .Where(x => x.Id == userId); // Valid for string ID
+                    
+                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+
+                var response = await query.Get();
 
                 Console.WriteLine($"[SyncService] Pulled {response.Models.Count} preferences from Cloud.");
                 
@@ -652,11 +675,16 @@ namespace Daily.Services
                  {
                      Console.WriteLine($"[SyncService] Pulling Summaries range {rangeStart}-{rangeEnd}...");
                      
+                     var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                     DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
                      var userGuid = Guid.Parse(userId);
-                     var response = await _supabase.From<DailySummary>()
-                        .Where(x => x.UserId == userGuid)
-                        .Range(rangeStart, rangeEnd)
-                        .Get();
+                     var query = _supabase.From<DailySummary>()
+                        .Where(x => x.UserId == userGuid);
+                     
+                     if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+
+                     var response = await query.Range(rangeStart, rangeEnd).Get();
 
                      var count = response.Models.Count;
                      if (count > 0)
@@ -731,7 +759,13 @@ namespace Daily.Services
         {
             try 
             {
-                var response = await _supabase.From<Account>().Where(a => a.UserId == Guid.Parse(userId)).Get();
+                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
+                var query = _supabase.From<Account>().Where(a => a.UserId == Guid.Parse(userId));
+                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                
+                var response = await query.Get();
                 int count = response.Models.Count;
                 if (count > 0)
                 {
@@ -820,8 +854,14 @@ namespace Daily.Services
             
             try 
             {
+                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
                 // Range logic for transactions if many?
-                var response = await _supabase.From<Transaction>().Order("date", Supabase.Postgrest.Constants.Ordering.Descending).Limit(1000).Get();
+                var query = _supabase.From<Transaction>().Order("date", Supabase.Postgrest.Constants.Ordering.Descending);
+                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+
+                var response = await query.Limit(1000).Get();
                 int count = response.Models.Count;
                 if (count > 0)
                 {
@@ -880,7 +920,13 @@ namespace Daily.Services
         {
             try 
             {
-                var response = await _supabase.From<Holding>().Limit(1000).Get(); // RLS handles userid via account join
+                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
+                var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<Holding>)_supabase.From<Holding>(); // RLS handles userid via account join
+                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+
+                var response = await query.Limit(1000).Get();
                 int count = response.Models.Count;
                 if (count > 0)
                 {
@@ -1006,7 +1052,13 @@ namespace Daily.Services
             try
             {
                 Console.WriteLine($"[SyncService] Pulling Saved Articles for User: {userId}...");
-                var response = await _supabase.From<SavedArticle>().Get();
+                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
+                var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<SavedArticle>)_supabase.From<SavedArticle>();
+                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                
+                var response = await query.Get();
 
                 Console.WriteLine($"[SyncService] Pulled {response.Models.Count} saved articles from Cloud.");
 
