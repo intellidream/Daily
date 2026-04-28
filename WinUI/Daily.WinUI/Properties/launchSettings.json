@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Daily.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Daily.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

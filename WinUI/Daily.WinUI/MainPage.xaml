@@ -1,0 +1,470 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="Daily_WinUI.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Daily_WinUI"
+    xmlns:models="using:Daily_WinUI.Models"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#FF0E1F3A" Offset="0" />
+            <GradientStop Color="#FF163760" Offset="0.45" />
+            <GradientStop Color="#FF236A88" Offset="1" />
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="AccentBlueBrush" Color="#FF69B6FF" />
+        <SolidColorBrush x:Key="AccentMintBrush" Color="#FF7FF0D5" />
+        <SolidColorBrush x:Key="AccentSunBrush" Color="#FFFFD166" />
+        <SolidColorBrush x:Key="AccentRoseBrush" Color="#FFFF8FA3" />
+        <SolidColorBrush x:Key="ButtonPrimaryBrush" Color="#CC2274D8" />
+        <SolidColorBrush x:Key="ButtonSecondaryBrush" Color="#AA165AA8" />
+        <SolidColorBrush x:Key="ShellBrush" Color="#20FFFFFF" />
+        <SolidColorBrush x:Key="ShellBorderBrush" Color="#46FFFFFF" />
+        <SolidColorBrush x:Key="TileBrush" Color="#18FFFFFF" />
+        <SolidColorBrush x:Key="TileBorderBrush" Color="#30FFFFFF" />
+        <SolidColorBrush x:Key="SubTileBrush" Color="#15FFFFFF" />
+        <SolidColorBrush x:Key="ForecastCardBrush" Color="#14FFFFFF" />
+        <SolidColorBrush x:Key="ForecastCardBorderBrush" Color="#33FFFFFF" />
+    </Page.Resources>
+
+    <Grid Background="Transparent">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="MobileState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="GlassShell.Margin" Value="12" />
+                        <Setter Target="GlassShell.Padding" Value="14" />
+                        <Setter Target="DashboardGrid.ColumnSpacing" Value="0" />
+                        <Setter Target="PrimaryPanel.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="SideRailPanel.(Grid.Row)" Value="1" />
+                        <Setter Target="SideRailPanel.(Grid.Column)" Value="0" />
+                        <Setter Target="SideRailPanel.(Grid.ColumnSpan)" Value="2" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="DesktopState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1000" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="GlassShell.Margin" Value="28" />
+                        <Setter Target="GlassShell.Padding" Value="26" />
+                        <Setter Target="DashboardGrid.ColumnSpacing" Value="16" />
+                        <Setter Target="PrimaryPanel.(Grid.ColumnSpan)" Value="1" />
+                        <Setter Target="SideRailPanel.(Grid.Row)" Value="0" />
+                        <Setter Target="SideRailPanel.(Grid.Column)" Value="1" />
+                        <Setter Target="SideRailPanel.(Grid.ColumnSpan)" Value="1" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" VerticalScrollMode="Enabled" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled">
+            <Border x:Name="GlassShell" Margin="20" Background="{StaticResource ShellBrush}" BorderBrush="{StaticResource ShellBorderBrush}" BorderThickness="1" CornerRadius="28" Padding="22">
+                <Grid RowSpacing="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <AutoSuggestBox
+                            Grid.Column="0"
+                            x:Name="LocationSearchBox"
+                            PlaceholderText="Search city, e.g. London, UK"
+                            TextChanged="LocationSearchBox_TextChanged"
+                            SuggestionChosen="LocationSearchBox_SuggestionChosen"
+                            QuerySubmitted="LocationSearchBox_QuerySubmitted"
+                            FontSize="15"
+                            MaxWidth="720" />
+
+                        <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,0">
+                                <Button x:Name="FavoriteToggleButton" Content="Add Favorite" Click="FavoriteToggleButton_Click" Background="{StaticResource ButtonPrimaryBrush}" Foreground="White" Padding="12,8" MinWidth="110" />
+                                <Button x:Name="FavoritePinButton" Content="Pin" Click="FavoritePinButton_Click" Background="{StaticResource ButtonSecondaryBrush}" Foreground="White" Padding="12,8" MinWidth="84" />
+                                <Button x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click" Background="{StaticResource ButtonSecondaryBrush}" Foreground="White" Padding="12,8" MinWidth="92" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="8,0,0,0">
+                                    <TextBlock Text="Glass" VerticalAlignment="Center" Opacity="0.75" />
+                                    <ComboBox x:Name="GlassIntensityComboBox" Width="120" SelectionChanged="GlassIntensityComboBox_SelectionChanged" SelectedIndex="1">
+                                        <x:String>Low</x:String>
+                                        <x:String>Medium</x:String>
+                                        <x:String>High</x:String>
+                                    </ComboBox>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <Grid x:Name="DashboardGrid" Grid.Row="1" ColumnSpacing="14" RowSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel x:Name="PrimaryPanel" Grid.Row="0" Grid.Column="0" Spacing="14">
+                            <Border Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="20" Padding="18">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Spacing="3">
+                                        <TextBlock Text="{x:Bind ViewModel.LocationName, Mode=OneWay}" FontFamily="Segoe UI Variable Display" FontSize="34" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        <TextBlock Text="{x:Bind ViewModel.Description, Mode=OneWay}" FontSize="16" Opacity="0.84" TextWrapping="Wrap" />
+                                        <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,8,0,0" VerticalAlignment="Bottom">
+                                            <TextBlock Text="{x:Bind ViewModel.Temperature, Mode=OneWay}" FontFamily="Segoe UI Variable Display" FontSize="70" FontWeight="Bold" />
+                                            <StackPanel VerticalAlignment="Center" Spacing="4">
+                                                <TextBlock Text="Feels Like" FontSize="12" Opacity="0.65" CharacterSpacing="100" />
+                                                <TextBlock Text="{x:Bind ViewModel.FeelsLike, Mode=OneWay}" FontSize="24" FontWeight="SemiBold" />
+                                                <TextBlock Text="{x:Bind ViewModel.HighLow, Mode=OneWay}" FontSize="14" Opacity="0.76" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                                    <ProgressRing Width="14" Height="14" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+                                                    <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" FontSize="12" Opacity="0.75" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <Border Grid.Column="1" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="18" Padding="10" VerticalAlignment="Center">
+                                        <Image x:Name="ConditionIcon" Width="116" Height="116" Stretch="UniformToFill" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <Grid ColumnSpacing="10" RowSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
+                                    <StackPanel Spacing="2">
+                                        <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentMintBrush}" />
+                                        <TextBlock Text="Humidity" FontSize="12" Opacity="0.65" />
+                                        <TextBlock Text="{x:Bind ViewModel.Humidity, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Row="0" Grid.Column="1" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
+                                    <StackPanel Spacing="2">
+                                        <PathIcon Width="18" Height="18" Opacity="0.85" Foreground="{StaticResource AccentBlueBrush}" Data="M2,6 C5,6 6.5,4.2 9.2,4.2 C11.5,4.2 13.2,5.8 13.2,7.8 C13.2,9.8 11.5,11.2 9.2,11.2 M2,9.5 H10.3 M2,13 H7.3" />
+                                        <TextBlock Text="Wind" FontSize="12" Opacity="0.65" />
+                                        <TextBlock Text="{x:Bind ViewModel.Wind, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Row="1" Grid.Column="0" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
+                                    <StackPanel Spacing="2">
+                                        <FontIcon Glyph="&#xE890;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentSunBrush}" />
+                                        <TextBlock Text="Visibility" FontSize="12" Opacity="0.65" />
+                                        <TextBlock Text="{x:Bind ViewModel.Visibility, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
+                                    <StackPanel Spacing="2">
+                                        <FontIcon Glyph="&#xE9D9;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentRoseBrush}" />
+                                        <TextBlock Text="Pressure" FontSize="12" Opacity="0.65" />
+                                        <TextBlock Text="{x:Bind ViewModel.Pressure, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border x:Name="SunToggleTile" Grid.Column="0" Background="{StaticResource SubTileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="10" Tapped="WeatherToggleTile_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="16" />
+                                        <TextBlock Text="{x:Bind ViewModel.SunLabel, Mode=OneWay}" Opacity="0.65" />
+                                        <TextBlock Text="{x:Bind ViewModel.SunValue, Mode=OneWay}" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border x:Name="HumidityToggleTile" Grid.Column="1" Background="{StaticResource SubTileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="10" Tapped="WeatherToggleTile_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="16" />
+                                        <TextBlock Text="{x:Bind ViewModel.MoistureLabel, Mode=OneWay}" Opacity="0.65" />
+                                        <TextBlock Text="{x:Bind ViewModel.MoistureValue, Mode=OneWay}" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+
+                        <StackPanel x:Name="SideRailPanel" Grid.Row="0" Grid.Column="1" Spacing="14">
+                            <Border Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
+                                <StackPanel x:Name="FavoritesPanel" Spacing="10">
+                                    <TextBlock Text="Saved Locations" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" />
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Home" FontSize="12" Opacity="0.7" CharacterSpacing="80" />
+                                        <ListView
+                                            x:Name="HomeFavoritesList"
+                                            ItemsSource="{x:Bind HomeFavorites, Mode=OneWay}"
+                                            SelectionMode="None"
+                                            IsItemClickEnabled="True"
+                                            ItemClick="FavoriteList_ItemClick"
+                                            CanDragItems="True"
+                                            CanReorderItems="True"
+                                            AllowDrop="True"
+                                            DragItemsCompleted="FavoriteList_DragItemsCompleted"
+                                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                            ScrollViewer.HorizontalScrollMode="Enabled"
+                                            ScrollViewer.VerticalScrollMode="Disabled"
+                                            ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                            MaxHeight="52">
+                                            <ListView.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <ItemsStackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ListView.ItemsPanel>
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="models:LocationSuggestion">
+                                                    <Border Padding="10,4" Margin="0,0,8,0" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="10">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <TextBlock Text="{x:Bind PinTag}" />
+                                                            <TextBlock Text="{x:Bind DisplayName}" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Work" FontSize="12" Opacity="0.7" CharacterSpacing="80" />
+                                        <ListView
+                                            x:Name="WorkFavoritesList"
+                                            ItemsSource="{x:Bind WorkFavorites, Mode=OneWay}"
+                                            SelectionMode="None"
+                                            IsItemClickEnabled="True"
+                                            ItemClick="FavoriteList_ItemClick"
+                                            CanDragItems="True"
+                                            CanReorderItems="True"
+                                            AllowDrop="True"
+                                            DragItemsCompleted="FavoriteList_DragItemsCompleted"
+                                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                            ScrollViewer.HorizontalScrollMode="Enabled"
+                                            ScrollViewer.VerticalScrollMode="Disabled"
+                                            ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                            MaxHeight="52">
+                                            <ListView.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <ItemsStackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ListView.ItemsPanel>
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="models:LocationSuggestion">
+                                                    <Border Padding="10,4" Margin="0,0,8,0" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="10">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <TextBlock Text="{x:Bind PinTag}" />
+                                                            <TextBlock Text="{x:Bind DisplayName}" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Travel" FontSize="12" Opacity="0.7" CharacterSpacing="80" />
+                                        <ListView
+                                            x:Name="TravelFavoritesList"
+                                            ItemsSource="{x:Bind TravelFavorites, Mode=OneWay}"
+                                            SelectionMode="None"
+                                            IsItemClickEnabled="True"
+                                            ItemClick="FavoriteList_ItemClick"
+                                            CanDragItems="True"
+                                            CanReorderItems="True"
+                                            AllowDrop="True"
+                                            DragItemsCompleted="FavoriteList_DragItemsCompleted"
+                                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                            ScrollViewer.HorizontalScrollMode="Enabled"
+                                            ScrollViewer.VerticalScrollMode="Disabled"
+                                            ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                            MaxHeight="52">
+                                            <ListView.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <ItemsStackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ListView.ItemsPanel>
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="models:LocationSuggestion">
+                                                    <Border Padding="10,4" Margin="0,0,8,0" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="10">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <TextBlock Text="{x:Bind PinTag}" />
+                                                            <TextBlock Text="{x:Bind DisplayName}" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Recent" FontSize="12" Opacity="0.7" CharacterSpacing="80" />
+                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                                            <ItemsRepeater ItemsSource="{x:Bind RecentLocations, Mode=OneWay}">
+                                                <ItemsRepeater.Layout>
+                                                    <StackLayout Orientation="Horizontal" Spacing="8" />
+                                                </ItemsRepeater.Layout>
+                                                <ItemsRepeater.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Button Content="{Binding DisplayName}" Click="RecentChip_Click" Padding="10,4" FontSize="12" />
+                                                    </DataTemplate>
+                                                </ItemsRepeater.ItemTemplate>
+                                            </ItemsRepeater>
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border x:Name="SettingsPanelHost" Background="{StaticResource SubTileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="8">
+                                <Expander IsExpanded="False">
+                                    <Expander.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE713;" FontFamily="Segoe Fluent Icons" Foreground="{StaticResource AccentMintBrush}" />
+                                            <TextBlock Text="Settings &amp; Preferences" FontWeight="SemiBold" />
+                                        </StackPanel>
+                                    </Expander.Header>
+                                    <Grid Padding="4,8,4,4" ColumnSpacing="10" RowSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Weather &amp; Favorites" FontFamily="Segoe UI Variable Display" FontWeight="SemiBold" Opacity="0.85" Foreground="{StaticResource AccentBlueBrush}" />
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Favorite Type" FontSize="12" Opacity="0.7" />
+                                        <ComboBox Grid.Row="1" Grid.Column="1" x:Name="FavoriteCategoryComboBox" SelectedIndex="2">
+                                            <x:String>Home</x:String>
+                                            <x:String>Work</x:String>
+                                            <x:String>Travel</x:String>
+                                        </ComboBox>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Temperature Units" FontSize="12" Opacity="0.7" />
+                                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="UnitSystemComboBox" SelectionChanged="UnitSystemComboBox_SelectionChanged">
+                                            <x:String>Metric (C)</x:String>
+                                            <x:String>Imperial (F)</x:String>
+                                        </ComboBox>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Wind Units" FontSize="12" Opacity="0.7" />
+                                        <ComboBox Grid.Row="3" Grid.Column="1" x:Name="WindUnitComboBox" SelectionChanged="WindUnitComboBox_SelectionChanged">
+                                            <x:String>m/s</x:String>
+                                            <x:String>km/h</x:String>
+                                            <x:String>mph</x:String>
+                                            <x:String>kn</x:String>
+                                        </ComboBox>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Pressure Units" FontSize="12" Opacity="0.7" />
+                                        <ComboBox Grid.Row="4" Grid.Column="1" x:Name="PressureUnitComboBox" SelectionChanged="PressureUnitComboBox_SelectionChanged">
+                                            <x:String>hpa</x:String>
+                                            <x:String>mmhg</x:String>
+                                            <x:String>inhg</x:String>
+                                        </ComboBox>
+                                    </Grid>
+                                </Expander>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="2" ColumnSpacing="14" RowSpacing="14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="12">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Hourly Forecast" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" />
+                                <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}">
+                                        <ItemsRepeater.Layout>
+                                            <StackLayout Orientation="Horizontal" Spacing="10" />
+                                        </ItemsRepeater.Layout>
+                                        <ItemsRepeater.ItemTemplate>
+                                            <DataTemplate x:DataType="models:HourlyForecastSnapshot">
+                                                <Border Width="122" Padding="12" CornerRadius="14" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1">
+                                                    <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                                        <TextBlock Text="{x:Bind HourLabel}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                                        <Image Width="30" Height="30" Stretch="Uniform" Source="{Binding IconUri}" HorizontalAlignment="Center" />
+                                                        <TextBlock Text="{x:Bind TemperatureText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                                        <TextBlock Text="{x:Bind PrecipitationText}" Opacity="0.78" HorizontalAlignment="Center" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsRepeater.ItemTemplate>
+                                    </ItemsRepeater>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Row="1" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="12">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="5-Day Forecast" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" />
+                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.ForecastDays, Mode=OneWay}">
+                                    <ItemsRepeater.Layout>
+                                        <StackLayout Orientation="Vertical" Spacing="8" />
+                                    </ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ForecastDaySnapshot">
+                                            <Border Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="10">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{x:Bind DayLabel}" FontSize="15" FontWeight="SemiBold" Margin="0,0,10,0" />
+                                                    <StackPanel Grid.Column="1" Spacing="1">
+                                                        <TextBlock Text="{x:Bind Description}" Opacity="0.84" TextWrapping="WrapWholeWords" MaxLines="1" />
+                                                        <TextBlock Text="{x:Bind PrecipitationText}" Opacity="0.72" FontSize="12" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="12,0,0,0">
+                                                        <TextBlock Text="{x:Bind MaxTempText}" FontWeight="SemiBold" />
+                                                        <TextBlock Text="/" Opacity="0.7" />
+                                                        <TextBlock Text="{x:Bind MinTempText}" Opacity="0.75" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+        </ScrollViewer>
+    </Grid>
+</Page>
