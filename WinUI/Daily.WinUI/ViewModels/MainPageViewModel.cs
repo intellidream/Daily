@@ -19,6 +19,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private string _feelsLike = "--";
     private string _highLow = "H --  L --";
     private string _humidity = "--";
+    private double _humidityValue;
+    private double _windSpeedValue;
     private string _wind = "--";
     private string _visibility = "--";
     private string _pressure = "--";
@@ -28,6 +30,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private string _sunValue = "--:--";
     private string _moistureLabel = "Humidity";
     private string _moistureValue = "--";
+    private bool _hasWeatherAlert;
+    private string _weatherAlertText = string.Empty;
     private string _iconUrl = "https://openweathermap.org/img/wn/01d@4x.png";
     private bool _isBusy;
     private string _unitSystem = "metric";
@@ -90,6 +94,18 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _humidity, value);
     }
 
+    public double HumidityValue
+    {
+        get => _humidityValue;
+        private set => SetProperty(ref _humidityValue, value);
+    }
+
+    public double WindSpeedValue
+    {
+        get => _windSpeedValue;
+        private set => SetProperty(ref _windSpeedValue, value);
+    }
+
     public string Wind
     {
         get => _wind;
@@ -150,6 +166,18 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _iconUrl, value);
     }
 
+    public bool HasWeatherAlert
+    {
+        get => _hasWeatherAlert;
+        private set => SetProperty(ref _hasWeatherAlert, value);
+    }
+
+    public string WeatherAlertText
+    {
+        get => _weatherAlertText;
+        private set => SetProperty(ref _weatherAlertText, value);
+    }
+
     public bool IsBusy
     {
         get => _isBusy;
@@ -206,6 +234,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             FeelsLike = $"{snapshot.FeelsLike:0.#}°";
             HighLow = $"H {snapshot.TempMax:0.#}°  L {snapshot.TempMin:0.#}°";
             Humidity = $"{snapshot.Humidity}%";
+            HumidityValue = snapshot.Humidity;
+            WindSpeedValue = snapshot.WindSpeed;
             Wind = FormatWind(snapshot.WindSpeed, _unitSystem, _windUnit);
             Visibility = $"{Math.Round(snapshot.Visibility / 1000.0, 1):0.#} km";
             Pressure = FormatPressure(snapshot.Pressure, _pressureUnit);
@@ -213,6 +243,10 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             Sunset = snapshot.Sunset > 0 ? DateTimeOffset.FromUnixTimeSeconds(snapshot.Sunset).ToLocalTime().ToString("HH:mm") : "--:--";
             IconUrl = $"https://openweathermap.org/img/wn/{snapshot.IconCode}@4x.png";
             Details = $"Updated weather for {snapshot.LocationName}";
+
+            var isStorm = (snapshot.IconCode ?? string.Empty).StartsWith("11", StringComparison.Ordinal);
+            HasWeatherAlert = snapshot.WindSpeed >= 14.0 || isStorm;
+            WeatherAlertText = HasWeatherAlert ? "!" : string.Empty;
 
             ForecastDays.Clear();
             foreach (var day in forecast)

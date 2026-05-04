@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Syncfusion.UI.Xaml.Editors;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Input;
@@ -33,12 +34,16 @@ public sealed partial class MainPage : Page
     private IReadOnlyList<LocationSuggestion> _lastSuggestions = Array.Empty<LocationSuggestion>();
     private LocationSuggestion? _selectedLocation;
     private CancellationTokenSource? _searchCts;
+    private bool _suppressTextCallback;
 
     public MainPage()
     {
         InitializeComponent();
         Loaded += MainPage_Loaded;
     }
+
+    private Microsoft.UI.Xaml.Visibility BoolToVisibility(bool value) =>
+        value ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
     private async void MainPage_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
@@ -108,7 +113,7 @@ public sealed partial class MainPage : Page
                 Longitude = _settings.LastLongitude.Value,
                 DisplayName = _settings.LastLocationName ?? "Saved Location"
             };
-            LocationSearchBox.Text = _selectedLocation.DisplayName;
+            SetLocationText(_selectedLocation.DisplayName);
             ViewModel.SetStatus("Loaded last location.");
             UpdateFavoriteButtonText();
             UpdatePinButtonText();
@@ -127,7 +132,7 @@ public sealed partial class MainPage : Page
                 Longitude = location.Value.Longitude,
                 DisplayName = "Auto location"
             };
-            LocationSearchBox.Text = _selectedLocation.DisplayName;
+            SetLocationText(_selectedLocation.DisplayName);
             ViewModel.SetStatus("Using auto location.");
             UpdateFavoriteButtonText();
             UpdatePinButtonText();
@@ -144,9 +149,16 @@ public sealed partial class MainPage : Page
             Longitude = 26.1025,
             DisplayName = "Bucharest, RO"
         };
-        LocationSearchBox.Text = _selectedLocation.DisplayName;
+        SetLocationText(_selectedLocation.DisplayName);
         UpdateFavoriteButtonText();
         UpdatePinButtonText();
+    }
+
+    private void SetLocationText(string text)
+    {
+        _suppressTextCallback = true;
+        LocationSearchBox.Text = text;
+        _suppressTextCallback = false;
     }
 
     private void UpdateWeatherIcon()
@@ -161,17 +173,21 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private async void LocationSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    private void LocationSearchBox_ComboBoxLoaded(object sender, RoutedEventArgs e)
     {
-        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
-        {
-            return;
-        }
+        LocationSearchBox.RegisterPropertyChangedCallback(
+            DropDownListBase.TextProperty,
+            LocationSearchBox_TextPropertyChanged);
+    }
 
-        var text = sender.Text?.Trim();
+    private async void LocationSearchBox_TextPropertyChanged(DependencyObject d, DependencyProperty dp)
+    {
+        if (_suppressTextCallback) return;
+
+        var text = LocationSearchBox.Text?.Trim();
         if (string.IsNullOrWhiteSpace(text) || text.Length < 2)
         {
-            sender.ItemsSource = null;
+            LocationSearchBox.ItemsSource = null;
             _lastSuggestions = Array.Empty<LocationSuggestion>();
             return;
         }
@@ -183,38 +199,42 @@ public sealed partial class MainPage : Page
         {
             var suggestions = await _weatherClient.SearchLocationsAsync(text, cancellationToken: _searchCts.Token);
             _lastSuggestions = suggestions;
-            sender.ItemsSource = suggestions;
+            if (!_suppressTextCallback)
+                LocationSearchBox.ItemsSource = suggestions;
         }
         catch (OperationCanceledException)
         {
         }
         catch
         {
-            sender.ItemsSource = null;
+            LocationSearchBox.ItemsSource = null;
         }
     }
 
-    private void LocationSearchBox_SuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
+    private async void LocationSearchBox_SelectionChanged(object sender, ComboBoxSelectionChangedEventArgs args)
     {
-        if (args.SelectedItem is LocationSuggestion suggestion)
+        if (args.AddedItems?.Count > 0 && args.AddedItems[0] is LocationSuggestion suggestion)
         {
             _selectedLocation = suggestion;
-            sender.Text = suggestion.DisplayName;
+            _suppressTextCallback = true;
+            LocationSearchBox.Text = suggestion.DisplayName;
+            _suppressTextCallback = false;
             UpdateFavoriteButtonText();
             UpdatePinButtonText();
+            await RefreshWeatherAsync();
         }
     }
 
-    private async void LocationSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    private async void LocationSearchBox_InputSubmitted(object sender, ComboBoxInputSubmittedEventArgs args)
     {
-        if (args.ChosenSuggestion is LocationSuggestion selected)
+        if (args.Item is LocationSuggestion selected)
         {
             _selectedLocation = selected;
         }
         else if (_lastSuggestions.Count > 0)
         {
             _selectedLocation = _lastSuggestions[0];
-            sender.Text = _selectedLocation.DisplayName;
+            SetLocationText(_selectedLocation.DisplayName);
         }
 
         await RefreshWeatherAsync();
@@ -225,7 +245,7 @@ public sealed partial class MainPage : Page
         if (sender is FrameworkElement { DataContext: LocationSuggestion location })
         {
             _selectedLocation = location;
-            LocationSearchBox.Text = location.DisplayName;
+            SetLocationText(location.DisplayName);
             UpdateFavoriteButtonText();
             UpdatePinButtonText();
             await RefreshWeatherAsync();
@@ -237,7 +257,7 @@ public sealed partial class MainPage : Page
         if (sender is FrameworkElement { DataContext: LocationSuggestion location })
         {
             _selectedLocation = location;
-            LocationSearchBox.Text = location.DisplayName;
+            SetLocationText(location.DisplayName);
             UpdateFavoriteButtonText();
             UpdatePinButtonText();
             await RefreshWeatherAsync();
@@ -301,7 +321,7 @@ public sealed partial class MainPage : Page
         }
 
         _selectedLocation = location;
-        LocationSearchBox.Text = location.DisplayName;
+        SetLocationText(location.DisplayName);
         UpdateFavoriteButtonText();
         UpdatePinButtonText();
         await RefreshWeatherAsync();

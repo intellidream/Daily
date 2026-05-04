@@ -6,6 +6,10 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Daily_WinUI"
     xmlns:models="using:Daily_WinUI.Models"
+    xmlns:chart="using:Syncfusion.UI.Xaml.Charts"
+    xmlns:gauge="using:Syncfusion.UI.Xaml.Gauges"
+    xmlns:editors="using:Syncfusion.UI.Xaml.Editors"
+    xmlns:notif="using:Syncfusion.UI.Xaml.Notifications"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
@@ -79,13 +83,18 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <AutoSuggestBox
+                        <editors:SfComboBox
                             Grid.Column="0"
                             x:Name="LocationSearchBox"
                             PlaceholderText="Search city, e.g. London, UK"
-                            TextChanged="LocationSearchBox_TextChanged"
-                            SuggestionChosen="LocationSearchBox_SuggestionChosen"
-                            QuerySubmitted="LocationSearchBox_QuerySubmitted"
+                            IsEditable="True"
+                            IsFilteringEnabled="False"
+                            IsTextSearchEnabled="False"
+                            TextMemberPath="DisplayName"
+                            DisplayMemberPath="DisplayName"
+                            SelectionChanged="LocationSearchBox_SelectionChanged"
+                            InputSubmitted="LocationSearchBox_InputSubmitted"
+                            Loaded="LocationSearchBox_ComboBoxLoaded"
                             FontSize="15"
                             MaxWidth="720" />
 
@@ -141,9 +150,21 @@
                                         </StackPanel>
                                     </StackPanel>
 
-                                    <Border Grid.Column="1" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="18" Padding="10" VerticalAlignment="Center">
-                                        <Image x:Name="ConditionIcon" Width="116" Height="116" Stretch="UniformToFill" />
-                                    </Border>
+                                    <notif:BadgeContainer Grid.Column="1" VerticalAlignment="Center">
+                                        <Border Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="18" Padding="10">
+                                            <Image x:Name="ConditionIcon" Width="116" Height="116" Stretch="UniformToFill" />
+                                        </Border>
+                                        <notif:BadgeContainer.Badge>
+                                            <notif:SfBadge
+                                                Content="{x:Bind ViewModel.WeatherAlertText, Mode=OneWay}"
+                                                Visibility="{x:Bind BoolToVisibility(ViewModel.HasWeatherAlert), Mode=OneWay}"
+                                                Shape="Oval"
+                                                Background="#FFFF6B00"
+                                                AnimationType="Scale"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Top" />
+                                        </notif:BadgeContainer.Badge>
+                                    </notif:BadgeContainer>
                                 </Grid>
                             </Border>
 
@@ -157,19 +178,75 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
-                                    <StackPanel Spacing="2">
-                                        <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentMintBrush}" />
-                                        <TextBlock Text="Humidity" FontSize="12" Opacity="0.65" />
-                                        <TextBlock Text="{x:Bind ViewModel.Humidity, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
+                                <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="8">
+                                    <StackPanel Spacing="0" HorizontalAlignment="Center">
+                                        <TextBlock Text="Humidity" FontSize="11" Opacity="0.65" HorizontalAlignment="Center" />
+                                        <gauge:SfRadialGauge Height="90" Width="90">
+                                            <gauge:SfRadialGauge.Axes>
+                                                <gauge:RadialAxis Minimum="0" Maximum="100"
+                                                                  ShowLabels="False"
+                                                                  ShowTicks="False"
+                                                                  ShowAxisLine="False"
+                                                                  StartAngle="140"
+                                                                  EndAngle="40">
+                                                    <gauge:RadialAxis.Ranges>
+                                                        <gauge:GaugeRange StartValue="0" EndValue="100" Background="#1A7FF0D5" />
+                                                    </gauge:RadialAxis.Ranges>
+                                                    <gauge:RadialAxis.Pointers>
+                                                        <gauge:RangePointer Value="{x:Bind ViewModel.HumidityValue, Mode=OneWay}">
+                                                            <gauge:RangePointer.GradientStops>
+                                                                <gauge:GaugeGradientStop Value="0" Color="#FF7FF0D5" />
+                                                                <gauge:GaugeGradientStop Value="100" Color="#FF7FF0D5" />
+                                                            </gauge:RangePointer.GradientStops>
+                                                        </gauge:RangePointer>
+                                                    </gauge:RadialAxis.Pointers>
+                                                    <gauge:RadialAxis.Annotations>
+                                                        <gauge:GaugeAnnotation DirectionUnit="Angle" DirectionValue="90" PositionFactor="0.5">
+                                                            <gauge:GaugeAnnotation.Content>
+                                                                <TextBlock Text="{x:Bind ViewModel.Humidity, Mode=OneWay}"
+                                                                           FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                                            </gauge:GaugeAnnotation.Content>
+                                                        </gauge:GaugeAnnotation>
+                                                    </gauge:RadialAxis.Annotations>
+                                                </gauge:RadialAxis>
+                                            </gauge:SfRadialGauge.Axes>
+                                        </gauge:SfRadialGauge>
                                     </StackPanel>
                                 </Border>
 
-                                <Border Grid.Row="0" Grid.Column="1" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
-                                    <StackPanel Spacing="2">
-                                        <PathIcon Width="18" Height="18" Opacity="0.85" Foreground="{StaticResource AccentBlueBrush}" Data="M2,6 C5,6 6.5,4.2 9.2,4.2 C11.5,4.2 13.2,5.8 13.2,7.8 C13.2,9.8 11.5,11.2 9.2,11.2 M2,9.5 H10.3 M2,13 H7.3" />
-                                        <TextBlock Text="Wind" FontSize="12" Opacity="0.65" />
-                                        <TextBlock Text="{x:Bind ViewModel.Wind, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
+                                <Border Grid.Row="0" Grid.Column="1" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="8">
+                                    <StackPanel Spacing="0" HorizontalAlignment="Center">
+                                        <TextBlock Text="Wind" FontSize="11" Opacity="0.65" HorizontalAlignment="Center" />
+                                        <gauge:SfRadialGauge Height="90" Width="90">
+                                            <gauge:SfRadialGauge.Axes>
+                                                <gauge:RadialAxis Minimum="0" Maximum="30"
+                                                                  ShowLabels="False"
+                                                                  ShowTicks="False"
+                                                                  ShowAxisLine="False"
+                                                                  StartAngle="140"
+                                                                  EndAngle="40">
+                                                    <gauge:RadialAxis.Ranges>
+                                                        <gauge:GaugeRange StartValue="0" EndValue="30" Background="#1A69B6FF" />
+                                                    </gauge:RadialAxis.Ranges>
+                                                    <gauge:RadialAxis.Pointers>
+                                                        <gauge:RangePointer Value="{x:Bind ViewModel.WindSpeedValue, Mode=OneWay}">
+                                                            <gauge:RangePointer.GradientStops>
+                                                                <gauge:GaugeGradientStop Value="0" Color="#FF69B6FF" />
+                                                                <gauge:GaugeGradientStop Value="30" Color="#FF69B6FF" />
+                                                            </gauge:RangePointer.GradientStops>
+                                                        </gauge:RangePointer>
+                                                    </gauge:RadialAxis.Pointers>
+                                                    <gauge:RadialAxis.Annotations>
+                                                        <gauge:GaugeAnnotation DirectionUnit="Angle" DirectionValue="90" PositionFactor="0.5">
+                                                            <gauge:GaugeAnnotation.Content>
+                                                                <TextBlock Text="{x:Bind ViewModel.Wind, Mode=OneWay}"
+                                                                           FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+                                                            </gauge:GaugeAnnotation.Content>
+                                                        </gauge:GaugeAnnotation>
+                                                    </gauge:RadialAxis.Annotations>
+                                                </gauge:RadialAxis>
+                                            </gauge:SfRadialGauge.Axes>
+                                        </gauge:SfRadialGauge>
                                     </StackPanel>
                                 </Border>
 
@@ -405,28 +482,81 @@
                         </Grid.RowDefinitions>
 
                         <Border Grid.Row="0" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="12">
-                            <StackPanel Spacing="10">
-                                <TextBlock Text="Hourly Forecast" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" />
-                                <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
-                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}">
-                                        <ItemsRepeater.Layout>
-                                            <StackLayout Orientation="Horizontal" Spacing="10" />
-                                        </ItemsRepeater.Layout>
-                                        <ItemsRepeater.ItemTemplate>
-                                            <DataTemplate x:DataType="models:HourlyForecastSnapshot">
-                                                <Border Width="122" Padding="12" CornerRadius="14" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1">
-                                                    <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <TextBlock Text="{x:Bind HourLabel}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                                        <Image Width="30" Height="30" Stretch="Uniform" Source="{Binding IconUri}" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="{x:Bind TemperatureText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="{x:Bind PrecipitationText}" Opacity="0.78" HorizontalAlignment="Center" />
+                                <Grid RowSpacing="4" HorizontalAlignment="Stretch">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Text="Hourly Forecast" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" />
+
+                                    <Grid Grid.Row="1" RowSpacing="2" HorizontalAlignment="Stretch" Margin="0,0,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Icon + temperature row. ScaleX=8/7 maps UniformGrid centers to 8 tick positions. -->
+                                        <ItemsRepeater
+                                            x:Name="HourlyIconStrip"
+                                            Grid.Row="0"
+                                            ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}"
+                                            HorizontalAlignment="Stretch"
+                                            Margin="12,0,12,0"
+                                            RenderTransformOrigin="0.5,0.5">
+                                            <ItemsRepeater.RenderTransform>
+                                                <ScaleTransform ScaleX="1.142857" />
+                                            </ItemsRepeater.RenderTransform>
+                                            <ItemsRepeater.Layout>
+                                                <UniformGridLayout MaximumRowsOrColumns="8" MinItemWidth="56" MinColumnSpacing="0" ItemsStretch="Fill" />
+                                            </ItemsRepeater.Layout>
+                                            <ItemsRepeater.ItemTemplate>
+                                                <DataTemplate x:DataType="models:HourlyForecastSnapshot">
+                                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Spacing="1" Padding="0,4,0,0">
+                                                        <Image Source="{x:Bind IconImage}" Width="30" Height="30" HorizontalAlignment="Center" />
+                                                        <TextBlock Text="{x:Bind TemperatureText}" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#FFF4FAFF" />
                                                     </StackPanel>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsRepeater.ItemTemplate>
-                                    </ItemsRepeater>
-                                </ScrollViewer>
-                            </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsRepeater.ItemTemplate>
+                                        </ItemsRepeater>
+
+                                        <!-- Spline chart — same container width as top strip -->
+                                        <chart:SfCartesianChart
+                                            x:Name="HourlyForecastChart"
+                                            Grid.Row="1"
+                                            Height="190"
+                                            Margin="0,2,0,0"
+                                            PlotAreaBorderThickness="0"
+                                            >
+
+                                        <chart:SfCartesianChart.XAxes>
+                                            <chart:CategoryAxis ShowMajorGridLines="False" TickLineSize="0">
+                                                <chart:CategoryAxis.LabelStyle>
+                                                    <chart:LabelStyle Foreground="#CCE0EEFF" FontSize="11" />
+                                                </chart:CategoryAxis.LabelStyle>
+                                                <chart:CategoryAxis.AxisLineStyle>
+                                                    <Style TargetType="Line">
+                                                        <Setter Property="StrokeThickness" Value="0" />
+                                                    </Style>
+                                                </chart:CategoryAxis.AxisLineStyle>
+                                            </chart:CategoryAxis>
+                                        </chart:SfCartesianChart.XAxes>
+
+                                        <chart:SfCartesianChart.YAxes>
+                                            <chart:NumericalAxis />
+                                        </chart:SfCartesianChart.YAxes>
+
+                                        <chart:SplineAreaSeries
+                                            ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}"
+                                            XBindingPath="HourLabel"
+                                            YBindingPath="Temperature"
+                                            StrokeWidth="2"
+                                            Fill="#8069B6FF"
+                                            Stroke="#FF69B6FF" />
+
+                                        </chart:SfCartesianChart>
+                                    </Grid>
+                                </Grid>
                         </Border>
 
                         <Border Grid.Row="1" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="12">

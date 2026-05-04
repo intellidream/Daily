@@ -48,6 +48,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.7705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
+    <PackageReference Include="Syncfusion.Chart.WinUI" Version="33.2.4" />
+    <PackageReference Include="Syncfusion.Editors.WinUI" Version="33.2.4" />
+    <PackageReference Include="Syncfusion.Gauge.WinUI" Version="33.2.4" />
+    <PackageReference Include="Syncfusion.Notifications.WinUI" Version="33.2.4" />
   </ItemGroup>
 
   <!--
