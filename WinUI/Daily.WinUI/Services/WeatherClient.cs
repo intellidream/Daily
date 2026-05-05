@@ -133,8 +133,10 @@ public sealed class WeatherClient
                 return new HourlyForecastSnapshot
                 {
                     HourLabel = at.ToString("HH:mm"),
+                    UnixTime = item.Dt,
                     IconCode = string.IsNullOrWhiteSpace(iconCode) ? "01d" : iconCode,
                     Temperature = (int)Math.Round(item.Main?.Temp ?? 0),
+                    FeelsLike = (int)Math.Round(item.Main?.FeelsLike ?? 0),
                     PrecipitationChance = (int)Math.Round((item.Pop < 0 ? 0 : item.Pop) * 100)
                 };
             })

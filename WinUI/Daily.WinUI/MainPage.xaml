@@ -502,7 +502,7 @@
                                             Grid.Row="0"
                                             ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}"
                                             HorizontalAlignment="Stretch"
-                                            Margin="12,0,12,0"
+                                            Margin="52,32,12,32"
                                             RenderTransformOrigin="0.5,0.5">
                                             <ItemsRepeater.RenderTransform>
                                                 <ScaleTransform ScaleX="1.142857" />
@@ -525,9 +525,24 @@
                                             x:Name="HourlyForecastChart"
                                             Grid.Row="1"
                                             Height="190"
-                                            Margin="0,2,0,0"
+                                            Margin="0,0,8,0"
                                             PlotAreaBorderThickness="0"
+                                            SeriesBoundsChanged="HourlyForecastChart_SeriesBoundsChanged"
                                             >
+
+                                        <chart:SfCartesianChart.TrackballBehavior>
+                                            <chart:ChartTrackballBehavior
+                                                ShowLine="True"
+                                                DisplayMode="NearestPoint">
+                                                <chart:ChartTrackballBehavior.LineStyle>
+                                                    <Style TargetType="Line">
+                                                        <Setter Property="Stroke" Value="#80FFFFFF" />
+                                                        <Setter Property="StrokeThickness" Value="1.5" />
+                                                        <Setter Property="StrokeDashArray" Value="4,3" />
+                                                    </Style>
+                                                </chart:ChartTrackballBehavior.LineStyle>
+                                            </chart:ChartTrackballBehavior>
+                                        </chart:SfCartesianChart.TrackballBehavior>
 
                                         <chart:SfCartesianChart.XAxes>
                                             <chart:CategoryAxis ShowMajorGridLines="False" TickLineSize="0">
@@ -543,7 +558,26 @@
                                         </chart:SfCartesianChart.XAxes>
 
                                         <chart:SfCartesianChart.YAxes>
-                                            <chart:NumericalAxis />
+                                            <chart:NumericalAxis
+                                                x:Name="HourlyYAxis"
+                                                ShowMajorGridLines="True"
+                                                TickLineSize="0"
+                                                LabelCreated="HourlyYAxis_LabelCreated">
+                                                <chart:NumericalAxis.MajorGridLineStyle>
+                                                    <Style TargetType="Line">
+                                                        <Setter Property="Stroke" Value="#20FFFFFF" />
+                                                        <Setter Property="StrokeDashArray" Value="3,3" />
+                                                    </Style>
+                                                </chart:NumericalAxis.MajorGridLineStyle>
+                                                <chart:NumericalAxis.LabelStyle>
+                                                    <chart:LabelStyle Foreground="#99E0EEFF" FontSize="11" />
+                                                </chart:NumericalAxis.LabelStyle>
+                                                <chart:NumericalAxis.AxisLineStyle>
+                                                    <Style TargetType="Line">
+                                                        <Setter Property="StrokeThickness" Value="0" />
+                                                    </Style>
+                                                </chart:NumericalAxis.AxisLineStyle>
+                                            </chart:NumericalAxis>
                                         </chart:SfCartesianChart.YAxes>
 
                                         <chart:SplineAreaSeries
@@ -551,10 +585,155 @@
                                             XBindingPath="HourLabel"
                                             YBindingPath="Temperature"
                                             StrokeWidth="2"
-                                            Fill="#8069B6FF"
-                                            Stroke="#FF69B6FF" />
+                                            Fill="{x:Bind ViewModel.HourlyChartFill, Mode=OneWay}"
+                                            Stroke="{x:Bind ViewModel.HourlyChartStroke, Mode=OneWay}">
+                                            <chart:SplineAreaSeries.TrackballLabelTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="#E61A3A6C"
+                                                            BorderBrush="#60FFFFFF"
+                                                            BorderThickness="1"
+                                                            CornerRadius="16"
+                                                            Padding="14,12">
+                                                        <StackPanel Spacing="6" HorizontalAlignment="Center">
+                                                            <!-- Hour -->
+                                                            <TextBlock
+                                                                Text="{Binding Item.HourLabel}"
+                                                                FontSize="12"
+                                                                FontWeight="SemiBold"
+                                                                Opacity="0.80"
+                                                                HorizontalAlignment="Center"
+                                                                Foreground="#FFE0EEFF"
+                                                                CharacterSpacing="80" />
+                                                            <!-- Weather icon -->
+                                                            <Image
+                                                                Source="{Binding Item.IconImage}"
+                                                                Width="44"
+                                                                Height="44"
+                                                                HorizontalAlignment="Center" />
+                                                            <!-- Temperature -->
+                                                            <TextBlock
+                                                                Text="{Binding Item.TemperatureText}"
+                                                                FontFamily="Segoe UI Variable Display"
+                                                                FontSize="26"
+                                                                FontWeight="Bold"
+                                                                HorizontalAlignment="Center"
+                                                                Foreground="#FFFFFFFF" />
+                                                            <!-- Feels like -->
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                                                <TextBlock
+                                                                    Text="Feels like"
+                                                                    FontSize="11"
+                                                                    Opacity="0.65"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="#FFE0EEFF" />
+                                                                <TextBlock
+                                                                    Text="{Binding Item.FeelsLikeText}"
+                                                                    FontSize="12"
+                                                                    FontWeight="SemiBold"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="#FFE0EEFF" />
+                                                            </StackPanel>
+                                                            <!-- Rain -->
+                                                            <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                                                                <FontIcon
+                                                                    Glyph="&#xEB42;"
+                                                                    FontFamily="Segoe Fluent Icons"
+                                                                    FontSize="13"
+                                                                    Foreground="#FF69B6FF"
+                                                                    VerticalAlignment="Center" />
+                                                                <TextBlock
+                                                                    Text="{Binding Item.PrecipitationText}"
+                                                                    FontSize="12"
+                                                                    FontWeight="SemiBold"
+                                                                    VerticalAlignment="Center"
+                                                                    Foreground="#FF69B6FF" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </chart:SplineAreaSeries.TrackballLabelTemplate>
+                                        </chart:SplineAreaSeries>
 
                                         </chart:SfCartesianChart>
+
+                                        <!-- Sunrise / Sunset overlay badges (positioned from code-behind) -->
+                                        <Canvas
+                                            x:Name="SunAnnotationCanvas"
+                                            Grid.Row="1"
+                                            IsHitTestVisible="False"
+                                            Margin="0,0,8,0">
+                                            <!-- Sunrise badge -->
+                                            <Border
+                                                x:Name="SunriseBadge"
+                                                Background="#E01A3A6C"
+                                                BorderBrush="#60FFD166"
+                                                BorderThickness="1"
+                                                CornerRadius="10"
+                                                Padding="7,5"
+                                                Visibility="Collapsed">
+                                                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <TextBlock
+                                                        Text="&#x2600;&#x2191;"
+                                                        FontFamily="Segoe UI Symbol"
+                                                        FontSize="12"
+                                                        Foreground="#FFFFD166"
+                                                        VerticalAlignment="Center" />
+                                                    <TextBlock
+                                                        x:Name="SunriseTimeText"
+                                                        FontSize="10"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="#FFFFD166"
+                                                        VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Border>
+                                                <!-- Sunset badge -->
+                                                <Border
+                                                    x:Name="SunsetBadge"
+                                                    Background="#E01A3A6C"
+                                                    BorderBrush="#60FFB347"
+                                                    BorderThickness="1"
+                                                    CornerRadius="10"
+                                                    Padding="7,5"
+                                                    Visibility="Collapsed">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                        <TextBlock
+                                                            Text="&#x2600;&#x2193;"
+                                                            FontFamily="Segoe UI Symbol"
+                                                            FontSize="12"
+                                                            Foreground="#FFFFB347"
+                                                            VerticalAlignment="Center" />
+                                                        <TextBlock
+                                                            x:Name="SunsetTimeText"
+                                                            FontSize="10"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="#FFFFB347"
+                                                            VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </Border>
+                                                <!-- Current weather bubble -->
+                                                <Border
+                                                    x:Name="CurrentWeatherBadge"
+                                                    Background="#E0103050"
+                                                    BorderBrush="#80FFFFFF"
+                                                    BorderThickness="1"
+                                                    CornerRadius="12"
+                                                    Padding="8,6"
+                                                    Visibility="Collapsed">
+                                                    <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                                        <Image
+                                                            x:Name="CurrentWeatherIcon"
+                                                            Width="28"
+                                                            Height="28"
+                                                            HorizontalAlignment="Center" />
+                                                        <TextBlock
+                                                            x:Name="CurrentWeatherTemp"
+                                                            FontSize="12"
+                                                            FontWeight="Bold"
+                                                            Foreground="White"
+                                                            HorizontalAlignment="Center" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </Canvas>
                                     </Grid>
                                 </Grid>
                         </Border>

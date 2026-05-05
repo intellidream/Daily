@@ -55,8 +55,90 @@ public sealed partial class MainPage : Page
         PressureUnitComboBox.SelectedItem = _settings.PressureUnit;
         FavoriteCategoryComboBox.SelectedItem = "Travel";
 
+        ViewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is nameof(ViewModel.ShowSunriseAnnotation) or
+                nameof(ViewModel.ShowSunsetAnnotation) or
+                nameof(ViewModel.SunriseAnnotationX) or
+                nameof(ViewModel.SunsetAnnotationX) or
+                nameof(ViewModel.Sunrise) or
+                nameof(ViewModel.Sunset))
+            {
+                PositionSunAnnotations();
+            }
+        };
+
         await InitializeLocationAsync();
         await RefreshWeatherAsync();
+    }
+
+    /// <summary>Appends a degree symbol to every Y-axis label on the hourly chart.</summary>
+    private void HourlyYAxis_LabelCreated(object sender, Syncfusion.UI.Xaml.Charts.ChartAxisLabelEventArgs e)
+    {
+        if (e.Label is { } label && !label.EndsWith("°", StringComparison.Ordinal))
+        {
+            e.Label = label + "°";
+        }
+    }
+
+    // Actual plot-area bounds reported by Syncfusion after layout.
+    private Windows.Foundation.Rect _chartPlotBounds;
+
+    private void HourlyForecastChart_SeriesBoundsChanged(object sender, Syncfusion.UI.Xaml.Charts.ChartSeriesBoundsEventArgs e)
+    {
+        _chartPlotBounds = e.NewBounds;
+        PositionSunAnnotations();
+    }
+
+    /// <summary>Positions the sunrise/sunset badge overlays on the chart canvas.</summary>
+    private void PositionSunAnnotations()
+    {
+        var hourlyCount = ViewModel.HourlyForecast.Count;
+        if (hourlyCount == 0) return;
+
+        var plotBounds = _chartPlotBounds;
+        if (plotBounds.Width <= 0 || plotBounds.Height <= 0) return;
+
+        // CategoryAxis internal range is [-0.5 .. N-0.5].
+        // Category i centre pixel = plotLeft + (i + 0.5) * slotWidth.
+        // annotX from the ViewModel is a fractional slot index (e.g. 6.38 for 06:23
+        // sitting 38 % of the way between the 06:00 and 09:00 slots), so the same
+        // formula places the badge centred on exactly that fractional position.
+        var slotWidth = plotBounds.Width / hourlyCount;
+
+        const double bottomMargin = 4; // px above the x-axis line
+
+        void PlaceBadge(Border badge, TextBlock timeText, double annotX, bool show, string time)
+        {
+            if (!show || annotX < 0)
+            {
+                badge.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                return;
+            }
+
+            timeText.Text = time;
+            badge.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+
+            // Force a layout pass so ActualWidth reflects the new text.
+            badge.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            var badgeWidth  = badge.DesiredSize.Width  > 0 ? badge.DesiredSize.Width  : 70;
+            var badgeHeight = badge.DesiredSize.Height > 0 ? badge.DesiredSize.Height : 24;
+
+            // Centre badge on the fractional slot position.
+            var xCenter = plotBounds.X + (annotX + 0.5) * slotWidth;
+            var xLeft   = xCenter - badgeWidth / 2;
+
+            // Sit just above the x-axis line.
+            var yTop = plotBounds.Y + plotBounds.Height - badgeHeight - bottomMargin;
+
+            Canvas.SetLeft(badge, xLeft);
+            Canvas.SetTop(badge, yTop);
+        }
+
+        PlaceBadge(SunriseBadge, SunriseTimeText, ViewModel.SunriseAnnotationX, ViewModel.ShowSunriseAnnotation, ViewModel.Sunrise);
+        PlaceBadge(SunsetBadge,  SunsetTimeText,  ViewModel.SunsetAnnotationX,  ViewModel.ShowSunsetAnnotation,  ViewModel.Sunset);
+
+        CurrentWeatherBadge.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
     }
 
     private async void RefreshButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
