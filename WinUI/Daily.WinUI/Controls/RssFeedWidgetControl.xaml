@@ -22,7 +22,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             
-            <FontIcon Glyph="&#xE900;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center"/>
+            <FontIcon Glyph="&#xE736;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center"/>
             <TextBlock Grid.Column="1" Text="News" FontSize="16" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
             
             <!-- Feed Selector -->

@@ -10,12 +10,16 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <!-- A highly translucent blue to tint the Mica slightly while keeping it very transparent -->
-        <SolidColorBrush x:Key="DashboardBackgroundBrush" Color="#600B1121" />
+        <LinearGradientBrush x:Key="DashboardBackgroundBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FF0B1121" Offset="0" />
+            <GradientStop Color="#FF0B1121" Offset="0.35" />
+            <GradientStop Color="#600B1121" Offset="0.6" />
+            <GradientStop Color="#600B1121" Offset="1" />
+        </LinearGradientBrush>
         
         <LinearGradientBrush x:Key="TopBarOverlayBrush" StartPoint="0,0" EndPoint="0,1">
             <GradientStop Color="#000B1121" Offset="0" />
-            <GradientStop Color="#600B1121" Offset="1" />
+            <GradientStop Color="#FF0B1121" Offset="1" />
         </LinearGradientBrush>
         <SolidColorBrush x:Key="WidgetBrush" Color="#20FFFFFF" />
         <SolidColorBrush x:Key="WidgetBorderBrush" Color="#46FFFFFF" />
@@ -24,7 +28,7 @@
     <Grid Background="{StaticResource DashboardBackgroundBrush}">
         <!-- Top Artwork -->
         <Grid VerticalAlignment="Top" Height="350">
-            <Image Source="ms-appx:///Assets/apptopbar.png" Stretch="UniformToFill" Opacity="0.25" />
+            <Image Source="ms-appx:///Assets/apptopbar.png" Stretch="UniformToFill" Opacity="0.4" />
             <Rectangle Fill="{StaticResource TopBarOverlayBrush}" />
         </Grid>
 

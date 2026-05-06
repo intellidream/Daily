@@ -24,7 +24,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <FontIcon Glyph="&#xE900;" FontFamily="Segoe Fluent Icons" FontSize="28" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center"/>
+                <FontIcon Glyph="&#xE736;" FontFamily="Segoe Fluent Icons" FontSize="28" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1" Text="News" FontSize="28" FontWeight="Bold" Margin="16,0,0,0" VerticalAlignment="Center"/>
                 
                 <ComboBox Grid.Column="2" x:Name="FeedComboBox" 
