@@ -502,7 +502,7 @@
                                             Grid.Row="0"
                                             ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}"
                                             HorizontalAlignment="Stretch"
-                                            Margin="52,32,12,32"
+                                            Margin="48,32,12,32"
                                             RenderTransformOrigin="0.5,0.5">
                                             <ItemsRepeater.RenderTransform>
                                                 <ScaleTransform ScaleX="1.142857" />
