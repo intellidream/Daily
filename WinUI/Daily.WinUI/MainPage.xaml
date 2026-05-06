@@ -438,6 +438,7 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
 
                                         <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Weather &amp; Favorites" FontFamily="Segoe UI Variable Display" FontWeight="SemiBold" Opacity="0.85" Foreground="{StaticResource AccentBlueBrush}" />
@@ -464,11 +465,18 @@
                                         </ComboBox>
 
                                         <TextBlock Grid.Row="4" Grid.Column="0" Text="Pressure Units" FontSize="12" Opacity="0.7" />
-                                        <ComboBox Grid.Row="4" Grid.Column="1" x:Name="PressureUnitComboBox" SelectionChanged="PressureUnitComboBox_SelectionChanged">
-                                            <x:String>hpa</x:String>
-                                            <x:String>mmhg</x:String>
-                                            <x:String>inhg</x:String>
-                                        </ComboBox>
+                                         <ComboBox Grid.Row="4" Grid.Column="1" x:Name="PressureUnitComboBox" SelectionChanged="PressureUnitComboBox_SelectionChanged">
+                                             <x:String>hpa</x:String>
+                                             <x:String>mmhg</x:String>
+                                             <x:String>inhg</x:String>
+                                         </ComboBox>
+
+                                         <TextBlock Grid.Row="5" Grid.Column="0" Text="Always Auto-Location" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
+                                         <ToggleSwitch
+                                             x:Name="AlwaysAutoLocationToggle"
+                                             Grid.Row="5" Grid.Column="1"
+                                             OnContent="On" OffContent="Off"
+                                             Toggled="AlwaysAutoLocationToggle_Toggled" />
                                     </Grid>
                                 </Expander>
                             </Border>
@@ -522,13 +530,14 @@
 
                                         <!-- Spline chart — same container width as top strip -->
                                         <chart:SfCartesianChart
-                                            x:Name="HourlyForecastChart"
-                                            Grid.Row="1"
-                                            Height="190"
-                                            Margin="0,0,8,0"
-                                            PlotAreaBorderThickness="0"
-                                            SeriesBoundsChanged="HourlyForecastChart_SeriesBoundsChanged"
-                                            >
+                                           x:Name="HourlyForecastChart"
+                                           Grid.Row="1"
+                                           Height="190"
+                                           Margin="0,0,8,0"
+                                           PlotAreaBorderThickness="0"
+                                           SeriesBoundsChanged="HourlyForecastChart_SeriesBoundsChanged"
+                                           SizeChanged="HourlyForecastChart_SizeChanged"
+                                           >
 
                                         <chart:SfCartesianChart.TrackballBehavior>
                                             <chart:ChartTrackballBehavior

@@ -40,6 +40,7 @@ public sealed partial class MainPage : Page
     {
         InitializeComponent();
         Loaded += MainPage_Loaded;
+        Unloaded += MainPage_Unloaded;
     }
 
     private Microsoft.UI.Xaml.Visibility BoolToVisibility(bool value) =>
@@ -54,6 +55,7 @@ public sealed partial class MainPage : Page
         WindUnitComboBox.SelectedItem = _settings.WindUnit;
         PressureUnitComboBox.SelectedItem = _settings.PressureUnit;
         FavoriteCategoryComboBox.SelectedItem = "Travel";
+        AlwaysAutoLocationToggle.IsOn = _settings.AlwaysAutoLocation;
 
         ViewModel.PropertyChanged += (_, args) =>
         {
@@ -70,6 +72,39 @@ public sealed partial class MainPage : Page
 
         await InitializeLocationAsync();
         await RefreshWeatherAsync();
+
+        // Start watching for location changes after the initial load.
+        _locationService.PositionChanged += LocationService_PositionChanged;
+        await _locationService.StartWatchingAsync();
+    }
+
+    private void MainPage_Unloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        _locationService.PositionChanged -= LocationService_PositionChanged;
+        _locationService.StopWatching();
+    }
+
+    private void LocationService_PositionChanged(object? sender, (double Latitude, double Longitude) coords)
+    {
+        // PositionChanged fires on a background thread — marshal to the UI thread.
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            // Only update if the user hasn't pinned a manual location.
+            if (_selectedLocation is null || _settings.LastLocationWasAuto)
+            {
+                _selectedLocation = new LocationSuggestion
+                {
+                    Name = "Auto Location",
+                    Country = "",
+                    State = null,
+                    Latitude = coords.Latitude,
+                    Longitude = coords.Longitude,
+                    DisplayName = "Auto location"
+                };
+                SetLocationText(_selectedLocation.DisplayName);
+                await RefreshWeatherAsync();
+            }
+        });
     }
 
     /// <summary>Appends a degree symbol to every Y-axis label on the hourly chart.</summary>
@@ -90,6 +125,11 @@ public sealed partial class MainPage : Page
         PositionSunAnnotations();
     }
 
+    private void HourlyForecastChart_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+    {
+        PositionSunAnnotations();
+    }
+
     /// <summary>Positions the sunrise/sunset badge overlays on the chart canvas.</summary>
     private void PositionSunAnnotations()
     {
@@ -99,14 +139,20 @@ public sealed partial class MainPage : Page
         var plotBounds = _chartPlotBounds;
         if (plotBounds.Width <= 0 || plotBounds.Height <= 0) return;
 
-        // CategoryAxis internal range is [-0.5 .. N-0.5].
-        // Category i centre pixel = plotLeft + (i + 0.5) * slotWidth.
-        // annotX from the ViewModel is a fractional slot index (e.g. 6.38 for 06:23
-        // sitting 38 % of the way between the 06:00 and 09:00 slots), so the same
-        // formula places the badge centred on exactly that fractional position.
-        var slotWidth = plotBounds.Width / hourlyCount;
+        // _chartPlotBounds is in HourlyForecastChart-local coordinates.
+        // SunAnnotationCanvas is a sibling element — transform the chart origin into
+        // canvas space so any layout offset between them is accounted for exactly.
+        var chartToCanvas = HourlyForecastChart.TransformToVisual(SunAnnotationCanvas);
+        var plotOrigin    = chartToCanvas.TransformPoint(new Windows.Foundation.Point(plotBounds.X, plotBounds.Y));
 
-        const double bottomMargin = 4; // px above the x-axis line
+        // CategoryAxis internal range is [-0.5 .. N-0.5].
+        // Center of slot i = plotLeft + (i + 0.5) * slotWidth.
+        // annotX is a fractional 0-based slot index from the ViewModel.
+        var slotWidth = plotBounds.Width / hourlyCount;
+        var plotLeft  = plotOrigin.X;
+        var plotBottom = plotOrigin.Y + plotBounds.Height;
+
+        const double bottomMargin = 4;
 
         void PlaceBadge(Border badge, TextBlock timeText, double annotX, bool show, string time)
         {
@@ -119,17 +165,13 @@ public sealed partial class MainPage : Page
             timeText.Text = time;
             badge.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
 
-            // Force a layout pass so ActualWidth reflects the new text.
             badge.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
             var badgeWidth  = badge.DesiredSize.Width  > 0 ? badge.DesiredSize.Width  : 70;
             var badgeHeight = badge.DesiredSize.Height > 0 ? badge.DesiredSize.Height : 24;
 
-            // Centre badge on the fractional slot position.
-            var xCenter = plotBounds.X + (annotX + 0.5) * slotWidth;
+            var xCenter = plotLeft + (annotX + 0.5) * slotWidth;
             var xLeft   = xCenter - badgeWidth / 2;
-
-            // Sit just above the x-axis line.
-            var yTop = plotBounds.Y + plotBounds.Height - badgeHeight - bottomMargin;
+            var yTop    = plotBottom - badgeHeight - bottomMargin;
 
             Canvas.SetLeft(badge, xLeft);
             Canvas.SetTop(badge, yTop);
@@ -151,6 +193,25 @@ public sealed partial class MainPage : Page
         RefreshButton.IsEnabled = false;
         try
         {
+            // When AlwaysAutoLocation is on, re-detect coordinates before every refresh.
+            if (_settings.AlwaysAutoLocation)
+            {
+                var coords = await _locationService.GetCurrentCoordinatesAsync();
+                if (coords.HasValue)
+                {
+                    _selectedLocation = new LocationSuggestion
+                    {
+                        Name = "Auto Location",
+                        Country = "",
+                        State = null,
+                        Latitude = coords.Value.Latitude,
+                        Longitude = coords.Value.Longitude,
+                        DisplayName = "Auto location"
+                    };
+                    SetLocationText(_selectedLocation.DisplayName);
+                }
+            }
+
             if (_selectedLocation is null)
             {
                 ViewModel.SetStatus("Select a city from the search box.");
@@ -173,6 +234,7 @@ public sealed partial class MainPage : Page
             _settings.LastLatitude = _selectedLocation.Latitude;
             _settings.LastLongitude = _selectedLocation.Longitude;
             _settings.LastLocationName = _selectedLocation.DisplayName;
+            _settings.LastLocationWasAuto = _selectedLocation.Name == "Auto Location";
             SaveLocationsToSettings();
             SettingsService.Save(_settings);
         }
@@ -184,7 +246,9 @@ public sealed partial class MainPage : Page
 
     private async Task InitializeLocationAsync()
     {
-        if (_settings.LastLatitude.HasValue && _settings.LastLongitude.HasValue)
+        // If there is a saved *manual* location and AlwaysAutoLocation is off, restore it and skip auto-detection.
+        if (_settings.LastLatitude.HasValue && _settings.LastLongitude.HasValue
+            && !_settings.LastLocationWasAuto && !_settings.AlwaysAutoLocation)
         {
             _selectedLocation = new LocationSuggestion
             {
@@ -466,6 +530,32 @@ public sealed partial class MainPage : Page
         _settings.PressureUnit = selected;
         SettingsService.Save(_settings);
         await RefreshWeatherAsync();
+    }
+
+    private async void AlwaysAutoLocationToggle_Toggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        _settings.AlwaysAutoLocation = AlwaysAutoLocationToggle.IsOn;
+        SettingsService.Save(_settings);
+
+        // If just turned on, immediately try to detect the current location.
+        if (_settings.AlwaysAutoLocation)
+        {
+            var coords = await _locationService.GetCurrentCoordinatesAsync();
+            if (coords.HasValue)
+            {
+                _selectedLocation = new LocationSuggestion
+                {
+                    Name = "Auto Location",
+                    Country = "",
+                    State = null,
+                    Latitude = coords.Value.Latitude,
+                    Longitude = coords.Value.Longitude,
+                    DisplayName = "Auto location"
+                };
+                SetLocationText(_selectedLocation.DisplayName);
+                await RefreshWeatherAsync();
+            }
+        }
     }
 
     private void GlassIntensityComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

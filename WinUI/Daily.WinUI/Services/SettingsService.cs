@@ -7,6 +7,10 @@ public sealed class AppSettings
     public double? LastLatitude { get; set; }
     public double? LastLongitude { get; set; }
     public string? LastLocationName { get; set; }
+    /// <summary>True when the last loaded location came from auto-detection, not a manual search.</summary>
+    public bool LastLocationWasAuto { get; set; }
+    /// <summary>When true, always attempt GPS/IP auto-detection at startup and on manual refresh, ignoring any saved location.</summary>
+    public bool AlwaysAutoLocation { get; set; } = false;
     public string GlassIntensity { get; set; } = "Medium";
     public string UnitSystem { get; set; } = "metric";
     public string WindUnit { get; set; } = "m/s";
