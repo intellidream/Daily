@@ -14,6 +14,7 @@ public sealed partial class MainPage : Page
     public MainPage()
     {
         InitializeComponent();
+        RssFeedWidget.ArticleTapped += RssFeedWidget_ArticleTapped;
     }
 
     private void WeatherWidget_Tapped(object sender, TappedRoutedEventArgs e)
@@ -33,7 +34,12 @@ public sealed partial class MainPage : Page
 
     private void RssFeedWidget_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        // OpenDetailWindow(typeof(RssFeedDetailPage)); // To be implemented
+        // OpenDetailWindow(typeof(RssFeedDetailPage));
+    }
+
+    private void RssFeedWidget_ArticleTapped(object? sender, Daily.Models.RssItem article)
+    {
+        OpenDetailWindow(typeof(Views.RssFeedDetailPage), article);
     }
 
     private void HealthWidget_Tapped(object sender, TappedRoutedEventArgs e)
@@ -41,24 +47,29 @@ public sealed partial class MainPage : Page
         // OpenDetailWindow(typeof(HealthDetailPage)); // To be implemented
     }
 
-    private void OpenDetailWindow(System.Type pageType)
+    private void OpenDetailWindow(System.Type pageType, object parameter = null)
     {
         if (_openWindows.TryGetValue(pageType, out var existingWindow))
         {
+            if (parameter != null)
+            {
+                // If window is already open, we might want to navigate it to the new item
+                existingWindow.NavigateTo(pageType, parameter);
+            }
             existingWindow.Activate();
             return;
         }
 
         var window = new DetailWindow();
         
-        window.Closed += (s, e) => 
+        window.Closed += (s, ev) => 
         {
             _openWindows.Remove(pageType);
         };
         
         _openWindows[pageType] = window;
         
-        window.NavigateTo(pageType);
+        window.NavigateTo(pageType, parameter);
         window.Activate();
     }
 }

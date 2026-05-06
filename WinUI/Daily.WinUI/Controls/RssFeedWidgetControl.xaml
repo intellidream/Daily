@@ -6,17 +6,89 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    d:DesignHeight="200" d:DesignWidth="400">
+    d:DesignHeight="300" d:DesignWidth="400">
 
-    <Grid Padding="20">
-        <StackPanel Spacing="8">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <FontIcon Glyph="&#xE814;" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="#FF69B6FF"/>
-                <TextBlock Text="RSS Feeds" FontSize="18" FontWeight="SemiBold" Opacity="0.9" />
-            </StackPanel>
-            
-            <TextBlock Text="Coming Soon" FontSize="24" FontWeight="Bold" Margin="0,24,0,0" Opacity="0.5"/>
-            <TextBlock Text="Latest news and articles" FontSize="12" Opacity="0.5" />
-        </StackPanel>
-    </Grid>
+    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Padding="16"
+            Tapped="WidgetBorder_Tapped">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <FontIcon Glyph="&#xE904;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="News" FontSize="14" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                
+                <!-- Feed Selector -->
+                <ComboBox Grid.Column="2" x:Name="FeedComboBox" 
+                          Width="150" Height="32" 
+                          DisplayMemberPath="Name"
+                          SelectionChanged="FeedComboBox_SelectionChanged"
+                          Background="Transparent"
+                          BorderThickness="0"/>
+            </Grid>
+
+            <!-- Content Area -->
+            <Grid Grid.Row="1">
+                <!-- Loading State -->
+                <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                    <ProgressRing IsActive="True" Width="24" Height="24"/>
+                    <TextBlock Text="Fetching news..." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12"/>
+                </StackPanel>
+
+                <!-- List of Articles -->
+                <ListView x:Name="ArticlesListView" 
+                          SelectionMode="None"
+                          ShowsScrollingPlaceholders="False"
+                          Visibility="Collapsed"
+                          Padding="0,0,12,0"
+                          IsItemClickEnabled="True"
+                          ItemClick="ArticlesListView_ItemClick">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,12" Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <!-- Article Thumbnail -->
+                                <Border Width="60" Height="60" CornerRadius="8" Background="{ThemeResource ControlFillColorDisabledBrush}">
+                                    <Image Source="{Binding ImageUrl}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                    <!-- Title -->
+                                    <TextBlock Text="{Binding Title}" 
+                                               FontSize="13" 
+                                               FontWeight="SemiBold"
+                                               TextWrapping="Wrap" 
+                                               MaxLines="2" 
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <!-- Meta Info -->
+                                    <TextBlock Text="{Binding PublishDate}" 
+                                               FontSize="11" 
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                                               Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+        </Grid>
+    </Border>
 </UserControl>
