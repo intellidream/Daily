@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Daily_WinUI.Controls.FinancesWidgetControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="200" d:DesignWidth="400">
+
+    <Grid Padding="20">
+        <StackPanel Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon Glyph="&#xE825;" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="#FF7FF0D5"/>
+                <TextBlock Text="Finances" FontSize="18" FontWeight="SemiBold" Opacity="0.9" />
+            </StackPanel>
+            
+            <TextBlock Text="Coming Soon" FontSize="24" FontWeight="Bold" Margin="0,24,0,0" Opacity="0.5"/>
+            <TextBlock Text="Track your spending and budget" FontSize="12" Opacity="0.5" />
+        </StackPanel>
+    </Grid>
+</UserControl>

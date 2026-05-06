@@ -9,7 +9,7 @@ using Windows.UI;
 
 namespace Daily_WinUI.ViewModels;
 
-public sealed class MainPageViewModel : INotifyPropertyChanged
+public sealed class WeatherDetailViewModel : INotifyPropertyChanged
 {
     private readonly WeatherClient _weatherClient = new();
 
