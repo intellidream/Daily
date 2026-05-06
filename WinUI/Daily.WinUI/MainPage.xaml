@@ -10,16 +10,24 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <LinearGradientBrush x:Key="DashboardBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#FF0B1121" Offset="0" />
-            <GradientStop Color="#FF11223B" Offset="0.5" />
-            <GradientStop Color="#FF18324D" Offset="1" />
+        <!-- A highly translucent blue to tint the Mica slightly while keeping it very transparent -->
+        <SolidColorBrush x:Key="DashboardBackgroundBrush" Color="#600B1121" />
+        
+        <LinearGradientBrush x:Key="TopBarOverlayBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#000B1121" Offset="0" />
+            <GradientStop Color="#600B1121" Offset="1" />
         </LinearGradientBrush>
         <SolidColorBrush x:Key="WidgetBrush" Color="#20FFFFFF" />
         <SolidColorBrush x:Key="WidgetBorderBrush" Color="#46FFFFFF" />
     </Page.Resources>
 
     <Grid Background="{StaticResource DashboardBackgroundBrush}">
+        <!-- Top Artwork -->
+        <Grid VerticalAlignment="Top" Height="350">
+            <Image Source="ms-appx:///Assets/apptopbar.png" Stretch="UniformToFill" Opacity="0.25" />
+            <Rectangle Fill="{StaticResource TopBarOverlayBrush}" />
+        </Grid>
+
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="32" Spacing="24">
                 <TextBlock Text="Dashboard" FontFamily="Segoe UI Variable Display" FontSize="42" FontWeight="SemiBold" Foreground="White" />
@@ -31,6 +39,7 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="200" />
                         <RowDefinition Height="200" />
                         <RowDefinition Height="200" />
                         <RowDefinition Height="200" />
@@ -51,8 +60,8 @@
                         <controls:HabitsWidgetControl x:Name="HabitsWidget" />
                     </Border>
 
-                    <!-- RSS Widget -->
-                    <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Grid.Column="0" Grid.Row="2" Tapped="RssFeedWidget_Tapped">
+                    <!-- RSS Widget (Spans 2 rows) -->
+                    <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Grid.Column="0" Grid.Row="2" Grid.RowSpan="2" Tapped="RssFeedWidget_Tapped">
                         <controls:RssFeedWidgetControl x:Name="RssFeedWidget" />
                     </Border>
 

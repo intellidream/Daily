@@ -63,7 +63,7 @@ public sealed partial class RssFeedWidgetControl : UserControl
             var items = await _rssClient.FetchFeedAsync(feed, _cancellationTokenSource.Token);
             
             _articles.Clear();
-            foreach (var item in items.Take(3)) // Show top 3 in widget
+            foreach (var item in items.Take(5)) // Show top 5 in widget
             {
                 _articles.Add(item);
             }
