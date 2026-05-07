@@ -225,10 +225,15 @@ namespace Daily.Services
                     // Because older iOS versions don't set updated_at, making lastPull filter unreliable.
                     // 14 days is very small (a few KB) and safe for performance.
                     var threshold = DateTime.UtcNow.AddDays(-14);
-                    if (lastPull > DateTime.MinValue && lastPull < threshold)
+                    if (lastPull == DateTime.MinValue)
                     {
-                        threshold = lastPull; // If we haven't synced in a long time, pull everything since last sync
+                        threshold = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc); // Pull all history on first sync
                     }
+                    else if (lastPull < threshold)
+                    {
+                        threshold = lastPull; // Pull everything since last sync if it's older than 14 days
+                    }
+                    
                     query = query.Filter("created_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, threshold.ToString("O"));
 
                     var response = await query.Range(rangeStart, rangeEnd).Get();

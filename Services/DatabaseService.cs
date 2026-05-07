@@ -16,9 +16,8 @@ namespace Daily.Services
         {
             var dbPath = Path.Combine(FileSystem.AppDataDirectory, DbName);
             var flags = SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.SharedCache;
-            
-            // Fix: Store DateTime as Strings (ISO 8601) instead of Ticks for compatibility and readability
-            _connection = new SQLiteAsyncConnection(dbPath, flags, storeDateTimeAsTicks: false);
+            // Reverting back to default (Ticks) because historical data was already saved as Ticks.
+            _connection = new SQLiteAsyncConnection(dbPath, flags);
         }
 
         public async Task InitializeAsync()
@@ -56,6 +55,7 @@ namespace Daily.Services
 
                 // RSS Saved Articles
                 await _connection.CreateTableAsync<LocalSavedArticle>().ConfigureAwait(false);
+                await _connection.CreateTableAsync<LocalRssSubscription>().ConfigureAwait(false);
                 
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
                 try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar").ConfigureAwait(false); } catch { /* Ignore if exists */ }
