@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Supabase.Realtime;
 
 namespace Daily.Services
 {
@@ -16,6 +17,9 @@ namespace Daily.Services
         
         public event Action OnHabitsUpdated;
         public event Action OnViewTypeChanged;
+
+        private Supabase.Realtime.RealtimeChannel? _habitsLogsChannel;
+        private Supabase.Realtime.RealtimeChannel? _habitsGoalsChannel;
 
         private string _currentViewType = "water"; // Default to "water"
         public string CurrentViewType
@@ -31,35 +35,32 @@ namespace Daily.Services
             }
         }
 
-        public HabitsService(Supabase.Client supabase, ISettingsService settingsService, IRefreshService refreshService, IHabitsRepository repository, ISyncService syncService)
+        private readonly ISeederService _seederService;
+        private readonly IRssFeedService _rssFeedService;
+
+        public HabitsService(Supabase.Client supabase, ISettingsService settingsService, IRefreshService refreshService, IHabitsRepository repository, ISyncService syncService, ISeederService seederService, IRssFeedService rssFeedService)
         {
             _supabase = supabase;
             _settingsService = settingsService;
             _refreshService = refreshService;
             _repository = repository;
             _syncService = syncService;
+            _seederService = seederService;
+            _rssFeedService = rssFeedService;
 
             // Listen for Auth Changes to Trigger Migration
             _supabase.Auth.AddStateChangedListener((sender, state) =>
             {
                if (state == Supabase.Gotrue.Constants.AuthState.SignedIn)
                {
-                   Task.Run(async () => 
-                   {
-                       try
-                       {
-                           Console.WriteLine($"[HabitsService] User Signed In: {CurrentUserId}. Check for migration...");
-                           await _repository.MigrateGuestDataAsync(CurrentUserId.ToString());
-                           await _syncService.SyncAsync();
-                           OnHabitsUpdated?.Invoke();
-                       }
-                       catch(Exception ex)
-                       {
-                           Console.WriteLine($"[HabitsService] Migration Error: {ex}");
-                       }
-                   });
+                   RunStartupMigration();
                }
             });
+
+            if (_supabase.Auth.CurrentSession != null)
+            {
+                RunStartupMigration();
+            }
 
             // Listen for global refresh (triggered by Auth/Settings changes)
             _refreshService.RefreshRequested += async () =>
@@ -71,6 +72,26 @@ namespace Daily.Services
                 }
                 OnHabitsUpdated?.Invoke();
             };
+        }
+
+        private void RunStartupMigration()
+        {
+            Task.Run(async () => 
+            {
+                try
+                {
+                    Console.WriteLine($"[HabitsService] User Signed In: {CurrentUserId}. Check for migration...");
+                    await _repository.MigrateGuestDataAsync(CurrentUserId.ToString());
+                    await _seederService.SeedRssFeedsAsync(CurrentUserId.ToString());
+                    await _rssFeedService.InitializeCustomFeedsAsync();
+                    await _syncService.SyncAsync();
+                    OnHabitsUpdated?.Invoke();
+                }
+                catch(Exception ex)
+                {
+                    Console.WriteLine($"[HabitsService] Migration Error: {ex}");
+                }
+            });
         }
 
         private bool IsAuthenticated => _supabase.Auth.CurrentSession != null && _supabase.Auth.CurrentUser != null;
@@ -202,13 +223,76 @@ namespace Daily.Services
              // Force check auth state and sync if needed
              if (IsAuthenticated)
              {
-                 Console.WriteLine($"[HabitsService] Initialize: User {CurrentUserId} detected. Triggering Sync...");
+                 Console.WriteLine($"[HabitsService] Initialize: User {CurrentUserId} detected. Triggering Sync & Realtime...");
                  await _syncService.SyncAsync();
+                 await SetupRealtimeAsync();
              }
              else
              {
                  Console.WriteLine("[HabitsService] Initialize: Guest mode.");
              }
+        }
+
+        private async Task SetupRealtimeAsync()
+        {
+            if (!IsAuthenticated) return;
+            
+            try 
+            {
+                if (_habitsLogsChannel == null)
+                {
+                    _habitsLogsChannel = _supabase.Realtime.Channel("public:habits_logs");
+                    _habitsLogsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHabitLogReceived);
+                    await _habitsLogsChannel.Subscribe();
+                    Console.WriteLine("[HabitsService] Realtime subscribed to habits_logs");
+                }
+
+                if (_habitsGoalsChannel == null)
+                {
+                    _habitsGoalsChannel = _supabase.Realtime.Channel("public:habits_goals");
+                    _habitsGoalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHabitGoalReceived);
+                    await _habitsGoalsChannel.Subscribe();
+                    Console.WriteLine("[HabitsService] Realtime subscribed to habits_goals");
+                }
+            } 
+            catch (Exception ex) 
+            {
+                Console.WriteLine($"[HabitsService] Realtime setup failed: {ex.Message}");
+            }
+        }
+
+        private void OnHabitLogReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
+        {
+            try 
+            {
+                var remoteLog = e.Model<HabitLog>();
+                
+                if (remoteLog != null && remoteLog.UserId == CurrentUserId)
+                {
+                    var localLog = remoteLog.ToLocal();
+                    localLog.SyncedAt = DateTime.UtcNow; // Prevent sync push loop
+                    _repository.SaveLocalLogAsync(localLog).ContinueWith(_ => OnHabitsUpdated?.Invoke());
+                    Console.WriteLine($"[HabitsService] Realtime: Synced incoming habit log {localLog.Id}");
+                }
+            } 
+            catch(Exception ex) { Console.WriteLine($"[HabitsService] Realtime Log Error: {ex}"); }
+        }
+
+        private void OnHabitGoalReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
+        {
+            try 
+            {
+                var remoteGoal = e.Model<HabitGoal>();
+                
+                if (remoteGoal != null && remoteGoal.UserId == CurrentUserId)
+                {
+                    var localGoal = remoteGoal.ToLocal();
+                    localGoal.SyncedAt = DateTime.UtcNow; // Prevent sync push loop
+                    _repository.SaveLocalGoalAsync(localGoal).ContinueWith(_ => OnHabitsUpdated?.Invoke());
+                    Console.WriteLine($"[HabitsService] Realtime: Synced incoming habit goal {localGoal.Id}");
+                }
+            } 
+            catch(Exception ex) { Console.WriteLine($"[HabitsService] Realtime Goal Error: {ex}"); }
         }
         public async Task<Dictionary<string, int>> GetSmokesBreakdownAsync(DateTime sinceDate)
         {

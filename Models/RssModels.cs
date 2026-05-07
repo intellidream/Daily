@@ -99,6 +99,40 @@ namespace Daily.Models
         public override string ToString() => Name;
     }
 
+    [Table("rss_subscriptions")]
+    public class RssSubscription : BaseModel
+    {
+        [PrimaryKey("id")]
+        public Guid Id { get; set; }
+
+        [Column("user_id")]
+        public Guid UserId { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [Column("url")]
+        public string Url { get; set; } = string.Empty;
+
+        [Column("icon_url")]
+        public string IconUrl { get; set; } = string.Empty;
+
+        [Column("category")]
+        public string Category { get; set; } = "Custom";
+
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; }
+
+        [Column("updated_at")]
+        public DateTime? UpdatedAt { get; set; }
+
+        [Column("is_deleted")]
+        public bool IsDeleted { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        public DateTime? SyncedAt { get; set; }
+    }
+
     public class RssItem
     {
         public string Title { get; set; } = string.Empty;

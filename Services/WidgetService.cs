@@ -8,13 +8,17 @@ namespace Daily.Services
 {
     public class WidgetService : IWidgetService
     {
-        private readonly List<WidgetModel> _widgets;
+        private readonly ISettingsService _settingsService;
 
-        public WidgetService()
+        public WidgetService(ISettingsService settingsService)
         {
-            _widgets = new List<WidgetModel>
+            _settingsService = settingsService;
+        }
+
+        private List<WidgetModel> GetDefaultWidgets()
+        {
+            return new List<WidgetModel>
             {
-                // Default widgets
                 new WidgetModel { Title = "Weather", ComponentType = "WeatherWidget", RowSpan = 2 },
                 new WidgetModel { Title = "Bubbles", ComponentType = "HabitsWidget", RowSpan = 3 },
                 new WidgetModel { Title = "Vitals", ComponentType = "HealthWidget", RowSpan = 2 },
@@ -29,35 +33,51 @@ namespace Daily.Services
 
         public Task<List<WidgetModel>> GetWidgetsAsync()
         {
-            return Task.FromResult(_widgets);
+             var json = _settingsService.Settings.DashboardWidgetsJson;
+             if (string.IsNullOrEmpty(json)) 
+             {
+                 return Task.FromResult(GetDefaultWidgets());
+             }
+             try 
+             {
+                 var widgets = System.Text.Json.JsonSerializer.Deserialize<List<WidgetModel>>(json);
+                 return Task.FromResult(widgets ?? GetDefaultWidgets());
+             }
+             catch 
+             {
+                 return Task.FromResult(GetDefaultWidgets());
+             }
         }
 
-        public Task AddWidgetAsync(WidgetModel widget)
+        public async Task AddWidgetAsync(WidgetModel widget)
         {
-            _widgets.Add(widget);
-            return Task.CompletedTask;
+            var widgets = await GetWidgetsAsync();
+            widgets.Add(widget);
+            await SaveWidgetsAsync(widgets);
         }
 
-        public Task RemoveWidgetAsync(Guid id)
+        public async Task RemoveWidgetAsync(Guid id)
         {
-            var widget = _widgets.FirstOrDefault(w => w.Id == id);
-            if (widget != null)
-            {
-                _widgets.Remove(widget);
-            }
-            return Task.CompletedTask;
+            var widgets = await GetWidgetsAsync();
+            widgets.RemoveAll(w => w.Id == id);
+            await SaveWidgetsAsync(widgets);
         }
 
-        public Task UpdateWidgetAsync(WidgetModel widget)
+        public async Task UpdateWidgetAsync(WidgetModel widget)
         {
-            // In-memory, so reference update is enough if it's the same object, 
-            // but for safety we could replace it.
-            var index = _widgets.FindIndex(w => w.Id == widget.Id);
+            var widgets = await GetWidgetsAsync();
+            var index = widgets.FindIndex(w => w.Id == widget.Id);
             if (index != -1)
             {
-                _widgets[index] = widget;
+                widgets[index] = widget;
+                await SaveWidgetsAsync(widgets);
             }
-            return Task.CompletedTask;
+        }
+
+        private async Task SaveWidgetsAsync(List<WidgetModel> widgets)
+        {
+            _settingsService.Settings.DashboardWidgetsJson = System.Text.Json.JsonSerializer.Serialize(widgets);
+            await _settingsService.SaveSettingsAsync();
         }
     }
 }

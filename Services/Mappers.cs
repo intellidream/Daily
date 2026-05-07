@@ -28,8 +28,8 @@ namespace Daily.Services
         {
             return new LocalHabitLog
             {
-                Id = domain.Id.ToString(),
-                UserId = domain.UserId.ToString(),
+                Id = domain.Id.ToString().ToLowerInvariant(),
+                UserId = domain.UserId.ToString().ToLowerInvariant(),
                 HabitType = domain.HabitType,
                 Value = domain.Value,
                 Unit = domain.Unit,
@@ -64,8 +64,8 @@ namespace Daily.Services
         {
             return new LocalHabitGoal
             {
-                Id = domain.Id.ToString(),
-                UserId = domain.UserId.ToString(),
+                Id = domain.Id.ToString().ToLowerInvariant(),
+                UserId = domain.UserId.ToString().ToLowerInvariant(),
                 HabitType = domain.HabitType,
                 TargetValue = domain.TargetValue,
                 Unit = domain.Unit,
@@ -141,6 +141,7 @@ namespace Daily.Services
                 Interests = string.IsNullOrEmpty(local.InterestsJson) 
                             ? new List<string>() 
                             : System.Text.Json.JsonSerializer.Deserialize<List<string>>(local.InterestsJson) ?? new List<string>(),
+                DashboardWidgetsJson = local.DashboardWidgetsJson,
                 // Ensure UTC Kind for correct serialization
                 UpdatedAt = SafeUtc(local.UpdatedAt) 
             };
@@ -170,6 +171,7 @@ namespace Daily.Services
                 SmokesQuitDate = domain.SmokesQuitDate,
                 
                 InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests),
+                DashboardWidgetsJson = domain.DashboardWidgetsJson,
                 UpdatedAt = domain.UpdatedAt
             };
         }
@@ -240,6 +242,42 @@ namespace Daily.Services
                 PublicationIconUrl = domain.PublicationIconUrl,
                 ArticleType = domain.ArticleType,
                 ArticleDate = domain.ArticleDate.ToUniversalTime(),
+                CreatedAt = domain.CreatedAt.ToUniversalTime(),
+                UpdatedAt = domain.UpdatedAt?.ToUniversalTime(),
+                IsDeleted = domain.IsDeleted,
+                SyncedAt = domain.SyncedAt?.ToUniversalTime()
+            };
+        }
+
+        // --- RssSubscription ---
+
+        public static RssSubscription ToDomain(this LocalRssSubscription local)
+        {
+            return new RssSubscription
+            {
+                Id = Guid.Parse(local.Id),
+                UserId = Guid.Parse(local.UserId),
+                Name = local.Name,
+                Url = local.Url,
+                IconUrl = local.IconUrl,
+                Category = local.Category,
+                CreatedAt = SafeUtc(local.CreatedAt),
+                UpdatedAt = SafeUtc(local.UpdatedAt),
+                IsDeleted = local.IsDeleted,
+                SyncedAt = SafeUtc(local.SyncedAt)
+            };
+        }
+
+        public static LocalRssSubscription ToLocal(this RssSubscription domain)
+        {
+            return new LocalRssSubscription
+            {
+                Id = domain.Id.ToString(),
+                UserId = domain.UserId.ToString(),
+                Name = domain.Name,
+                Url = domain.Url,
+                IconUrl = domain.IconUrl,
+                Category = domain.Category,
                 CreatedAt = domain.CreatedAt.ToUniversalTime(),
                 UpdatedAt = domain.UpdatedAt?.ToUniversalTime(),
                 IsDeleted = domain.IsDeleted,

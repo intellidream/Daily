@@ -112,125 +112,103 @@ namespace Daily.Services.Finances
                 symbolsToFetchFromYahoo = symbols.ToList();
             }
 
-            // 2. Fetch Stale/Missing/Rich data from Yahoo
+            // 2. Fetch Stale/Missing/Rich data from Supabase Edge Function
             if (symbolsToFetchFromYahoo.Any())
             {
-                // Console.WriteLine($"[FinancesService] Fetching from Yahoo: {string.Join(", ", symbolsToFetchFromYahoo)}");
-                var yahooData = await _yahooService.GetMarketDataAsync(symbolsToFetchFromYahoo);
-
-                // Failover Logic: If Yahoo didn't return some symbols, try Finnhub
-                var missingSymbols = symbolsToFetchFromYahoo.Where(s => !yahooData.ContainsKey(s)).ToList();
-                if (missingSymbols.Any())
+                try
                 {
-                    foreach (var missing in missingSymbols)
+                    Console.WriteLine($"[FinancesService] Fetching from Edge Function: {string.Join(", ", symbolsToFetchFromYahoo)}");
+                    var parameters = new Dictionary<string, object>
                     {
-                        var finnhubQuote = await _finnhubService.GetQuoteAsync(missing);
-                        if (finnhubQuote != null)
-                        {
-                            // Finnhub data is "lighter" (no CompanyName usually), so we might need to patch it
-                            // Use cached name if available or symbol as fallback
-                            var cached = cachedSecurities.FirstOrDefault(s => s.Symbol == missing);
-                            if (string.IsNullOrEmpty(finnhubQuote.CompanyName))
-                            {
-                                finnhubQuote.CompanyName = cached?.Name ?? GetPrettyName(missing, missing);
-                            }
-                            // Attempt to infer MarketType/Currency/Exchange if missing
-                            if (string.IsNullOrEmpty(finnhubQuote.Currency)) finnhubQuote.Currency = "USD"; // Default
-                            if (string.IsNullOrEmpty(finnhubQuote.MarketType)) 
-                            {
-                                if (missing.Contains("-USD")) finnhubQuote.MarketType = "crypto";
-                                else if (missing.Contains("=X")) finnhubQuote.MarketType = "forex";
-                                else finnhubQuote.MarketType = "stock";
-                            }
+                        { "symbols", symbolsToFetchFromYahoo }
+                    };
 
-                            // Add to yahooData so it gets processed downstream
-                            if (!yahooData.ContainsKey(missing))
-                            {
-                                yahooData.Add(missing, finnhubQuote);
-                            }
-                        }
-                    }
-                }
-
-                if (yahooData.Any())
-                {
-                    // Update Results with Fresh Data (Merge with Cached)
-                    foreach (var kvp in yahooData)
+                    // Invoke Edge Function
+                    var bodyString = System.Text.Json.JsonSerializer.Serialize(parameters);
+                    var responseJson = await _supabaseClient.Functions.Invoke("fetch-market-quotes", bodyString);
+                    
+                    if (!string.IsNullOrEmpty(responseJson))
                     {
-                        var freshQuote = kvp.Value;
-                        
-                        // 2a. Merge with Cached Data to preserve richness (Logo, Volume, MarketCap)
-                        // This is crucial because Finnhub quotes are "light" (missing huge chunks of data)
-                        // If we just overwrite, we lose the Logos and Charts.
-                        var cached = cachedSecurities.FirstOrDefault(s => s.Symbol == freshQuote.Symbol);
-                        if (cached != null)
+                        // Deserialize
+                        using var doc = JsonDocument.Parse(responseJson);
+                        if (doc.RootElement.TryGetProperty("data", out var dataElement) && dataElement.ValueKind == JsonValueKind.Array)
                         {
-                            // Preserve Name if fresh is generic/missing
-                            if (string.IsNullOrEmpty(freshQuote.CompanyName) || freshQuote.CompanyName == freshQuote.Symbol)
+                            foreach (var item in dataElement.EnumerateArray())
                             {
-                                 freshQuote.CompanyName = cached.Name;
-                            }
+                                var symbol = item.GetProperty("symbol").GetString();
+                                var name = item.TryGetProperty("name", out var n) ? n.GetString() : symbol;
+                                var type = item.TryGetProperty("type", out var t) ? t.GetString() : "stock";
+                                var exchange = item.TryGetProperty("exchange", out var e) ? e.GetString() : "US";
+                                var currency = item.TryGetProperty("currency", out var c) ? c.GetString() : "USD";
+                                var lastPrice = item.TryGetProperty("last_price", out var p) ? p.GetDecimal() : 0m;
+                                var updatedAtStr = item.TryGetProperty("last_updated_at", out var u) ? u.GetString() : null;
+                                var updatedAt = DateTime.TryParse(updatedAtStr, out var date) ? date : DateTime.UtcNow;
 
-                            // Preserve Logo if fresh is missing
-                            // Finnhub returns NULL LogoUrl. We MUST use the cached one if valid.
-                            if (string.IsNullOrEmpty(freshQuote.LogoUrl) && !string.IsNullOrEmpty(cached.LogoUrl))
-                            {
-                                freshQuote.LogoUrl = cached.LogoUrl;
-                            }
+                                // Fallback logic for Name/Logo
+                                var cached = cachedSecurities.FirstOrDefault(s => s.Symbol == symbol);
+                                var finalName = string.IsNullOrEmpty(name) || name == symbol ? (cached?.Name ?? symbol) : name;
+                                var finalLogoUrl = cached?.LogoUrl ?? GetLogoUrl(symbol, finalName, type);
 
-                            // Preserve Rich Data (Volume/MarketCap) if fresh is missing/zero
-                            if (freshQuote.Volume == 0 && cached.Volume.HasValue) freshQuote.Volume = cached.Volume;
-                            if (freshQuote.MarketCap == 0 && cached.MarketCap.HasValue) freshQuote.MarketCap = cached.MarketCap;
-                            if (freshQuote.DayHigh == 0 && cached.DayHigh.HasValue) freshQuote.DayHigh = cached.DayHigh;
-                            if (freshQuote.DayLow == 0 && cached.DayLow.HasValue) freshQuote.DayLow = cached.DayLow;
-                        }
+                                var freshQuote = new StockQuote
+                                {
+                                    Symbol = symbol,
+                                    CompanyName = finalName,
+                                    CurrentPrice = lastPrice,
+                                    MarketType = type,
+                                    Exchange = exchange,
+                                    Currency = currency,
+                                    LogoUrl = finalLogoUrl,
+                                    // Preserve some rich data from cache if it existed
+                                    Volume = cached?.Volume,
+                                    MarketCap = cached?.MarketCap,
+                                    DayHigh = cached?.DayHigh,
+                                    DayLow = cached?.DayLow,
+                                    Change = cached?.Change ?? 0,
+                                    PercentChange = cached?.PercentChange ?? 0
+                                };
 
-                        // 2b. Final Fallback for Logo
-                        if (string.IsNullOrEmpty(freshQuote.LogoUrl))
-                        {
-                             freshQuote.LogoUrl = GetLogoUrl(freshQuote.Symbol, freshQuote.CompanyName, freshQuote.MarketType);
-                        }
-                        
-                        // Remove stale entry if exists
-                        var existing = results.FirstOrDefault(r => r.Symbol == freshQuote.Symbol);
-                        if (existing != null) results.Remove(existing);
-                        
-                        results.Add(freshQuote);
-
-                        // 3. Update Local SQLite Cache
-                        try
-                        {
-                            var security = new LocalSecurity
-                            {
-                                Symbol = freshQuote.Symbol,
-                                Name = freshQuote.CompanyName, 
-                                LatestPrice = freshQuote.CurrentPrice,
-                                LastUpdatedAt = DateTime.UtcNow,
-                                Type = MapMarketType(freshQuote.MarketType),
-                                Change = freshQuote.Change,
-                                PercentChange = freshQuote.PercentChange,
+                                // Remove stale entry if exists
+                                var existing = results.FirstOrDefault(r => r.Symbol == symbol);
+                                if (existing != null) results.Remove(existing);
                                 
-                                // Rich Data
-                                DayHigh = freshQuote.DayHigh,
-                                DayLow = freshQuote.DayLow,
-                                Volume = freshQuote.Volume,
-                                MarketCap = freshQuote.MarketCap,
-                                Currency = freshQuote.Currency,
-                                Exchange = freshQuote.Exchange,
-                                LogoUrl = freshQuote.LogoUrl
-                            };
-                            
-                            await _databaseService.Connection.InsertOrReplaceAsync(security);
-                        }
-                        catch(Exception ex)
-                        {
-                             Console.WriteLine($"[FinancesService] SQLite Write Error: {ex}");
+                                results.Add(freshQuote);
+
+                                // Update Local SQLite Cache
+                                try
+                                {
+                                    var security = new LocalSecurity
+                                    {
+                                        Symbol = freshQuote.Symbol,
+                                        Name = freshQuote.CompanyName, 
+                                        LatestPrice = freshQuote.CurrentPrice,
+                                        LastUpdatedAt = updatedAt,
+                                        Type = MapMarketType(freshQuote.MarketType),
+                                        Change = freshQuote.Change,
+                                        PercentChange = freshQuote.PercentChange,
+                                        
+                                        // Rich Data
+                                        DayHigh = freshQuote.DayHigh,
+                                        DayLow = freshQuote.DayLow,
+                                        Volume = freshQuote.Volume,
+                                        MarketCap = freshQuote.MarketCap,
+                                        Currency = freshQuote.Currency,
+                                        Exchange = freshQuote.Exchange,
+                                        LogoUrl = freshQuote.LogoUrl
+                                    };
+                                    
+                                    await _databaseService.Connection.InsertOrReplaceAsync(security);
+                                }
+                                catch(Exception ex)
+                                {
+                                     Console.WriteLine($"[FinancesService] SQLite Write Error: {ex}");
+                                }
+                            }
                         }
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Console.WriteLine("[FinancesService] Yahoo fetch returned empty. Keeping cached data if available.");
+                    Console.WriteLine($"[FinancesService] Edge Function Error: {ex}");
                 }
             }
 

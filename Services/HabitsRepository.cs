@@ -21,14 +21,15 @@ namespace Daily.Services
             var startUtc = localMidnight.ToUniversalTime(); 
             var endUtc = localMidnight.AddDays(1).ToUniversalTime();
 
+            var normalizedUserId = userId?.ToLowerInvariant();
             // Fetch from Local DB with UserID filter
             var localLogs = await _databaseService.Connection.Table<LocalHabitLog>()
-                                .Where(l => l.HabitType == habitType && l.UserId == userId && l.IsDeleted == false) 
+                                .Where(l => l.HabitType == habitType && l.UserId == normalizedUserId && l.IsDeleted == false) 
                                 .ToListAsync();
             
             return localLogs
                 .Select(l => l.ToDomain()) // Map safely to UTC domain objects first
-                .Where(l => l.LoggedAt >= startUtc && l.LoggedAt < endUtc)
+                .Where(l => l.LoggedAt.ToLocalTime().Date == date.Date) // Use local date comparison to avoid boundary issues
                 .OrderByDescending(l => l.LoggedAt)
                 .ToList();
         }
@@ -42,6 +43,13 @@ namespace Daily.Services
              if (string.IsNullOrEmpty(local.Id)) local.Id = Guid.NewGuid().ToString();
              
              await _databaseService.Connection.InsertOrReplaceAsync(local);
+        }
+
+        public async Task SaveLocalLogAsync(LocalHabitLog localLog)
+        {
+             await _databaseService.InitializeAsync();
+             if (string.IsNullOrEmpty(localLog.Id)) localLog.Id = Guid.NewGuid().ToString();
+             await _databaseService.Connection.InsertOrReplaceAsync(localLog);
         }
 
         public async Task DeleteLogAsync(Guid logId)
@@ -58,8 +66,9 @@ namespace Daily.Services
         {
             await _databaseService.InitializeAsync();
 
+            var normalizedUserId = userId?.ToLowerInvariant();
             var local = await _databaseService.Connection.Table<LocalHabitGoal>()
-                            .Where(g => g.HabitType == habitType && g.UserId == userId)
+                            .Where(g => g.HabitType == habitType && g.UserId == normalizedUserId && g.IsDeleted == false)
                             .FirstOrDefaultAsync();
 
             return local == null ? null : local.ToDomain();
@@ -70,6 +79,12 @@ namespace Daily.Services
             await _databaseService.InitializeAsync();
             var local = goal.ToLocal();
             await _databaseService.Connection.InsertOrReplaceAsync(local);
+        }
+
+        public async Task SaveLocalGoalAsync(LocalHabitGoal localGoal)
+        {
+            await _databaseService.InitializeAsync();
+            await _databaseService.Connection.InsertOrReplaceAsync(localGoal);
         }
 
         public async Task MigrateGuestDataAsync(string newUserId)
@@ -141,16 +156,16 @@ namespace Daily.Services
 
              // Need strict string format for comparison if underlying is string
              // But sqlite-net-pcl handles DateTime mappings if configured.
-             // Let's assume standard Linq Works:
+             var normalizedUserId = userId?.ToLowerInvariant();
              var summaries = await _databaseService.Connection.Table<LocalDailySummary>()
-                                .Where(s => s.HabitType == habitType && s.UserId == userId && s.Date >= sDate && s.Date < eDate)
+                                .Where(s => s.HabitType == habitType && s.UserId == normalizedUserId && s.Date >= sDate && s.Date < eDate)
                                 .ToListAsync();
 
              // 2. Fetch Raw Logs (for the same period)
              // We assume raw logs only exist for the last 90 days, but we query whatever is there.
              // If raw logs exist, they are "Verified Truth" and supersede summaries.
              var rawLogs = await _databaseService.Connection.Table<LocalHabitLog>()
-                                .Where(l => l.HabitType == habitType && l.UserId == userId && l.IsDeleted == false && l.LoggedAt >= sDate && l.LoggedAt < eDate)
+                                .Where(l => l.HabitType == habitType && l.UserId == normalizedUserId && l.IsDeleted == false && l.LoggedAt >= sDate && l.LoggedAt < eDate)
                                 .ToListAsync();
 
             // 3. Merge: Pivot on Date
@@ -205,12 +220,13 @@ namespace Daily.Services
             // But we know Logs are < 90 Days. So getting all logs is 90 days * 20 = 1800 rows. Fast.
             // Getting all Summaries is 20 * 365 = 7300 rows. Fast.
             
+            var normalizedUserId = userId?.ToLowerInvariant();
             var allSummaries = await _databaseService.Connection.Table<LocalDailySummary>()
-                                .Where(s => s.HabitType == habitType && s.UserId == userId)
+                                .Where(s => s.HabitType == habitType && s.UserId == normalizedUserId)
                                 .ToListAsync();
 
             var allLogs = await _databaseService.Connection.Table<LocalHabitLog>()
-                                .Where(l => l.HabitType == habitType && l.UserId == userId && l.IsDeleted == false)
+                                .Where(l => l.HabitType == habitType && l.UserId == normalizedUserId && l.IsDeleted == false)
                                 .ToListAsync();
 
             var logDates = allLogs.Select(l => l.LoggedAt.Date).ToHashSet();
@@ -252,9 +268,10 @@ namespace Daily.Services
             // Or if they are older logs, they are in LocalHabitLog (we don't purge yet).
             
             var sinceUtc = sinceDate.ToUniversalTime();
+            var normalizedUserId = userId?.ToLowerInvariant();
             
             var logs = await _databaseService.Connection.Table<LocalHabitLog>()
-                            .Where(l => l.HabitType == habitType && l.UserId == userId && l.IsDeleted == false && l.LoggedAt >= sinceUtc)
+                            .Where(l => l.HabitType == habitType && l.UserId == normalizedUserId && l.IsDeleted == false && l.LoggedAt >= sinceUtc)
                             .ToListAsync();
 
             var breakdown = new Dictionary<string, int>();

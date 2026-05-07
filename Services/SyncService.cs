@@ -182,6 +182,9 @@ namespace Daily.Services
 
             // 5. Push Saved Articles (Read Later / Favorites)
             await PushSavedArticlesAsync(userId);
+            
+            // 6. Push RSS Subscriptions
+            await PushRssSubscriptionsAsync(userId);
 
             // 6. Data Safety / Cost Management: Always check if we can prune old remote logs
             await PruneRemoteLogsAsync(userId);
@@ -218,10 +221,15 @@ namespace Daily.Services
                     var query = _supabase.From<HabitLog>()
                         .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending);
                     
-                    if (lastPull > DateTime.MinValue)
+                    // Always pull the last 14 days of logs to ensure we don't miss anything from iOS
+                    // Because older iOS versions don't set updated_at, making lastPull filter unreliable.
+                    // 14 days is very small (a few KB) and safe for performance.
+                    var threshold = DateTime.UtcNow.AddDays(-14);
+                    if (lastPull > DateTime.MinValue && lastPull < threshold)
                     {
-                        query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                        threshold = lastPull; // If we haven't synced in a long time, pull everything since last sync
                     }
+                    query = query.Filter("created_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, threshold.ToString("O"));
 
                     var response = await query.Range(rangeStart, rangeEnd).Get();
 
@@ -265,10 +273,8 @@ namespace Daily.Services
             try {
                 Console.WriteLine($"[SyncService] Pulling Goals for User: {userId}...");
                 var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<HabitGoal>)_supabase.From<HabitGoal>();
-                if (lastPull > DateTime.MinValue)
-                {
-                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
-                }
+                // Always pull all goals since there are very few of them
+                // This ensures we catch any goals created by iOS without updated_at
                 var goalResponse = await query.Get();
 
                 Console.WriteLine($"[SyncService] Pulled {goalResponse.Models.Count} goals from Cloud.");
@@ -287,6 +293,12 @@ namespace Daily.Services
             // 3. Pull Preferences
             totalPulled += await PullPreferencesAsync(userId);
             
+            // 5. Pull Saved Articles
+            totalPulled += await PullSavedArticlesAsync(userId);
+            
+            // 6. Pull RSS Subscriptions
+            totalPulled += await PullRssSubscriptionsAsync(userId, lastPull);
+            
             // 4. Pull Finances
             totalPulled += await PullAccountsAsync(userId);
             totalPulled += await PullTransactionsAsync(userId);
@@ -294,9 +306,6 @@ namespace Daily.Services
 
             // 4. Pull Summaries
             totalPulled += await PullSummariesAsync(userId);
-
-            // 5. Pull Saved Articles (Read Later / Favorites)
-            totalPulled += await PullSavedArticlesAsync(userId);
 
             if (totalPulled >= 0)
             {
@@ -317,6 +326,68 @@ namespace Daily.Services
         public string DebugLog { get; private set; } = "";
         public event Action? OnDebugLogUpdated;
         public event Action? OnPreferencesPulled;
+        public event Action? OnSavedArticlesPulled;
+
+        private async Task PushRssSubscriptionsAsync(string userId)
+        {
+            var dirty = await _databaseService.Connection.Table<LocalRssSubscription>()
+                                .Where(x => x.SyncedAt == null && x.UserId == userId)
+                                .ToListAsync();
+            if (dirty.Any())
+            {
+                Console.WriteLine($"[SyncService] Pushing {dirty.Count} dirty RSS subscriptions...");
+                try 
+                {
+                    var remote = new List<RssSubscription>();
+                    foreach(var d in dirty)
+                    {
+                        try { remote.Add(d.ToDomain()); } catch { }
+                    }
+                    if (remote.Any())
+                    {
+                        await _supabase.From<RssSubscription>().Upsert(remote);
+                        foreach (var l in dirty)
+                        {
+                            l.SyncedAt = DateTime.UtcNow;
+                            await _databaseService.Connection.UpdateAsync(l);
+                        }
+                    }
+                }
+                catch(Exception ex) { Console.WriteLine($"[SyncService] Push RssSubscriptions Failed: {ex.Message}"); }
+            }
+        }
+
+        private async Task<int> PullRssSubscriptionsAsync(string userId, DateTime lastPull)
+        {
+            try 
+            {
+                var query = _supabase.From<RssSubscription>().Where(x => x.UserId == Guid.Parse(userId));
+                if (lastPull > DateTime.MinValue)
+                {
+                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                }
+                var response = await query.Get();
+                int count = response.Models.Count;
+                if (count > 0)
+                {
+                    var localBatch = response.Models.Select(m => {
+                        var l = m.ToLocal();
+                        l.SyncedAt = DateTime.UtcNow;
+                        return l;
+                    }).ToList();
+
+                    await _databaseService.Connection.RunInTransactionAsync(tran => 
+                    {
+                        foreach(var item in localBatch)
+                        {
+                            tran.InsertOrReplace(item);
+                        }
+                    });
+                }
+                return count;
+            }
+            catch(Exception ex) { Console.WriteLine($"[SyncService] Pull RssSubscriptions Failed: {ex.Message}"); return 0; }
+        }
 
         public void Log(string message) => LogDebug(message);
 

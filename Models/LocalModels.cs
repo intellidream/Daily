@@ -79,6 +79,7 @@ namespace Daily.Models
 
         // Serialized JSON
         public string InterestsJson { get; set; }
+        public string? DashboardWidgetsJson { get; set; }
 
         public DateTime UpdatedAt { get; set; }
         public DateTime? SyncedAt { get; set; }
@@ -178,6 +179,29 @@ namespace Daily.Models
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
 
+        [Indexed]
+        public DateTime? SyncedAt { get; set; } // Null = Dirty
+        public bool IsDeleted { get; set; }
+    }
+
+    [Table("rss_subscriptions")]
+    public class LocalRssSubscription
+    {
+        [PrimaryKey]
+        public string Id { get; set; } // UUID as string
+
+        [Indexed]
+        public string UserId { get; set; } // UUID as string
+
+        public string Name { get; set; }
+        public string Url { get; set; }
+        public string IconUrl { get; set; }
+        public string Category { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+
+        // Sync Status
         [Indexed]
         public DateTime? SyncedAt { get; set; } // Null = Dirty
         public bool IsDeleted { get; set; }

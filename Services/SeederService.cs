@@ -8,6 +8,7 @@ namespace Daily.Services
     public interface ISeederService
     {
         Task SeedHistoryAsync(string userId);
+        Task SeedRssFeedsAsync(string userId);
     }
 
     public class SeederService : ISeederService
@@ -108,6 +109,52 @@ namespace Daily.Services
                 byte[] hash = md5.ComputeHash(System.Text.Encoding.Default.GetBytes(input));
                 return new Guid(hash);
             }
+        }
+        public async Task SeedRssFeedsAsync(string userId)
+        {
+            var existingCount = await _databaseService.Connection.Table<LocalRssSubscription>()
+                                        .Where(r => r.UserId == userId && r.IsDeleted == false)
+                                        .CountAsync();
+            
+            if (existingCount > 0)
+            {
+                return; // Already seeded or user has their own feeds
+            }
+
+            Console.WriteLine("[Seeder] Seeding default RSS Feeds...");
+            
+            var defaultFeeds = new List<LocalRssSubscription>
+            {
+                // 🇷🇴 Local
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Republica", Url = "https://republica.ro/rss", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=republica.ro&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Digi24", Url = "https://www.digi24.ro/rss", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=digi24.ro&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Ziarul Financiar", Url = "https://www.zf.ro/rss/", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=zf.ro&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "HotNews", Url = "https://www.hotnews.ro/rss", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=hotnews.ro&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Biziday", Url = "https://www.biziday.ro/feed/", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=biziday.ro&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Economica.net", Url = "https://www.economica.net/rss", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=economica.net&sz=64", CreatedAt = DateTime.UtcNow },
+
+                // 📈 Markets
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "CNBC", Url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", Category = "Markets", IconUrl = "https://www.google.com/s2/favicons?domain=cnbc.com&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "The Economist", Url = "https://www.economist.com/finance-and-economics/rss.xml", Category = "Markets", IconUrl = "https://www.google.com/s2/favicons?domain=economist.com&sz=64", CreatedAt = DateTime.UtcNow },
+
+                // 🌍 World
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "BBC News", Url = "https://feeds.bbci.co.uk/news/rss.xml", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=bbc.com&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "NPR", Url = "https://feeds.npr.org/1001/rss.xml", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=npr.org&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Politico Europe", Url = "https://www.politico.eu/feed/", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=politico.eu&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Deutsche Welle", Url = "https://rss.dw.com/rdf/rss-en-all", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=dw.com&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Google News", Url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=news.google.com&sz=64", CreatedAt = DateTime.UtcNow },
+
+                // 💡 Tech
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "TechCrunch", Url = "https://techcrunch.com/feed/", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=techcrunch.com&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "The Verge", Url = "https://www.theverge.com/rss/index.xml", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=theverge.com&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Ars Technica", Url = "https://feeds.arstechnica.com/arstechnica/index", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=arstechnica.com&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Zona IT", Url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=zonait.ro&sz=64", CreatedAt = DateTime.UtcNow },
+                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Windows Central", Url = "https://www.windowscentral.com/feeds.xml", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=windowscentral.com&sz=64", CreatedAt = DateTime.UtcNow }
+            };
+
+            await _databaseService.Connection.InsertAllAsync(defaultFeeds);
+            await _syncService.SyncAsync(); // Push to Supabase immediately
+            Console.WriteLine("[Seeder] Successfully seeded default RSS Feeds.");
         }
     }
 }

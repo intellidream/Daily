@@ -16,6 +16,7 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

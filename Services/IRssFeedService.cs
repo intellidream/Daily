@@ -20,5 +20,6 @@ namespace Daily.Services
         Task ReloadCurrentFeedAsync();
         void SelectFeed(FeedSource feed);
         Task<RssItem> FetchFullArticleAsync(string url);
+        Task InitializeCustomFeedsAsync();
     }
 }

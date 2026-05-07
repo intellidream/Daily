@@ -21,6 +21,9 @@ namespace Daily.Models
         [Column("news_interests")]
         public List<string> Interests { get; set; } = new();
 
+        [Column("dashboard_widgets")]
+        public string? DashboardWidgetsJson { get; set; }
+
         // New Preferences (Local Only until DB Schema Updated)
         [Column("wind_unit")]
         public string WindUnit { get; set; } = "km/h"; // m/s, km/h, mph

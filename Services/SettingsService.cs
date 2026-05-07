@@ -1,5 +1,6 @@
 using Daily.Models;
 using Supabase.Postgrest;
+using Supabase.Realtime;
 
 namespace Daily.Services
 {
@@ -8,6 +9,7 @@ namespace Daily.Services
         private readonly Supabase.Client _supabase;
         private readonly IDatabaseService _databaseService;
         private readonly ISyncService _syncService; // To trigger sync on save
+        private Supabase.Realtime.RealtimeChannel? _preferencesChannel;
         private UserPreferences _currentSettings = new UserPreferences();
         
         public UserPreferences Settings => _currentSettings;
@@ -161,8 +163,53 @@ namespace Daily.Services
                  _currentSettings = new UserPreferences { Id = userId };
              }
 
+            // Start Realtime
+            await SetupRealtimeAsync();
+
             // Notify UI
             OnSettingsChanged?.Invoke();
+        }
+
+        private async Task SetupRealtimeAsync()
+        {
+            if (!IsAuthenticated) return;
+            
+            try 
+            {
+                if (_preferencesChannel == null)
+                {
+                    _preferencesChannel = _supabase.Realtime.Channel("public:user_preferences");
+                    _preferencesChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnPreferencesReceived);
+                    await _preferencesChannel.Subscribe();
+                    Console.WriteLine("[SettingsService] Realtime subscribed to user_preferences");
+                }
+            } 
+            catch (Exception ex) 
+            {
+                Console.WriteLine($"[SettingsService] Realtime setup failed: {ex.Message}");
+            }
+        }
+
+        private void OnPreferencesReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
+        {
+            try 
+            {
+                var remotePref = e.Model<UserPreferences>();
+                
+                if (remotePref != null && remotePref.Id == CurrentUserId)
+                {
+                    var localPrefs = ToLocal(remotePref);
+                    localPrefs.SyncedAt = DateTime.UtcNow; // Prevent push loop
+                    
+                    _databaseService.Connection.InsertOrReplaceAsync(localPrefs).ContinueWith(_ => 
+                    {
+                        _currentSettings = remotePref;
+                        Console.WriteLine($"[SettingsService] Realtime: Synced incoming user preferences");
+                        OnSettingsChanged?.Invoke();
+                    });
+                }
+            } 
+            catch(Exception ex) { Console.WriteLine($"[SettingsService] Realtime Preferences Error: {ex}"); }
         }
 
         public async Task SaveSettingsAsync()
@@ -234,6 +281,7 @@ namespace Daily.Services
             };
 
             Console.WriteLine($"[SettingsService] ToDomain Raw: '{local.UnitSystem}' -> Sanitized: '{userPrefs.UnitSystem}'");
+            userPrefs.DashboardWidgetsJson = local.DashboardWidgetsJson;
             userPrefs.UpdatedAt = local.UpdatedAt;
             return userPrefs;
         }
@@ -262,6 +310,7 @@ namespace Daily.Services
                 SmokesQuitDate = domain.SmokesQuitDate,
                 
                 InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests),
+                DashboardWidgetsJson = domain.DashboardWidgetsJson,
                 UpdatedAt = domain.UpdatedAt
             };
         }

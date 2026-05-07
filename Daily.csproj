@@ -19,6 +19,7 @@
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <Nullable>enable</Nullable>
         <NoWarn>$(NoWarn);NU1510</NoWarn>
+        <DefaultItemExcludes>$(DefaultItemExcludes);WinUI\**</DefaultItemExcludes>
 
         <!-- Display name -->
         <ApplicationTitle>Daily</ApplicationTitle>
@@ -131,6 +132,14 @@
         <EmbeddedResource Remove="WatchOS\**" />
         <None Remove="WatchOS\**" />
         <MauiAsset Remove="WatchOS\**" />
+        
+        <!-- Ignore WinUI sub-project completely -->
+        <Compile Remove="WinUI\**\*.cs" />
+        <EmbeddedResource Remove="WinUI\**\*.*" />
+        <None Remove="WinUI\**\*.*" />
+        <MauiAsset Remove="WinUI\**\*.*" />
+        <MauiXaml Remove="WinUI\**\*.xaml" />
+        <Page Remove="WinUI\**\*.xaml" />
 
         <!-- Prevent MAUI Apple targets from crashing on unexpanded literal wildcards -->
         <Content Remove="**/*.config" />

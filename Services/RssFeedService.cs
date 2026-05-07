@@ -12,34 +12,7 @@ namespace Daily.Services
 {
     public class RssFeedService : IRssFeedService
     {
-        public List<FeedSource> Feeds { get; } = new()
-        {
-            // 🇷🇴 Local
-            new FeedSource { Name = "Republica", Url = "https://republica.ro/rss", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=republica.ro&sz=64" },
-            new FeedSource { Name = "Digi24", Url = "https://www.digi24.ro/rss", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=digi24.ro&sz=64" },
-            new FeedSource { Name = "Ziarul Financiar", Url = "https://www.zf.ro/rss/", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=zf.ro&sz=64" },
-            new FeedSource { Name = "HotNews", Url = "https://www.hotnews.ro/rss", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=hotnews.ro&sz=64" },
-            new FeedSource { Name = "Biziday", Url = "https://www.biziday.ro/feed/", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=biziday.ro&sz=64" },
-            new FeedSource { Name = "Economica.net", Url = "https://www.economica.net/rss", Type = FeedType.Rss, Category = FeedCategory.Local, IconUrl = "https://www.google.com/s2/favicons?domain=economica.net&sz=64" },
-
-            // 📈 Markets
-            new FeedSource { Name = "CNBC", Url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=cnbc.com&sz=64" },
-            new FeedSource { Name = "The Economist", Url = "https://www.economist.com/finance-and-economics/rss.xml", Type = FeedType.Rss, Category = FeedCategory.Markets, IconUrl = "https://www.google.com/s2/favicons?domain=economist.com&sz=64" },
-
-            // 🌍 World
-            new FeedSource { Name = "BBC News", Url = "https://feeds.bbci.co.uk/news/rss.xml", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=bbc.com&sz=64" },
-            new FeedSource { Name = "NPR", Url = "https://feeds.npr.org/1001/rss.xml", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=npr.org&sz=64" },
-            new FeedSource { Name = "Politico Europe", Url = "https://www.politico.eu/feed/", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=politico.eu&sz=64" },
-            new FeedSource { Name = "Deutsche Welle", Url = "https://rss.dw.com/rdf/rss-en-all", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=dw.com&sz=64" },
-            new FeedSource { Name = "Google News", Url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", Type = FeedType.Rss, Category = FeedCategory.World, IconUrl = "https://www.google.com/s2/favicons?domain=news.google.com&sz=64" },
-
-            // 💡 Tech
-            new FeedSource { Name = "TechCrunch", Url = "https://techcrunch.com/feed/", Type = FeedType.Rss, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=techcrunch.com&sz=64" },
-            new FeedSource { Name = "The Verge", Url = "https://www.theverge.com/rss/index.xml", Type = FeedType.Rss, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=theverge.com&sz=64" },
-            new FeedSource { Name = "Ars Technica", Url = "https://feeds.arstechnica.com/arstechnica/index", Type = FeedType.Rss, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=arstechnica.com&sz=64" },
-            new FeedSource { Name = "Zona IT", Url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", Type = FeedType.WpJson, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=zonait.ro&sz=64" },
-            new FeedSource { Name = "Windows Central", Url = "https://www.windowscentral.com/feeds.xml", Type = FeedType.Rss, Category = FeedCategory.Tech, IconUrl = "https://www.google.com/s2/favicons?domain=windowscentral.com&sz=64" }
-        };
+        public List<FeedSource> Feeds { get; private set; } = new();
 
         public FeedSource CurrentFeed { get; private set; }
         public List<RssItem> Items { get; private set; } = new();
@@ -51,13 +24,16 @@ namespace Daily.Services
 
         private readonly HttpClient _httpClient;
         private readonly IRenderedHtmlService? _renderedHtmlService;
+        private readonly IDatabaseService? _databaseService;
         private readonly Guid _instanceId = Guid.NewGuid();
 
-        public RssFeedService(IRenderedHtmlService? renderedHtmlService = null)
+        public RssFeedService(IRenderedHtmlService? renderedHtmlService = null, IDatabaseService? databaseService = null)
         {
             Console.WriteLine($"[RssFeedService] Constructor called. InstanceId: {_instanceId}");
-            CurrentFeed = Feeds.First();
             _renderedHtmlService = renderedHtmlService;
+            _databaseService = databaseService;
+            
+            _ = InitializeCustomFeedsAsync();
             
             var handler = new HttpClientHandler
             {
@@ -123,6 +99,63 @@ namespace Daily.Services
                 IsLoading = false;
                 OnItemsUpdated?.Invoke();
             }
+        }
+
+        public async Task InitializeCustomFeedsAsync()
+        {
+            if (_databaseService == null) return;
+            try 
+            {
+                await _databaseService.InitializeAsync();
+                var customFeeds = await _databaseService.Connection.Table<LocalRssSubscription>()
+                                    .Where(x => !x.IsDeleted)
+                                    .ToListAsync();
+                
+                var combined = new List<FeedSource>();
+                foreach(var c in customFeeds)
+                {
+                    combined.Add(new FeedSource {
+                        Name = c.Name,
+                        Url = c.Url,
+                        IconUrl = c.IconUrl,
+                        Category = Enum.TryParse<FeedCategory>(c.Category, true, out var cat) ? cat : FeedCategory.Tech,
+                        Type = c.Url.Contains("wp-json") ? FeedType.WpJson : FeedType.Rss
+                    });
+                }
+                Feeds = combined;
+                
+                if (CurrentFeed == null && Feeds.Any())
+                {
+                    CurrentFeed = Feeds.First();
+                }
+                
+                OnFeedChanged?.Invoke();
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine($"[RssFeedService] Init Custom Feeds Error: {ex}");
+            }
+        }
+
+        public async Task AddFeedAsync(string url, string name, string category, string userId)
+        {
+            if (_databaseService == null) return;
+            
+            await _databaseService.InitializeAsync();
+            var newSub = new LocalRssSubscription
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserId = userId,
+                Name = name,
+                Url = url,
+                Category = category,
+                IconUrl = $"https://www.google.com/s2/favicons?domain={new Uri(url).Host}&sz=64",
+                CreatedAt = DateTime.UtcNow,
+                SyncedAt = null
+            };
+            
+            await _databaseService.Connection.InsertOrReplaceAsync(newSub);
+            await InitializeCustomFeedsAsync();
         }
 
         private async Task LoadRssFeedAsync(FeedSource feed)

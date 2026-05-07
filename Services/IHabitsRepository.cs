@@ -6,10 +6,12 @@ namespace Daily.Services
     {
         Task<List<HabitLog>> GetLogsAsync(string habitType, DateTime date, string userId);
         Task SaveLogAsync(HabitLog log);
+        Task SaveLocalLogAsync(LocalHabitLog localLog);
         Task DeleteLogAsync(Guid logId);
 
         Task<HabitGoal?> GetGoalAsync(string habitType, string userId);
         Task SaveGoalAsync(HabitGoal goal);
+        Task SaveLocalGoalAsync(LocalHabitGoal localGoal);
 
         Task MigrateGuestDataAsync(string newUserId);
 
