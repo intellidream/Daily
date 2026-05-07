@@ -224,6 +224,17 @@ namespace Daily.Services
              if (IsAuthenticated)
              {
                  Console.WriteLine($"[HabitsService] Initialize: User {CurrentUserId} detected. Triggering Sync & Realtime...");
+                 
+                 // Ensure data migrations and seeds are run on startup if auto-hydrated
+                 try 
+                 {
+                     await _repository.MigrateGuestDataAsync(CurrentUserId.ToString());
+                     await _seederService.SeedRssFeedsAsync(CurrentUserId.ToString());
+                 } 
+                 catch(Exception ex) { Console.WriteLine($"[HabitsService] Init Migration Error: {ex}"); }
+
+                 await _rssFeedService.InitializeCustomFeedsAsync();
+                 
                  await _syncService.SyncAsync();
                  await SetupRealtimeAsync();
              }

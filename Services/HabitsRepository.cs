@@ -96,9 +96,9 @@ namespace Daily.Services
             // We can't do OR in one SQLite Where usually, so let's do two checks or a contains.
             // Simple approach: Check both.
             
-            var guestIds = new[] { "guest", Guid.Empty.ToString() };
+            var emptyGuid = Guid.Empty.ToString();
             var guestLogs = await _databaseService.Connection.Table<LocalHabitLog>()
-                                .Where(l => guestIds.Contains(l.UserId))
+                                .Where(l => l.UserId == "guest" || l.UserId == emptyGuid)
                                 .ToListAsync();
 
             if (guestLogs.Any())
@@ -114,7 +114,7 @@ namespace Daily.Services
 
             // 2. Migrate Goals
             var guestGoals = await _databaseService.Connection.Table<LocalHabitGoal>()
-                                .Where(g => guestIds.Contains(g.UserId))
+                                .Where(g => g.UserId == "guest" || g.UserId == emptyGuid)
                                 .ToListAsync();
 
             if (guestGoals.Any())
