@@ -29,11 +29,32 @@ public sealed partial class MainWindow : Window
         AppWindow.Title = "Daily for Windows";
         ConfigureStartupWindow();
 
-        // Navigate the root frame to the main page on startup.
-        RootFrame.Navigate(typeof(MainPage));
+        // Delay navigation until Supabase session is fully hydrated
+        _ = NavigateAfterHydrationAsync();
 
         AppWindow.Changed += AppWindow_Changed;
         Closed += MainWindow_Closed;
+    }
+
+    private async Task NavigateAfterHydrationAsync()
+    {
+        // Wait for App.xaml.cs InitializeAsync() to finish hydrating the session
+        await App.Current.InitializationTask;
+
+        var authService = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<WinUIAuthService>(App.Current.Services);
+        
+        // Ensure UI thread navigation
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (authService.IsAuthenticated)
+            {
+                RootFrame.Navigate(typeof(MainPage));
+            }
+            else
+            {
+                RootFrame.Navigate(typeof(Views.LoginPage));
+            }
+        });
     }
 
     private void ConfigureStartupWindow()

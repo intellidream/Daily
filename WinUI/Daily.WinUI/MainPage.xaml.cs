@@ -2,19 +2,71 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Daily_WinUI.Views;
+using Daily_WinUI.Services;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Daily_WinUI;
 
 public sealed partial class MainPage : Page
 {
     private readonly Dictionary<System.Type, DetailWindow> _openWindows = new();
+    private readonly WinUIAuthService _authService;
 
     public MainPage()
     {
         InitializeComponent();
+        _authService = App.Current.Services.GetRequiredService<WinUIAuthService>();
         RssFeedWidget.ArticleTapped += RssFeedWidget_ArticleTapped;
+        Loaded += MainPage_Loaded;
+    }
+
+    private void MainPage_Loaded(object sender, RoutedEventArgs e)
+    {
+        UpdateUserUI();
+    }
+
+    private void UpdateUserUI()
+    {
+        if (_authService.IsAuthenticated)
+        {
+            UserEmailText.Text = _authService.CurrentUserEmail ?? "Signed in";
+            UserAvatar.DisplayName = _authService.CurrentUserEmail?.Split('@').FirstOrDefault() ?? "U";
+            if (!string.IsNullOrEmpty(_authService.CurrentUserAvatarUrl))
+            {
+                UserAvatar.ProfilePicture = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(
+                    new System.Uri(_authService.CurrentUserAvatarUrl));
+            }
+            SignOutItem.Text = "Sign Out";
+        }
+        else
+        {
+            UserEmailText.Text = "Not signed in";
+            UserAvatar.DisplayName = "?";
+            SignOutItem.Text = "Sign In";
+        }
+    }
+
+    private async void SignOut_Click(object sender, RoutedEventArgs e)
+    {
+        if (_authService.IsAuthenticated)
+        {
+            await _authService.SignOutAsync();
+            // Navigate back to login
+            if (Frame != null)
+            {
+                Frame.Navigate(typeof(LoginPage));
+            }
+        }
+        else
+        {
+            // Navigate to login
+            if (Frame != null)
+            {
+                Frame.Navigate(typeof(LoginPage));
+            }
+        }
     }
 
     private void WeatherWidget_Tapped(object sender, TappedRoutedEventArgs e)

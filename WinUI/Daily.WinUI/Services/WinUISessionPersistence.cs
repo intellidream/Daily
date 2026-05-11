@@ -40,37 +40,12 @@ namespace Daily_WinUI.Services
         {
             try
             {
-                var vault = new PasswordVault();
+                // Serialize the ENTIRE session to JSON to preserve CreatedAt, ProviderToken, and User metadata
+                // CRITICAL: Must use Newtonsoft.Json because Supabase models use [JsonProperty] attributes
+                var json = Newtonsoft.Json.JsonConvert.SerializeObject(session);
+                SaveSetting(SessionKey + "_JSON", json);
                 
-                // Save access/refresh tokens via Vault for security
-                if (!string.IsNullOrEmpty(session.AccessToken))
-                {
-                    vault.Add(new PasswordCredential(PasswordVaultResource, "AccessToken", session.AccessToken));
-                }
-                if (!string.IsNullOrEmpty(session.RefreshToken))
-                {
-                    vault.Add(new PasswordCredential(PasswordVaultResource, "RefreshToken", session.RefreshToken));
-                }
-                
-                // Save ProviderToken (used for YouTube) in Vault as well
-                if (!string.IsNullOrEmpty(session.ProviderToken))
-                {
-                    vault.Add(new PasswordCredential(PasswordVaultResource, "ProviderToken", session.ProviderToken));
-                }
-                else
-                {
-                    RemoveCredential("ProviderToken");
-                }
-
-                // Save non-sensitive session data
-                SaveSetting(SessionKey + "_TokenType", session.TokenType ?? "bearer");
-                SaveSetting(SessionKey + "_ExpiresIn", session.ExpiresIn.ToString());
-                
-                if (session.User != null)
-                {
-                    SaveSetting(SessionKey + "_UserId", session.User.Id ?? "");
-                    SaveSetting(SessionKey + "_UserEmail", session.User.Email ?? "");
-                }
+                System.Diagnostics.Debug.WriteLine("[WinUISessionPersistence] Session saved via JSON serialization.");
             }
             catch (Exception ex)
             {
@@ -80,10 +55,12 @@ namespace Daily_WinUI.Services
 
         public void DestroySession()
         {
-            RemoveCredential("AccessToken");
-            RemoveCredential("RefreshToken");
-            RemoveCredential("ProviderToken");
-
+            DeleteSetting(SessionKey + "_JSON");
+            
+            // Cleanup legacy files just in case
+            DeleteSetting("AccessToken");
+            DeleteSetting("RefreshToken");
+            DeleteSetting("ProviderToken");
             DeleteSetting(SessionKey + "_TokenType");
             DeleteSetting(SessionKey + "_ExpiresIn");
             DeleteSetting(SessionKey + "_UserId");
@@ -94,43 +71,22 @@ namespace Daily_WinUI.Services
         {
             try
             {
-                var vault = new PasswordVault();
-                var accessToken = GetCredential("AccessToken");
-                var refreshToken = GetCredential("RefreshToken");
-                var providerToken = GetCredential("ProviderToken");
-
-                if (string.IsNullOrEmpty(accessToken) && string.IsNullOrEmpty(refreshToken))
+                var json = LoadSetting(SessionKey + "_JSON");
+                if (!string.IsNullOrEmpty(json))
                 {
-                    return null;
+                    return Newtonsoft.Json.JsonConvert.DeserializeObject<Session>(json);
                 }
-
-                long expiresIn = 3600;
-                var expiresInStr = LoadSetting(SessionKey + "_ExpiresIn");
-                if (!string.IsNullOrEmpty(expiresInStr) && long.TryParse(expiresInStr, out long parsed))
+                
+                // Fallback for legacy format if JSON doesn't exist
+                var accessToken = LoadSetting("AccessToken");
+                var refreshToken = LoadSetting("RefreshToken");
+                if (!string.IsNullOrEmpty(accessToken))
                 {
-                    expiresIn = parsed;
+                    // This will be expired immediately, but better than nothing
+                    return new Session { AccessToken = accessToken, RefreshToken = refreshToken };
                 }
-
-                var session = new Session
-                {
-                    AccessToken = accessToken,
-                    RefreshToken = refreshToken,
-                    ProviderToken = providerToken,
-                    TokenType = LoadSetting(SessionKey + "_TokenType") ?? "bearer",
-                    ExpiresIn = expiresIn
-                };
-
-                var userId = LoadSetting(SessionKey + "_UserId");
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    session.User = new User
-                    {
-                        Id = userId,
-                        Email = LoadSetting(SessionKey + "_UserEmail")
-                    };
-                }
-
-                return session;
+                
+                return null;
             }
             catch
             {

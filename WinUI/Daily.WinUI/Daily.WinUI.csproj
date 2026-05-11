@@ -17,7 +17,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
-    <DefineConstants>$(DefineConstants);WINUI_NATIVE</DefineConstants>
+    <DefineConstants>$(DefineConstants);WINUI_NATIVE;DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
