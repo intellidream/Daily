@@ -8,19 +8,21 @@ using Microsoft.UI.Xaml.Navigation;
 using Daily.Models;
 using Daily_WinUI.Services;
 using System.Collections.ObjectModel;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Daily_WinUI.Views;
 
 public sealed partial class RssFeedDetailPage : Page
 {
-    private readonly RssClient _rssClient = new();
-    private CancellationTokenSource? _cancellationTokenSource;
+    private readonly Daily.Services.IRssFeedService _rssService;
     private ObservableCollection<RssItem> _articles = new();
     private RssItem? _selectedItem;
 
     public RssFeedDetailPage()
     {
         InitializeComponent();
+        _rssService = App.Current.Services.GetRequiredService<Daily.Services.IRssFeedService>();
+        
         ArticlesListView.ItemsSource = _articles;
         Loaded += RssFeedDetailPage_Loaded;
         Unloaded += RssFeedDetailPage_Unloaded;
@@ -40,30 +42,82 @@ public sealed partial class RssFeedDetailPage : Page
 
     private void RssFeedDetailPage_Loaded(object sender, RoutedEventArgs e)
     {
+        _rssService.OnFeedChanged += RssService_OnFeedChanged;
+        _rssService.OnItemsUpdated += RssService_OnItemsUpdated;
+
         if (FeedComboBox.ItemsSource == null)
         {
-            FeedComboBox.ItemsSource = _rssClient.Feeds;
+            FeedComboBox.ItemsSource = _rssService.Feeds;
             if (_selectedItem != null)
             {
                 // Pre-select the feed that matches the item, if possible
-                var feed = _rssClient.Feeds.FirstOrDefault(f => f.Name == _selectedItem.PublicationName);
+                var feed = _rssService.Feeds.FirstOrDefault(f => f.Name == _selectedItem.PublicationName);
                 if (feed != null)
                 {
                     FeedComboBox.SelectedItem = feed;
                 }
             }
-            else if (_rssClient.Feeds.Any())
+            else if (_rssService.CurrentFeed != null)
+            {
+                FeedComboBox.SelectedItem = _rssService.CurrentFeed;
+            }
+            else if (_rssService.Feeds.Any())
             {
                 FeedComboBox.SelectedIndex = 0;
             }
         }
         
+        UpdateArticles();
         EnsureWebViewCoreInitialized();
     }
 
     private void RssFeedDetailPage_Unloaded(object sender, RoutedEventArgs e)
     {
-        _cancellationTokenSource?.Cancel();
+        _rssService.OnFeedChanged -= RssService_OnFeedChanged;
+        _rssService.OnItemsUpdated -= RssService_OnItemsUpdated;
+    }
+
+    private void RssService_OnFeedChanged()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (FeedComboBox.ItemsSource != _rssService.Feeds)
+            {
+                FeedComboBox.ItemsSource = _rssService.Feeds;
+            }
+            if (FeedComboBox.SelectedItem != _rssService.CurrentFeed)
+            {
+                FeedComboBox.SelectedItem = _rssService.CurrentFeed;
+            }
+        });
+    }
+
+    private void RssService_OnItemsUpdated()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            UpdateArticles();
+        });
+    }
+
+    private void UpdateArticles()
+    {
+        _articles.Clear();
+        foreach (var item in _rssService.Items)
+        {
+            _articles.Add(item);
+        }
+        
+        if (_rssService.IsLoading)
+        {
+            LoadingPanel.Visibility = Visibility.Visible;
+            ArticlesListView.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            LoadingPanel.Visibility = Visibility.Collapsed;
+            ArticlesListView.Visibility = Visibility.Visible;
+        }
     }
 
     private async void EnsureWebViewCoreInitialized()
@@ -75,39 +129,13 @@ public sealed partial class RssFeedDetailPage : Page
     {
         if (FeedComboBox.SelectedItem is FeedSource selectedFeed && _selectedItem == null)
         {
-            await LoadFeedAsync(selectedFeed);
-        }
-    }
-
-    private async Task LoadFeedAsync(FeedSource feed)
-    {
-        _cancellationTokenSource?.Cancel();
-        _cancellationTokenSource = new CancellationTokenSource();
-
-        LoadingPanel.Visibility = Visibility.Visible;
-        ArticlesListView.Visibility = Visibility.Collapsed;
-
-        try
-        {
-            var items = await _rssClient.FetchFeedAsync(feed, _cancellationTokenSource.Token);
-            
-            _articles.Clear();
-            foreach (var item in items)
+            if (selectedFeed != _rssService.CurrentFeed)
             {
-                _articles.Add(item);
+                LoadingPanel.Visibility = Visibility.Visible;
+                ArticlesListView.Visibility = Visibility.Collapsed;
+                _rssService.SelectFeed(selectedFeed);
+                await _rssService.LoadFeedAsync(selectedFeed);
             }
-
-            LoadingPanel.Visibility = Visibility.Collapsed;
-            ArticlesListView.Visibility = Visibility.Visible;
-        }
-        catch (TaskCanceledException)
-        {
-            // Ignore cancellation
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error loading feed: {ex.Message}");
-            LoadingPanel.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -126,24 +154,196 @@ public sealed partial class RssFeedDetailPage : Page
         ReaderViewContainer.Visibility = Visibility.Visible;
         ReaderLoadingPanel.Visibility = Visibility.Visible;
         ReaderWebView.Visibility = Visibility.Collapsed;
+        ReaderWebView.Opacity = 1;
 
+        // Step 1: Try the fast HttpClient + SmartReader path
+        RssItem? fullArticle = null;
+        bool needsWebViewFallback = false;
         try
         {
-            var fullArticle = await _rssClient.FetchFullArticleAsync(item.Link);
+            fullArticle = await _rssService.FetchFullArticleAsync(item.Link);
             
-            // Generate HTML
+            // FetchFullArticleAsync never throws — it returns Title="Error fetching article" on failure.
+            // Detect that and trigger the WebView2 fallback instead of showing the error.
+            if (fullArticle.Title == "Error fetching article" || string.IsNullOrWhiteSpace(fullArticle.Content))
+            {
+                needsWebViewFallback = true;
+            }
+        }
+        catch
+        {
+            needsWebViewFallback = true;
+        }
+
+        // Step 2: If the fast path succeeded, render it
+        if (!needsWebViewFallback && fullArticle != null)
+        {
             string html = GenerateReaderHtml(fullArticle);
-            
             await ReaderWebView.EnsureCoreWebView2Async();
             ReaderWebView.NavigateToString(html);
-
             ReaderLoadingPanel.Visibility = Visibility.Collapsed;
             ReaderWebView.Visibility = Visibility.Visible;
+            return;
         }
-        catch (Exception ex)
+
+        // Step 3: WebView2 fallback — navigate a real browser to the URL,
+        // wait for JS to render, then extract + parse with SmartReader.
+        System.Diagnostics.Debug.WriteLine($"[Reader] Fast path failed for {item.Link}, using WebView2 fallback...");
+        try 
         {
-            System.Diagnostics.Debug.WriteLine($"Error loading reader view: {ex.Message}");
+            // WebView2 must be Visible for its Chromium engine to run JS.
+            // Hide it visually with Opacity 0 while we scrape.
+            ReaderWebView.Visibility = Visibility.Visible;
+            ReaderWebView.Opacity = 0.0;
+            
+            await ReaderWebView.EnsureCoreWebView2Async();
+            
+            // Safety: wait for the engine to fully attach
+            if (ReaderWebView.CoreWebView2 == null) 
+            {
+                await Task.Delay(500);
+                if (ReaderWebView.CoreWebView2 == null)
+                    throw new Exception("WebView2 engine failed to initialize.");
+            }
+
+            // Navigate to the actual article URL
+            var tcs = new TaskCompletionSource<string>();
+            
+            Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? handler = null;
+            handler = async (s, args) => 
+            {
+                ReaderWebView.CoreWebView2.NavigationCompleted -= handler;
+                try 
+                {
+                    // Give the page a moment to settle after navigation
+                    await Task.Delay(2000);
+
+                    // Remove cookie/GDPR overlays that block content
+                    var cleanupScript = "(function(){" +
+                        "var selectors=['#cmp-app-container','.cookie-banner','#cookie-consent','.gdpr-modal'," +
+                        "'[class*=\"cookie\"]','[id*=\"cookie\"]','[class*=\"consent\"]','[class*=\"paywall\"]'," +
+                        "'[id*=\"consent\"]','[class*=\"overlay\"]','[id*=\"piano\"]'];" +
+                        "selectors.forEach(function(s){document.querySelectorAll(s).forEach(function(e){e.remove();});});" +
+                        "document.body.style.overflow='auto';document.documentElement.style.overflow='auto';" +
+                        "document.body.style.position='static';" +
+                        "var main=document.querySelector('article')||document.querySelector('main')||document.querySelector('[role=\"main\"]');" +
+                        "if(main){main.style.display='block';main.style.visibility='visible';main.style.opacity='1';}" +
+                        "})()";
+                    await ReaderWebView.ExecuteScriptAsync(cleanupScript);
+
+                    // Poll until the page has substantial text content (JS-rendered)
+                    string extractedHtml = "";
+                    for (int i = 0; i < 20; i++)
+                    {
+                        await Task.Delay(1000);
+                        
+                        // Re-run cleanup each iteration in case overlays re-appear
+                        if (i % 3 == 0 && i > 0)
+                            await ReaderWebView.ExecuteScriptAsync(cleanupScript);
+
+                        // Check text length
+                        var lenJson = await ReaderWebView.ExecuteScriptAsync(
+                            "document.body && document.body.innerText ? document.body.innerText.length : 0;");
+                        if (lenJson != null && int.TryParse(lenJson.Trim('\"'), out int len) && len > 500)
+                        {
+                            // Also try article-specific selectors for a more targeted extraction
+                            var articleJson = await ReaderWebView.ExecuteScriptAsync(
+                                "(function(){" +
+                                "var selectors='article, main, [itemprop=\"articleBody\"], .article-body, .article-content, .post-content, .entry-content, .layout-article-body';" +
+                                "var el=document.querySelector(selectors);" +
+                                "if(el && el.innerText && el.innerText.length > 200) return '<html><head><meta charset=\"utf-8\"/></head><body>'+el.outerHTML+'</body></html>';" +
+                                "return null;" +
+                                "})()");
+                            
+                            string? articleHtml = null;
+                            if (articleJson != null && articleJson != "null")
+                            {
+                                try { articleHtml = System.Text.Json.JsonSerializer.Deserialize<string>(articleJson); }
+                                catch { }
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(articleHtml) && articleHtml.Length > 500)
+                            {
+                                extractedHtml = articleHtml;
+                                break;
+                            }
+
+                            // Fall back to full page HTML
+                            var fullJson = await ReaderWebView.ExecuteScriptAsync("document.documentElement.outerHTML;");
+                            if (fullJson != null && fullJson != "null")
+                            {
+                                try { extractedHtml = System.Text.Json.JsonSerializer.Deserialize<string>(fullJson) ?? ""; }
+                                catch { extractedHtml = fullJson; }
+                            }
+                            
+                            if (extractedHtml.Length > 2000)
+                                break;
+                        }
+                    }
+                    
+                    tcs.TrySetResult(extractedHtml);
+                }
+                catch (Exception jsEx)
+                {
+                    tcs.TrySetException(jsEx);
+                }
+            };
+            
+            ReaderWebView.CoreWebView2.NavigationCompleted += handler;
+            ReaderWebView.CoreWebView2.Navigate(item.Link);
+            
+            // Wait up to 30s for the scraping to complete
+            var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(30000));
+            string loadedHtml = "";
+            if (completedTask == tcs.Task)
+            {
+                loadedHtml = await tcs.Task;
+            }
+            
+            if (!string.IsNullOrWhiteSpace(loadedHtml) && loadedHtml.Length > 500)
+            {
+                var reader = new SmartReader.Reader(item.Link, loadedHtml);
+                var article = reader.GetArticle();
+                
+                if (article.IsReadable)
+                {
+                    var fallbackArticle = new RssItem 
+                    {
+                        Title = !string.IsNullOrEmpty(article.Title) ? article.Title : item.Title,
+                        Link = item.Link,
+                        Content = article.Content,
+                        Description = article.Excerpt ?? article.TextContent,
+                        Author = article.Byline ?? item.Author,
+                        PublishDate = item.PublishDate,
+                        PublicationName = item.PublicationName,
+                        PublicationIconUrl = item.PublicationIconUrl,
+                        ImageUrl = item.ImageUrl
+                    };
+                    string finalHtml = GenerateReaderHtml(fallbackArticle);
+                    ReaderWebView.NavigateToString(finalHtml);
+                }
+                else
+                {
+                    // SmartReader couldn't parse it — show the raw page instead
+                    ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: #1a1a1a; }} a {{ color: #4DA6FF; }}</style></head><body><h2>Could not extract article text</h2><p>The content may be behind a paywall. <a href='{item.Link}'>Open in browser</a></p></body></html>");
+                }
+            }
+            else
+            {
+                ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: #1a1a1a; }} a {{ color: #4DA6FF; }}</style></head><body><h2>Timed out loading article</h2><p>The page took too long to render. <a href='{item.Link}'>Open in browser</a></p></body></html>");
+            }
+        }
+        catch (Exception fallbackEx)
+        {
+            System.Diagnostics.Debug.WriteLine($"WebView2 fallback failed: {fallbackEx.Message}");
+            await ReaderWebView.EnsureCoreWebView2Async();
+            ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: #1a1a1a; }}</style></head><body><h2>Error loading article</h2><p>{fallbackEx.Message}</p></body></html>");
+        }
+        finally
+        {
             ReaderLoadingPanel.Visibility = Visibility.Collapsed;
+            ReaderWebView.Visibility = Visibility.Visible;
+            ReaderWebView.Opacity = 1.0;
         }
     }
 
@@ -156,7 +356,7 @@ public sealed partial class RssFeedDetailPage : Page
         // If we don't have articles loaded (e.g., navigated directly to an article from widget), load the selected feed
         if (_articles.Count == 0 && FeedComboBox.SelectedItem is FeedSource feed)
         {
-            _ = LoadFeedAsync(feed);
+            _ = _rssService.LoadFeedAsync(feed);
         }
     }
 

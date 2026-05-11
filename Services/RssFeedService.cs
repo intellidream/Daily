@@ -111,8 +111,10 @@ namespace Daily.Services
                                     .Where(x => !x.IsDeleted)
                                     .ToListAsync();
                 
+                var distinctFeeds = customFeeds.GroupBy(f => f.Url).Select(g => g.First()).ToList();
+
                 var combined = new List<FeedSource>();
-                foreach(var c in customFeeds)
+                foreach(var c in distinctFeeds)
                 {
                     combined.Add(new FeedSource {
                         Name = c.Name,
@@ -247,7 +249,7 @@ namespace Daily.Services
                     Title = title,
                     Link = link,
                     PublishDate = DateTime.TryParse(pubDateStr, out var date) ? date : DateTime.Now,
-                    ImageUrl = imageUrl ?? channelImage,
+                    ImageUrl = imageUrl ?? channelImage ?? feed.IconUrl,
                     Description = description,
                     Content = contentEncoded,
                     Author = author,
@@ -316,7 +318,7 @@ namespace Daily.Services
                      Title = title ?? "No Title",
                      Link = link,
                      PublishDate = date,
-                     ImageUrl = imageUrl,
+                     ImageUrl = imageUrl ?? feed.IconUrl,
                      Description = excerpt,
                      Content = content,
                      Author = author,

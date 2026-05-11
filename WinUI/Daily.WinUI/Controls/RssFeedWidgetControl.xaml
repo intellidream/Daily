@@ -20,6 +20,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             
             <FontIcon Glyph="&#xE736;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center"/>
@@ -32,6 +33,15 @@
                       SelectionChanged="FeedComboBox_SelectionChanged"
                       Background="Transparent"
                       BorderThickness="0"/>
+
+            <!-- Refresh Button -->
+            <Button Grid.Column="3" 
+                    Margin="8,0,0,0"
+                    Background="Transparent" BorderThickness="0"
+                    Click="RefreshButton_Click"
+                    ToolTipService.ToolTip="Refresh Feed">
+                <FontIcon Glyph="&#xE72C;" FontSize="14"/>
+            </Button>
         </Grid>
 
         <!-- Content Area -->

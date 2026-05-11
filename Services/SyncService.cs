@@ -203,7 +203,7 @@ namespace Daily.Services
 
             int totalPulled = 0;
 
-            var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+            var lastPullStr = GetPreference("SyncService_LastPullTime", "");
             DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
             // 1. Pull Logs (Paginated to get all ~90 days of history ~2000 items)
@@ -315,7 +315,7 @@ namespace Daily.Services
             if (totalPulled >= 0)
             {
                 // Using UtcNow as the marker for the NEXT sync
-                Microsoft.Maui.Storage.Preferences.Default.Set("SyncService_LastPullTime", DateTime.UtcNow.ToString("O"));
+                SetPreference("SyncService_LastPullTime", DateTime.UtcNow.ToString("O"));
             }
 
             return totalPulled;
@@ -412,7 +412,7 @@ namespace Daily.Services
 
             try
             {
-                var path = Path.Combine(FileSystem.CacheDirectory, "sync_debug.log");
+                var path = Path.Combine(GetCacheDirectory(), "sync_debug.log");
                 File.AppendAllText(path, logLine + "\n");
             }
             catch { /* Ignore logging errors */ }
@@ -537,7 +537,7 @@ namespace Daily.Services
         {
              try {
                 Console.WriteLine($"[SyncService] Pulling Preferences for User: {userId}...");
-                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
                 DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
                 var query = _supabase.From<UserPreferences>()
@@ -751,7 +751,7 @@ namespace Daily.Services
                  {
                      Console.WriteLine($"[SyncService] Pulling Summaries range {rangeStart}-{rangeEnd}...");
                      
-                     var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                     var lastPullStr = GetPreference("SyncService_LastPullTime", "");
                      DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
                      var userGuid = Guid.Parse(userId);
@@ -835,7 +835,7 @@ namespace Daily.Services
         {
             try 
             {
-                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
                 DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
                 var query = _supabase.From<Account>().Where(a => a.UserId == Guid.Parse(userId));
@@ -930,7 +930,7 @@ namespace Daily.Services
             
             try 
             {
-                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
                 DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
                 // Range logic for transactions if many?
@@ -996,7 +996,7 @@ namespace Daily.Services
         {
             try 
             {
-                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
                 DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
                 var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<Holding>)_supabase.From<Holding>(); // RLS handles userid via account join
@@ -1128,7 +1128,7 @@ namespace Daily.Services
             try
             {
                 Console.WriteLine($"[SyncService] Pulling Saved Articles for User: {userId}...");
-                var lastPullStr = Microsoft.Maui.Storage.Preferences.Default.Get("SyncService_LastPullTime", "");
+                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
                 DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
                 var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<SavedArticle>)_supabase.From<SavedArticle>();
@@ -1153,6 +1153,41 @@ namespace Daily.Services
                 Console.WriteLine($"[SyncService] Pull Saved Articles Error: {ex.Message}");
                 return 0;
             }
+        }
+        private string GetPreference(string key, string defaultValue)
+        {
+#if WINUI_NATIVE
+            var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+            System.IO.Directory.CreateDirectory(appDataPath);
+            var file = Path.Combine(appDataPath, key + ".txt");
+            if (File.Exists(file)) return File.ReadAllText(file);
+            return defaultValue;
+#else
+            return Microsoft.Maui.Storage.Preferences.Default.Get(key, defaultValue);
+#endif
+        }
+
+        private void SetPreference(string key, string value)
+        {
+#if WINUI_NATIVE
+            var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+            System.IO.Directory.CreateDirectory(appDataPath);
+            var file = Path.Combine(appDataPath, key + ".txt");
+            File.WriteAllText(file, value);
+#else
+            Microsoft.Maui.Storage.Preferences.Default.Set(key, value);
+#endif
+        }
+
+        private string GetCacheDirectory()
+        {
+#if WINUI_NATIVE
+            var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp", "Cache");
+            System.IO.Directory.CreateDirectory(appDataPath);
+            return appDataPath;
+#else
+            return Microsoft.Maui.Storage.FileSystem.CacheDirectory;
+#endif
         }
     }
 }

@@ -14,7 +14,13 @@ namespace Daily.Services
 
         public DatabaseService()
         {
-            var dbPath = Path.Combine(FileSystem.AppDataDirectory, DbName);
+#if WINUI_NATIVE
+            var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+            System.IO.Directory.CreateDirectory(appDataPath);
+            var dbPath = Path.Combine(appDataPath, DbName);
+#else
+            var dbPath = Path.Combine(Microsoft.Maui.Storage.FileSystem.AppDataDirectory, DbName);
+#endif
             var flags = SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.SharedCache;
             // Reverting back to default (Ticks) because historical data was already saved as Ticks.
             _connection = new SQLiteAsyncConnection(dbPath, flags);

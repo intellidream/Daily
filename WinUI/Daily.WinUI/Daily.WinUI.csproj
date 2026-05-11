@@ -17,6 +17,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <DefineConstants>$(DefineConstants);WINUI_NATIVE</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,7 +38,26 @@
 
   <ItemGroup>
     <Compile Include="..\..\Configuration\Secrets.cs" Link="Configuration\Secrets.cs" />
-    <Compile Include="..\..\Models\WeatherModels.cs" Link="Models\WeatherModels.cs" />
+    <Compile Include="..\..\Models\**\*.cs" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
+    
+    <!-- Services needed for Sync and RSS -->
+    <Compile Include="..\..\Services\IDatabaseService.cs" Link="Services\IDatabaseService.cs" />
+    <Compile Include="..\..\Services\DatabaseService.cs" Link="Services\DatabaseService.cs" />
+    <Compile Include="..\..\Services\ISyncService.cs" Link="Services\ISyncService.cs" />
+    <Compile Include="..\..\Services\SyncService.cs" Link="Services\SyncService.cs" />
+    <Compile Include="..\..\Services\IRssFeedService.cs" Link="Services\IRssFeedService.cs" />
+    <Compile Include="..\..\Services\RssFeedService.cs" Link="Services\RssFeedService.cs" />
+    <Compile Include="..\..\Services\SeederService.cs" Link="Services\SeederService.cs" />
+    <Compile Include="..\..\Services\Mappers.cs" Link="Services\Mappers.cs" />
+    <Compile Include="..\..\Services\DebugLogger.cs" Link="Services\DebugLogger.cs" />
+    <Compile Include="..\..\Services\ReadabilityResult.cs" Link="Services\ReadabilityResult.cs" />
+    <Compile Include="..\..\Services\IRenderedHtmlService.cs" Link="Services\IRenderedHtmlService.cs" />
+    <Compile Include="..\..\Services\Health\IHealthService.cs" Link="Services\Health\IHealthService.cs" />
+    
+    <!-- Stubs/Interfaces for Dependencies of SyncService -->
+    <Compile Include="..\..\Services\IHabitsService.cs" Link="Services\IHabitsService.cs" />
+    <Compile Include="..\..\Services\IHabitsRepository.cs" Link="Services\IHabitsRepository.cs" />
+    <Compile Include="..\..\Services\ISettingsService.cs" Link="Services\ISettingsService.cs" />
   </ItemGroup>
 
   <!--
@@ -47,8 +67,11 @@
   -->
   <!-- MSIX project capability omitted - running unpackaged/self-contained -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.7705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
+    <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+    <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
     <PackageReference Include="Syncfusion.Chart.WinUI" Version="33.2.4" />
     <PackageReference Include="Syncfusion.Editors.WinUI" Version="33.2.4" />
     <PackageReference Include="Syncfusion.Gauge.WinUI" Version="33.2.4" />

@@ -15,11 +15,13 @@ namespace Daily.Services
     {
         private readonly IDatabaseService _databaseService;
         private readonly ISyncService _syncService;
+        private readonly Supabase.Client _supabase;
 
-        public SeederService(IDatabaseService databaseService, ISyncService syncService)
+        public SeederService(IDatabaseService databaseService, ISyncService syncService, Supabase.Client supabase)
         {
             _databaseService = databaseService;
             _syncService = syncService;
+            _supabase = supabase;
         }
 
         public async Task SeedHistoryAsync(string userId)
@@ -120,6 +122,18 @@ namespace Daily.Services
             {
                 return; // Already seeded or user has their own feeds
             }
+
+            try 
+            {
+                // Check if user already has feeds in Supabase (logged into a new device)
+                var remoteFeeds = await _supabase.From<RssSubscription>().Select("id").Limit(1).Get();
+                if (remoteFeeds.Models.Count > 0)
+                {
+                    Console.WriteLine("[Seeder] User has remote RSS feeds. Skipping default seed.");
+                    return; 
+                }
+            }
+            catch { /* Ignore network errors, fall back to seeding if empty */ }
 
             Console.WriteLine("[Seeder] Seeding default RSS Feeds...");
             
