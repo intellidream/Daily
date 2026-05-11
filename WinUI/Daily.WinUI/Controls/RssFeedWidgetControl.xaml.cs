@@ -114,12 +114,16 @@ public sealed partial class RssFeedWidgetControl : UserControl
 
     private async void FeedComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (FeedComboBox.SelectedItem is FeedSource selectedFeed && selectedFeed != _rssService.CurrentFeed)
+        if (FeedComboBox.SelectedItem is FeedSource selectedFeed)
         {
-            LoadingPanel.Visibility = Visibility.Visible;
-            ArticlesListView.Visibility = Visibility.Collapsed;
-            _rssService.SelectFeed(selectedFeed);
-            await _rssService.LoadFeedAsync(selectedFeed);
+            // Only trigger a new load if the feed actually changed (compare by Url to avoid object reference false positives)
+            if (_rssService.CurrentFeed == null || selectedFeed.Url != _rssService.CurrentFeed.Url)
+            {
+                LoadingPanel.Visibility = Visibility.Visible;
+                ArticlesListView.Visibility = Visibility.Collapsed;
+                _rssService.SelectFeed(selectedFeed);
+                await _rssService.LoadFeedAsync(selectedFeed);
+            }
         }
     }
 
