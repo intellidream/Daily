@@ -282,6 +282,7 @@ namespace Daily.Services
 
             Console.WriteLine($"[SettingsService] ToDomain Raw: '{local.UnitSystem}' -> Sanitized: '{userPrefs.UnitSystem}'");
             userPrefs.DashboardWidgetsJson = local.DashboardWidgetsJson;
+            userPrefs.WinUIDashboardWidgetsJson = local.WinUIDashboardWidgetsJson;
             userPrefs.UpdatedAt = local.UpdatedAt;
             return userPrefs;
         }
@@ -311,6 +312,7 @@ namespace Daily.Services
                 
                 InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests),
                 DashboardWidgetsJson = domain.DashboardWidgetsJson,
+                WinUIDashboardWidgetsJson = domain.WinUIDashboardWidgetsJson,
                 UpdatedAt = domain.UpdatedAt
             };
         }

@@ -24,6 +24,9 @@ namespace Daily.Models
         [Column("dashboard_widgets")]
         public string? DashboardWidgetsJson { get; set; }
 
+        [Column("winui_dashboard_widgets")]
+        public string? WinUIDashboardWidgetsJson { get; set; }
+
         // New Preferences (Local Only until DB Schema Updated)
         [Column("wind_unit")]
         public string WindUnit { get; set; } = "km/h"; // m/s, km/h, mph

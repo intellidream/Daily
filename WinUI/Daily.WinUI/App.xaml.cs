@@ -98,7 +98,9 @@ public partial class App : Application
         services.AddSingleton<Daily.Services.ISyncService, Daily.Services.SyncService>();
         services.AddSingleton<Daily.Services.IRssFeedService, Daily.Services.RssFeedService>();
         services.AddSingleton<Daily.Services.SeederService>();
+        services.AddSingleton<Daily.Services.ISettingsService, Daily.Services.SettingsService>();
         services.AddSingleton<Daily_WinUI.Services.WinUIAuthService>();
+        services.AddSingleton<Daily_WinUI.Services.WinUIWidgetService>();
         
         // Dummy services to satisfy SyncService dependencies
         services.AddSingleton<Daily.Services.Health.IHealthService, Daily_WinUI.Services.MockHealthService>();
@@ -123,6 +125,11 @@ public partial class App : Application
         // Initialize Database & Start Background Sync
         var db = Services.GetRequiredService<Daily.Services.IDatabaseService>();
         await db.InitializeAsync();
+
+        // CRITICAL: Guarantee SettingsService is fully hydrated BEFORE the UI loads and asks for widgets!
+        // This solves the race condition where the dashboard falls back to default sizes/positions on startup.
+        var settingsService = Services.GetRequiredService<Daily.Services.ISettingsService>();
+        await settingsService.InitializeAsync();
 
         var userId = SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
         var seeder = Services.GetRequiredService<Daily.Services.SeederService>();

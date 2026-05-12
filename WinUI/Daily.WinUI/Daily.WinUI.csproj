@@ -58,6 +58,7 @@
     <Compile Include="..\..\Services\IHabitsService.cs" Link="Services\IHabitsService.cs" />
     <Compile Include="..\..\Services\IHabitsRepository.cs" Link="Services\IHabitsRepository.cs" />
     <Compile Include="..\..\Services\ISettingsService.cs" Link="Services\ISettingsService.cs" />
+    <Compile Include="..\..\Services\SettingsService.cs" Link="Services\SettingsService.cs" />
   </ItemGroup>
 
   <!--

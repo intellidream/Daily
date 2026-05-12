@@ -471,7 +471,10 @@ namespace Daily.Services
                                 var diff = remoteTime - localTime;
                                 LogDebug($"   Diff (Remote - Local): {diff.TotalSeconds} seconds");
 
-                                if (remoteTime > localTime.AddSeconds(1)) // 1s buffer for SQLite trunc
+                                // FIX: Desktop PC clocks often drift. If local clock is slightly behind the server,
+                                // the server's previous UpdatedAt (set by DB trigger) will appear "newer" than our current local UtcNow!
+                                // Allow a generous 60-second skew buffer so we don't accidentally pull and overwrite local changes.
+                                if (remoteTime > localTime.AddSeconds(60)) 
                                 {
                                     LogDebug($"[SyncService] DECISION: REMOTE WIN. Remote is newer by {diff.TotalSeconds:F2}s. Skipping Push & Pulling.");
                                     skipPush = true;

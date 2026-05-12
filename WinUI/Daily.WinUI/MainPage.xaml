@@ -23,6 +23,63 @@
         </LinearGradientBrush>
         <SolidColorBrush x:Key="WidgetBrush" Color="#20FFFFFF" />
         <SolidColorBrush x:Key="WidgetBorderBrush" Color="#46FFFFFF" />
+
+        <DataTemplate x:Key="WeatherWidgetTemplate">
+            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+                <controls:WeatherWidgetControl x:Name="WeatherWidget" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="FinancesWidgetTemplate">
+            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+                <controls:FinancesWidgetControl x:Name="FinancesWidget" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="HabitsWidgetTemplate">
+            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+                <controls:HabitsWidgetControl x:Name="HabitsWidget" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="HealthWidgetTemplate">
+            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+                <controls:HealthWidgetControl x:Name="HealthWidget" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="CalendarWidgetTemplate">
+            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+                <TextBlock Text="Calendar Widget Coming Soon" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="RssFeedWidgetTemplate">
+            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+                <controls:RssFeedWidgetControl x:Name="RssFeedWidget" ArticleTapped="RssFeedWidget_ArticleTapped" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="NotesWidgetTemplate">
+            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+                <TextBlock Text="Notes Widget Coming Soon" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="MediaWidgetTemplate">
+            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+                <TextBlock Text="Media Widget Coming Soon" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="SystemInfoWidgetTemplate">
+            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+                <TextBlock Text="System Info Widget Coming Soon" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </DataTemplate>
+
+        <controls:WidgetTemplateSelector x:Key="WidgetSelector"
+            WeatherTemplate="{StaticResource WeatherWidgetTemplate}"
+            FinancesTemplate="{StaticResource FinancesWidgetTemplate}"
+            HabitsTemplate="{StaticResource HabitsWidgetTemplate}"
+            HealthTemplate="{StaticResource HealthWidgetTemplate}"
+            CalendarTemplate="{StaticResource CalendarWidgetTemplate}"
+            RssFeedTemplate="{StaticResource RssFeedWidgetTemplate}"
+            NotesTemplate="{StaticResource NotesWidgetTemplate}"
+            MediaTemplate="{StaticResource MediaWidgetTemplate}"
+            SystemInfoTemplate="{StaticResource SystemInfoWidgetTemplate}" />
     </Page.Resources>
 
     <Grid Background="{StaticResource DashboardBackgroundBrush}">
@@ -64,45 +121,45 @@
                     </Button>
                 </Grid>
                 
-                <!-- We will use a Grid to allow different widget sizes without crashing -->
-                <Grid ColumnSpacing="16" RowSpacing="16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="200" />
-                        <RowDefinition Height="200" />
-                        <RowDefinition Height="200" />
-                        <RowDefinition Height="200" />
-                    </Grid.RowDefinitions>
+                <!-- Dynamic Widget Grid -->
+                <local:DashboardGridView x:Name="WidgetGridView"
+                          SelectionMode="None"
+                          HorizontalAlignment="Stretch"
+                          Padding="0"
+                          CanDragItems="True"
+                          CanReorderItems="False"
+                          AllowDrop="True"
+                          DragItemsStarting="WidgetGridView_DragItemsStarting"
+                          DragOver="WidgetGridView_DragOver"
+                          Drop="WidgetGridView_Drop"
+                          SizeChanged="WidgetGridView_SizeChanged"
+                          ItemTemplateSelector="{StaticResource WidgetSelector}">
                     
-                    <!-- Weather Widget -->
-                    <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Grid.ColumnSpan="2" Grid.Row="0" Tapped="WeatherWidget_Tapped">
-                        <controls:WeatherWidgetControl x:Name="WeatherWidget" />
-                    </Border>
+                    <local:DashboardGridView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VariableSizedWrapGrid x:Name="DashboardWrapGrid" Orientation="Horizontal" MaximumRowsOrColumns="2" />
+                        </ItemsPanelTemplate>
+                    </local:DashboardGridView.ItemsPanel>
                     
-                    <!-- Finances Widget -->
-                    <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Grid.Column="0" Grid.Row="1" Tapped="FinancesWidget_Tapped">
-                        <controls:FinancesWidgetControl x:Name="FinancesWidget" />
-                    </Border>
-
-                    <!-- Habits Widget -->
-                    <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Grid.Column="1" Grid.Row="1" Tapped="HabitsWidget_Tapped">
-                        <controls:HabitsWidgetControl x:Name="HabitsWidget" />
-                    </Border>
-
-                    <!-- RSS Widget (Spans 2 rows) -->
-                    <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Grid.Column="0" Grid.Row="2" Grid.RowSpan="2" Tapped="RssFeedWidget_Tapped">
-                        <controls:RssFeedWidgetControl x:Name="RssFeedWidget" />
-                    </Border>
-
-                    <!-- Health Widget -->
-                    <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Grid.Column="1" Grid.Row="2" Tapped="HealthWidget_Tapped">
-                        <controls:HealthWidgetControl x:Name="HealthWidget" />
-                    </Border>
-
-                </Grid>
+                    <local:DashboardGridView.ItemContainerStyle>
+                        <Style TargetType="GridViewItem">
+                            <Setter Property="Margin" Value="8" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                            <Setter Property="ContextFlyout">
+                                <Setter.Value>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="Size: Small (1x1)" Tag="1x1" Click="WidgetResize_Click"/>
+                                        <MenuFlyoutItem Text="Size: Wide (2x1)" Tag="2x1" Click="WidgetResize_Click"/>
+                                        <MenuFlyoutItem Text="Size: Tall (1x2)" Tag="1x2" Click="WidgetResize_Click"/>
+                                        <MenuFlyoutItem Text="Size: Large (2x2)" Tag="2x2" Click="WidgetResize_Click"/>
+                                    </MenuFlyout>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </local:DashboardGridView.ItemContainerStyle>
+                </local:DashboardGridView>
             </StackPanel>
         </ScrollViewer>
     </Grid>

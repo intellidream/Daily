@@ -142,6 +142,7 @@ namespace Daily.Services
                             ? new List<string>() 
                             : System.Text.Json.JsonSerializer.Deserialize<List<string>>(local.InterestsJson) ?? new List<string>(),
                 DashboardWidgetsJson = local.DashboardWidgetsJson,
+                WinUIDashboardWidgetsJson = local.WinUIDashboardWidgetsJson,
                 // Ensure UTC Kind for correct serialization
                 UpdatedAt = SafeUtc(local.UpdatedAt) 
             };
@@ -172,6 +173,7 @@ namespace Daily.Services
                 
                 InterestsJson = System.Text.Json.JsonSerializer.Serialize(domain.Interests),
                 DashboardWidgetsJson = domain.DashboardWidgetsJson,
+                WinUIDashboardWidgetsJson = domain.WinUIDashboardWidgetsJson,
                 UpdatedAt = domain.UpdatedAt
             };
         }
