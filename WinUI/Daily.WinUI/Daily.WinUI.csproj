@@ -56,7 +56,11 @@
     
     <!-- Stubs/Interfaces for Dependencies of SyncService -->
     <Compile Include="..\..\Services\IHabitsService.cs" Link="Services\IHabitsService.cs" />
+    <Compile Include="..\..\Services\HabitsService.cs" Link="Services\HabitsService.cs" />
     <Compile Include="..\..\Services\IHabitsRepository.cs" Link="Services\IHabitsRepository.cs" />
+    <Compile Include="..\..\Services\HabitsRepository.cs" Link="Services\HabitsRepository.cs" />
+    <Compile Include="..\..\Services\IRefreshService.cs" Link="Services\IRefreshService.cs" />
+    <Compile Include="..\..\Services\RefreshService.cs" Link="Services\RefreshService.cs" />
     <Compile Include="..\..\Services\ISettingsService.cs" Link="Services\ISettingsService.cs" />
     <Compile Include="..\..\Services\SettingsService.cs" Link="Services\SettingsService.cs" />
   </ItemGroup>

@@ -1,22 +1,116 @@
-<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Daily_WinUI.Controls.HabitsWidgetControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:gauge="using:Syncfusion.UI.Xaml.Gauges"
     mc:Ignorable="d"
-    d:DesignHeight="200" d:DesignWidth="400">
+    d:DesignHeight="300" d:DesignWidth="400"
+    Tapped="Widget_Tapped"
+    Background="Transparent">
 
-    <Grid Padding="20">
-        <StackPanel Spacing="8">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <FontIcon Glyph="&#xE81C;" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="#FFFF8FA3"/>
-                <TextBlock Text="Habits" FontSize="18" FontWeight="SemiBold" Opacity="0.9" />
-            </StackPanel>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Grid.Row="0" Margin="16,12,16,0" PointerEntered="Header_PointerEntered" PointerExited="Header_PointerExited" Tapped="Header_Tapped" Background="Transparent" x:Name="HeaderGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <FontIcon Grid.Column="0" Glyph="&#xE81C;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource SystemAccentColor}" Margin="0,0,8,0"/>
+            <TextBlock Grid.Column="1" Text="Habits" FontSize="14" FontWeight="SemiBold" Opacity="0.9" VerticalAlignment="Center" />
             
-            <TextBlock Text="Coming Soon" FontSize="24" FontWeight="Bold" Margin="0,24,0,0" Opacity="0.5"/>
-            <TextBlock Text="Build better habits" FontSize="12" Opacity="0.5" />
-        </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                <Button x:Name="PrevBtn" Background="Transparent" BorderThickness="0" Padding="4" Height="24" Width="24" Click="Prev_Click">
+                    <FontIcon Glyph="&#xE76B;" FontSize="10" />
+                </Button>
+                <Button x:Name="NextBtn" Background="Transparent" BorderThickness="0" Padding="4" Height="24" Width="24" Click="Next_Click">
+                    <FontIcon Glyph="&#xE76C;" FontSize="10" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- FlipView for Water/Smokes -->
+        <FlipView x:Name="HabitsFlipView" Grid.Row="1" SelectionChanged="HabitsFlipView_SelectionChanged" Background="Transparent">
+            <!-- Item 1: Water -->
+            <FlipViewItem>
+                <Grid Padding="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0" Margin="0,0,12,0">
+                        <!-- Syncfusion Radial Gauge for Water -->
+                        <gauge:SfRadialGauge Height="120" Width="120">
+                            <gauge:SfRadialGauge.Axes>
+                                <gauge:RadialAxis StartAngle="180" EndAngle="360" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowTicks="False" ShowAxisLine="False">
+                                    <gauge:RadialAxis.Ranges>
+                                        <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+                                        <gauge:GaugeRange StartValue="0" EndValue="{x:Bind CurrentProgress, Mode=OneWay}" Background="{x:Bind GaugeColor, Mode=OneWay}"/>
+                                    </gauge:RadialAxis.Ranges>
+                                </gauge:RadialAxis>
+                            </gauge:SfRadialGauge.Axes>
+                        </gauge:SfRadialGauge>
+                        
+                        <!-- Center Text -->
+                        <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,12">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="28" FontWeight="Bold" Foreground="{x:Bind GaugeColor, Mode=OneWay}" />
+                                <TextBlock Text="ml" FontSize="14" Opacity="0.6" VerticalAlignment="Bottom" Margin="2,0,0,4"/>
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" Margin="0,-4,0,0"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Quick Adds -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="12">
+                        <Button Background="{ThemeResource SystemAccentColorDark2}" Width="48" Height="48" CornerRadius="24" Click="AddWater_Click">
+                            <FontIcon Glyph="&#xE7A3;" Foreground="White" FontSize="20"/>
+                        </Button>
+                        <Button Background="#FF9800" Width="48" Height="48" CornerRadius="24" Click="AddCoffee_Click">
+                            <FontIcon Glyph="&#xE81E;" Foreground="White" FontSize="20"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </FlipViewItem>
+
+            <!-- Item 2: Smokes -->
+            <FlipViewItem>
+                <Grid Padding="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Data Display for Smokes -->
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="8">
+                        <TextBlock Text="Smokes Today" FontSize="14" Opacity="0.6" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="36" FontWeight="Bold" Foreground="#F44336"/>
+                            <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="16" Opacity="0.5" VerticalAlignment="Bottom" Margin="0,0,0,6"/>
+                        </StackPanel>
+                        
+                        <StackPanel Margin="0,12,0,0">
+                            <TextBlock Text="Financials" FontSize="12" Opacity="0.6"/>
+                            <TextBlock Text="{x:Bind MoneySavedDisplay, Mode=OneWay}" FontSize="16" Foreground="Green" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Quick Adds -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="12">
+                        <Button Background="#F44336" Width="48" Height="48" CornerRadius="24" Click="AddCigarette_Click">
+                            <FontIcon Glyph="&#xE731;" Foreground="White" FontSize="20"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </FlipViewItem>
+        </FlipView>
     </Grid>
 </UserControl>

@@ -127,10 +127,9 @@ public sealed partial class RssFeedWidgetControl : UserControl
         }
     }
 
-    private void Article_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+    private void ArticlesListView_ItemClick(object sender, ItemClickEventArgs e)
     {
-        e.Handled = true; // Stop it from bubbling up to the GridView, which swallows the click!
-        if (sender is FrameworkElement fe && fe.DataContext is RssItem item)
+        if (e.ClickedItem is RssItem item)
         {
             ArticleTapped?.Invoke(this, item);
         }

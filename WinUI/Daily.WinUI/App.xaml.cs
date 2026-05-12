@@ -97,10 +97,13 @@ public partial class App : Application
         services.AddSingleton<Daily.Services.IDatabaseService, Daily.Services.DatabaseService>();
         services.AddSingleton<Daily.Services.ISyncService, Daily.Services.SyncService>();
         services.AddSingleton<Daily.Services.IRssFeedService, Daily.Services.RssFeedService>();
-        services.AddSingleton<Daily.Services.SeederService>();
+        services.AddSingleton<Daily.Services.ISeederService, Daily.Services.SeederService>();
         services.AddSingleton<Daily.Services.ISettingsService, Daily.Services.SettingsService>();
         services.AddSingleton<Daily_WinUI.Services.WinUIAuthService>();
         services.AddSingleton<Daily_WinUI.Services.WinUIWidgetService>();
+        services.AddSingleton<Daily.Services.IHabitsRepository, Daily.Services.HabitsRepository>();
+        services.AddSingleton<Daily.Services.IHabitsService, Daily.Services.HabitsService>();
+        services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();
         
         // Dummy services to satisfy SyncService dependencies
         services.AddSingleton<Daily.Services.Health.IHealthService, Daily_WinUI.Services.MockHealthService>();
@@ -132,7 +135,7 @@ public partial class App : Application
         await settingsService.InitializeAsync();
 
         var userId = SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
-        var seeder = Services.GetRequiredService<Daily.Services.SeederService>();
+        var seeder = Services.GetRequiredService<Daily.Services.ISeederService>();
         await seeder.SeedRssFeedsAsync(userId);
 
         // Re-initialize feeds in memory to reflect the newly seeded database entries

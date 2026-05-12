@@ -198,6 +198,13 @@ namespace Daily.Services
                 
                 if (remotePref != null && remotePref.Id == CurrentUserId)
                 {
+                    // Structurally prevent self-overwrite / stale cache overwrite
+                    if (_currentSettings != null && remotePref.UpdatedAt <= _currentSettings.UpdatedAt)
+                    {
+                        Console.WriteLine($"[SettingsService] Realtime: Ignored stale/self broadcast. Remote: {remotePref.UpdatedAt}, Local: {_currentSettings.UpdatedAt}");
+                        return;
+                    }
+
                     var localPrefs = ToLocal(remotePref);
                     localPrefs.SyncedAt = DateTime.UtcNow; // Prevent push loop
                     

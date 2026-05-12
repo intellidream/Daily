@@ -197,6 +197,9 @@ public sealed partial class MainPage : Page
             {
                 _widgets.RemoveAt(index);
                 _widgets.Insert(index, widget);
+                
+                // Save the new layout sizes
+                _ = _widgetService.SaveWidgetsAsync(_widgets.ToList());
             }
             
             await _widgetService.SaveWidgetsAsync(_widgets.ToList());
@@ -227,6 +230,7 @@ public sealed partial class MainPage : Page
                 case "FinancesWidget":
                     break;
                 case "HabitsWidget":
+                    OpenDetailWindow(typeof(HabitsDetailPage));
                     break;
                 case "HealthWidget":
                     break;

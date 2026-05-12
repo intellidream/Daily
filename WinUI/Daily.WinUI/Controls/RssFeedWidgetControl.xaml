@@ -58,7 +58,8 @@
                       ShowsScrollingPlaceholders="False"
                       Visibility="Collapsed"
                       Padding="16,0,16,16"
-                      IsItemClickEnabled="False">
+                      IsItemClickEnabled="True"
+                      ItemClick="ArticlesListView_ItemClick">
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -88,8 +89,7 @@
                                 CornerRadius="8"
                                 Margin="0,0,0,12"
                                 Padding="12"
-                                HorizontalAlignment="Stretch"
-                                Tapped="Article_Tapped">
+                                HorizontalAlignment="Stretch">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="80"/>

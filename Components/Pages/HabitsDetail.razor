@@ -683,6 +683,7 @@
      private string _smokesCurrency = "USD";
      private DateTime? _smokesQuitDate;
      private Dictionary<string, int> _smokesBreakdown = new();
+     private (double TotalSmoked, int DaysTracked) _smokesFinancials;
      private string _bulkSmokeType = "Cigarette";
      private int _bulkSmokeCount = 1;
 
@@ -878,6 +879,7 @@
             _smokesLogs = await HabitsService.GetLogsAsync("smokes", dateToUse);
             _smokesCurrentValue = (int)_smokesLogs.Sum(l => l.Value);
             _smokesBreakdown = await HabitsService.GetSmokesBreakdownAsync(_smokesQuitDate ?? DateTime.Today);
+            _smokesFinancials = await HabitsService.GetSmokesFinancialsAsync(_smokesQuitDate ?? DateTime.Today);
             
             UpdateHealthStatus();
         }
@@ -965,15 +967,14 @@
     {
         if (!_smokesQuitDate.HasValue) return 0;
         
-        var totalSmokes = _smokesBreakdown.Sum(x => x.Value);
+        var totalSmokes = _smokesFinancials.TotalSmoked;
         
         var startDate = _smokesQuitDate.Value.Date;
         var endDate = DateTime.Today;
         var totalDays = (endDate - startDate).TotalDays + 1; // Inclusive
+        if (totalDays <= 0) totalDays = 1;
         
-        if (totalDays <= 0) return 0;
-        
-        return (double)totalSmokes / totalDays;
+        return totalSmokes / totalDays;
     }
 
     private void UpdateWaterStatus()
@@ -1020,7 +1021,7 @@
         if (totalDays <= 0) return $"{_smokesCurrency} 0";
         
         var totalExpectedSmokes = totalDays * _smokesBaseline;
-        var actualSmokes = _smokesBreakdown.Sum(x => x.Value);
+        var actualSmokes = _smokesFinancials.TotalSmoked;
         
         var avoided = totalExpectedSmokes - actualSmokes;
         if (avoided < 0) avoided = 0;
@@ -1065,7 +1066,7 @@
         var type = _viewType == "water" ? "water" : "smokes";
         var labels = new string[7];
 
-        var historyList = await HabitsService.GetHistoryAsync(type, startDate, endDate);
+        var historyList = await HabitsService.GetConsistencyAsync(type, startDate, endDate);
         var historyMap = historyList.ToDictionary(h => h.Date.Date, h => h);
 
         if (type == "water")

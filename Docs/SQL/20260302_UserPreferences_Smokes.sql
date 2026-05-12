@@ -11,4 +11,5 @@ ADD COLUMN IF NOT EXISTS smokes_baseline integer DEFAULT 0,
 ADD COLUMN IF NOT EXISTS smokes_pack_size integer DEFAULT 20,
 ADD COLUMN IF NOT EXISTS smokes_pack_cost numeric DEFAULT 0,
 ADD COLUMN IF NOT EXISTS smokes_currency text DEFAULT 'USD',
-ADD COLUMN IF NOT EXISTS smokes_quit_date timestamp with time zone;
+ADD COLUMN IF NOT EXISTS smokes_quit_date timestamp with time zone,
+ADD COLUMN IF NOT EXISTS winui_dashboard_widgets text;

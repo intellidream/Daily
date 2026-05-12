@@ -26,6 +26,18 @@ namespace Daily.Services
         
         Task<List<DailySummary>> GetHistoryAsync(string habitType, DateTime startDate, DateTime endDate);
         
+        /// <summary>
+        /// Server-side aggregation via Supabase RPC. Returns daily totals for a habit type
+        /// over a date range. Falls back to local GetHistoryAsync if offline.
+        /// </summary>
+        Task<List<DailySummary>> GetConsistencyAsync(string habitType, DateTime startDate, DateTime endDate);
+        
+        /// <summary>
+        /// Server-side aggregation via Supabase RPC. Returns total smokes and days tracked
+        /// since the given date. Falls back to local GetSmokesBreakdownAsync if offline.
+        /// </summary>
+        Task<(double TotalSmoked, int DaysTracked)> GetSmokesFinancialsAsync(DateTime sinceDate);
+        
         Task InitializeAsync();
         
         Task<Dictionary<string, int>> GetSmokesBreakdownAsync(DateTime sinceDate);

@@ -157,16 +157,18 @@ namespace Daily.Services
              // Need strict string format for comparison if underlying is string
              // But sqlite-net-pcl handles DateTime mappings if configured.
              var normalizedUserId = userId?.ToLowerInvariant();
-             var summaries = await _databaseService.Connection.Table<LocalDailySummary>()
-                                .Where(s => s.HabitType == habitType && s.UserId == normalizedUserId && s.Date >= sDate && s.Date < eDate)
+             var allSummaries = await _databaseService.Connection.Table<LocalDailySummary>()
+                                .Where(s => s.HabitType == habitType && s.UserId == normalizedUserId)
                                 .ToListAsync();
+             var summaries = allSummaries.Where(s => s.Date >= sDate && s.Date < eDate).ToList();
 
              // 2. Fetch Raw Logs (for the same period)
              // We assume raw logs only exist for the last 90 days, but we query whatever is there.
              // If raw logs exist, they are "Verified Truth" and supersede summaries.
-             var rawLogs = await _databaseService.Connection.Table<LocalHabitLog>()
-                                .Where(l => l.HabitType == habitType && l.UserId == normalizedUserId && l.IsDeleted == false && l.LoggedAt >= sDate && l.LoggedAt < eDate)
+             var allLogs = await _databaseService.Connection.Table<LocalHabitLog>()
+                                .Where(l => l.HabitType == habitType && l.UserId == normalizedUserId && l.IsDeleted == false)
                                 .ToListAsync();
+             var rawLogs = allLogs.Where(l => l.LoggedAt >= sDate && l.LoggedAt < eDate).ToList();
 
             // 3. Merge: Pivot on Date
              // We want a list of DailySummary objects covering the range where data exists.
@@ -270,9 +272,10 @@ namespace Daily.Services
             var sinceUtc = sinceDate.ToUniversalTime();
             var normalizedUserId = userId?.ToLowerInvariant();
             
-            var logs = await _databaseService.Connection.Table<LocalHabitLog>()
-                            .Where(l => l.HabitType == habitType && l.UserId == normalizedUserId && l.IsDeleted == false && l.LoggedAt >= sinceUtc)
+            var allLogs = await _databaseService.Connection.Table<LocalHabitLog>()
+                            .Where(l => l.HabitType == habitType && l.UserId == normalizedUserId && l.IsDeleted == false)
                             .ToListAsync();
+            var logs = allLogs.Where(l => l.LoggedAt >= sinceUtc).ToList();
 
             var breakdown = new Dictionary<string, int>();
 

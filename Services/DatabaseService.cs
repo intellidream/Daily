@@ -66,6 +66,16 @@ namespace Daily.Services
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
                 try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar").ConfigureAwait(false); } catch { /* Ignore if exists */ }
                 
+                // Habits & Smokes Migrations
+                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesBaselineDaily integer").ConfigureAwait(false); } catch { }
+                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesPackSize integer").ConfigureAwait(false); } catch { }
+                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesPackCost real").ConfigureAwait(false); } catch { }
+                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesCurrency varchar").ConfigureAwait(false); } catch { }
+                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesQuitDate bigint").ConfigureAwait(false); } catch { }
+                
+                // WinUI Widgets Migration
+                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN WinUIDashboardWidgetsJson varchar").ConfigureAwait(false); } catch { }
+                
                 Console.WriteLine($"[DatabaseService] Tables Created results: {res1}, {res2}, {res3}, {res4}");
                 
                 _initialized = true;

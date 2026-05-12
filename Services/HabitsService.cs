@@ -2,6 +2,7 @@ using Daily.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Supabase.Realtime;
 
@@ -163,6 +164,7 @@ namespace Daily.Services
              };
 
              await _repository.SaveLogAsync(log);
+             InvalidateRpcCache();
              _ = _syncService.PushAsync(); // Background
              OnHabitsUpdated?.Invoke();
         }
@@ -170,6 +172,7 @@ namespace Daily.Services
         public async Task DeleteLogAsync(Guid logId)
         {
             await _repository.DeleteLogAsync(logId);
+            InvalidateRpcCache();
             _ = _syncService.PushAsync(); // Background
             OnHabitsUpdated?.Invoke();
         }
@@ -282,6 +285,7 @@ namespace Daily.Services
                 {
                     var localLog = remoteLog.ToLocal();
                     localLog.SyncedAt = DateTime.UtcNow; // Prevent sync push loop
+                    InvalidateRpcCache();
                     _repository.SaveLocalLogAsync(localLog).ContinueWith(_ => OnHabitsUpdated?.Invoke());
                     Console.WriteLine($"[HabitsService] Realtime: Synced incoming habit log {localLog.Id}");
                 }
@@ -308,6 +312,153 @@ namespace Daily.Services
         public async Task<Dictionary<string, int>> GetSmokesBreakdownAsync(DateTime sinceDate)
         {
             return await _repository.GetGlobalTypeBreakdownAsync("smokes", sinceDate, CurrentUserIdString);
+        }
+
+        // =====================================================
+        // Server-Side Aggregation via Supabase RPC
+        // =====================================================
+
+        // Simple in-memory cache for RPC results
+        private static readonly Dictionary<string, (DateTime CachedAt, object Data)> _rpcCache = new();
+        private static readonly TimeSpan _cacheTtl = TimeSpan.FromMinutes(5);
+
+        public async Task<List<DailySummary>> GetConsistencyAsync(string habitType, DateTime startDate, DateTime endDate)
+        {
+            var cacheKey = $"consistency_{habitType}_{startDate:yyyyMMdd}_{endDate:yyyyMMdd}_{CurrentUserIdString}";
+
+            // Check cache
+            if (_rpcCache.TryGetValue(cacheKey, out var cached) && (DateTime.UtcNow - cached.CachedAt) < _cacheTtl)
+            {
+                return (List<DailySummary>)cached.Data;
+            }
+
+            // Try RPC
+            if (IsAuthenticated)
+            {
+                try
+                {
+                    var response = await _supabase.Rpc("get_habits_consistency", new Dictionary<string, object>
+                    {
+                        { "p_habit_type", habitType },
+                        { "p_start_date", startDate.ToString("yyyy-MM-dd") },
+                        { "p_end_date", endDate.ToString("yyyy-MM-dd") }
+                    });
+
+                    var json = response.Content;
+                    if (!string.IsNullOrEmpty(json) && json != "null")
+                    {
+                        var items = JsonSerializer.Deserialize<List<ConsistencyRow>>(json, new JsonSerializerOptions 
+                        { 
+                            PropertyNameCaseInsensitive = true 
+                        });
+
+                        if (items != null)
+                        {
+                            var result = items.Select(r => new DailySummary
+                            {
+                                Id = Guid.Empty,
+                                UserId = CurrentUserId,
+                                HabitType = habitType,
+                                Date = r.Day,
+                                TotalValue = r.TotalValue,
+                                LogCount = r.LogCount
+                            }).ToList();
+
+                            // Cache the result
+                            _rpcCache[cacheKey] = (DateTime.UtcNow, result);
+                            Console.WriteLine($"[HabitsService] RPC consistency: Got {result.Count} days for {habitType}");
+                            return result;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[HabitsService] RPC consistency fallback to local: {ex.Message}");
+                }
+            }
+
+            // Fallback to local
+            return await GetHistoryAsync(habitType, startDate, endDate);
+        }
+
+        public async Task<(double TotalSmoked, int DaysTracked)> GetSmokesFinancialsAsync(DateTime sinceDate)
+        {
+            var cacheKey = $"financials_smokes_{sinceDate:yyyyMMdd}_{CurrentUserIdString}";
+
+            // Check cache
+            if (_rpcCache.TryGetValue(cacheKey, out var cached) && (DateTime.UtcNow - cached.CachedAt) < _cacheTtl)
+            {
+                return ((double, int))cached.Data;
+            }
+
+            // Try RPC
+            if (IsAuthenticated)
+            {
+                try
+                {
+                    var response = await _supabase.Rpc("get_smokes_financials", new Dictionary<string, object>
+                    {
+                        { "p_since_date", sinceDate.ToUniversalTime().ToString("o") }
+                    });
+
+                    var json = response.Content;
+                    if (!string.IsNullOrEmpty(json) && json != "null")
+                    {
+                        var data = JsonSerializer.Deserialize<SmokesFinancialsRow>(json, new JsonSerializerOptions 
+                        { 
+                            PropertyNameCaseInsensitive = true 
+                        });
+
+                        if (data != null)
+                        {
+                            var result = (data.TotalSmoked, data.DaysTracked);
+                            _rpcCache[cacheKey] = (DateTime.UtcNow, result);
+                            Console.WriteLine($"[HabitsService] RPC financials: {data.TotalSmoked} smokes over {data.DaysTracked} days");
+                            return result;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[HabitsService] RPC financials fallback to local: {ex.Message}");
+                }
+            }
+
+            // Fallback to local breakdown
+            var breakdown = await GetSmokesBreakdownAsync(sinceDate);
+            var totalSmoked = breakdown.Values.Sum();
+            var daysTracked = (int)(DateTime.Today - sinceDate.Date).TotalDays + 1;
+            return (totalSmoked, daysTracked);
+        }
+
+        /// <summary>Invalidate RPC cache (e.g., after logging a new entry)</summary>
+        private void InvalidateRpcCache()
+        {
+            _rpcCache.Clear();
+        }
+
+        // JSON deserialization models for RPC responses
+        private class ConsistencyRow
+        {
+            public DateTime Day { get; set; }
+            public double TotalValue { get; set; }
+            public int LogCount { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("total_value")]
+            public double TotalValueJson { set => TotalValue = value; }
+            [System.Text.Json.Serialization.JsonPropertyName("log_count")]
+            public int LogCountJson { set => LogCount = value; }
+        }
+
+        private class SmokesFinancialsRow
+        {
+            public double TotalSmoked { get; set; }
+            public int DaysTracked { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("total_smoked")]
+            public double TotalSmokedJson { set => TotalSmoked = value; }
+            [System.Text.Json.Serialization.JsonPropertyName("days_tracked")]
+            public int DaysTrackedJson { set => DaysTracked = value; }
         }
     }
 }

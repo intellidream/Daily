@@ -305,6 +305,7 @@
     private string _smokesCurrency = "USD";
     private DateTime? _smokesQuitDate;
     private Dictionary<string, int> _smokesBreakdown = new();
+    private (double TotalSmoked, int DaysTracked) _smokesFinancials;
     
     // SVG Data
     record SvgSegment(string PathData, string Color);
@@ -447,6 +448,7 @@
             
             _smokesQuitDate = SettingsService.Settings.SmokesQuitDate;
             _smokesBreakdown = await HabitsService.GetSmokesBreakdownAsync(_smokesQuitDate ?? DateTime.Today);
+            _smokesFinancials = await HabitsService.GetSmokesFinancialsAsync(_smokesQuitDate ?? DateTime.Today);
             
             _smokesCurrentValue = await HabitsService.GetDailyProgressAsync("smokes", DateTime.Now);
         }
@@ -532,14 +534,13 @@
         if (!_smokesQuitDate.HasValue) 
             return _smokesCurrentValue; // Fallback if no quit date
             
-        var totalSmokes = _smokesBreakdown.Sum(x => x.Value);
+        var totalSmokes = _smokesFinancials.TotalSmoked;
         
         var startDate = _smokesQuitDate.Value.Date;
         var endDate = DateTime.Today;
-        var totalDays = (endDate - startDate).TotalDays + 1;
+        var totalDays = (endDate - startDate).TotalDays + 1; // Inclusive
+        if (totalDays <= 0) totalDays = 1;
         
-        if (totalDays <= 0) return _smokesCurrentValue;
-        
-        return (double)totalSmokes / totalDays;
+        return totalSmokes / totalDays;
     }
 }
