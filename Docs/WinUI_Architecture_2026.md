@@ -53,3 +53,28 @@ The application relies on an offline-first SQLite database that syncs in the bac
 * The application leverages Supabase Realtime via the `_supabase.Auth.AddStateChangedListener` and specific Postgres change listeners in `SettingsService`.
 * When an update occurs on another device (e.g., another WinUI desktop), Supabase broadcasts the row change.
 * `SettingsService.OnPreferencesReceived` intercepts this payload, writes it to the local SQLite database, and silently updates `_currentSettings`. While the UI does not aggressively redraw automatically (to prevent disrupting the user), the new layout is securely cached and will be applied on the next app launch or page refresh.
+
+---
+
+## 5. XAML Compiler Stability & UI Components
+
+A key challenge during the WinUI port was ensuring compile-time and runtime stability for complex layouts.
+
+### Avoiding MSB3073 & Complex Layout Crashes
+* **The Problem**: Nesting complex third-party visual controls (like Syncfusion Gauges and Charts) deep within WinUI 3 `DataTemplate` and `FlipView` hierarchies frequently caused `MSB3073` XamlCompiler errors in .NET 10.
+* **The Solution**: The UI was systematically refactored to prioritize **Native WinUI Controls** (e.g., `ProgressRing`, `Expander`, `GridView`) for all core layouts. Third-party controls are now strictly isolated within their own lightweight `UserControl` wrappers when necessary, preventing the XamlCompiler from failing during the markup generation phase.
+
+### Two-Way Binding Parse Exceptions
+* **The Problem**: WinUI 3's `{Binding}` engine heavily relies on strict type matching. Binding `int` or `double` data models directly to a `TextBox.Text` property using `Mode=TwoWay` without a custom type converter causes a silent `XamlParseException` during `InitializeComponent()`, instantly aborting page navigation.
+* **The Solution**: The architecture mandates the use of the native `NumberBox` control (`Microsoft.UI.Xaml.Controls.NumberBox`) for all numeric inputs. Because `NumberBox.Value` explicitly accepts `double` types, it safely handles two-way bindings to numeric models without triggering reflection/parse crashes.
+
+---
+
+## 6. Server-Side RPC Aggregation
+
+To optimize performance and reduce local processing overhead, the application minimizes expensive local SQLite aggregations in favor of Supabase server-side RPCs (Remote Procedure Calls).
+
+### Optimized Financial & Consistency Calculations
+* Rather than downloading the entire `habits_logs` dataset to compute multi-month consistency heatmaps or financial savings, the WinUI app leverages optimized Postgres functions (e.g., `get_smokes_financials` and `get_consistency`).
+* **Accurate Elapsed Time tracking**: Calculations dynamically calculate the duration (like "Days Since Quit") server-side using Postgres `CURRENT_DATE - p_since_date::date` instead of simply counting the distinct number of logged days. This ensures that financial totals (Money Saved, Cigarettes Avoided) accurately reflect real-world time elapsed regardless of the user's daily logging frequency.
+* **Client-Side Caching**: The results of these RPC calls are aggressively cached in-memory on the client to prevent excessive network requests when repeatedly navigating between widget details.
