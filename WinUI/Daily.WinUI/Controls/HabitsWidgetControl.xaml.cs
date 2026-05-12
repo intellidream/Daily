@@ -1,14 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.Extensions.DependencyInjection;
-using Daily.Services;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI;
+using Daily.Services;
 
 namespace Daily_WinUI.Controls;
 
@@ -17,41 +18,111 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
     private readonly IHabitsService _habitsService;
     private readonly ISettingsService _settingsService;
 
-    // View Model Properties
     private double _currentProgress;
     public double CurrentProgress
     {
         get => _currentProgress;
-        set { _currentProgress = value; OnPropertyChanged(); }
+        set
+        {
+            if (Math.Abs(_currentProgress - value) < 0.01) return;
+            _currentProgress = value;
+            OnPropertyChanged();
+        }
     }
 
     private double _goalValue = 2000;
     public double GoalValue
     {
         get => _goalValue;
-        set { _goalValue = value; OnPropertyChanged(); }
+        set
+        {
+            if (Math.Abs(_goalValue - value) < 0.01) return;
+            _goalValue = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(GoalDisplay));
+        }
     }
 
     private string _goalDisplay = "";
     public string GoalDisplay
     {
         get => _goalDisplay;
-        set { _goalDisplay = value; OnPropertyChanged(); }
+        set
+        {
+            if (_goalDisplay == value) return;
+            _goalDisplay = value;
+            OnPropertyChanged();
+        }
     }
 
     private string _moneySavedDisplay = "";
     public string MoneySavedDisplay
     {
         get => _moneySavedDisplay;
-        set { _moneySavedDisplay = value; OnPropertyChanged(); }
+        set
+        {
+            if (_moneySavedDisplay == value) return;
+            _moneySavedDisplay = value;
+            OnPropertyChanged();
+        }
     }
 
-    private SolidColorBrush _gaugeColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 2, 136, 209)); // Default Blue
+    private SolidColorBrush _gaugeColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 2, 136, 209));
     public SolidColorBrush GaugeColor
     {
         get => _gaugeColor;
-        set { _gaugeColor = value; OnPropertyChanged(); }
+        set
+        {
+            if (ReferenceEquals(_gaugeColor, value)) return;
+            _gaugeColor = value;
+            OnPropertyChanged();
+        }
     }
+
+    private double _waterAmount;
+    public double WaterAmount
+    {
+        get => _waterAmount;
+        set
+        {
+            if (Math.Abs(_waterAmount - value) < 0.01) return;
+            _waterAmount = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(WaterAndCoffeeAmount));
+            OnPropertyChanged(nameof(TotalDrinkAmount));
+        }
+    }
+
+    private double _coffeeAmount;
+    public double CoffeeAmount
+    {
+        get => _coffeeAmount;
+        set
+        {
+            if (Math.Abs(_coffeeAmount - value) < 0.01) return;
+            _coffeeAmount = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(WaterAndCoffeeAmount));
+            OnPropertyChanged(nameof(TotalDrinkAmount));
+        }
+    }
+
+    private double _teaAmount;
+    public double TeaAmount
+    {
+        get => _teaAmount;
+        set
+        {
+            if (Math.Abs(_teaAmount - value) < 0.01) return;
+            _teaAmount = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(TotalDrinkAmount));
+        }
+    }
+
+    public double WaterAndCoffeeAmount => WaterAmount + CoffeeAmount;
+    public double TotalDrinkAmount => WaterAmount + CoffeeAmount + TeaAmount;
+    public string CurrentViewLabel => HabitsFlipView?.SelectedIndex == 0 ? "Hydration" : "Smoking";
 
     public event EventHandler? WidgetTapped;
 
@@ -78,59 +149,76 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
     private void HabitsService_OnHabitsUpdated()
     {
-        DispatcherQueue.TryEnqueue(async () =>
-        {
-            await LoadDataAsync();
-        });
+        DispatcherQueue.TryEnqueue(async () => await LoadDataAsync());
     }
 
     private async Task LoadDataAsync()
     {
-        if (_habitsService == null || _settingsService == null) return;
-        
-        bool isWater = HabitsFlipView.SelectedIndex == 0;
-        
+        if (_habitsService == null || _settingsService == null)
+        {
+            return;
+        }
+
+        var isWater = HabitsFlipView.SelectedIndex == 0;
         if (isWater)
         {
             var waterGoal = await _habitsService.GetGoalAsync("water");
             GoalValue = waterGoal?.TargetValue > 0 ? waterGoal.TargetValue : 2000;
             CurrentProgress = await _habitsService.GetDailyProgressAsync("water", DateTime.Now);
-            GoalDisplay = $"/ {GoalValue}";
-            GaugeColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 2, 136, 209)); // Blue for water
+            GoalDisplay = $"/ {GoalValue:0}";
+            GaugeColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 2, 136, 209));
+
+            var breakdown = await _habitsService.GetDailyBreakdownAsync("water", DateTime.Now);
+            WaterAmount = GetBreakdownValue(breakdown, "water", "Water");
+            CoffeeAmount = GetBreakdownValue(breakdown, "coffee", "Coffee");
+            TeaAmount = GetBreakdownValue(breakdown, "tea", "Tea");
+
+            if (WaterAndCoffeeAmount + TeaAmount <= 0)
+            {
+                WaterAmount = CurrentProgress;
+                CoffeeAmount = 0;
+                TeaAmount = 0;
+            }
+
+            MoneySavedDisplay = string.Empty;
         }
         else
         {
+            WaterAmount = 0;
+            CoffeeAmount = 0;
+            TeaAmount = 0;
+
             GoalValue = _settingsService.Settings.SmokesBaselineDaily > 0 ? _settingsService.Settings.SmokesBaselineDaily : 20;
             CurrentProgress = await _habitsService.GetDailyProgressAsync("smokes", DateTime.Now);
-            GoalDisplay = $"/ {GoalValue}";
-            
-            // Red for bad (more than 90%), Orange for warning (more than 50%), Green for good (less than 50%)
+            GoalDisplay = $"/ {GoalValue:0}";
+
             if (GoalValue > 0)
             {
-                double ratio = CurrentProgress / GoalValue;
-                if (ratio < 0.5) GaugeColor = new SolidColorBrush(Microsoft.UI.Colors.DarkGreen);
-                else if (ratio < 0.9) GaugeColor = new SolidColorBrush(Microsoft.UI.Colors.DarkOrange);
-                else GaugeColor = new SolidColorBrush(Microsoft.UI.Colors.DarkRed);
+                var ratio = CurrentProgress / GoalValue;
+                GaugeColor = ratio < 0.5
+                    ? new SolidColorBrush(Colors.DarkGreen)
+                    : ratio < 0.9
+                        ? new SolidColorBrush(Colors.DarkOrange)
+                        : new SolidColorBrush(Colors.DarkRed);
             }
             else
             {
-                GaugeColor = new SolidColorBrush(Microsoft.UI.Colors.DarkRed);
+                GaugeColor = new SolidColorBrush(Colors.DarkRed);
             }
 
-            // Calculate financials via server-side RPC
             var quitDate = _settingsService.Settings.SmokesQuitDate;
             if (quitDate.HasValue)
             {
                 var days = (DateTime.Today - quitDate.Value.Date).TotalDays + 1;
                 if (days > 0)
                 {
-                    var (totalSmoked, daysTracked) = await _habitsService.GetSmokesFinancialsAsync(quitDate.Value);
+                    var (totalSmoked, _) = await _habitsService.GetSmokesFinancialsAsync(quitDate.Value);
                     var expected = days * GoalValue;
                     var avoided = Math.Max(0, expected - totalSmoked);
                     var costPerCig = _settingsService.Settings.SmokesPackCost / Math.Max(1, _settingsService.Settings.SmokesPackSize);
                     var saved = avoided * costPerCig;
-                    var curr = string.IsNullOrEmpty(_settingsService.Settings.SmokesCurrency) ? "USD" : _settingsService.Settings.SmokesCurrency;
-                    MoneySavedDisplay = $"{curr} {saved:F0}";
+                    var currency = string.IsNullOrEmpty(_settingsService.Settings.SmokesCurrency) ? "USD" : _settingsService.Settings.SmokesCurrency;
+                    MoneySavedDisplay = $"{currency} {saved:F0}";
                 }
                 else
                 {
@@ -142,6 +230,29 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                 MoneySavedDisplay = "Not started";
             }
         }
+
+        OnPropertyChanged(nameof(CurrentViewLabel));
+    }
+
+    private static double GetBreakdownValue(IReadOnlyDictionary<string, double>? breakdown, params string[] keys)
+    {
+        if (breakdown is null || breakdown.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var pair in breakdown)
+        {
+            foreach (var key in keys)
+            {
+                if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return pair.Value;
+                }
+            }
+        }
+
+        return 0;
     }
 
     private async void HabitsFlipView_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -150,6 +261,8 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         {
             _habitsService.CurrentViewType = HabitsFlipView.SelectedIndex == 0 ? "water" : "smokes";
         }
+
+        OnPropertyChanged(nameof(CurrentViewLabel));
         await LoadDataAsync();
     }
 
@@ -199,9 +312,14 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         }
     }
 
-    private async void AddWater_Click(object sender, RoutedEventArgs e)
+    private async void AddWaterSmall_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("water", 250, "ml", DateTime.Now, "{\"drink\":\"Water\"}");
+        await _habitsService.AddLogAsync("water", 150, "ml", DateTime.Now, "{\"drink\":\"Water\",\"size\":\"Small\"}");
+    }
+
+    private async void AddWaterLarge_Click(object sender, RoutedEventArgs e)
+    {
+        await _habitsService.AddLogAsync("water", 300, "ml", DateTime.Now, "{\"drink\":\"Water\",\"size\":\"Large\"}");
     }
 
     private async void AddCoffee_Click(object sender, RoutedEventArgs e)
@@ -209,12 +327,33 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         await _habitsService.AddLogAsync("water", 150, "ml", DateTime.Now, "{\"drink\":\"Coffee\"}");
     }
 
+    private async void AddTea_Click(object sender, RoutedEventArgs e)
+    {
+        await _habitsService.AddLogAsync("water", 200, "ml", DateTime.Now, "{\"drink\":\"Tea\"}");
+    }
+
     private async void AddCigarette_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Cigarette\"}");
     }
 
+    private async void AddVape_Click(object sender, RoutedEventArgs e)
+    {
+        await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Vape\"}");
+    }
+
+    private async void AddRolled_Click(object sender, RoutedEventArgs e)
+    {
+        await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Rolled\"}");
+    }
+
+    private async void AddCigarillo_Click(object sender, RoutedEventArgs e)
+    {
+        await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Cigarillo\"}");
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
+
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

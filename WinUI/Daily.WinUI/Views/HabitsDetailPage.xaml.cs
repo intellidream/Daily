@@ -117,6 +117,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     {
         public string DateLabel { get; set; } = "";
         public double Value { get; set; }
+        public double BarHeight { get; set; } = 8;
     }
 
     public class HeatmapCell
@@ -272,6 +273,13 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                 Value = sum != null ? sum.TotalValue : 0 
             });
         }
+
+        var maxChartValue = Math.Max(1.0, newChart.Max(item => item.Value));
+        foreach (var item in newChart)
+        {
+            item.BarHeight = item.Value <= 0 ? 8 : 24 + ((item.Value / maxChartValue) * 140);
+        }
+
         HistoryData = newChart;
 
         // Heatmap (Last 16 weeks ~ 112 days) - via server-side RPC
@@ -324,9 +332,14 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         HeatmapData = newHeat;
     }
 
-    private async void AddWater_Click(object sender, RoutedEventArgs e)
+    private async void AddWaterSmall_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("water", 250, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Water\"}");
+        await _habitsService.AddLogAsync("water", 150, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Water\",\"size\":\"Small\"}");
+    }
+
+    private async void AddWaterLarge_Click(object sender, RoutedEventArgs e)
+    {
+        await _habitsService.AddLogAsync("water", 300, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Water\",\"size\":\"Large\"}");
     }
 
     private async void AddCoffee_Click(object sender, RoutedEventArgs e)
