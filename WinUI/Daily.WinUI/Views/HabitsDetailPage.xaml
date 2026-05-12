@@ -138,11 +138,11 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Baseline Daily:" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SmokesBaseline, Mode=TwoWay}" PlaceholderText="e.g. 20" MaxWidth="150" HorizontalAlignment="Left" />
+                    <NumberBox Grid.Row="0" Grid.Column="1" Value="{Binding SmokesBaseline, Mode=TwoWay}" PlaceholderText="e.g. 20" MaxWidth="150" HorizontalAlignment="Left" SpinButtonPlacementMode="Compact" Minimum="0" />
                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Pack Size:" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SmokesPackSize, Mode=TwoWay}" PlaceholderText="e.g. 20" MaxWidth="150" HorizontalAlignment="Left" />
+                    <NumberBox Grid.Row="1" Grid.Column="1" Value="{Binding SmokesPackSize, Mode=TwoWay}" PlaceholderText="e.g. 20" MaxWidth="150" HorizontalAlignment="Left" SpinButtonPlacementMode="Compact" Minimum="1" />
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Pack Cost:" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SmokesPackCost, Mode=TwoWay}" PlaceholderText="e.g. 10.50" MaxWidth="150" HorizontalAlignment="Left" />
+                    <NumberBox Grid.Row="2" Grid.Column="1" Value="{Binding SmokesPackCost, Mode=TwoWay}" PlaceholderText="e.g. 10.50" MaxWidth="150" HorizontalAlignment="Left" SpinButtonPlacementMode="Compact" Minimum="0" />
                     <Button Grid.Row="3" Grid.ColumnSpan="2" Content="Save Settings" HorizontalAlignment="Right" Click="SaveSettings_Click" Style="{ThemeResource AccentButtonStyle}"/>
                 </Grid>
             </Expander>

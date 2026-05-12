@@ -92,8 +92,8 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         set { _daysSinceQuitDisplay = value; OnPropertyChanged(); }
     }
 
-    private int _smokesBaseline;
-    public int SmokesBaseline
+    private double _smokesBaseline;
+    public double SmokesBaseline
     {
         get => _smokesBaseline;
         set { _smokesBaseline = value; OnPropertyChanged(); }
@@ -106,8 +106,8 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         set { _smokesPackCost = value; OnPropertyChanged(); }
     }
     
-    private int _smokesPackSize;
-    public int SmokesPackSize
+    private double _smokesPackSize;
+    public double SmokesPackSize
     {
         get => _smokesPackSize;
         set { _smokesPackSize = value; OnPropertyChanged(); }
@@ -171,19 +171,23 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     private void HabitTypeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (HabitTypeSelector.SelectedItem is ComboBoxItem selectedItem)
+        if (sender is ComboBox comboBox && comboBox.SelectedItem is ComboBoxItem selectedItem)
         {
-            _currentType = selectedItem.Tag.ToString() ?? "water";
+            _currentType = selectedItem.Tag?.ToString() ?? "water";
+            
+            if (WaterSummaryPanel == null || SmokesSummaryPanel == null || SettingsGrid == null) return;
             
             if (_currentType == "water")
             {
                 WaterSummaryPanel.Visibility = Visibility.Visible;
                 SmokesSummaryPanel.Visibility = Visibility.Collapsed;
+                SettingsGrid.Visibility = Visibility.Collapsed;
             }
             else
             {
                 WaterSummaryPanel.Visibility = Visibility.Collapsed;
                 SmokesSummaryPanel.Visibility = Visibility.Visible;
+                SettingsGrid.Visibility = Visibility.Visible;
             }
 
             _ = LoadDataAsync();
@@ -380,9 +384,9 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     private async void SaveSettings_Click(object sender, RoutedEventArgs e)
     {
-        _settingsService.Settings.SmokesBaselineDaily = SmokesBaseline;
+        _settingsService.Settings.SmokesBaselineDaily = (int)SmokesBaseline;
         _settingsService.Settings.SmokesPackCost = SmokesPackCost;
-        _settingsService.Settings.SmokesPackSize = SmokesPackSize;
+        _settingsService.Settings.SmokesPackSize = (int)SmokesPackSize;
         await _settingsService.SaveSettingsAsync();
         
         // Reload to update financials

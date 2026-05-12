@@ -28,6 +28,14 @@ public sealed partial class DetailWindow : Window
 
     public void NavigateTo(Type pageType, object parameter = null)
     {
-        RootFrame.Navigate(pageType, parameter);
+        try
+        {
+            RootFrame.Navigate(pageType, parameter);
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText("crash_log.txt", ex.ToString());
+            throw;
+        }
     }
 }
