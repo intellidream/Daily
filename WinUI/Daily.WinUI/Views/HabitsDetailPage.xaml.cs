@@ -458,6 +458,41 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         };
     }
 
+    private string GetWaterColorForAmount(double amountMl)
+    {
+        // 150 ml -> clearly light blue, 300 ml+ -> clearly darker blue
+        double ratio = Math.Clamp((amountMl - 150.0) / 150.0, 0.0, 1.0);
+
+        byte startR = 94;
+        byte startG = 181;
+        byte startB = 255;
+
+        byte endR = 36;
+        byte endG = 122;
+        byte endB = 212;
+
+        byte r = (byte)Math.Round(startR + ((endR - startR) * ratio));
+        byte g = (byte)Math.Round(startG + ((endG - startG) * ratio));
+        byte b = (byte)Math.Round(startB + ((endB - startB) * ratio));
+
+        return $"#FF{r:X2}{g:X2}{b:X2}";
+    }
+
+    private string GetHydrationColorForDrink(string drink, double amountMl)
+    {
+        var normalized = (drink ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (normalized.Contains("water")) return GetWaterColorForAmount(amountMl);
+        if (normalized.Contains("coffee")) return GetColorForDrinkOrSmoke("coffee");
+        if (normalized.Contains("tea")) return GetColorForDrinkOrSmoke("tea");
+        if (normalized.Contains("juice")) return GetColorForDrinkOrSmoke("juice");
+        if (normalized.Contains("beer")) return GetColorForDrinkOrSmoke("beer");
+        if (normalized.Contains("wine")) return GetColorForDrinkOrSmoke("wine");
+
+        // Unknown/legacy drinks keep the darker hydration blue tone.
+        return GetWaterColorForAmount(300);
+    }
+
     private Windows.UI.Color GetColorFromHex(string hex)
     {
         hex = hex.Replace("#", "");
@@ -638,16 +673,20 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     {
         if (WaterFillControl == null) return;
 
-        double totalMl = logs.Sum(l => l.Value);
+        var selectedDate = ViewDate.GetValueOrDefault().Date;
+        var dayLogs = logs.Where(l => l.LoggedAt.Date == selectedDate).ToList();
+
+        double totalMl = dayLogs.Sum(l => l.Value);
         if (totalMl <= 0)
         {
-            WaterFillControl.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(GetColorFromHex("#FF2996CC"));
+            WaterFillControl.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(GetColorFromHex(GetWaterColorForAmount(150)));
             return;
         }
 
-        // Build segments in chronological order: oldest log = bottom of glass, newest = top
-        var segments = new List<(string Drink, double Ml)>();
-        foreach (var log in logs.OrderBy(l => l.LoggedAt))
+        // Build segments from selected-day history in chronological order:
+        // oldest log = bottom of glass, newest = top.
+        var segments = new List<(string ColorHex, double Ml)>();
+        foreach (var log in dayLogs.OrderBy(l => l.LoggedAt))
         {
             string drink = "Water";
             if (!string.IsNullOrEmpty(log.Metadata))
@@ -660,18 +699,21 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                 }
                 catch { }
             }
-            // Merge consecutive same-type logs into one segment
-            if (segments.Count > 0 && segments[^1].Drink.Equals(drink, StringComparison.OrdinalIgnoreCase))
-                segments[^1] = (drink, segments[^1].Ml + log.Value);
+
+            string colorHex = GetHydrationColorForDrink(drink, log.Value);
+
+            // Merge consecutive same-color logs into one segment
+            if (segments.Count > 0 && segments[^1].ColorHex.Equals(colorHex, StringComparison.OrdinalIgnoreCase))
+                segments[^1] = (colorHex, segments[^1].Ml + log.Value);
             else
-                segments.Add((drink, log.Value));
+                segments.Add((colorHex, log.Value));
         }
 
-        // Single type — use a plain solid brush
+        // Single segment — use a plain solid brush
         if (segments.Count == 1)
         {
             WaterFillControl.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                GetColorFromHex(GetColorForDrinkOrSmoke(segments[0].Drink)));
+                GetColorFromHex(segments[0].ColorHex));
             return;
         }
 
@@ -685,13 +727,19 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         };
 
         double cursor = 0.0;
-        foreach (var (drink, ml) in segments)
+        for (int i = 0; i < segments.Count; i++)
         {
+            var (colorHex, ml) = segments[i];
             double fraction = ml / totalMl;
-            var color = GetColorFromHex(GetColorForDrinkOrSmoke(drink));
+            var color = GetColorFromHex(colorHex);
             gradient.GradientStops.Add(new Microsoft.UI.Xaml.Media.GradientStop { Color = color, Offset = cursor });
-            cursor += fraction;
-            gradient.GradientStops.Add(new Microsoft.UI.Xaml.Media.GradientStop { Color = color, Offset = cursor });
+
+            double next = i == segments.Count - 1
+                ? 1.0
+                : Math.Min(1.0, cursor + fraction);
+
+            gradient.GradientStops.Add(new Microsoft.UI.Xaml.Media.GradientStop { Color = color, Offset = next });
+            cursor = next;
         }
 
         WaterFillControl.Background = gradient;
