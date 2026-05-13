@@ -123,16 +123,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Remove="TestParser\**" />
-        <EmbeddedResource Remove="TestParser\**" />
-        <None Remove="TestParser\**" />
-        <MauiAsset Remove="TestParser\**" />
-        
-        <Compile Remove="WatchOS\**" />
-        <EmbeddedResource Remove="WatchOS\**" />
-        <None Remove="WatchOS\**" />
-        <MauiAsset Remove="WatchOS\**" />
-        
         <!-- Ignore WinUI sub-project completely -->
         <Compile Remove="WinUI\**\*.cs" />
         <EmbeddedResource Remove="WinUI\**\*.*" />
