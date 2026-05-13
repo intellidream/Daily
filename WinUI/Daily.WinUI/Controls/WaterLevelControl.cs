@@ -1,3 +1,4 @@
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -34,6 +35,65 @@ namespace Daily_WinUI.Controls
             InvalidateMeasure();
         }
 
+        private static PathGeometry CreateRoundedTrapezoidGeometry(Point topLeft, Point topRight, Point botRight, Point botLeft, double cornerRadius)
+        {
+            var corners = new[] { topLeft, topRight, botRight, botLeft };
+            var entryPoints = new Point[corners.Length];
+            var exitPoints = new Point[corners.Length];
+
+            for (int i = 0; i < corners.Length; i++)
+            {
+                var prev = corners[(i - 1 + corners.Length) % corners.Length];
+                var current = corners[i];
+                var next = corners[(i + 1) % corners.Length];
+
+                var toPrev = Normalize(new Point(prev.X - current.X, prev.Y - current.Y));
+                var toNext = Normalize(new Point(next.X - current.X, next.Y - current.Y));
+
+                var maxRadius = Math.Min(Distance(current, prev), Distance(current, next)) * 0.45;
+                var radius = Math.Min(cornerRadius, maxRadius);
+
+                entryPoints[i] = new Point(current.X + (toPrev.X * radius), current.Y + (toPrev.Y * radius));
+                exitPoints[i] = new Point(current.X + (toNext.X * radius), current.Y + (toNext.Y * radius));
+            }
+
+            var figure = new PathFigure { StartPoint = exitPoints[0], IsClosed = true };
+
+            for (int i = 1; i < corners.Length; i++)
+            {
+                figure.Segments.Add(new LineSegment { Point = entryPoints[i] });
+                AddRoundedCorner(figure, corners[i], entryPoints[i], exitPoints[i]);
+            }
+
+            figure.Segments.Add(new LineSegment { Point = entryPoints[0] });
+            AddRoundedCorner(figure, corners[0], entryPoints[0], exitPoints[0]);
+
+            var geometry = new PathGeometry();
+            geometry.Figures.Add(figure);
+            return geometry;
+        }
+
+        private static void AddRoundedCorner(PathFigure figure, Point corner, Point start, Point end)
+        {
+            // Quadratic-to-cubic conversion for smooth corner rounding.
+            var c1 = new Point(start.X + ((2.0 / 3.0) * (corner.X - start.X)), start.Y + ((2.0 / 3.0) * (corner.Y - start.Y)));
+            var c2 = new Point(end.X + ((2.0 / 3.0) * (corner.X - end.X)), end.Y + ((2.0 / 3.0) * (corner.Y - end.Y)));
+            figure.Segments.Add(new BezierSegment { Point1 = c1, Point2 = c2, Point3 = end });
+        }
+
+        private static Point Normalize(Point vector)
+        {
+            var length = Math.Sqrt((vector.X * vector.X) + (vector.Y * vector.Y));
+            return length <= 0.00001 ? new Point(0, 0) : new Point(vector.X / length, vector.Y / length);
+        }
+
+        private static double Distance(Point a, Point b)
+        {
+            var dx = a.X - b.X;
+            var dy = a.Y - b.Y;
+            return Math.Sqrt((dx * dx) + (dy * dy));
+        }
+
         protected override Size MeasureOverride(Size availableSize)
         {
             double width  = double.IsInfinity(availableSize.Width)  ? 280.0 : availableSize.Width;
@@ -61,20 +121,14 @@ namespace Daily_WinUI.Controls
                     var botRight = new Point(width - botInset,  height);
                     var botLeft  = new Point(botInset,          height);
 
-                    PathFigure fig = new PathFigure { StartPoint = topLeft, IsClosed = true };
-                    fig.Segments.Add(new LineSegment { Point = topRight });
-                    fig.Segments.Add(new LineSegment { Point = botRight });
-                    fig.Segments.Add(new LineSegment { Point = botLeft });
-
-                    var geom = new PathGeometry();
-                    geom.Figures.Add(fig);
-                    this.path.Data = geom;
+                    this.path.Data = CreateRoundedTrapezoidGeometry(topLeft, topRight, botRight, botLeft, Math.Max(4.0, width * 0.03));
                 }
                 else
                 {
                     // Outline: stroke visible, transparent fill
                     const double st = 2.0;
                     this.path.StrokeThickness = st;
+                    this.path.StrokeLineJoin = PenLineJoin.Round;
                     double s = st / 2.0;
 
                     double topInset = width * 0.05 + s;
@@ -85,14 +139,7 @@ namespace Daily_WinUI.Controls
                     var botRight = new Point(width - botInset,  height - s);
                     var botLeft  = new Point(botInset,          height - s);
 
-                    PathFigure fig = new PathFigure { StartPoint = topLeft, IsClosed = true };
-                    fig.Segments.Add(new LineSegment { Point = topRight });
-                    fig.Segments.Add(new LineSegment { Point = botRight });
-                    fig.Segments.Add(new LineSegment { Point = botLeft });
-
-                    var geom = new PathGeometry();
-                    geom.Figures.Add(fig);
-                    this.path.Data = geom;
+                    this.path.Data = CreateRoundedTrapezoidGeometry(topLeft, topRight, botRight, botLeft, Math.Max(5.0, width * 0.035));
                 }
             }
 
