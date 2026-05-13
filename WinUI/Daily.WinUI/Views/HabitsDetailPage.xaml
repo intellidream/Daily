@@ -5,8 +5,54 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:local="using:Daily_WinUI.Views"
       xmlns:gauge="using:Syncfusion.UI.Xaml.Gauges"
+      xmlns:controls="using:Daily_WinUI.Controls"
       mc:Ignorable="d"
       Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="WaterGlassBorderBrush" Color="#CCFFFFFF" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="WaterGlassBorderBrush" Color="#99000000" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <Style TargetType="controls:WaterLevelControl">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="controls:WaterLevelControl">
+                            <Path x:Name="PART_Path"
+                                  Fill="{TemplateBinding Background}"
+                                  Stroke="{TemplateBinding BorderBrush}" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <DataTemplate x:Key="WaterPointerHandleTemplate">
+                <Border Width="64" Height="64" CornerRadius="32"
+                        Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                        BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="1">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                        <TextBlock Text="▲" FontSize="12" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="150 ml" FontSize="11" Foreground="White" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="▼" FontSize="12" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+        </ResourceDictionary>
+    </Page.Resources>
+
+
+    
+
 
     <Grid Padding="24" RowSpacing="18">
         <Grid.RowDefinitions>
@@ -24,7 +70,7 @@
 
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                    <FontIcon Glyph="&#xE81C;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource SystemControlHighlightAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <FontIcon Glyph="&#xed23;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource SystemControlHighlightAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Habits Detail" FontSize="28" FontWeight="SemiBold" />
@@ -48,13 +94,97 @@
                 CornerRadius="20"
                 Padding="16">
             <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Stretch">
-                <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="16" Opacity="0.7" VerticalAlignment="Center" />
+                <FontIcon Glyph="&#xea53;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.7" VerticalAlignment="Center" />
                 <TextBlock Text="Use the quick actions below to keep logs close to the MAUI experience, while the charts and consistency cards adapt to the available width." TextWrapping="WrapWholeWords" Opacity="0.75" VerticalAlignment="Center" />
             </StackPanel>
         </Border>
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="18">
+                <!-- HERO GAUGE SECTION -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="32">
+                    <Grid>
+                        
+                          <gauge:SfRadialGauge x:Name="HeroRadialGauge" Visibility="{x:Bind SmokesGaugeVisibility, Mode=OneWay}" Width="280" Height="280" HorizontalAlignment="Center" VerticalAlignment="Center">
+                              <gauge:SfRadialGauge.Axes>
+                                  <gauge:RadialAxis x:Name="HeroRadialAxis" StartAngle="135" EndAngle="405" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowAxisLine="False" TickLengthUnit="Factor" MajorTickLength="0.265" MinorTickLength="0.13" MinorTicksPerInterval="4" TickOffset="0">
+                                      <gauge:RadialAxis.Ranges>
+                                          <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" StartWidth="0.265" EndWidth="0.265" WidthUnit="Factor" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
+                                      </gauge:RadialAxis.Ranges>
+                                      <gauge:RadialAxis.Pointers>
+                                          <gauge:NeedlePointer Value="{x:Bind CurrentProgress, Mode=OneWay}"
+                                                               NeedleFill="{ThemeResource TextFillColorPrimaryBrush}"
+                                                               NeedleLength="0.6"
+                                                               NeedleStartWidth="1"
+                                                               NeedleEndWidth="24"
+                                                               KnobFill="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                                                               KnobStroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                                               KnobStrokeThickness="0.05"
+                                                               KnobRadius="0.08"
+                                                               TailFill="{ThemeResource TextFillColorPrimaryBrush}"
+                                                               TailLength="0.2"
+                                                               TailWidth="24" />
+                                      </gauge:RadialAxis.Pointers>
+                                      <gauge:RadialAxis.Annotations>
+                                          <gauge:GaugeAnnotation PositionFactor="0.85" DirectionValue="90">
+                                              <gauge:GaugeAnnotation.Content>
+                                                  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+                                                      <TextBlock Text="{x:Bind HeroMainText, Mode=OneWay}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"  />
+                                                      <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="16" Opacity="0.65" HorizontalAlignment="Center" />
+                                                  </StackPanel>
+                                              </gauge:GaugeAnnotation.Content>
+                                          </gauge:GaugeAnnotation>
+                                      </gauge:RadialAxis.Annotations>
+                                  </gauge:RadialAxis>
+                              </gauge:SfRadialGauge.Axes>
+                          </gauge:SfRadialGauge>
+
+                          <gauge:SfLinearGauge x:Name="WaterLinearGauge" Orientation="Vertical" Visibility="{x:Bind WaterGaugeVisibility, Mode=OneWay}" Width="300" Height="420" HorizontalAlignment="Center" VerticalAlignment="Center">
+                              <gauge:SfLinearGauge.Axis>
+                                  <gauge:LinearAxis Maximum="{x:Bind GoalValue, Mode=OneWay}" Interval="500">
+                                      <gauge:LinearAxis.LabelTemplate>
+                                          <DataTemplate>
+                                              <StackPanel Orientation="Horizontal">
+                                                  <TextBlock Text="{Binding Text}" />
+                                                  <TextBlock Text=" ml" />
+                                              </StackPanel>
+                                          </DataTemplate>
+                                      </gauge:LinearAxis.LabelTemplate>
+                                      <gauge:LinearAxis.BarPointers>
+                                          <gauge:BarPointer Value="{x:Bind GoalValue, Mode=OneWay}" Background="Transparent" PointerSize="250" Offset="-140">
+                                              <gauge:BarPointer.Child>
+                                                  <controls:WaterLevelControl BorderBrush="{ThemeResource WaterGlassBorderBrush}" />
+                                              </gauge:BarPointer.Child>
+                                          </gauge:BarPointer>
+                                          <gauge:BarPointer Value="{Binding ElementName=waterShapePointer, Path=Value, Mode=OneWay}" Background="Transparent" PointerSize="250" Offset="-140">
+                                              <gauge:BarPointer.Child>
+                                                  <controls:WaterLevelControl x:Name="WaterFillControl" FullHeight="420" />
+                                              </gauge:BarPointer.Child>
+                                          </gauge:BarPointer>
+                                      </gauge:LinearAxis.BarPointers>
+                                      <gauge:LinearAxis.MarkerPointers>
+                                          <gauge:LinearShapePointer x:Name="waterShapePointer"
+                                                                    IsInteractive="True"
+                                                                    ShapeTemplate="{StaticResource WaterPointerHandleTemplate}"
+                                                                    ValueChanged="WaterShapePointer_ValueChanged"
+                                                                    ValueChangeCompleted="WaterShapePointer_ValueChangeCompleted" />
+                                          <gauge:LinearContentPointer Value="{Binding ElementName=waterShapePointer, Path=Value, Mode=OneWay}" OffsetPoint="-140,0" VerticalAnchor="End">
+                                              <gauge:LinearContentPointer.Content>
+                                                  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+                                                      <TextBlock Text="{x:Bind WaterMlText, Mode=OneWay}" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Foreground="White" />
+                                                  </StackPanel>
+                                              </gauge:LinearContentPointer.Content>
+                                          </gauge:LinearContentPointer>
+                                      </gauge:LinearAxis.MarkerPointers>
+                                  </gauge:LinearAxis>
+                              </gauge:SfLinearGauge.Axis>
+                          </gauge:SfLinearGauge>
+
+
+                        
+                    </Grid>
+                </Border>
+                
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                     <Grid>
                         <StackPanel x:Name="WaterSummaryPanel" Visibility="Visible" Spacing="18">
@@ -86,20 +216,11 @@
                                                 <RowDefinition Height="*" />
                                             </Grid.RowDefinitions>
                                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-                                                <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource SystemControlHighlightAccentBrush}" />
+                                                <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="{ThemeResource SystemControlHighlightAccentBrush}" />
                                                 <TextBlock Text="Hydration" FontSize="16" FontWeight="SemiBold" />
                                             </StackPanel>
                                             <Grid Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <gauge:SfRadialGauge Width="210" Height="210">
-                                                    <gauge:SfRadialGauge.Axes>
-                                                        <gauge:RadialAxis StartAngle="180" EndAngle="360" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowTicks="False" ShowAxisLine="False">
-                                                            <gauge:RadialAxis.Ranges>
-                                                                <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" Background="#1A7FF0D5" />
-                                                                <gauge:GaugeRange StartValue="0" EndValue="{x:Bind CurrentProgress, Mode=OneWay}" Background="{ThemeResource SystemControlHighlightAccentBrush}" />
-                                                            </gauge:RadialAxis.Ranges>
-                                                        </gauge:RadialAxis>
-                                                    </gauge:SfRadialGauge.Axes>
-                                                </gauge:SfRadialGauge>
+                                                <!-- Gauge Removed -->
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                     <TextBlock Text="{x:Bind ProgressPercentageText, Mode=OneWay}" FontSize="40" FontWeight="Bold" HorizontalAlignment="Center" />
                                                     <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="15" Opacity="0.65" HorizontalAlignment="Center" />
@@ -123,27 +244,27 @@
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
-                                                <Button Grid.Row="0" Grid.Column="0" Click="AddWaterSmall_Click" CornerRadius="18" Padding="10" Background="{ThemeResource SystemAccentColorDark2}" BorderThickness="0">
+                                                <Button Grid.Row="0" Grid.Column="0" Click="AddWater_Click" CornerRadius="18" Padding="10" Background="#FF2196F3" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="150ml" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                        <TextBlock Text="Water" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
-                                                <Button Grid.Row="0" Grid.Column="1" Click="AddWaterLarge_Click" CornerRadius="18" Padding="10" Background="#FF1E88E5" BorderThickness="0">
+                                                <Button Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Padding="10" Background="#FFE91E63" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="300ml" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xeab8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                        <TextBlock Text="Juice" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
                                                 <Button Grid.Row="1" Grid.Column="0" Click="AddCoffee_Click" CornerRadius="18" Padding="10" Background="#FFF2994A" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xE81E;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                         <TextBlock Text="Coffee" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
                                                 <Button Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Padding="10" Background="#FF27AE60" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xE7C3;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                         <TextBlock Text="Tea" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
@@ -162,7 +283,7 @@
                                                             <ColumnDefinition Width="Auto" />
                                                             <ColumnDefinition Width="*" />
                                                         </Grid.ColumnDefinitions>
-                                                        <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF2D9CDB" />
+                                                        <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF2D9CDB" />
                                                         <TextBlock Grid.Column="1" Text="Water" FontSize="12" Opacity="0.75" HorizontalAlignment="Right" />
                                                     </Grid>
                                                     <Grid Grid.Row="1">
@@ -170,7 +291,7 @@
                                                             <ColumnDefinition Width="Auto" />
                                                             <ColumnDefinition Width="*" />
                                                         </Grid.ColumnDefinitions>
-                                                        <FontIcon Glyph="&#xE81E;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FFF2994A" />
+                                                        <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFF2994A" />
                                                         <TextBlock Grid.Column="1" Text="Coffee" FontSize="12" Opacity="0.75" HorizontalAlignment="Right" />
                                                     </Grid>
                                                     <Grid Grid.Row="2">
@@ -178,7 +299,7 @@
                                                             <ColumnDefinition Width="Auto" />
                                                             <ColumnDefinition Width="*" />
                                                         </Grid.ColumnDefinitions>
-                                                        <FontIcon Glyph="&#xE7C3;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF27AE60" />
+                                                        <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
                                                         <TextBlock Grid.Column="1" Text="Tea" FontSize="12" Opacity="0.75" HorizontalAlignment="Right" />
                                                     </Grid>
                                                     <Grid Grid.Row="3">
@@ -203,20 +324,11 @@
                                                 <RowDefinition Height="*" />
                                             </Grid.RowDefinitions>
                                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-                                                <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource SystemControlHighlightAccentBrush}" />
+                                                <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="{ThemeResource SystemControlHighlightAccentBrush}" />
                                                 <TextBlock Text="Hydration" FontSize="16" FontWeight="SemiBold" />
                                             </StackPanel>
                                             <Grid Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <gauge:SfRadialGauge Width="180" Height="180">
-                                                    <gauge:SfRadialGauge.Axes>
-                                                        <gauge:RadialAxis StartAngle="180" EndAngle="360" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowTicks="False" ShowAxisLine="False">
-                                                            <gauge:RadialAxis.Ranges>
-                                                                <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" Background="#1A7FF0D5" />
-                                                                <gauge:GaugeRange StartValue="0" EndValue="{x:Bind CurrentProgress, Mode=OneWay}" Background="{ThemeResource SystemControlHighlightAccentBrush}" />
-                                                            </gauge:RadialAxis.Ranges>
-                                                        </gauge:RadialAxis>
-                                                    </gauge:SfRadialGauge.Axes>
-                                                </gauge:SfRadialGauge>
+                                                <!-- Gauge Removed -->
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                     <TextBlock Text="{x:Bind ProgressPercentageText, Mode=OneWay}" FontSize="34" FontWeight="Bold" HorizontalAlignment="Center" />
                                                     <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="14" Opacity="0.65" HorizontalAlignment="Center" />
@@ -234,27 +346,27 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <Button Grid.Row="0" Grid.Column="0" Click="AddWaterSmall_Click" CornerRadius="18" Padding="10" Background="{ThemeResource SystemAccentColorDark2}" BorderThickness="0">
+                                        <Button Grid.Row="0" Grid.Column="0" Click="AddWater_Click" CornerRadius="18" Padding="10" Background="#FF2196F3" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
-                                                <TextBlock Text="150ml" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                <TextBlock Text="Water" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
-                                        <Button Grid.Row="0" Grid.Column="1" Click="AddWaterLarge_Click" CornerRadius="18" Padding="10" Background="#FF1E88E5" BorderThickness="0">
+                                        <Button Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Padding="10" Background="#FFE91E63" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
-                                                <TextBlock Text="300ml" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xeab8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                <TextBlock Text="Juice" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
                                         <Button Grid.Row="1" Grid.Column="0" Click="AddCoffee_Click" CornerRadius="18" Padding="10" Background="#FFF2994A" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xE81E;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                 <TextBlock Text="Coffee" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
                                         <Button Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Padding="10" Background="#FF27AE60" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xE7C3;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                 <TextBlock Text="Tea" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
@@ -288,20 +400,11 @@
                                     <Border CornerRadius="24" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Padding="18">
                                         <Grid>
                                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-                                                <FontIcon Glyph="&#xE95E;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#FFF44336" />
+                                                <FontIcon Glyph="&#xebea;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#FFF44336" />
                                                 <TextBlock Text="Smoking" FontSize="16" FontWeight="SemiBold" />
                                             </StackPanel>
                                             <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <gauge:SfRadialGauge Width="210" Height="210">
-                                                    <gauge:SfRadialGauge.Axes>
-                                                        <gauge:RadialAxis StartAngle="180" EndAngle="360" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowTicks="False" ShowAxisLine="False">
-                                                            <gauge:RadialAxis.Ranges>
-                                                                <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" Background="#1AF44336" />
-                                                                <gauge:GaugeRange StartValue="0" EndValue="{x:Bind CurrentProgress, Mode=OneWay}" Background="#FFF44336" />
-                                                            </gauge:RadialAxis.Ranges>
-                                                        </gauge:RadialAxis>
-                                                    </gauge:SfRadialGauge.Axes>
-                                                </gauge:SfRadialGauge>
+                                                <!-- Gauge Removed -->
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                     <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="40" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#FFF44336" />
                                                     <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="15" Opacity="0.65" HorizontalAlignment="Center" />
@@ -335,25 +438,25 @@
                                                 </Grid.RowDefinitions>
                                                 <Button Grid.Row="0" Grid.Column="0" Click="AddCigarette_Click" CornerRadius="18" Padding="10" Background="#FFF44336" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xE731;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                         <TextBlock Text="Cigarette" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
                                                 <Button Grid.Row="0" Grid.Column="1" Click="AddVape_Click" CornerRadius="18" Padding="10" Background="#FF1976D2" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xE7C2;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                         <TextBlock Text="Vape" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
                                                 <Button Grid.Row="1" Grid.Column="0" Click="AddRolled_Click" CornerRadius="18" Padding="10" Background="#FFEF6C00" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xE8AD;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                         <TextBlock Text="Rolled" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
                                                 <Button Grid.Row="1" Grid.Column="1" Click="AddCigarillo_Click" CornerRadius="18" Padding="10" Background="#FF8E24AA" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xE720;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                         <TextBlock Text="Cigarillo" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
@@ -366,20 +469,11 @@
                                     <Border CornerRadius="24" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Padding="16">
                                         <Grid>
                                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-                                                <FontIcon Glyph="&#xE95E;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#FFF44336" />
+                                                <FontIcon Glyph="&#xebea;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#FFF44336" />
                                                 <TextBlock Text="Smoking" FontSize="16" FontWeight="SemiBold" />
                                             </StackPanel>
                                             <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <gauge:SfRadialGauge Width="180" Height="180">
-                                                    <gauge:SfRadialGauge.Axes>
-                                                        <gauge:RadialAxis StartAngle="180" EndAngle="360" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowTicks="False" ShowAxisLine="False">
-                                                            <gauge:RadialAxis.Ranges>
-                                                                <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" Background="#1AF44336" />
-                                                                <gauge:GaugeRange StartValue="0" EndValue="{x:Bind CurrentProgress, Mode=OneWay}" Background="#FFF44336" />
-                                                            </gauge:RadialAxis.Ranges>
-                                                        </gauge:RadialAxis>
-                                                    </gauge:SfRadialGauge.Axes>
-                                                </gauge:SfRadialGauge>
+                                                <!-- Gauge Removed -->
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                     <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="34" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#FFF44336" />
                                                     <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="14" Opacity="0.65" HorizontalAlignment="Center" />
@@ -406,25 +500,25 @@
                                         </Grid.RowDefinitions>
                                         <Button Grid.Row="0" Grid.Column="0" Click="AddCigarette_Click" CornerRadius="18" Padding="10" Background="#FFF44336" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xE731;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                 <TextBlock Text="Cigarette" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
                                         <Button Grid.Row="0" Grid.Column="1" Click="AddVape_Click" CornerRadius="18" Padding="10" Background="#FF1976D2" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xE7C2;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                 <TextBlock Text="Vape" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
                                         <Button Grid.Row="1" Grid.Column="0" Click="AddRolled_Click" CornerRadius="18" Padding="10" Background="#FFEF6C00" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xE8AD;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                 <TextBlock Text="Rolled" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
                                         <Button Grid.Row="1" Grid.Column="1" Click="AddCigarillo_Click" CornerRadius="18" Padding="10" Background="#FF8E24AA" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xE720;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" />
                                                 <TextBlock Text="Cigarillo" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
@@ -464,7 +558,7 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <FontIcon Glyph="&#xE9D9;" FontFamily="Segoe Fluent Icons" FontSize="16" Opacity="0.75" />
+                                        <FontIcon Glyph="&#xeb6b;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
                                         <TextBlock Text="Last 7 Days" FontSize="18" FontWeight="SemiBold" />
                                     </StackPanel>
                                 </Grid>
@@ -489,7 +583,7 @@
                         <Border Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                             <StackPanel Spacing="14">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <FontIcon Glyph="&#xE8E1;" FontFamily="Segoe Fluent Icons" FontSize="16" Opacity="0.75" />
+                                    <FontIcon Glyph="&#xea59;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
                                     <TextBlock Text="Consistency (Last 4 Months)" FontSize="18" FontWeight="SemiBold" />
                                 </StackPanel>
                                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -514,7 +608,7 @@
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                             <StackPanel Spacing="14">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <FontIcon Glyph="&#xE9D9;" FontFamily="Segoe Fluent Icons" FontSize="16" Opacity="0.75" />
+                                    <FontIcon Glyph="&#xeb6b;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
                                     <TextBlock Text="Last 7 Days" FontSize="18" FontWeight="SemiBold" />
                                 </StackPanel>
                                 <ItemsControl ItemsSource="{x:Bind HistoryData, Mode=OneWay}">
@@ -538,7 +632,7 @@
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                             <StackPanel Spacing="14">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <FontIcon Glyph="&#xE8E1;" FontFamily="Segoe Fluent Icons" FontSize="16" Opacity="0.75" />
+                                    <FontIcon Glyph="&#xea59;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
                                     <TextBlock Text="Consistency (Last 4 Months)" FontSize="18" FontWeight="SemiBold" />
                                 </StackPanel>
                                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -577,7 +671,7 @@
                                             <TextBlock Text="{Binding Metadata}" Opacity="0.5" VerticalAlignment="Center" />
                                         </StackPanel>
                                         <Button Grid.Column="1" Click="DeleteLog_Click" Background="Transparent" BorderThickness="0" Padding="8" HorizontalAlignment="Right">
-                                            <FontIcon Glyph="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14" />
+                                            <FontIcon Glyph="&#xeb41;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" />
                                         </Button>
                                     </Grid>
                                 </DataTemplate>
@@ -589,7 +683,7 @@
                 <Border x:Name="SettingsGrid" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                     <StackPanel Spacing="16">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon Glyph="&#xE115;" FontFamily="Segoe Fluent Icons" FontSize="16" Opacity="0.75" />
+                            <FontIcon Glyph="&#xeb20;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
                             <TextBlock Text="Configuration" FontSize="18" FontWeight="SemiBold" />
                         </StackPanel>
                         <Grid ColumnSpacing="16" RowSpacing="12">
@@ -613,7 +707,7 @@
                                 <Button.ContentTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <FontIcon Glyph="&#xE74E;" FontFamily="Segoe Fluent Icons" FontSize="14" />
+                                            <FontIcon Glyph="&#xeb62;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" />
                                             <TextBlock Text="Save Settings" />
                                         </StackPanel>
                                     </DataTemplate>
@@ -626,3 +720,12 @@
         </ScrollViewer>
     </Grid>
 </Page>
+
+
+
+
+
+
+
+
+

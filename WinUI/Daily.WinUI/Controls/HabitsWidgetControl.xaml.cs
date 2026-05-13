@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Daily.Services;
+using Windows.UI;
 
 namespace Daily_WinUI.Controls;
 
@@ -79,49 +80,6 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         }
     }
 
-    private double _waterAmount;
-    public double WaterAmount
-    {
-        get => _waterAmount;
-        set
-        {
-            if (Math.Abs(_waterAmount - value) < 0.01) return;
-            _waterAmount = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(WaterAndCoffeeAmount));
-            OnPropertyChanged(nameof(TotalDrinkAmount));
-        }
-    }
-
-    private double _coffeeAmount;
-    public double CoffeeAmount
-    {
-        get => _coffeeAmount;
-        set
-        {
-            if (Math.Abs(_coffeeAmount - value) < 0.01) return;
-            _coffeeAmount = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(WaterAndCoffeeAmount));
-            OnPropertyChanged(nameof(TotalDrinkAmount));
-        }
-    }
-
-    private double _teaAmount;
-    public double TeaAmount
-    {
-        get => _teaAmount;
-        set
-        {
-            if (Math.Abs(_teaAmount - value) < 0.01) return;
-            _teaAmount = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(TotalDrinkAmount));
-        }
-    }
-
-    public double WaterAndCoffeeAmount => WaterAmount + CoffeeAmount;
-    public double TotalDrinkAmount => WaterAmount + CoffeeAmount + TeaAmount;
     public string CurrentViewLabel => HabitsFlipView?.SelectedIndex == 0 ? "Hydration" : "Smoking";
 
     public event EventHandler? WidgetTapped;
@@ -166,28 +124,14 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             GoalValue = waterGoal?.TargetValue > 0 ? waterGoal.TargetValue : 2000;
             CurrentProgress = await _habitsService.GetDailyProgressAsync("water", DateTime.Now);
             GoalDisplay = $"/ {GoalValue:0}";
-            GaugeColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 2, 136, 209));
 
             var breakdown = await _habitsService.GetDailyBreakdownAsync("water", DateTime.Now);
-            WaterAmount = GetBreakdownValue(breakdown, "water", "Water");
-            CoffeeAmount = GetBreakdownValue(breakdown, "coffee", "Coffee");
-            TeaAmount = GetBreakdownValue(breakdown, "tea", "Tea");
-
-            if (WaterAndCoffeeAmount + TeaAmount <= 0)
-            {
-                WaterAmount = CurrentProgress;
-                CoffeeAmount = 0;
-                TeaAmount = 0;
-            }
+            UpdateGaugeSegments(WaterRadialAxis, breakdown);
 
             MoneySavedDisplay = string.Empty;
         }
         else
         {
-            WaterAmount = 0;
-            CoffeeAmount = 0;
-            TeaAmount = 0;
-
             GoalValue = _settingsService.Settings.SmokesBaselineDaily > 0 ? _settingsService.Settings.SmokesBaselineDaily : 20;
             CurrentProgress = await _habitsService.GetDailyProgressAsync("smokes", DateTime.Now);
             GoalDisplay = $"/ {GoalValue:0}";
@@ -205,6 +149,33 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             {
                 GaugeColor = new SolidColorBrush(Colors.DarkRed);
             }
+
+            SmokesRadialAxis.Ranges.Clear();
+            var bgRange = new Syncfusion.UI.Xaml.Gauges.GaugeRange
+            {
+                StartValue = 0,
+                EndValue = GoalValue > 0 ? GoalValue : 100,
+                StartWidth = 0.265,
+                EndWidth = 0.265,
+                WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
+                
+                
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(26, 128, 128, 128)) // semi-transparent gray
+            };
+            SmokesRadialAxis.Ranges.Add(bgRange);
+
+            var progressRange = new Syncfusion.UI.Xaml.Gauges.GaugeRange
+            {
+                StartValue = 0,
+                EndValue = CurrentProgress,
+                StartWidth = 0.265,
+                EndWidth = 0.265,
+                WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
+                
+                
+                Background = GaugeColor
+            };
+            SmokesRadialAxis.Ranges.Add(progressRange);
 
             var quitDate = _settingsService.Settings.SmokesQuitDate;
             if (quitDate.HasValue)
@@ -234,26 +205,6 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         OnPropertyChanged(nameof(CurrentViewLabel));
     }
 
-    private static double GetBreakdownValue(IReadOnlyDictionary<string, double>? breakdown, params string[] keys)
-    {
-        if (breakdown is null || breakdown.Count == 0)
-        {
-            return 0;
-        }
-
-        foreach (var pair in breakdown)
-        {
-            foreach (var key in keys)
-            {
-                if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
-                {
-                    return pair.Value;
-                }
-            }
-        }
-
-        return 0;
-    }
 
     private async void HabitsFlipView_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -264,6 +215,89 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
         OnPropertyChanged(nameof(CurrentViewLabel));
         await LoadDataAsync();
+    }
+
+    private void UpdateGaugeSegments(Syncfusion.UI.Xaml.Gauges.RadialAxis axis, Dictionary<string, double> breakdown)
+    {
+        if (axis == null) return;
+
+        axis.Ranges.Clear();
+
+        // Always add background range first
+        var bgRange = new Syncfusion.UI.Xaml.Gauges.GaugeRange
+        {
+            StartValue = 0,
+            EndValue = GoalValue > 0 ? GoalValue : 100,
+                StartWidth = 0.265,
+                EndWidth = 0.265,
+                WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
+            
+            
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(26, 128, 128, 128)) // semi-transparent gray
+        };
+        axis.Ranges.Add(bgRange);
+
+        double currentStart = 0;
+        foreach (var kvp in breakdown)
+        {
+            double amount = kvp.Value;
+            if (amount <= 0) continue;
+
+            string colorHex = GetColorForDrinkOrSmoke(kvp.Key);
+            var color = GetColorFromHex(colorHex);
+
+            var range = new Syncfusion.UI.Xaml.Gauges.GaugeRange
+            {
+                StartValue = currentStart,
+                EndValue = currentStart + amount,
+                    StartWidth = 0.265,
+                    EndWidth = 0.265,
+                    WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
+                
+                
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color)
+            };
+
+            axis.Ranges.Add(range);
+            currentStart += amount;
+        }
+    }
+
+    private string GetColorForDrinkOrSmoke(string item)
+    {
+        return item.ToLowerInvariant() switch
+        {
+            "water" => "#FF2196F3",
+            "coffee" => "#FFF2994A",
+            "tea" => "#FF27AE60",
+            "juice" => "#FFE91E63",
+            "cigarette" => "#FFF44336",
+            "vape" => "#FF1976D2",
+            "rolled" => "#FFEF6C00",
+            "cigarillo" => "#FF8E24AA",
+            _ => "#FF808080"
+        };
+    }
+
+    private Windows.UI.Color GetColorFromHex(string hex)
+    {
+        hex = hex.Replace("#", "");
+        byte a = 255;
+        byte r = 0, g = 0, b = 0;
+        if (hex.Length == 8)
+        {
+            a = byte.Parse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
+            r = byte.Parse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
+            g = byte.Parse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
+            b = byte.Parse(hex.Substring(6, 2), System.Globalization.NumberStyles.HexNumber);
+        }
+        else if (hex.Length == 6)
+        {
+            r = byte.Parse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
+            g = byte.Parse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
+            b = byte.Parse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
+        }
+        return Windows.UI.Color.FromArgb(a, r, g, b);
     }
 
     private void Header_PointerEntered(object sender, PointerRoutedEventArgs e)
@@ -312,14 +346,14 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         }
     }
 
-    private async void AddWaterSmall_Click(object sender, RoutedEventArgs e)
+    private async void AddWater_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("water", 150, "ml", DateTime.Now, "{\"drink\":\"Water\",\"size\":\"Small\"}");
+        await _habitsService.AddLogAsync("water", 250, "ml", DateTime.Now, "{\"drink\":\"Water\"}");
     }
 
-    private async void AddWaterLarge_Click(object sender, RoutedEventArgs e)
+    private async void AddJuice_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("water", 300, "ml", DateTime.Now, "{\"drink\":\"Water\",\"size\":\"Large\"}");
+        await _habitsService.AddLogAsync("water", 250, "ml", DateTime.Now, "{\"drink\":\"Juice\"}");
     }
 
     private async void AddCoffee_Click(object sender, RoutedEventArgs e)

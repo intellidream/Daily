@@ -30,6 +30,7 @@
     <Content Include="Assets\AppIcon.ico" />
     <Content Include="Assets\apptopbar.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    <Content Include="Assets\Fonts\tabler-icons.ttf" />
   </ItemGroup>
 
   <ItemGroup>

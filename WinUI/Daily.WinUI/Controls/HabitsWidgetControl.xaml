@@ -31,21 +31,19 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <Border Width="32" Height="32" CornerRadius="16" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                    <FontIcon Glyph="&#xE81C;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource SystemControlHighlightAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
+                <FontIcon Grid.Column="0" Glyph="&#xed23;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="{ThemeResource SystemAccentColor}" Margin="0,0,8,0"/>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Habits" FontSize="16" FontWeight="SemiBold" Opacity="0.95" />
+                    <TextBlock Text="Habits" FontSize="14" FontWeight="SemiBold" Opacity="0.9" VerticalAlignment="Center" />
                     <TextBlock Text="{x:Bind CurrentViewLabel, Mode=OneWay}" FontSize="11" Opacity="0.55" />
                 </StackPanel>
             </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                <Button x:Name="PrevBtn" Background="Transparent" BorderThickness="0" Padding="4" Height="28" Width="28" Click="Prev_Click">
-                    <FontIcon Glyph="&#xE76B;" FontSize="11" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                <Button x:Name="PrevBtn" Background="Transparent" BorderThickness="0" Padding="4" Height="24" Width="24" Click="Prev_Click">
+                    <FontIcon Glyph="&#xea60;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" />
                 </Button>
-                <Button x:Name="NextBtn" Background="Transparent" BorderThickness="0" Padding="4" Height="28" Width="28" Click="Next_Click">
-                    <FontIcon Glyph="&#xE76C;" FontSize="11" />
+                <Button x:Name="NextBtn" Background="Transparent" BorderThickness="0" Padding="4" Height="24" Width="24" Click="Next_Click">
+                    <FontIcon Glyph="&#xea61;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" />
                 </Button>
             </StackPanel>
         </Grid>
@@ -65,29 +63,41 @@
                             BorderThickness="1"
                             Padding="14">
                         <Grid>
-                            <gauge:SfRadialGauge Height="168" Width="168" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <gauge:SfRadialGauge Margin="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                                 <gauge:SfRadialGauge.Axes>
-                                    <gauge:RadialAxis StartAngle="180"
-                                                      EndAngle="360"
-                                                      Minimum="0"
-                                                      Maximum="{x:Bind GoalValue, Mode=OneWay}"
-                                                      ShowLabels="False"
-                                                      ShowTicks="False"
-                                                      ShowAxisLine="False">
+                                    <gauge:RadialAxis x:Name="WaterRadialAxis" StartAngle="135" EndAngle="405" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowAxisLine="False" TickLengthUnit="Factor" MajorTickLength="0.265" MinorTickLength="0.13" MinorTicksPerInterval="4" TickOffset="0">
                                         <gauge:RadialAxis.Ranges>
-                                            <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
-                                            <gauge:GaugeRange StartValue="0" EndValue="{x:Bind WaterAmount, Mode=OneWay}" Background="#FF2D9CDB" />
-                                            <gauge:GaugeRange StartValue="{x:Bind WaterAmount, Mode=OneWay}" EndValue="{x:Bind WaterAndCoffeeAmount, Mode=OneWay}" Background="#FFF2994A" />
-                                            <gauge:GaugeRange StartValue="{x:Bind WaterAndCoffeeAmount, Mode=OneWay}" EndValue="{x:Bind TotalDrinkAmount, Mode=OneWay}" Background="#FF2F80ED" />
+                                            <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" StartWidth="0.265" EndWidth="0.265" WidthUnit="Factor" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
                                         </gauge:RadialAxis.Ranges>
+                                        <gauge:RadialAxis.Pointers>
+                                            <gauge:NeedlePointer Value="{x:Bind CurrentProgress, Mode=OneWay}"
+                                                                 NeedleFill="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                 NeedleLength="0.6"
+                                                                 NeedleStartWidth="1"
+                                                                 NeedleEndWidth="16"
+                                                                 KnobFill="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                                                                 KnobStroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                 KnobStrokeThickness="0.05"
+                                                                 KnobRadius="0.08"
+                                                                 TailFill="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                 TailLength="0.2"
+                                                                 TailWidth="16" />
+                                        </gauge:RadialAxis.Pointers>
+                                        <gauge:RadialAxis.Annotations>
+                                            <gauge:GaugeAnnotation PositionFactor="0.85" DirectionValue="90">
+                                                <gauge:GaugeAnnotation.Content>
+                                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" />
+                                                        <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="10" Opacity="0.55" HorizontalAlignment="Center" />
+                                                    </StackPanel>
+                                                </gauge:GaugeAnnotation.Content>
+                                            </gauge:GaugeAnnotation>
+                                        </gauge:RadialAxis.Annotations>
                                     </gauge:RadialAxis>
                                 </gauge:SfRadialGauge.Axes>
                             </gauge:SfRadialGauge>
 
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center" />
-                                <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="11" Opacity="0.55" HorizontalAlignment="Center" />
-                            </StackPanel>
+                            
                         </Grid>
                     </Border>
 
@@ -99,7 +109,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF2D9CDB" />
+                                    <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF2D9CDB" />
                                     <TextBlock Grid.Column="1" Text="Water" FontSize="12" Opacity="0.7" />
                                 </Grid>
                                 <Grid>
@@ -107,7 +117,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <FontIcon Glyph="&#xE81E;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FFF2994A" />
+                                    <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFF2994A" />
                                     <TextBlock Grid.Column="1" Text="Coffee" FontSize="12" Opacity="0.7" />
                                 </Grid>
                                 <Grid>
@@ -115,7 +125,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <FontIcon Glyph="&#xE7C3;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF27AE60" />
+                                    <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
                                     <TextBlock Grid.Column="1" Text="Tea" FontSize="12" Opacity="0.7" />
                                 </Grid>
                                 <Border Height="1" Background="{ThemeResource CardStrokeColorDefaultBrush}" Margin="0,2,0,0" />
@@ -140,27 +150,27 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <Button Grid.Row="0" Grid.Column="0" Click="AddWaterSmall_Click" CornerRadius="18" Padding="8" Background="{ThemeResource SystemAccentColorDark2}" BorderThickness="0">
+                            <Button Grid.Row="0" Grid.Column="0" Click="AddWater_Click" CornerRadius="18" Padding="8" Background="#FF2196F3" BorderThickness="0">
                                 <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                    <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
-                                    <TextBlock Text="150ml" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
+                                    <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+                                    <TextBlock Text="Water" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
-                            <Button Grid.Row="0" Grid.Column="1" Click="AddWaterLarge_Click" CornerRadius="18" Padding="8" Background="#FF1E88E5" BorderThickness="0">
+                            <Button Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Padding="8" Background="#FFE91E63" BorderThickness="0">
                                 <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                    <FontIcon Glyph="&#xE7A3;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
-                                    <TextBlock Text="300ml" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
+                                    <FontIcon Glyph="&#xeab8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+                                    <TextBlock Text="Juice" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="1" Grid.Column="0" Click="AddCoffee_Click" CornerRadius="18" Padding="8" Background="#FFF2994A" BorderThickness="0">
                                 <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                    <FontIcon Glyph="&#xE81E;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+                                    <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
                                     <TextBlock Text="Coffee" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Padding="8" Background="#FF27AE60" BorderThickness="0">
                                 <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                    <FontIcon Glyph="&#xE7C3;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+                                    <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
                                     <TextBlock Text="Tea" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
@@ -183,27 +193,41 @@
                             BorderThickness="1"
                             Padding="14">
                         <Grid>
-                            <gauge:SfRadialGauge Height="168" Width="168" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <gauge:SfRadialGauge Margin="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                                 <gauge:SfRadialGauge.Axes>
-                                    <gauge:RadialAxis StartAngle="180"
-                                                      EndAngle="360"
-                                                      Minimum="0"
-                                                      Maximum="{x:Bind GoalValue, Mode=OneWay}"
-                                                      ShowLabels="False"
-                                                      ShowTicks="False"
-                                                      ShowAxisLine="False">
+                                    <gauge:RadialAxis x:Name="SmokesRadialAxis" StartAngle="135" EndAngle="405" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowAxisLine="False" TickLengthUnit="Factor" MajorTickLength="0.265" MinorTickLength="0.13" MinorTicksPerInterval="4" TickOffset="0">
                                         <gauge:RadialAxis.Ranges>
-                                            <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
-                                            <gauge:GaugeRange StartValue="0" EndValue="{x:Bind CurrentProgress, Mode=OneWay}" Background="{x:Bind GaugeColor, Mode=OneWay}" />
+                                            <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" StartWidth="0.265" EndWidth="0.265" WidthUnit="Factor" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
                                         </gauge:RadialAxis.Ranges>
+                                        <gauge:RadialAxis.Pointers>
+                                            <gauge:NeedlePointer Value="{x:Bind CurrentProgress, Mode=OneWay}"
+                                                                 NeedleFill="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                 NeedleLength="0.6"
+                                                                 NeedleStartWidth="1"
+                                                                 NeedleEndWidth="16"
+                                                                 KnobFill="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                                                                 KnobStroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                 KnobStrokeThickness="0.05"
+                                                                 KnobRadius="0.08"
+                                                                 TailFill="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                 TailLength="0.2"
+                                                                 TailWidth="16" />
+                                        </gauge:RadialAxis.Pointers>
+                                        <gauge:RadialAxis.Annotations>
+                                            <gauge:GaugeAnnotation PositionFactor="0.85" DirectionValue="90">
+                                                <gauge:GaugeAnnotation.Content>
+                                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{x:Bind GaugeColor, Mode=OneWay}" />
+                                                        <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="10" Opacity="0.55" HorizontalAlignment="Center" />
+                                                    </StackPanel>
+                                                </gauge:GaugeAnnotation.Content>
+                                            </gauge:GaugeAnnotation>
+                                        </gauge:RadialAxis.Annotations>
                                     </gauge:RadialAxis>
                                 </gauge:SfRadialGauge.Axes>
                             </gauge:SfRadialGauge>
 
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{x:Bind GaugeColor, Mode=OneWay}" />
-                                <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="11" Opacity="0.55" HorizontalAlignment="Center" />
-                            </StackPanel>
+                            
                         </Grid>
                     </Border>
 
@@ -228,25 +252,25 @@
 
                             <Button Grid.Row="0" Grid.Column="0" Click="AddCigarette_Click" CornerRadius="18" Padding="8" Background="#FFF44336" BorderThickness="0">
                                 <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                    <FontIcon Glyph="&#xE731;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+                                    <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
                                     <TextBlock Text="Cigarette" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="0" Grid.Column="1" Click="AddVape_Click" CornerRadius="18" Padding="8" Background="#FF1976D2" BorderThickness="0">
                                 <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                    <FontIcon Glyph="&#xE7C2;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+                                    <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
                                     <TextBlock Text="Vape" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="1" Grid.Column="0" Click="AddRolled_Click" CornerRadius="18" Padding="8" Background="#FFEF6C00" BorderThickness="0">
                                 <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                    <FontIcon Glyph="&#xE8AD;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+                                    <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
                                     <TextBlock Text="Rolled" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="1" Grid.Column="1" Click="AddCigarillo_Click" CornerRadius="18" Padding="8" Background="#FF8E24AA" BorderThickness="0">
                                 <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                    <FontIcon Glyph="&#xE720;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+                                    <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
                                     <TextBlock Text="Cigarillo" FontSize="10" Foreground="White" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
@@ -257,3 +281,4 @@
         </FlipView>
     </Grid>
 </UserControl>
+

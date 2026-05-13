@@ -11,6 +11,7 @@ using Daily.Models;
 using System.Linq;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI;
+using Windows.UI;
 
 namespace Daily_WinUI.Views;
 
@@ -19,6 +20,8 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     private readonly IHabitsService _habitsService;
     private readonly ISettingsService _settingsService;
     private string _currentType = "water";
+    private bool _isReconciling;
+    private bool _isSyncingPointer;  // blocks ValueChanged snap during programmatic set
 
     private double _currentProgress;
     public double CurrentProgress
@@ -30,6 +33,8 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
             OnPropertyChanged(); 
             OnPropertyChanged(nameof(ProgressPercentage));
             OnPropertyChanged(nameof(ProgressPercentageText));
+            OnPropertyChanged(nameof(HeroMainText));
+            WaterMlText = $"{value:0} ml";
         }
     }
 
@@ -43,11 +48,23 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
             OnPropertyChanged(); 
             OnPropertyChanged(nameof(ProgressPercentage));
             OnPropertyChanged(nameof(ProgressPercentageText));
+            OnPropertyChanged(nameof(HeroMainText));
         }
     }
 
     public double ProgressPercentage => GoalValue > 0 ? (CurrentProgress / GoalValue) * 100 : 0;
     public string ProgressPercentageText => $"{ProgressPercentage:F0}%";
+    public string HeroMainText => _currentType == "water" ? ProgressPercentageText : CurrentProgress.ToString();
+
+    private string _waterMlText = "0 ml";
+    public string WaterMlText
+    {
+        get => _waterMlText;
+        private set { if (_waterMlText == value) return; _waterMlText = value; OnPropertyChanged(); }
+    }
+
+    public Visibility WaterGaugeVisibility => _currentType == "water" ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility SmokesGaugeVisibility => _currentType == "smokes" ? Visibility.Visible : Visibility.Collapsed;
 
     private DateTimeOffset? _viewDate = DateTimeOffset.Now;
     public DateTimeOffset? ViewDate
@@ -69,6 +86,14 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     {
         get => _todaysLogs;
         set { _todaysLogs = value; OnPropertyChanged(); }
+    }
+
+    private Microsoft.UI.Xaml.Media.Brush _waterFillBrush =
+        new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 41, 150, 204)); // #2996cc water blue
+    public Microsoft.UI.Xaml.Media.Brush WaterFillBrush
+    {
+        get => _waterFillBrush;
+        set { _waterFillBrush = value; OnPropertyChanged(); }
     }
 
     private string _goalDisplay = "";
@@ -215,11 +240,19 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         CurrentProgress = await _habitsService.GetDailyProgressAsync(_currentType, ViewDate.GetValueOrDefault().Date);
         TodaysLogs = await _habitsService.GetLogsAsync(_currentType, ViewDate.GetValueOrDefault().Date);
         
+        var breakdown = await _habitsService.GetDailyBreakdownAsync(_currentType, ViewDate.GetValueOrDefault().Date);
+
         if (_currentType == "water")
         {
             var goal = await _habitsService.GetGoalAsync("water");
             GoalValue = goal.TargetValue > 0 ? goal.TargetValue : 2000;
             GoalDisplay = $"/ {GoalValue}";
+            // Set pointer to real DB value — guard prevents ValueChanged from snapping it
+            _isSyncingPointer = true;
+            waterShapePointer.Value = CurrentProgress;
+            WaterMlText = $"{CurrentProgress:0} ml";
+            _isSyncingPointer = false;
+            UpdateWaterFillColor(TodaysLogs);
         }
         else
         {
@@ -256,6 +289,8 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                 MoneySavedDisplay = $"Saved Today: {currency} {savedToday:0.00}";
             }
         }
+
+        UpdateHeroGauge(breakdown);
 
         // History Chart (Last 7 Days) - via server-side RPC
         var endDate = DateTime.Today;
@@ -332,7 +367,119 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         HeatmapData = newHeat;
     }
 
-    private async void AddWaterSmall_Click(object sender, RoutedEventArgs e)
+    private void UpdateHeroGauge(Dictionary<string, double> breakdown)
+    {
+        if (HeroRadialAxis == null) return;
+
+        HeroRadialAxis.Ranges.Clear();
+
+        // Always add background range first
+        var bgRange = new Syncfusion.UI.Xaml.Gauges.GaugeRange
+        {
+            StartValue = 0,
+            EndValue = GoalValue > 0 ? GoalValue : 100,
+            StartWidth = 0.265,
+            EndWidth = 0.265,
+            WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
+            
+            
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(26, 128, 128, 128)) // semi-transparent gray
+        };
+        HeroRadialAxis.Ranges.Add(bgRange);
+
+        if (_currentType == "smokes")
+        {
+            var brush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Colors.DarkRed);
+            if (GoalValue > 0)
+            {
+                var ratio = CurrentProgress / GoalValue;
+                brush = ratio < 0.265 ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Colors.DarkGreen)
+                      : ratio < 0.5 ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Colors.DarkOrange)
+                      : new Microsoft.UI.Xaml.Media.SolidColorBrush(Colors.DarkRed);
+            }
+            
+            var progressRange = new Syncfusion.UI.Xaml.Gauges.GaugeRange
+            {
+                StartValue = 0,
+                EndValue = CurrentProgress,
+                StartWidth = 0.265,
+                EndWidth = 0.265,
+                WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
+                
+                
+                Background = brush
+            };
+            HeroRadialAxis.Ranges.Add(progressRange);
+        }
+        else
+        {
+            double currentStart = 0;
+            foreach (var kvp in breakdown)
+            {
+                double amount = kvp.Value;
+                if (amount <= 0) continue;
+
+                string colorHex = GetColorForDrinkOrSmoke(kvp.Key);
+                var color = GetColorFromHex(colorHex);
+
+                var range = new Syncfusion.UI.Xaml.Gauges.GaugeRange
+                {
+                    StartValue = currentStart,
+                    EndValue = currentStart + amount,
+                    StartWidth = 0.265,
+                    EndWidth = 0.265,
+                    WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
+                    
+                    
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color)
+                };
+
+                HeroRadialAxis.Ranges.Add(range);
+                currentStart += amount;
+            }
+        }
+    }
+
+    private string GetColorForDrinkOrSmoke(string item)
+    {
+        return item.ToLowerInvariant() switch
+        {
+            "water"     => "#FF2996CC",
+            "coffee"    => "#FFF2994A",
+            "tea"       => "#FF27AE60",
+            "juice"     => "#FFE91E63",
+            "beer"      => "#FFFFA000",
+            "wine"      => "#FF9C27B0",
+            "cigarette" => "#FFF44336",
+            "vape"      => "#FF1976D2",
+            "rolled"    => "#FFEF6C00",
+            "cigarillo" => "#FF8E24AA",
+            _           => "#FF808080"
+        };
+    }
+
+    private Windows.UI.Color GetColorFromHex(string hex)
+    {
+        hex = hex.Replace("#", "");
+        byte a = 255;
+        byte r = 0, g = 0, b = 0;
+        if (hex.Length == 8)
+        {
+            a = byte.Parse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
+            r = byte.Parse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
+            g = byte.Parse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
+            b = byte.Parse(hex.Substring(6, 2), System.Globalization.NumberStyles.HexNumber);
+        }
+        else if (hex.Length == 6)
+        {
+            r = byte.Parse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
+            g = byte.Parse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
+            b = byte.Parse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
+        }
+        return Windows.UI.Color.FromArgb(a, r, g, b);
+    }
+
+    private async void AddWater_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("water", 150, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Water\",\"size\":\"Small\"}");
     }
@@ -404,6 +551,150 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         
         // Reload to update financials
         await LoadDataAsync();
+    }
+
+    private void WaterShapePointer_ValueChanged(object sender, Syncfusion.UI.Xaml.Gauges.ValueChangedEventArgs e)
+    {
+        if (_isReconciling || _isSyncingPointer) return;
+        if (sender is not Syncfusion.UI.Xaml.Gauges.LinearShapePointer ptr) return;
+        double snapped = Math.Round(ptr.Value / 150.0) * 150.0;
+        snapped = Math.Clamp(snapped, 0, GoalValue);
+        ptr.Value = snapped;
+        WaterMlText = $"{snapped:0} ml";
+    }
+
+    private async void WaterShapePointer_ValueChangeCompleted(object sender, Syncfusion.UI.Xaml.Gauges.ValueChangedEventArgs e)
+    {
+        if (_isReconciling || _isSyncingPointer) return;
+        if (sender is not Syncfusion.UI.Xaml.Gauges.LinearShapePointer ptr) return;
+        double snapped = Math.Round(ptr.Value / 150.0) * 150.0;
+        snapped = Math.Clamp(snapped, 0, GoalValue);
+        ptr.Value = snapped;
+        await ReconcileWaterToTargetAsync(snapped);
+    }
+
+    private async Task ReconcileWaterToTargetAsync(double targetMl)
+    {
+        _isReconciling = true;
+        try
+        {
+            var date = ViewDate.GetValueOrDefault().Date;
+            double currentTotal = await _habitsService.GetDailyProgressAsync("water", date);
+            double diff = targetMl - currentTotal;
+
+            // Nothing meaningful to change
+            if (Math.Abs(diff) < 1)
+            {
+                await LoadDataAsync();
+                return;
+            }
+
+            if (diff > 0)
+            {
+                // Add exactly as many 150 ml logs as needed (round up)
+                int stepsToAdd = (int)Math.Ceiling(diff / 150.0);
+                for (int i = 0; i < stepsToAdd; i++)
+                    await _habitsService.AddLogAsync("water", 150, "ml",
+                        date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Water\",\"source\":\"gauge\"}");
+            }
+            else
+            {
+                // Remove enough logs (newest first) to reach target
+                double toRemove = -diff;
+                var logs = await _habitsService.GetLogsAsync("water", date);
+                var sorted = logs.OrderByDescending(l => l.LoggedAt).ToList();
+
+                foreach (var log in sorted)
+                {
+                    if (toRemove < 1) break;
+
+                    if (log.Value <= toRemove)
+                    {
+                        await _habitsService.DeleteLogAsync(log.Id);
+                        toRemove -= log.Value;
+                    }
+                    else
+                    {
+                        // Split: keep the remainder, delete the original
+                        double remainder = log.Value - toRemove;
+                        await _habitsService.DeleteLogAsync(log.Id);
+                        if (remainder >= 1)
+                            await _habitsService.AddLogAsync("water", remainder, "ml",
+                                log.LoggedAt, log.Metadata);
+                        toRemove = 0;
+                    }
+                }
+            }
+
+            await LoadDataAsync();
+        }
+        finally
+        {
+            _isReconciling = false;
+        }
+    }
+
+    private void UpdateWaterFillColor(List<HabitLog> logs)
+    {
+        if (WaterFillControl == null) return;
+
+        double totalMl = logs.Sum(l => l.Value);
+        if (totalMl <= 0)
+        {
+            WaterFillControl.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(GetColorFromHex("#FF2996CC"));
+            return;
+        }
+
+        // Build segments in chronological order: oldest log = bottom of glass, newest = top
+        var segments = new List<(string Drink, double Ml)>();
+        foreach (var log in logs.OrderBy(l => l.LoggedAt))
+        {
+            string drink = "Water";
+            if (!string.IsNullOrEmpty(log.Metadata))
+            {
+                try
+                {
+                    var doc = System.Text.Json.JsonDocument.Parse(log.Metadata);
+                    if (doc.RootElement.TryGetProperty("drink", out var d))
+                        drink = d.GetString() ?? "Water";
+                }
+                catch { }
+            }
+            // Merge consecutive same-type logs into one segment
+            if (segments.Count > 0 && segments[^1].Drink.Equals(drink, StringComparison.OrdinalIgnoreCase))
+                segments[^1] = (drink, segments[^1].Ml + log.Value);
+            else
+                segments.Add((drink, log.Value));
+        }
+
+        // Single type — use a plain solid brush
+        if (segments.Count == 1)
+        {
+            WaterFillControl.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                GetColorFromHex(GetColorForDrinkOrSmoke(segments[0].Drink)));
+            return;
+        }
+
+        // Multiple types — build a hard-stop gradient:
+        // StartPoint (0.5,1) = bottom of element = glass bottom = oldest drink (offset 0)
+        // EndPoint   (0.5,0) = top    of element = water surface = newest drink (offset 1)
+        var gradient = new Microsoft.UI.Xaml.Media.LinearGradientBrush
+        {
+            StartPoint = new Windows.Foundation.Point(0.5, 1),
+            EndPoint   = new Windows.Foundation.Point(0.5, 0)
+        };
+
+        double cursor = 0.0;
+        foreach (var (drink, ml) in segments)
+        {
+            double fraction = ml / totalMl;
+            var color = GetColorFromHex(GetColorForDrinkOrSmoke(drink));
+            gradient.GradientStops.Add(new Microsoft.UI.Xaml.Media.GradientStop { Color = color, Offset = cursor });
+            cursor += fraction;
+            gradient.GradientStops.Add(new Microsoft.UI.Xaml.Media.GradientStop { Color = color, Offset = cursor });
+        }
+
+        WaterFillControl.Background = gradient;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
