@@ -22,6 +22,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     private string _currentType = "water";
     private bool _isReconciling;
     private bool _isSyncingPointer;  // blocks ValueChanged snap during programmatic set
+    private double _pointerPrevValue = -1; // tracks last confirmed snap for direction detection
 
     private double _currentProgress;
     public double CurrentProgress
@@ -63,8 +64,26 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         private set { if (_waterMlText == value) return; _waterMlText = value; OnPropertyChanged(); }
     }
 
-    public Visibility WaterGaugeVisibility => _currentType == "water" ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility SmokesGaugeVisibility => _currentType == "smokes" ? Visibility.Visible : Visibility.Collapsed;
+    // Last-log info used by the split drag handle
+    private double  _lastLogValue = 150;
+    private string  _lastLogMlText = "150 ml";
+    private Microsoft.UI.Xaml.Media.Brush _lastLogColor =
+        new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 94, 181, 255));
+
+    public string LastLogMlText
+    {
+        get => _lastLogMlText;
+        private set { if (_lastLogMlText == value) return; _lastLogMlText = value; OnPropertyChanged(); }
+    }
+    public Microsoft.UI.Xaml.Media.Brush LastLogColor
+    {
+        get => _lastLogColor;
+        private set { _lastLogColor = value; OnPropertyChanged(); }
+    }
+
+    public Visibility WaterGaugeVisibility  => _currentType == "water"  ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility SmokesGaugeVisibility => Visibility.Collapsed;  // replaced by LungsControl
+    public Visibility SmokesLungsVisibility => _currentType == "smokes" ? Visibility.Visible : Visibility.Collapsed;
 
     private DateTimeOffset? _viewDate = DateTimeOffset.Now;
     public DateTimeOffset? ViewDate
@@ -200,6 +219,8 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         if (sender is ComboBox comboBox && comboBox.SelectedItem is ComboBoxItem selectedItem)
         {
             _currentType = selectedItem.Tag?.ToString() ?? "water";
+            OnPropertyChanged(nameof(WaterGaugeVisibility));
+            OnPropertyChanged(nameof(SmokesLungsVisibility));
             
             if (WaterSummaryPanel == null || SmokesSummaryPanel == null || SettingsGrid == null) return;
             
@@ -250,9 +271,11 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
             // Set pointer to real DB value — guard prevents ValueChanged from snapping it
             _isSyncingPointer = true;
             waterShapePointer.Value = CurrentProgress;
+            _pointerPrevValue = CurrentProgress;
             WaterMlText = $"{CurrentProgress:0} ml";
             _isSyncingPointer = false;
             UpdateWaterFillColor(TodaysLogs);
+            UpdateLastLogInfo(TodaysLogs);
         }
         else
         {
@@ -288,6 +311,10 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                 double savedToday = Math.Max(0, SmokesBaseline - CurrentProgress) * costPerCig;
                 MoneySavedDisplay = $"Saved Today: {currency} {savedToday:0.00}";
             }
+
+            // Update lungs fill: fraction = cigarettes smoked / baseline (capped at 1)
+            double lungsFraction = SmokesBaseline > 0 ? Math.Clamp(CurrentProgress / SmokesBaseline, 0.0, 1.0) : 0.0;
+            SmokesLungsControl.FillFraction = lungsFraction;
         }
 
         UpdateHeroGauge(breakdown);
@@ -592,7 +619,8 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     {
         if (_isReconciling || _isSyncingPointer) return;
         if (sender is not Syncfusion.UI.Xaml.Gauges.LinearShapePointer ptr) return;
-        double snapped = Math.Round(ptr.Value / 150.0) * 150.0;
+
+        double snapped = SnapPointerValue(ptr.Value);
         snapped = Math.Clamp(snapped, 0, GoalValue);
         ptr.Value = snapped;
         WaterMlText = $"{snapped:0} ml";
@@ -602,10 +630,34 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     {
         if (_isReconciling || _isSyncingPointer) return;
         if (sender is not Syncfusion.UI.Xaml.Gauges.LinearShapePointer ptr) return;
-        double snapped = Math.Round(ptr.Value / 150.0) * 150.0;
+
+        double snapped = SnapPointerValue(ptr.Value);
         snapped = Math.Clamp(snapped, 0, GoalValue);
         ptr.Value = snapped;
+        _pointerPrevValue = snapped;
         await ReconcileWaterToTargetAsync(snapped);
+    }
+
+    /// <summary>
+    /// Determines the correct snapped value based on drag direction.
+    /// Up  → nearest 150 ml step above previous value.
+    /// Down → previous value minus the exact last-log amount.
+    /// </summary>
+    private double SnapPointerValue(double rawValue)
+    {
+        double prev = _pointerPrevValue >= 0 ? _pointerPrevValue : CurrentProgress;
+
+        if (rawValue >= prev)
+        {
+            // Dragging up — add 150 ml step
+            return Math.Round(rawValue / 150.0) * 150.0;
+        }
+        else
+        {
+            // Dragging down — remove exactly the last log's amount
+            double step = _lastLogValue > 0 ? _lastLogValue : 150;
+            return Math.Max(0, prev - step);
+        }
     }
 
     private async Task ReconcileWaterToTargetAsync(double targetMl)
@@ -666,6 +718,75 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         finally
         {
             _isReconciling = false;
+        }
+    }
+
+    private void UpdateLastLogInfo(List<HabitLog> logs)
+    {
+        var last = logs.OrderByDescending(l => l.LoggedAt).FirstOrDefault();
+        if (last == null)
+        {
+            // No logs today — show neutral defaults
+            _lastLogValue   = 150;
+            LastLogMlText   = "150 ml";
+            LastLogColor    = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                                  GetColorFromHex("#FF808080"));
+            ApplyLastLogColorBrush("#FF808080", "150 ml");
+            return;
+        }
+
+        _lastLogValue = last.Value;
+        LastLogMlText = $"{(int)last.Value} ml";
+
+        // Determine colour from metadata drink name, falling back to plain water
+        string drinkName = "water";
+        if (!string.IsNullOrWhiteSpace(last.Metadata))
+        {
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(last.Metadata);
+                if (doc.RootElement.TryGetProperty("drink", out var d))
+                    drinkName = d.GetString() ?? "water";
+            }
+            catch { /* malformed metadata → keep "water" */ }
+        }
+
+        string colorHex = GetHydrationColorForDrink(drinkName, last.Value);
+        LastLogColor = new Microsoft.UI.Xaml.Media.SolidColorBrush(GetColorFromHex(colorHex));
+        ApplyLastLogColorBrush(colorHex, LastLogMlText);
+    }
+
+    /// <summary>
+    /// Updates the mutable resource brush so the DataTemplate's bottom half refreshes,
+    /// and walks the pointer shape visual tree to update the ml label text.
+    /// </summary>
+    private void ApplyLastLogColorBrush(string colorHex, string mlText)
+    {
+        var color = GetColorFromHex(colorHex);
+
+        // Update the named resource brush — existing template instances observe this change
+        if (Resources.TryGetValue("LastLogColorBrush", out var obj) && obj is Microsoft.UI.Xaml.Media.SolidColorBrush brush)
+        {
+            brush.Color = color;
+        }
+
+        // Walk the visual tree of the LinearShapePointer to find and update the label
+        UpdateLastLogLabelInTree(waterShapePointer, mlText);
+    }
+
+    private static void UpdateLastLogLabelInTree(DependencyObject root, string mlText)
+    {
+        if (root == null) return;
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is TextBlock tb && tb.Name == "LastLogMlLabel")
+            {
+                tb.Text = mlText;
+                return;
+            }
+            UpdateLastLogLabelInTree(child, mlText);
         }
     }
 

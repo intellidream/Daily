@@ -32,19 +32,56 @@
                 </Setter>
             </Style>
 
+            <Style TargetType="controls:LungsControl">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="controls:LungsControl">
+                            <Canvas x:Name="PART_Canvas">
+                                <Path x:Name="PART_LeftFill"    StrokeThickness="0" />
+                                <Path x:Name="PART_RightFill"   StrokeThickness="0" />
+                                <Path x:Name="PART_LeftOutline" StrokeThickness="1.5" Fill="Transparent" />
+                                <Path x:Name="PART_RightOutline" StrokeThickness="1.5" Fill="Transparent" />
+                                <Path x:Name="PART_Trachea"     StrokeThickness="1.5" />
+                            </Canvas>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Mutable brush updated from code-behind to reflect last-log drink colour -->
+            <SolidColorBrush x:Key="LastLogColorBrush" x:Name="LastLogColorBrush" Color="#FF5EB5FF" />
+
             <DataTemplate x:Key="WaterPointerHandleTemplate">
-                <Border Width="64" Height="64" CornerRadius="32"
-                        Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                <Border Width="72" Height="72" CornerRadius="36"
                         BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
-                        BorderThickness="1">
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
-                        <TextBlock Text="▲" FontSize="12" Foreground="White"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        <TextBlock Text="150 ml" FontSize="11" Foreground="White" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        <TextBlock Text="▼" FontSize="12" Foreground="White"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </StackPanel>
+                        BorderThickness="1"
+                        Padding="0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Top half: always light blue / +150 ml -->
+                        <Border Grid.Row="0" Background="#FF5EB5FF" CornerRadius="36,36,0,0">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                                <TextBlock Text="▲" FontSize="11" Foreground="White" FontWeight="Bold"
+                                           HorizontalAlignment="Center" />
+                                <TextBlock Text="150 ml" FontSize="10" Foreground="White" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Bottom half: last-log drink colour / last-log amount -->
+                        <Border Grid.Row="1" Background="{ThemeResource LastLogColorBrush}" CornerRadius="0,0,36,36">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                                <TextBlock x:Name="LastLogMlLabel" FontSize="10" Foreground="White" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" />
+                                <TextBlock Text="▼" FontSize="11" Foreground="White" FontWeight="Bold"
+                                           HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </Border>
             </DataTemplate>
         </ResourceDictionary>
@@ -104,8 +141,8 @@
                 <!-- HERO GAUGE SECTION -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="32">
                     <Grid>
-                        
-                          <gauge:SfRadialGauge x:Name="HeroRadialGauge" Visibility="{x:Bind SmokesGaugeVisibility, Mode=OneWay}" Width="280" Height="280" HorizontalAlignment="Center" VerticalAlignment="Center">
+
+                          <gauge:SfRadialGauge x:Name="HeroRadialGauge" Visibility="Collapsed" Width="280" Height="280" HorizontalAlignment="Center" VerticalAlignment="Center">
                               <gauge:SfRadialGauge.Axes>
                                   <gauge:RadialAxis x:Name="HeroRadialAxis" StartAngle="135" EndAngle="405" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowAxisLine="False" TickLengthUnit="Factor" MajorTickLength="0.265" MinorTickLength="0.13" MinorTicksPerInterval="4" TickOffset="0">
                                       <gauge:RadialAxis.Ranges>
@@ -180,8 +217,12 @@
                               </gauge:SfLinearGauge.Axis>
                           </gauge:SfLinearGauge>
 
+                          <controls:LungsControl x:Name="SmokesLungsControl"
+                                                 Visibility="{x:Bind SmokesLungsVisibility, Mode=OneWay}"
+                                                 Width="280" Height="340"
+                                                 HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-                        
+
                     </Grid>
                 </Border>
                 
