@@ -26,6 +26,20 @@
                 <GradientStop Color="#CC000000" Offset="1" />
             </LinearGradientBrush>
 
+            <!-- Dark navy background — matches MainPage DashboardBackgroundBrush -->
+            <LinearGradientBrush x:Key="DetailPageBgBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#FF0B1121" Offset="0" />
+                <GradientStop Color="#FF0B1121" Offset="0.35" />
+                <GradientStop Color="#820B1121" Offset="0.65" />
+                <GradientStop Color="#600B1121" Offset="1" />
+            </LinearGradientBrush>
+
+            <!-- Frosted-glass panel brushes -->
+            <SolidColorBrush x:Key="GlassPanelBrush"        Color="#22FFFFFF" />
+            <SolidColorBrush x:Key="GlassPanelBorderBrush"  Color="#44FFFFFF" />
+            <SolidColorBrush x:Key="GlassSubPanelBrush"     Color="#16FFFFFF" />
+            <SolidColorBrush x:Key="GlassSubBorderBrush"    Color="#30FFFFFF" />
+
             <Style TargetType="controls:WaterLevelControl">
                 <Setter Property="Template">
                     <Setter.Value>
@@ -137,12 +151,9 @@
 
 
     <!-- Root grid: artwork layer behind content -->
-    <Grid>
-        <!-- Artwork banner — same image as MainPage but more faded (0.15 vs 0.4) -->
-        <Grid VerticalAlignment="Top" Height="280" IsHitTestVisible="False">
-            <Image Source="ms-appx:///Assets/apptopbar.png" Stretch="UniformToFill" Opacity="0.15" />
-            <Rectangle Fill="{StaticResource DetailArtOverlayBrush}" />
-        </Grid>
+    <Grid Background="{StaticResource DetailPageBgBrush}">
+        <!-- Full-page background artwork -->
+        <Image Source="ms-appx:///Assets/appbg.png" Stretch="UniformToFill" Opacity="0.10" IsHitTestVisible="False" />
 
     <Grid Padding="24" RowSpacing="18">
         <Grid.RowDefinitions>
@@ -159,12 +170,12 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                    <FontIcon Glyph="&#xed23;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource SystemControlHighlightAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <Border Width="40" Height="40" CornerRadius="20" Background="#30FFFFFF">
+                    <FontIcon Glyph="&#xed23;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Habits Detail" FontSize="28" FontWeight="SemiBold" />
-                    <TextBlock Text="Desktop-friendly overview with responsive insight cards" FontSize="12" Opacity="0.6" />
+                    <TextBlock Text="Habits Detail" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="White" />
+                    <TextBlock Text="Desktop-friendly overview with responsive insight cards" FontSize="12" Foreground="#99FFFFFF" />
                 </StackPanel>
             </StackPanel>
 
@@ -178,28 +189,28 @@
         </Grid>
 
         <Border Grid.Row="1"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{StaticResource GlassPanelBrush}"
+                BorderBrush="{StaticResource GlassPanelBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="20"
                 Padding="16">
             <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Stretch">
-                <FontIcon Glyph="&#xea53;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.7" VerticalAlignment="Center" />
-                <TextBlock Text="Use the quick actions below to keep logs close to the MAUI experience, while the charts and consistency cards adapt to the available width." TextWrapping="WrapWholeWords" Opacity="0.75" VerticalAlignment="Center" />
+                <FontIcon Glyph="&#xea53;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#AAFFFFFF" VerticalAlignment="Center" />
+                <TextBlock Text="Use the quick actions below to keep logs close to the MAUI experience, while the charts and consistency cards adapt to the available width." TextWrapping="WrapWholeWords" Foreground="#CCFFFFFF" VerticalAlignment="Center" />
             </StackPanel>
         </Border>
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="18">
                 <!-- HERO GAUGE SECTION -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="32">
+                <Border Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="24" Padding="32">
                     <Grid>
 
                           <gauge:SfRadialGauge x:Name="HeroRadialGauge" Visibility="Collapsed" Width="280" Height="280" HorizontalAlignment="Center" VerticalAlignment="Center">
                               <gauge:SfRadialGauge.Axes>
                                   <gauge:RadialAxis x:Name="HeroRadialAxis" StartAngle="135" EndAngle="405" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowAxisLine="False" TickLengthUnit="Factor" MajorTickLength="0.265" MinorTickLength="0.13" MinorTicksPerInterval="4" TickOffset="0">
                                       <gauge:RadialAxis.Ranges>
-                                          <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" StartWidth="0.265" EndWidth="0.265" WidthUnit="Factor" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
+                                          <gauge:GaugeRange StartValue="0" EndValue="{x:Bind GoalValue, Mode=OneWay}" StartWidth="0.265" EndWidth="0.265" WidthUnit="Factor" Background="{StaticResource GlassSubPanelBrush}" />
                                       </gauge:RadialAxis.Ranges>
                                       <gauge:RadialAxis.Pointers>
                                           <gauge:NeedlePointer Value="{x:Bind CurrentProgress, Mode=OneWay}"
@@ -220,7 +231,7 @@
                                               <gauge:GaugeAnnotation.Content>
                                                   <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
                                                       <TextBlock Text="{x:Bind HeroMainText, Mode=OneWay}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"  />
-                                                      <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="16" Opacity="0.65" HorizontalAlignment="Center" />
+                                                      <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="16" Foreground="#AAFFFFFF" HorizontalAlignment="Center" />
                                                   </StackPanel>
                                               </gauge:GaugeAnnotation.Content>
                                           </gauge:GaugeAnnotation>
@@ -313,7 +324,7 @@
                     </Grid>
                 </Border>
                 
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
+                <Border Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                     <Grid>
                         <StackPanel x:Name="WaterSummaryPanel" Visibility="Visible" Spacing="18">
                             <Grid>
@@ -337,7 +348,7 @@
                                         <ColumnDefinition Width="0.85*" />
                                     </Grid.ColumnDefinitions>
 
-                                    <Border CornerRadius="24" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Padding="18">
+                                    <Border CornerRadius="24" Background="{StaticResource GlassSubPanelBrush}" Padding="18">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
@@ -351,17 +362,17 @@
                                                 <!-- Gauge Removed -->
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                     <TextBlock Text="{x:Bind ProgressPercentageText, Mode=OneWay}" FontSize="40" FontWeight="Bold" HorizontalAlignment="Center" />
-                                                    <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="15" Opacity="0.65" HorizontalAlignment="Center" />
+                                                    <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="15" Foreground="#AAFFFFFF" HorizontalAlignment="Center" />
                                                 </StackPanel>
                                             </Grid>
                                         </Grid>
                                     </Border>
 
-                                    <Border Grid.Column="1" CornerRadius="24" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Padding="18">
+                                    <Border Grid.Column="1" CornerRadius="24" Background="{StaticResource GlassSubPanelBrush}" Padding="18">
                                         <StackPanel Spacing="14">
                                             <StackPanel Spacing="4">
                                                 <TextBlock Text="Quick Add" FontSize="16" FontWeight="SemiBold" />
-                                                <TextBlock Text="Close to the MAUI-style shortcuts" FontSize="12" Opacity="0.6" />
+                                                <TextBlock Text="Close to the MAUI-style shortcuts" FontSize="12" Foreground="#99FFFFFF" />
                                             </StackPanel>
                                             <Grid ColumnSpacing="10" RowSpacing="10">
                                                 <Grid.ColumnDefinitions>
@@ -398,7 +409,7 @@
                                                 </Button>
                                             </Grid>
 
-                                            <Border CornerRadius="18" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                                            <Border CornerRadius="18" Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" Padding="12">
                                                 <Grid RowSpacing="8">
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto" />
@@ -412,7 +423,7 @@
                                                             <ColumnDefinition Width="*" />
                                                         </Grid.ColumnDefinitions>
                                                         <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF2D9CDB" />
-                                                        <TextBlock Grid.Column="1" Text="Water" FontSize="12" Opacity="0.75" HorizontalAlignment="Right" />
+                                                        <TextBlock Grid.Column="1" Text="Water" FontSize="12" Foreground="#BBFFFFFF" HorizontalAlignment="Right" />
                                                     </Grid>
                                                     <Grid Grid.Row="1">
                                                         <Grid.ColumnDefinitions>
@@ -420,7 +431,7 @@
                                                             <ColumnDefinition Width="*" />
                                                         </Grid.ColumnDefinitions>
                                                         <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFF2994A" />
-                                                        <TextBlock Grid.Column="1" Text="Coffee" FontSize="12" Opacity="0.75" HorizontalAlignment="Right" />
+                                                        <TextBlock Grid.Column="1" Text="Coffee" FontSize="12" Foreground="#BBFFFFFF" HorizontalAlignment="Right" />
                                                     </Grid>
                                                     <Grid Grid.Row="2">
                                                         <Grid.ColumnDefinitions>
@@ -428,7 +439,7 @@
                                                             <ColumnDefinition Width="*" />
                                                         </Grid.ColumnDefinitions>
                                                         <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
-                                                        <TextBlock Grid.Column="1" Text="Tea" FontSize="12" Opacity="0.75" HorizontalAlignment="Right" />
+                                                        <TextBlock Grid.Column="1" Text="Tea" FontSize="12" Foreground="#BBFFFFFF" HorizontalAlignment="Right" />
                                                     </Grid>
                                                     <Grid Grid.Row="3">
                                                         <Grid.ColumnDefinitions>
@@ -445,7 +456,7 @@
                                 </Grid>
 
                                 <StackPanel x:Name="WaterNarrowLayout" Spacing="14">
-                                    <Border CornerRadius="24" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Padding="16">
+                                    <Border CornerRadius="24" Background="{StaticResource GlassSubPanelBrush}" Padding="16">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
@@ -459,7 +470,7 @@
                                                 <!-- Gauge Removed -->
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                     <TextBlock Text="{x:Bind ProgressPercentageText, Mode=OneWay}" FontSize="34" FontWeight="Bold" HorizontalAlignment="Center" />
-                                                    <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="14" Opacity="0.65" HorizontalAlignment="Center" />
+                                                    <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="14" Foreground="#AAFFFFFF" HorizontalAlignment="Center" />
                                                 </StackPanel>
                                             </Grid>
                                         </Grid>
@@ -525,7 +536,7 @@
                                         <ColumnDefinition Width="0.85*" />
                                     </Grid.ColumnDefinitions>
 
-                                    <Border CornerRadius="24" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Padding="18">
+                                    <Border CornerRadius="24" Background="{StaticResource GlassSubPanelBrush}" Padding="18">
                                         <Grid>
                                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
                                                 <FontIcon Glyph="&#xebea;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#FFF44336" />
@@ -535,23 +546,23 @@
                                                 <!-- Gauge Removed -->
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                     <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="40" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#FFF44336" />
-                                                    <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="15" Opacity="0.65" HorizontalAlignment="Center" />
+                                                    <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="15" Foreground="#AAFFFFFF" HorizontalAlignment="Center" />
                                                 </StackPanel>
                                             </Grid>
                                         </Grid>
                                     </Border>
 
-                                    <Border Grid.Column="1" CornerRadius="24" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Padding="18">
+                                    <Border Grid.Column="1" CornerRadius="24" Background="{StaticResource GlassSubPanelBrush}" Padding="18">
                                         <StackPanel Spacing="14">
                                             <StackPanel Spacing="4">
                                                 <TextBlock Text="Savings" FontSize="16" FontWeight="SemiBold" />
-                                                <TextBlock Text="Financial progress and quick actions" FontSize="12" Opacity="0.6" />
+                                                <TextBlock Text="Financial progress and quick actions" FontSize="12" Foreground="#99FFFFFF" />
                                             </StackPanel>
 
-                                            <Border CornerRadius="18" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                                            <Border CornerRadius="18" Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" Padding="12">
                                                 <StackPanel Spacing="6">
                                                     <TextBlock Text="{x:Bind MoneySavedDisplay, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Foreground="#FF43A047" />
-                                                    <TextBlock Text="{x:Bind DaysSinceQuitDisplay, Mode=OneWay}" FontSize="12" Opacity="0.65" />
+                                                    <TextBlock Text="{x:Bind DaysSinceQuitDisplay, Mode=OneWay}" FontSize="12" Foreground="#AAFFFFFF" />
                                                 </StackPanel>
                                             </Border>
 
@@ -594,7 +605,7 @@
                                 </Grid>
 
                                 <StackPanel x:Name="SmokeNarrowLayout" Spacing="14">
-                                    <Border CornerRadius="24" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Padding="16">
+                                    <Border CornerRadius="24" Background="{StaticResource GlassSubPanelBrush}" Padding="16">
                                         <Grid>
                                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
                                                 <FontIcon Glyph="&#xebea;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#FFF44336" />
@@ -604,16 +615,16 @@
                                                 <!-- Gauge Removed -->
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                     <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="34" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#FFF44336" />
-                                                    <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="14" Opacity="0.65" HorizontalAlignment="Center" />
+                                                    <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="14" Foreground="#AAFFFFFF" HorizontalAlignment="Center" />
                                                 </StackPanel>
                                             </Grid>
                                         </Grid>
                                     </Border>
 
-                                    <Border CornerRadius="18" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                                    <Border CornerRadius="18" Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" Padding="12">
                                         <StackPanel Spacing="6">
                                             <TextBlock Text="{x:Bind MoneySavedDisplay, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Foreground="#FF43A047" />
-                                            <TextBlock Text="{x:Bind DaysSinceQuitDisplay, Mode=OneWay}" FontSize="12" Opacity="0.65" />
+                                            <TextBlock Text="{x:Bind DaysSinceQuitDisplay, Mode=OneWay}" FontSize="12" Foreground="#AAFFFFFF" />
                                         </StackPanel>
                                     </Border>
 
@@ -678,7 +689,7 @@
                             <ColumnDefinition Width="1.25*" />
                         </Grid.ColumnDefinitions>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
+                        <Border Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                             <StackPanel Spacing="14">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -686,8 +697,8 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <FontIcon Glyph="&#xeb6b;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
-                                        <TextBlock Text="Last 7 Days" FontSize="18" FontWeight="SemiBold" />
+                                        <FontIcon Glyph="&#xeb6b;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#AAFFFFFF" />
+                                        <TextBlock Text="Last 7 Days" FontSize="18" FontWeight="SemiBold" Foreground="White" />
                                     </StackPanel>
                                 </Grid>
                                 <ItemsControl ItemsSource="{x:Bind HistoryData, Mode=OneWay}">
@@ -700,7 +711,7 @@
                                         <DataTemplate>
                                             <StackPanel VerticalAlignment="Bottom" ToolTipService.ToolTip="{Binding Value}">
                                                 <Border Background="{ThemeResource SystemControlHighlightAccentBrush}" Width="32" Height="{Binding BarHeight}" CornerRadius="6,6,0,0" MinHeight="8" />
-                                                <TextBlock Text="{Binding DateLabel}" FontSize="11" Opacity="0.6" HorizontalAlignment="Center" Margin="0,8,0,0" />
+                                                <TextBlock Text="{Binding DateLabel}" FontSize="11" Foreground="#99FFFFFF" HorizontalAlignment="Center" Margin="0,8,0,0" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -708,11 +719,11 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
+                        <Border Grid.Column="1" Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                             <StackPanel Spacing="14">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <FontIcon Glyph="&#xea59;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
-                                    <TextBlock Text="Consistency (Last 4 Months)" FontSize="18" FontWeight="SemiBold" />
+                                    <FontIcon Glyph="&#xea59;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#AAFFFFFF" />
+                                    <TextBlock Text="Consistency (Last 4 Months)" FontSize="18" FontWeight="SemiBold" Foreground="White" />
                                 </StackPanel>
                                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                                     <ItemsControl ItemsSource="{x:Bind HeatmapData, Mode=OneWay}">
@@ -733,11 +744,11 @@
                     </Grid>
 
                     <StackPanel x:Name="InsightsNarrowLayout" Spacing="16">
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
+                        <Border Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                             <StackPanel Spacing="14">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <FontIcon Glyph="&#xeb6b;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
-                                    <TextBlock Text="Last 7 Days" FontSize="18" FontWeight="SemiBold" />
+                                    <FontIcon Glyph="&#xeb6b;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#AAFFFFFF" />
+                                    <TextBlock Text="Last 7 Days" FontSize="18" FontWeight="SemiBold" Foreground="White" />
                                 </StackPanel>
                                 <ItemsControl ItemsSource="{x:Bind HistoryData, Mode=OneWay}">
                                     <ItemsControl.ItemsPanel>
@@ -749,7 +760,7 @@
                                         <DataTemplate>
                                             <StackPanel VerticalAlignment="Bottom" ToolTipService.ToolTip="{Binding Value}">
                                                 <Border Background="{ThemeResource SystemControlHighlightAccentBrush}" Width="28" Height="{Binding BarHeight}" CornerRadius="6,6,0,0" MinHeight="8" />
-                                                <TextBlock Text="{Binding DateLabel}" FontSize="11" Opacity="0.6" HorizontalAlignment="Center" Margin="0,8,0,0" />
+                                                <TextBlock Text="{Binding DateLabel}" FontSize="11" Foreground="#99FFFFFF" HorizontalAlignment="Center" Margin="0,8,0,0" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -757,11 +768,11 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
+                        <Border Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                             <StackPanel Spacing="14">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <FontIcon Glyph="&#xea59;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
-                                    <TextBlock Text="Consistency (Last 4 Months)" FontSize="18" FontWeight="SemiBold" />
+                                    <FontIcon Glyph="&#xea59;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#AAFFFFFF" />
+                                    <TextBlock Text="Consistency (Last 4 Months)" FontSize="18" FontWeight="SemiBold" Foreground="White" />
                                 </StackPanel>
                                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                                     <ItemsControl ItemsSource="{x:Bind HeatmapData, Mode=OneWay}">
@@ -782,14 +793,14 @@
                     </StackPanel>
                 </Grid>
 
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
+                <Border Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                     <Expander HorizontalAlignment="Stretch" ExpandDirection="Down" IsExpanded="True">
                         <Expander.Header>
                             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                <FontIcon Glyph="&#xeced;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.7" />
-                                <TextBlock Text="{x:Bind ViewDateText, Mode=OneWay}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" CornerRadius="10" Padding="8,2">
-                                    <TextBlock Text="{x:Bind LogEntries.Count, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
+                                <FontIcon Glyph="&#xeced;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#AAFFFFFF" />
+                                <TextBlock Text="{x:Bind ViewDateText, Mode=OneWay}" FontSize="15" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" />
+                                <Border Background="{StaticResource GlassSubPanelBrush}" CornerRadius="10" Padding="8,2">
+                                    <TextBlock Text="{x:Bind LogEntries.Count, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" Foreground="#CCFFFFFF" />
                                 </Border>
                             </StackPanel>
                         </Expander.Header>
@@ -815,8 +826,8 @@
                             </ListView.ItemContainerStyle>
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="local:LogEntryViewModel">
-                                    <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    <Border Background="{StaticResource GlassSubPanelBrush}"
+                                            BorderBrush="{StaticResource GlassPanelBorderBrush}"
                                             BorderThickness="1"
                                             CornerRadius="14"
                                             Padding="10,8"
@@ -845,18 +856,19 @@
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                                                 <TextBlock Text="{Binding Label}"
                                                            FontSize="14" FontWeight="SemiBold"
+                                                           Foreground="White"
                                                            TextTrimming="CharacterEllipsis" />
                                                 <TextBlock Text="{Binding Amount}"
-                                                           FontSize="12" Opacity="0.65" />
+                                                           FontSize="12" Foreground="#AAFFFFFF" />
                                             </StackPanel>
 
                                             <!-- Time badge -->
                                             <Border Grid.Column="2"
-                                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                    Background="{StaticResource GlassPanelBrush}"
                                                     CornerRadius="8" Padding="8,3"
                                                     VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding TimeText}"
-                                                           FontSize="12" Opacity="0.75"
+                                                           FontSize="12" Foreground="#BBFFFFFF"
                                                            FontFamily="Consolas" />
                                             </Border>
 
@@ -883,11 +895,11 @@
                     </Expander>
                 </Border>
 
-                <Border x:Name="SettingsGrid" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
+                <Border x:Name="SettingsGrid" Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="24" Padding="20">
                     <StackPanel Spacing="16">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon Glyph="&#xeb20;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Opacity="0.75" />
-                            <TextBlock Text="Configuration" FontSize="18" FontWeight="SemiBold" />
+                            <FontIcon Glyph="&#xeb20;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#AAFFFFFF" />
+                            <TextBlock Text="Configuration" FontSize="18" FontWeight="SemiBold" Foreground="White" />
                         </StackPanel>
                         <Grid ColumnSpacing="16" RowSpacing="12">
                             <Grid.ColumnDefinitions>
@@ -900,11 +912,11 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Baseline Daily:" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Baseline Daily:" VerticalAlignment="Center" Foreground="#CCFFFFFF" />
                             <NumberBox Grid.Row="0" Grid.Column="1" Value="{Binding SmokesBaseline, Mode=TwoWay}" PlaceholderText="e.g. 20" MaxWidth="170" HorizontalAlignment="Left" SpinButtonPlacementMode="Compact" Minimum="0" />
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Pack Size:" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Pack Size:" VerticalAlignment="Center" Foreground="#CCFFFFFF" />
                             <NumberBox Grid.Row="1" Grid.Column="1" Value="{Binding SmokesPackSize, Mode=TwoWay}" PlaceholderText="e.g. 20" MaxWidth="170" HorizontalAlignment="Left" SpinButtonPlacementMode="Compact" Minimum="1" />
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Pack Cost:" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Pack Cost:" VerticalAlignment="Center" Foreground="#CCFFFFFF" />
                             <NumberBox Grid.Row="2" Grid.Column="1" Value="{Binding SmokesPackCost, Mode=TwoWay}" PlaceholderText="e.g. 10.50" MaxWidth="170" HorizontalAlignment="Left" SpinButtonPlacementMode="Compact" Minimum="0" />
                             <Button Grid.Row="3" Grid.ColumnSpan="2" Content="Save Settings" HorizontalAlignment="Right" Click="SaveSettings_Click" Style="{ThemeResource AccentButtonStyle}" CornerRadius="16" Padding="18,10">
                                 <Button.ContentTemplate>

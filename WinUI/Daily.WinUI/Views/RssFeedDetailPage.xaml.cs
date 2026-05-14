@@ -180,6 +180,8 @@ public sealed partial class RssFeedDetailPage : Page
         {
             string html = GenerateReaderHtml(fullArticle);
             await ReaderWebView.EnsureCoreWebView2Async();
+            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            SetupWebViewVirtualHost();
             ReaderWebView.NavigateToString(html);
             ReaderLoadingPanel.Visibility = Visibility.Collapsed;
             ReaderWebView.Visibility = Visibility.Visible;
@@ -197,7 +199,9 @@ public sealed partial class RssFeedDetailPage : Page
             ReaderWebView.Opacity = 0.0;
             
             await ReaderWebView.EnsureCoreWebView2Async();
-            
+            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            SetupWebViewVirtualHost();
+
             // Safety: wait for the engine to fully attach
             if (ReaderWebView.CoreWebView2 == null) 
             {
@@ -325,19 +329,19 @@ public sealed partial class RssFeedDetailPage : Page
                 else
                 {
                     // SmartReader couldn't parse it — show the raw page instead
-                    ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: #1a1a1a; }} a {{ color: #4DA6FF; }}</style></head><body><h2>Could not extract article text</h2><p>The content may be behind a paywall. <a href='{item.Link}'>Open in browser</a></p></body></html>");
+                    ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: transparent; }} a {{ color: #4DA6FF; }}</style></head><body><h2>Could not extract article text</h2><p>The content may be behind a paywall. <a href='{item.Link}'>Open in browser</a></p></body></html>");
                 }
             }
             else
             {
-                ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: #1a1a1a; }} a {{ color: #4DA6FF; }}</style></head><body><h2>Timed out loading article</h2><p>The page took too long to render. <a href='{item.Link}'>Open in browser</a></p></body></html>");
+                ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: transparent; }} a {{ color: #4DA6FF; }}</style></head><body><h2>Timed out loading article</h2><p>The page took too long to render. <a href='{item.Link}'>Open in browser</a></p></body></html>");
             }
         }
         catch (Exception fallbackEx)
         {
             System.Diagnostics.Debug.WriteLine($"WebView2 fallback failed: {fallbackEx.Message}");
             await ReaderWebView.EnsureCoreWebView2Async();
-            ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: #1a1a1a; }}</style></head><body><h2>Error loading article</h2><p>{fallbackEx.Message}</p></body></html>");
+            ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: transparent; }}</style></head><body><h2>Error loading article</h2><p>{fallbackEx.Message}</p></body></html>");
         }
         finally
         {
@@ -360,11 +364,21 @@ public sealed partial class RssFeedDetailPage : Page
         }
     }
 
+    private bool _virtualHostMapped = false;
+    private void SetupWebViewVirtualHost()
+    {
+        if (_virtualHostMapped || ReaderWebView.CoreWebView2 == null) return;
+        string assetsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets");
+        ReaderWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            "app-assets.local", assetsPath,
+            Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
+        _virtualHostMapped = true;
+    }
+
     private string GenerateReaderHtml(RssItem article)
     {
         bool isDark = App.Current.RequestedTheme == ApplicationTheme.Dark;
-        
-        string bgColor = isDark ? "#1C1C1C" : "#FAF9F6"; // Match ApplicationPageBackgroundThemeBrush closely
+
         string textColor = isDark ? "#E0E0E0" : "#1A1A1A";
         string linkColor = isDark ? "#66B2FF" : "#0066CC";
         string metaColor = isDark ? "#A0A0A0" : "#666666";
@@ -385,9 +399,13 @@ public sealed partial class RssFeedDetailPage : Page
     <meta charset='utf-8'/>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'/>
     <style>
+        html {{
+            background-color: #0B1121;
+        }}
         body {{
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
-            background-color: {bgColor};
+            background-color: #0B1121;
+            position: relative;
             color: {textColor};
             line-height: 1.6;
             margin: 0;
@@ -396,6 +414,16 @@ public sealed partial class RssFeedDetailPage : Page
             margin-left: auto;
             margin-right: auto;
             font-size: 18px;
+        }}
+        body::before {{
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url('http://app-assets.local/appbg.png');
+            background-size: cover;
+            background-repeat: no-repeat;
+            opacity: 0.10;
+            z-index: -1;
         }}
         h1 {{
             font-size: 32px;

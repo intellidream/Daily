@@ -83,11 +83,8 @@
     </Page.Resources>
 
     <Grid Background="{StaticResource DashboardBackgroundBrush}">
-        <!-- Top Artwork -->
-        <Grid VerticalAlignment="Top" Height="350">
-            <Image Source="ms-appx:///Assets/apptopbar.png" Stretch="UniformToFill" Opacity="0.4" />
-            <Rectangle Fill="{StaticResource TopBarOverlayBrush}" />
-        </Grid>
+        <!-- Full-page background artwork -->
+        <Image Source="ms-appx:///Assets/appbg.png" Stretch="UniformToFill" Opacity="0.10" IsHitTestVisible="False" />
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="32" Spacing="24">
