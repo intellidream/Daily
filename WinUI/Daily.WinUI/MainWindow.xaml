@@ -9,7 +9,7 @@
     Title="Daily.WinUI"
     mc:Ignorable="d">
     <Window.SystemBackdrop>
-        <MicaBackdrop Kind="BaseAlt" />
+        <MicaBackdrop Kind="Base" />
     </Window.SystemBackdrop>
 
     <Grid Background="Transparent">

@@ -140,8 +140,32 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     public double SmokesBaseline
     {
         get => _smokesBaseline;
-        set { _smokesBaseline = value; OnPropertyChanged(); }
+        set { _smokesBaseline = value; OnPropertyChanged(); OnPropertyChanged(nameof(SmokesAxisInterval)); }
     }
+
+    /// <summary>
+    /// Ruler interval: 1 when baseline ≤ 10, 2 when ≤ 20, 5 when ≤ 50, else 10.
+    /// </summary>
+    public double SmokesAxisInterval => _smokesBaseline <= 10 ? 1
+                                      : _smokesBaseline <= 20 ? 2
+                                      : _smokesBaseline <= 50 ? 5
+                                      : 10;
+
+    // Smokes pointer state
+    private bool   _isSyncingSmokesPointer;
+    private double _smokesPointerPrevValue = -1;
+
+    private string _smokesCountText = "0";
+    public string SmokesCountText
+    {
+        get => _smokesCountText;
+        private set { if (_smokesCountText == value) return; _smokesCountText = value; OnPropertyChanged(); }
+    }
+
+    // Last smokes log info (for the split handle bottom half)
+    private double _lastSmokeLogValue  = 1;
+    private string _lastSmokeTypeName  = "Cigarette";
+
     
     private double _smokesPackCost;
     public double SmokesPackCost
@@ -315,6 +339,15 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
             // Update lungs fill: fraction = cigarettes smoked / baseline (capped at 1)
             double lungsFraction = SmokesBaseline > 0 ? Math.Clamp(CurrentProgress / SmokesBaseline, 0.0, 1.0) : 0.0;
             SmokesLungsControl.FillFraction = lungsFraction;
+
+            // Sync smokes pointer to real DB value
+            _isSyncingSmokesPointer = true;
+            smokesShapePointer.Value = CurrentProgress;
+            _smokesPointerPrevValue  = CurrentProgress;
+            SmokesCountText = $"{(int)CurrentProgress}";
+            _isSyncingSmokesPointer = false;
+
+            UpdateSmokesLastLogInfo(TodaysLogs);
         }
 
         UpdateHeroGauge(breakdown);
@@ -721,6 +754,91 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         }
     }
 
+    // ── Smokes pointer handlers ──────────────────────────────────────────────────
+
+    private void SmokesShapePointer_ValueChanged(object sender, Syncfusion.UI.Xaml.Gauges.ValueChangedEventArgs e)
+    {
+        if (_isReconciling || _isSyncingSmokesPointer) return;
+        if (sender is not Syncfusion.UI.Xaml.Gauges.LinearShapePointer ptr) return;
+
+        double snapped = SnapSmokesPointerValue(ptr.Value);
+        snapped = Math.Clamp(snapped, 0, SmokesBaseline);
+        ptr.Value = snapped;
+        SmokesCountText = $"{(int)snapped}";
+    }
+
+    private async void SmokesShapePointer_ValueChangeCompleted(object sender, Syncfusion.UI.Xaml.Gauges.ValueChangedEventArgs e)
+    {
+        if (_isReconciling || _isSyncingSmokesPointer) return;
+        if (sender is not Syncfusion.UI.Xaml.Gauges.LinearShapePointer ptr) return;
+
+        double snapped = SnapSmokesPointerValue(ptr.Value);
+        snapped = Math.Clamp(snapped, 0, SmokesBaseline);
+        ptr.Value = snapped;
+        _smokesPointerPrevValue = snapped;
+        await ReconcileSmokesToTargetAsync(snapped);
+    }
+
+    /// <summary>
+    /// Up → next integer step (+1); Down → prev value minus last-log amount.
+    /// </summary>
+    private double SnapSmokesPointerValue(double rawValue)
+    {
+        double prev = _smokesPointerPrevValue >= 0 ? _smokesPointerPrevValue : CurrentProgress;
+
+        if (rawValue >= prev)
+            return Math.Round(rawValue);   // snap to nearest whole number (up)
+        else
+            return Math.Max(0, prev - _lastSmokeLogValue);  // remove last-log amount
+    }
+
+    private async Task ReconcileSmokesToTargetAsync(double targetCount)
+    {
+        _isReconciling = true;
+        try
+        {
+            var date = ViewDate.GetValueOrDefault().Date;
+            double current = await _habitsService.GetDailyProgressAsync("smokes", date);
+            double diff = targetCount - current;
+
+            if (Math.Abs(diff) < 0.5)
+            {
+                await LoadDataAsync();
+                return;
+            }
+
+            if (diff > 0)
+            {
+                // The handle top always reads "1 Cig" — always log a Cigarette on upward drag.
+                int toAdd = (int)Math.Round(diff);
+                const string meta = "{\"type\":\"Cigarette\"}";
+                for (int i = 0; i < toAdd; i++)
+                    await _habitsService.AddLogAsync("smokes", 1, "unit",
+                        date.Add(DateTime.Now.TimeOfDay), meta);
+            }
+            else
+            {
+                // Delete newest logs until target is reached
+                double toRemove = -diff;
+                var logs   = await _habitsService.GetLogsAsync("smokes", date);
+                var sorted = logs.OrderByDescending(l => l.LoggedAt).ToList();
+
+                foreach (var log in sorted)
+                {
+                    if (toRemove < 0.5) break;
+                    await _habitsService.DeleteLogAsync(log.Id);
+                    toRemove -= log.Value;
+                }
+            }
+
+            await LoadDataAsync();
+        }
+        finally
+        {
+            _isReconciling = false;
+        }
+    }
+
     private void UpdateLastLogInfo(List<HabitLog> logs)
     {
         var last = logs.OrderByDescending(l => l.LoggedAt).FirstOrDefault();
@@ -787,6 +905,78 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                 return;
             }
             UpdateLastLogLabelInTree(child, mlText);
+        }
+    }
+
+    private void UpdateSmokesLastLogInfo(List<HabitLog> logs)
+    {
+        var last = logs.OrderByDescending(l => l.LoggedAt).FirstOrDefault();
+        if (last == null)
+        {
+            _lastSmokeLogValue = 1;
+            _lastSmokeTypeName = "Cigarette";
+            ApplySmokesLastLogBrush(GetColorForDrinkOrSmoke("cigarette"), "Cig");
+            return;
+        }
+
+        _lastSmokeLogValue = last.Value > 0 ? last.Value : 1;
+
+        // Parse type from metadata  { "type": "Cigarette" }
+        _lastSmokeTypeName = "Cigarette";
+        if (!string.IsNullOrWhiteSpace(last.Metadata))
+        {
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(last.Metadata);
+                if (doc.RootElement.TryGetProperty("type", out var t))
+                    _lastSmokeTypeName = t.GetString() ?? "Cigarette";
+            }
+            catch { /* keep default */ }
+        }
+
+        // Map type name to colour key used in GetColorForDrinkOrSmoke
+        string colorKey = _lastSmokeTypeName.ToLowerInvariant() switch
+        {
+            var s when s.Contains("vape") || s.Contains("heated") => "vape",
+            var s when s.Contains("roll")                         => "rolled",
+            var s when s.Contains("cigarillo")                    => "cigarillo",
+            _                                                      => "cigarette"
+        };
+
+        // Short label for the bottom half of the handle
+        string shortLabel = _lastSmokeTypeName.Length > 8
+            ? _lastSmokeTypeName[..7] + "…"
+            : _lastSmokeTypeName;
+
+        ApplySmokesLastLogBrush(GetColorForDrinkOrSmoke(colorKey), shortLabel);
+    }
+
+    private void ApplySmokesLastLogBrush(string colorHex, string label)
+    {
+        var color = GetColorFromHex(colorHex);
+
+        if (Resources.TryGetValue("SmokesLastLogColorBrush", out var obj)
+            && obj is Microsoft.UI.Xaml.Media.SolidColorBrush brush)
+        {
+            brush.Color = color;
+        }
+
+        UpdateSmokesLabelInTree(smokesShapePointer, label);
+    }
+
+    private static void UpdateSmokesLabelInTree(DependencyObject root, string label)
+    {
+        if (root == null) return;
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is TextBlock tb && tb.Name == "SmokesLastLogLabel")
+            {
+                tb.Text = label;
+                return;
+            }
+            UpdateSmokesLabelInTree(child, label);
         }
     }
 
