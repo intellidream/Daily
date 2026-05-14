@@ -104,7 +104,94 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     public List<HabitLog> TodaysLogs
     {
         get => _todaysLogs;
-        set { _todaysLogs = value; OnPropertyChanged(); }
+        set
+        {
+            _todaysLogs = value;
+            OnPropertyChanged();
+            BuildLogEntries();
+        }
+    }
+
+    private List<LogEntryViewModel> _logEntries = new();
+    public List<LogEntryViewModel> LogEntries
+    {
+        get => _logEntries;
+        set { _logEntries = value; OnPropertyChanged(); }
+    }
+
+    private void BuildLogEntries()
+    {
+        var result = new List<LogEntryViewModel>();
+        foreach (var log in _todaysLogs.OrderByDescending(l => l.LoggedAt))
+        {
+            string drinkOrType = "water";
+            if (!string.IsNullOrWhiteSpace(log.Metadata))
+            {
+                try
+                {
+                    var doc = System.Text.Json.JsonDocument.Parse(log.Metadata);
+                    if (doc.RootElement.TryGetProperty("drink", out var d))
+                        drinkOrType = d.GetString()?.ToLowerInvariant() ?? "water";
+                    else if (doc.RootElement.TryGetProperty("type", out var t))
+                        drinkOrType = t.GetString()?.ToLowerInvariant() ?? "cigarette";
+                }
+                catch { }
+            }
+            else if (_currentType == "smokes")
+            {
+                drinkOrType = "cigarette";
+            }
+
+            string colorHex = GetColorForDrinkOrSmoke(drinkOrType.Contains("water") ? "water"
+                            : drinkOrType.Contains("coffee") ? "coffee"
+                            : drinkOrType.Contains("tea") ? "tea"
+                            : drinkOrType.Contains("juice") ? "juice"
+                            : drinkOrType.Contains("beer") ? "beer"
+                            : drinkOrType.Contains("wine") ? "wine"
+                            : drinkOrType.Contains("cigarillo") ? "cigarillo"
+                            : drinkOrType.Contains("roll") ? "rolled"
+                            : drinkOrType.Contains("vape") || drinkOrType.Contains("heat") ? "vape"
+                            : drinkOrType.Contains("cig") ? "cigarette"
+                            : _currentType == "smokes" ? "cigarette" : "water");
+
+            // Icon glyphs (Tabler Icons)
+            string icon = _currentType == "smokes"
+                ? drinkOrType switch
+                {
+                    var s when s.Contains("vape") || s.Contains("heat") => "\ue941",  // device-desktop (vape/device)
+                    var s when s.Contains("roll")                        => "\uea77",  // pencil (roll-up)
+                    var s when s.Contains("cigarillo")                   => "\ueb7e",  // minus-vertical
+                    _                                                     => "\uecb2"   // smoking icon (cigarette)
+                }
+                : drinkOrType switch
+                {
+                    var s when s.Contains("coffee") => "\ue96e",  // coffee
+                    var s when s.Contains("tea")    => "\uecfe",  // cup
+                    var s when s.Contains("juice")  => "\ued09",  // lemon
+                    var s when s.Contains("beer")   => "\uecf5",  // beer
+                    var s when s.Contains("wine")   => "\uecf6",  // bottle
+                    _                               => "\ueb7b"   // droplet
+                };
+
+            string label = _currentType == "smokes"
+                ? System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType)
+                : System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType);
+
+            string amount = _currentType == "smokes"
+                ? $"{(int)log.Value} unit"
+                : $"{(int)log.Value} ml";
+
+            result.Add(new LogEntryViewModel
+            {
+                Log       = log,
+                Icon      = icon,
+                ColorHex  = colorHex,
+                Label     = label,
+                Amount    = amount,
+                TimeText  = log.LoggedAt.ToLocalTime().ToString("HH:mm")
+            });
+        }
+        LogEntries = result;
     }
 
     private Microsoft.UI.Xaml.Media.Brush _waterFillBrush =
@@ -631,9 +718,10 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     private async void DeleteLog_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.DataContext is HabitLog log)
+        if (sender is Button btn && btn.DataContext is LogEntryViewModel vm)
         {
-            await _habitsService.DeleteLogAsync(log.Id);
+            await _habitsService.DeleteLogAsync(vm.Log.Id);
+            await LoadDataAsync();
         }
     }
 
@@ -1060,5 +1148,35 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+}
+
+/// <summary>Display model for a single habit log row.</summary>
+public sealed class LogEntryViewModel
+{
+    public HabitLog Log      { get; set; } = null!;
+    public string   Icon     { get; set; } = "\ueb7b";
+    public string   ColorHex { get; set; } = "#FF808080";
+    public string   Label    { get; set; } = "";
+    public string   Amount   { get; set; } = "";
+    public string   TimeText { get; set; } = "";
+
+    /// <summary>Parsed accent color as a WinUI brush for direct binding.</summary>
+    public Microsoft.UI.Xaml.Media.SolidColorBrush AccentBrush =>
+        new(Windows.UI.Color.FromArgb(
+            Convert.ToByte(ColorHex.Length >= 9 ? ColorHex.Substring(1, 2) : "FF", 16),
+            Convert.ToByte(ColorHex.Length >= 9 ? ColorHex.Substring(3, 2) : ColorHex.Substring(1, 2), 16),
+            Convert.ToByte(ColorHex.Length >= 9 ? ColorHex.Substring(5, 2) : ColorHex.Substring(3, 2), 16),
+            Convert.ToByte(ColorHex.Length >= 9 ? ColorHex.Substring(7, 2) : ColorHex.Substring(5, 2), 16)));
+
+    /// <summary>Faded version (30% alpha) for the left pill background.</summary>
+    public Microsoft.UI.Xaml.Media.SolidColorBrush PillBrush
+    {
+        get
+        {
+            var c = AccentBrush.Color;
+            return new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                Windows.UI.Color.FromArgb(60, c.R, c.G, c.B));
+        }
     }
 }
