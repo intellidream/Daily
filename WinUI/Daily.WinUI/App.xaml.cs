@@ -7,6 +7,7 @@ namespace Daily_WinUI;
 public partial class App : Application
 {
     private Window? _window;
+    public MainWindow? MainWindow => _window as MainWindow;
     public static Supabase.Client SupabaseClient { get; private set; } = null!;
     public IServiceProvider Services { get; private set; } = null!;
     public static new App Current => (App)Application.Current;

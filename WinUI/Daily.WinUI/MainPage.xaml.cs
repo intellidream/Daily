@@ -44,26 +44,24 @@ public sealed partial class MainPage : Page
 
     private void UpdateUserUI()
     {
-        if (_authService.IsAuthenticated)
+        var email       = _authService.CurrentUserEmail;
+        var displayName = email?.Split('@').FirstOrDefault() ?? "U";
+        var avatarUrl   = _authService.CurrentUserAvatarUrl;
+        var isAuth      = _authService.IsAuthenticated;
+
+        // Push state to the OS title bar controls hosted in MainWindow
+        if (XamlRoot?.Content is FrameworkElement root &&
+            root.XamlRoot != null &&
+            App.Current.MainWindow is MainWindow mw)
         {
-            UserEmailText.Text = _authService.CurrentUserEmail ?? "Signed in";
-            UserAvatar.DisplayName = _authService.CurrentUserEmail?.Split('@').FirstOrDefault() ?? "U";
-            if (!string.IsNullOrEmpty(_authService.CurrentUserAvatarUrl))
-            {
-                UserAvatar.ProfilePicture = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(
-                    new System.Uri(_authService.CurrentUserAvatarUrl));
-            }
-            SignOutItem.Text = "Sign Out";
-        }
-        else
-        {
-            UserEmailText.Text = "Not signed in";
-            UserAvatar.DisplayName = "?";
-            SignOutItem.Text = "Sign In";
+            mw.UpdateTitleBarUser(email ?? string.Empty, displayName, avatarUrl, isAuth);
         }
     }
 
     private void ThemeToggleButton_Click(object sender, RoutedEventArgs e)
+        => ApplyThemeToggle();
+
+    public void ApplyThemeToggle()
     {
         var root = this.XamlRoot?.Content as FrameworkElement;
         if (root == null) return;
@@ -78,29 +76,19 @@ public sealed partial class MainPage : Page
         foreach (var win in _openWindows.Values)
             win.ApplyTheme(newTheme);
 
-        ThemeToggleIcon.Glyph = goingLight ? "\uE706" : "\uE708"; // sun : moon
-        ThemeToggleText.Text  = goingLight ? "Dark"  : "Light";
+        // Sync title bar theme button icon/text
+        App.Current.MainWindow?.UpdateThemeIcon(isDark: !goingLight);
     }
 
     private async void SignOut_Click(object sender, RoutedEventArgs e)
+        => await HandleSignOutAsync();
+
+    public async Task HandleSignOutAsync()
     {
         if (_authService.IsAuthenticated)
-        {
             await _authService.SignOutAsync();
-            // Navigate back to login
-            if (Frame != null)
-            {
-                Frame.Navigate(typeof(LoginPage));
-            }
-        }
-        else
-        {
-            // Navigate to login
-            if (Frame != null)
-            {
-                Frame.Navigate(typeof(LoginPage));
-            }
-        }
+
+        Frame?.Navigate(typeof(LoginPage));
     }
 
     private void WidgetGridView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)

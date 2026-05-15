@@ -91,13 +91,8 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Fixed TopBar Row: title + controls, always visible over the image -->
+            <!-- Fixed TopBar Row: logo/refresh -->
             <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
                 <Button Click="RefreshButton_Click"
                         Background="{ThemeResource AppGlassColorBrush}"
                         BorderThickness="0" CornerRadius="20"
@@ -114,37 +109,6 @@
                         </Image>
                         <TextBlock Text="DayOne" FontSize="13" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
-                </Button>
-
-                <!-- Theme Toggle -->
-                <Button x:Name="ThemeToggleButton" Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0"
-                        Background="{ThemeResource AppGlassColorBrush}" BorderThickness="0" CornerRadius="20" Padding="10,6"
-                        Height="40" Click="ThemeToggleButton_Click" ToolTipService.ToolTip="Toggle light/dark theme">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon x:Name="ThemeToggleIcon" Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource AppFgColorBrush}"/>
-                        <TextBlock x:Name="ThemeToggleText" Text="Light" FontSize="13" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-
-                <!-- User Account Button -->
-                <Button x:Name="AccountButton" Grid.Column="2" VerticalAlignment="Center"
-                        Background="{ThemeResource AppGlassColorBrush}" BorderThickness="0" CornerRadius="20" Padding="12,6"
-                        Height="40">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <PersonPicture x:Name="UserAvatar" Width="28" Height="28" DisplayName="?" />
-                        <TextBlock x:Name="UserEmailText" Text="Not signed in" FontSize="13" 
-                                   Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" MaxWidth="150"
-                                   TextTrimming="CharacterEllipsis"/>
-                    </StackPanel>
-                    <Button.Flyout>
-                        <MenuFlyout>
-                            <MenuFlyoutItem x:Name="SignOutItem" Text="Sign Out" Click="SignOut_Click">
-                                <MenuFlyoutItem.Icon>
-                                    <FontIcon Glyph="&#xF3B1;" FontFamily="Segoe Fluent Icons"/>
-                                </MenuFlyoutItem.Icon>
-                            </MenuFlyoutItem>
-                        </MenuFlyout>
-                    </Button.Flyout>
                 </Button>
             </Grid>
 

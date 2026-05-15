@@ -18,10 +18,63 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TitleBar x:Name="AppTitleBar" Title="Daily.WinUI">
+        <TitleBar x:Name="AppTitleBar" Title="DayOne">
             <TitleBar.IconSource>
                 <BitmapIconSource UriSource="Assets/Square44x44Logo.targetsize-32_altform-unplated.png" ShowAsMonochrome="False" />
             </TitleBar.IconSource>
+
+            <!-- Left of center: date shown after the app title -->
+            <TitleBar.LeftHeader>
+                <TextBlock x:Name="TitleBarDateText"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Opacity="0.6"
+                           Margin="12,0,0,0"
+                           IsHitTestVisible="False"/>
+            </TitleBar.LeftHeader>
+
+            <!-- Far right before min/max/close: theme toggle + user profile -->
+            <TitleBar.RightHeader>
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+
+                    <!-- Theme toggle -->
+                    <Button x:Name="TitleBarThemeButton"
+                            Background="Transparent" BorderThickness="0"
+                            CornerRadius="20" Padding="10,6"
+                            Height="36" VerticalAlignment="Center"
+                            Click="TitleBarTheme_Click"
+                            ToolTipService.ToolTip="Toggle light/dark theme">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="TitleBarThemeIcon" Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="14"/>
+                            <TextBlock x:Name="TitleBarThemeText" Text="Light" FontSize="12" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- User account -->
+                    <Button x:Name="TitleBarAccountButton"
+                            Background="Transparent" BorderThickness="0"
+                            CornerRadius="20" Padding="8,4"
+                            Height="36" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <PersonPicture x:Name="TitleBarUserAvatar" Width="26" Height="26" DisplayName="?" />
+                            <TextBlock x:Name="TitleBarUserEmailText"
+                                       Text="Not signed in" FontSize="12"
+                                       VerticalAlignment="Center" MaxWidth="140"
+                                       TextTrimming="CharacterEllipsis" Opacity="0.8"/>
+                        </StackPanel>
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem x:Name="TitleBarSignOutItem" Text="Sign Out" Click="TitleBarSignOut_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xF3B1;" FontFamily="Segoe Fluent Icons"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+
+                </StackPanel>
+            </TitleBar.RightHeader>
         </TitleBar>
 
         <!--
