@@ -42,27 +42,13 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (AppTitleBar.RightHeader is StackPanel outer)
-            {
-                // Account button is the second child of the outer StackPanel
-                var accountBtn = outer.Children.Count > 1 ? outer.Children[1] as Button : null;
-                if (accountBtn?.Content is StackPanel sp)
-                {
-                    if (sp.Children[0] is PersonPicture avatar)
-                    {
-                        avatar.DisplayName = isAuthenticated ? (displayName ?? "U") : "?";
-                        avatar.ProfilePicture = null;
-                        if (isAuthenticated && !string.IsNullOrEmpty(avatarUrl))
-                            avatar.ProfilePicture = new BitmapImage(new System.Uri(avatarUrl));
-                    }
-                    if (sp.Children[1] is TextBlock emailText)
-                        emailText.Text = isAuthenticated ? (email ?? "Signed in") : "Not signed in";
-                }
-                if (accountBtn?.Flyout is MenuFlyout flyout &&
-                    flyout.Items.Count > 0 &&
-                    flyout.Items[0] is MenuFlyoutItem item)
-                    item.Text = isAuthenticated ? "Sign Out" : "Sign In";
-            }
+            TitleBarUserAvatar.DisplayName = isAuthenticated ? (displayName ?? "U") : "?";
+            TitleBarUserAvatar.ProfilePicture = null;
+            if (isAuthenticated && !string.IsNullOrEmpty(avatarUrl))
+                TitleBarUserAvatar.ProfilePicture = new BitmapImage(new System.Uri(avatarUrl));
+
+            TitleBarUserEmailText.Text = isAuthenticated ? (email ?? "Signed in") : "Not signed in";
+            TitleBarSignOutItem.Text = isAuthenticated ? "Sign Out" : "Sign In";
         });
     }
 
@@ -71,16 +57,8 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (AppTitleBar.RightHeader is StackPanel outer &&
-                outer.Children.Count > 0 &&
-                outer.Children[0] is Button themeBtn &&
-                themeBtn.Content is StackPanel sp)
-            {
-                if (sp.Children[0] is FontIcon icon)
-                    icon.Glyph = isDark ? "\uE708" : "\uE706"; // moon : sun
-                if (sp.Children[1] is TextBlock text)
-                    text.Text = isDark ? "Light" : "Dark";
-            }
+            TitleBarThemeIcon.Glyph = isDark ? "\uE708" : "\uE706"; // moon : sun
+            TitleBarThemeText.Text = isDark ? "Light" : "Dark";
         });
     }
 
@@ -96,8 +74,7 @@ public sealed partial class MainWindow : Window
 
     private void UpdateDateText()
     {
-        if (AppTitleBar.Content is TextBlock tb)
-            tb.Text = DateTime.Now.ToString("dddd, MMMM d");
+        TitleBarDateText.Text = DateTime.Now.ToString("dddd, MMMM d");
     }
 
     // ── Theme toggle handler ──────────────────────────────────────────────────
@@ -174,6 +151,18 @@ public sealed partial class MainWindow : Window
         _settings.WindowWidth = size.Width;
         _settings.WindowHeight = size.Height;
         _settings.HasWindowPosition = true;
+    }
+
+    private void AppTitleBar_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (AppWindow.TitleBar != null && RightPaddingColumn != null)
+        {
+            double scaleAdjustment = this.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+            if (scaleAdjustment > 0)
+            {
+                RightPaddingColumn.Width = new GridLength(AppWindow.TitleBar.RightInset / scaleAdjustment);
+            }
+        }
     }
 
     private void MainWindow_Closed(object sender, WindowEventArgs args)
