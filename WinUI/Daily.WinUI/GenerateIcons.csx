@@ -17,22 +17,42 @@ var whiteFg     = Color.FromArgb(255, 255, 255, 255);  // white  (for light-bg v
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// Load SVG, replace fill color, rasterize at given size on given background
+// Load SVG, replace fill color, rasterize with 4x supersampling then downsample
 Bitmap Render(string svgFile, Color iconColor, Color bgColor, int size)
 {
     var svgText = File.ReadAllText(svgFile)
         .Replace("fill:white", $"fill:rgb({iconColor.R},{iconColor.G},{iconColor.B})")
         .Replace("style=\"fill:white", $"style=\"fill:rgb({iconColor.R},{iconColor.G},{iconColor.B})");
 
-    var doc = SvgDocument.FromSvg<SvgDocument>(svgText);
-    doc.Width  = new SvgUnit(SvgUnitType.Pixel, size);
-    doc.Height = new SvgUnit(SvgUnitType.Pixel, size);
+    // Supersample factor — render 4× larger then downsample for crisp edges
+    int scale = size <= 48 ? 8 : 4;
+    int hiSize = size * scale;
 
+    var doc = SvgDocument.FromSvg<SvgDocument>(svgText);
+    doc.Width  = new SvgUnit(SvgUnitType.Pixel, hiSize);
+    doc.Height = new SvgUnit(SvgUnitType.Pixel, hiSize);
+
+    var hiBmp = new Bitmap(hiSize, hiSize, PixelFormat.Format32bppArgb);
+    using (var gHi = Graphics.FromImage(hiBmp))
+    {
+        gHi.Clear(bgColor);
+        gHi.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        gHi.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        gHi.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+        doc.Draw(hiBmp);
+    }
+
+    // Downsample to target size with high-quality bicubic
     var bmp = new Bitmap(size, size, PixelFormat.Format32bppArgb);
-    using var g = Graphics.FromImage(bmp);
-    g.Clear(bgColor);
-    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-    doc.Draw(bmp);
+    using (var g = Graphics.FromImage(bmp))
+    {
+        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+        g.DrawImage(hiBmp, 0, 0, size, size);
+    }
+    hiBmp.Dispose();
     return bmp;
 }
 
@@ -80,6 +100,7 @@ Console.WriteLine("Generating app icons...");
 // Manifest PNG assets — dark-theme icon (yellowish on navy) for all sizes
 var specs = new (string file, int size)[]
 {
+    ("Square44x44Logo.png",                              44),   // base (manifest reference)
     ("Square44x44Logo.scale-100.png",                    44),
     ("Square44x44Logo.targetsize-24_altform-unplated.png", 24),
     ("Square44x44Logo.targetsize-48_altform-lightunplated.png", 48),
@@ -117,8 +138,22 @@ foreach (var (file, size) in specs)
     }
 }
 
-// ICO — 16,32,48,256
-var icoSizes = new[] { 16, 32, 48, 256 };
+// Extra targetsize assets Windows uses for title bar / small icons
+var extraSizes = new (string file, int size)[]
+{
+    ("Square44x44Logo.targetsize-16_altform-unplated.png", 16),
+    ("Square44x44Logo.targetsize-20_altform-unplated.png", 20),
+    ("Square44x44Logo.targetsize-32_altform-unplated.png", 32),
+    ("Square44x44Logo.targetsize-256_altform-unplated.png", 256),
+};
+foreach (var (file, size) in extraSizes)
+{
+    using var bmp = Render(svgPath, yellowFg, navyBg, size);
+    Save(bmp, Path.Combine(assetsDir, file));
+}
+
+// ICO — 16,20,24,32,48,256
+var icoSizes = new[] { 16, 20, 24, 32, 48, 256 };
 var icoBmps  = icoSizes.Select(s => Render(svgPath, yellowFg, navyBg, s)).ToList();
 SaveIco(icoBmps, Path.Combine(assetsDir, "AppIcon.ico"));
 foreach (var b in icoBmps) b.Dispose();

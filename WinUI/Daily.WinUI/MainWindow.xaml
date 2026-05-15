@@ -20,7 +20,7 @@
 
         <TitleBar x:Name="AppTitleBar" Title="Daily.WinUI">
             <TitleBar.IconSource>
-                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
+                <BitmapIconSource UriSource="Assets/Square44x44Logo.targetsize-32_altform-unplated.png" ShowAsMonochrome="False" />
             </TitleBar.IconSource>
         </TitleBar>
 
