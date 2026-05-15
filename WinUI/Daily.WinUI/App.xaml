@@ -11,6 +11,7 @@
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
+                    <x:String x:Key="AppIconSource">Assets/appicon.theme-dark.svg</x:String>
                     <Color x:Key="AppBgColor">#FF0B1121</Color>
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FFFFFFFF"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BBFFFFFF"/>
@@ -25,6 +26,7 @@
                     </LinearGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
+                    <x:String x:Key="AppIconSource">Assets/appicon.theme-light.svg</x:String>
                     <Color x:Key="AppBgColor">#FFD4C9B0</Color>
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FF1A1A1A"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BB1A1A1A"/>

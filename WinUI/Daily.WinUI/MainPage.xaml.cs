@@ -30,6 +30,11 @@ public sealed partial class MainPage : Page
         await LoadWidgetsAsync();
     }
 
+    private async void RefreshButton_Click(object sender, RoutedEventArgs e)
+    {
+        await LoadWidgetsAsync();
+    }
+
     private async System.Threading.Tasks.Task LoadWidgetsAsync()
     {
         var widgetList = await _widgetService.GetWidgetsAsync();
