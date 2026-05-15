@@ -180,7 +180,10 @@ public sealed partial class RssFeedDetailPage : Page
         {
             string html = GenerateReaderHtml(fullArticle);
             await ReaderWebView.EnsureCoreWebView2Async();
-            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 11, 17, 33);
+            bool readerIsDark = this.ActualTheme == ElementTheme.Dark;
+            ReaderWebView.DefaultBackgroundColor = readerIsDark
+                ? Windows.UI.Color.FromArgb(255, 6, 13, 24)      // #060D18
+                : Windows.UI.Color.FromArgb(255, 212, 201, 176);  // #D4C9B0
             SetupWebViewVirtualHost();
             ReaderWebView.NavigateToString(html);
             ReaderLoadingPanel.Visibility = Visibility.Collapsed;
@@ -364,7 +367,7 @@ public sealed partial class RssFeedDetailPage : Page
     }
 
     private bool _virtualHostMapped = false;
-    private string? _bgDataUri = null;
+
     private void SetupWebViewVirtualHost()
     {
         if (_virtualHostMapped || ReaderWebView.CoreWebView2 == null) return;
@@ -377,52 +380,16 @@ public sealed partial class RssFeedDetailPage : Page
 
     private string GenerateReaderHtml(RssItem article)
     {
-        bool isDark = App.Current.RequestedTheme == ApplicationTheme.Dark;
+        bool isDark = this.ActualTheme == ElementTheme.Dark;
 
         string textColor = isDark ? "#E0E0E0" : "#1A1A1A";
         string linkColor = isDark ? "#66B2FF" : "#0066CC";
         string metaColor = isDark ? "#A0A0A0" : "#666666";
 
-        // Embed background image as base64 so it works from about:blank origin
-        if (_bgDataUri == null)
-        {
-            try
-            {
-                // Try multiple locations to find appbg.png
-                var candidates = new[]
-                {
-                    System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "appbg.png"),
-                    System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", "Assets", "appbg.png"),
-                };
-                foreach (var candidate in candidates)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[BG] Trying: {candidate} exists={System.IO.File.Exists(candidate)}");
-                    if (System.IO.File.Exists(candidate))
-                    {
-                        byte[] bgBytes = System.IO.File.ReadAllBytes(candidate);
-                        _bgDataUri = "data:image/png;base64," + Convert.ToBase64String(bgBytes);
-                        System.Diagnostics.Debug.WriteLine($"[BG] Loaded {bgBytes.Length} bytes, data uri length={_bgDataUri.Length}");
-                        break;
-                    }
-                }
-                if (_bgDataUri == null) { _bgDataUri = ""; System.Diagnostics.Debug.WriteLine("[BG] appbg.png not found in any candidate path"); }
-            }
-            catch (Exception ex) { _bgDataUri = ""; System.Diagnostics.Debug.WriteLine($"[BG] Exception: {ex.Message}"); }
-        }
-        string bgDataUri = _bgDataUri ?? "";
-
-        string bgBeforeRule = string.IsNullOrEmpty(bgDataUri) ? "" : $@"
-        body::before {{
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image: url('{bgDataUri}');
-            background-size: cover;
-            background-repeat: no-repeat;
-            opacity: 0.10;
-            z-index: -1;
-            pointer-events: none;
-        }}";
+        // Gradient matches App.xaml AppBgBrush — top darker, bottom lighter
+        string bgGradient = isDark
+            ? "linear-gradient(to bottom, #060D18 0%, #0B1A30 35%, #122448 65%, #1A3566 100%)"
+            : "linear-gradient(to bottom, #D4C9B0 0%, #DFD5BC 35%, #EDE8DC 65%, #F8F5EF 100%)";
 
         string featuredImageHtml = string.IsNullOrEmpty(article.ImageUrl) 
             ? "" 
@@ -440,20 +407,22 @@ public sealed partial class RssFeedDetailPage : Page
     <meta charset='utf-8'/>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'/>
     <style>
+        html, body {{
+            min-height: 100%;
+        }}
         html {{
-            background-color: #0B1121;
+            background: {bgGradient};
+            background-attachment: fixed;
         }}
         body {{
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
-            background-color: transparent;
-            position: relative;
+            background: transparent;
             color: {textColor};
             line-height: 1.6;
             margin: 0;
             padding: 0;
             font-size: 18px;
         }}
-        {bgBeforeRule}
         .article-wrap {{
             max-width: 800px;
             margin-left: auto;

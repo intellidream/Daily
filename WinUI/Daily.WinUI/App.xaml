@@ -8,10 +8,47 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <!-- Other merged dictionaries here -->
             </ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <Color x:Key="AppBgColor">#FF0B1121</Color>
+                    <SolidColorBrush x:Key="AppFgColorBrush" Color="#FFFFFFFF"/>
+                    <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BBFFFFFF"/>
+                    <SolidColorBrush x:Key="AppGlassColorBrush" Color="#20FFFFFF"/>
+                    <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#44FFFFFF"/>
+                    <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#16FFFFFF"/>
+                    <LinearGradientBrush x:Key="AppBgBrush" StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#FF060D18" Offset="0"/>
+                        <GradientStop Color="#FF0B1A30" Offset="0.35"/>
+                        <GradientStop Color="#FF122448" Offset="0.65"/>
+                        <GradientStop Color="#FF1A3566" Offset="1"/>
+                    </LinearGradientBrush>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <Color x:Key="AppBgColor">#FFD4C9B0</Color>
+                    <SolidColorBrush x:Key="AppFgColorBrush" Color="#FF1A1A1A"/>
+                    <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BB1A1A1A"/>
+                    <SolidColorBrush x:Key="AppGlassColorBrush" Color="#25000000"/>
+                    <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#40000000"/>
+                    <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#18000000"/>
+                    <LinearGradientBrush x:Key="AppBgBrush" StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#FFD4C9B0" Offset="0"/>
+                        <GradientStop Color="#FFDFD5BC" Offset="0.35"/>
+                        <GradientStop Color="#FFEDE8DC" Offset="0.65"/>
+                        <GradientStop Color="#FFF8F5EF" Offset="1"/>
+                    </LinearGradientBrush>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
             <FontFamily x:Key="TablerIconsFont">ms-appx:///Assets/Fonts/tabler-icons.ttf#tabler-icons</FontFamily>
-            <!-- Other app resources here -->
+
+            <!-- Glass panel shadow style — apply to Border to get a soft drop shadow -->
+            <Style x:Key="GlassPanelStyle" TargetType="Border">
+                <Setter Property="Shadow">
+                    <Setter.Value>
+                        <ThemeShadow />
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

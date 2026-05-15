@@ -10,12 +10,8 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <LinearGradientBrush x:Key="DashboardBackgroundBrush" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#FF0B1121" Offset="0" />
-            <GradientStop Color="#FF0B1121" Offset="0.35" />
-            <GradientStop Color="#600B1121" Offset="0.6" />
-            <GradientStop Color="#600B1121" Offset="1" />
-        </LinearGradientBrush>
+        <SolidColorBrush x:Key="DashboardBackgroundBrush" Color="#FF0B1121" />
+        <SolidColorBrush x:Key="DashboardBackgroundBrushLight" Color="#FFF5F0E8" />
         
         <LinearGradientBrush x:Key="TopBarOverlayBrush" StartPoint="0,0" EndPoint="0,1">
             <GradientStop Color="#000B1121" Offset="0" />
@@ -25,48 +21,48 @@
         <SolidColorBrush x:Key="WidgetBorderBrush" Color="#46FFFFFF" />
 
         <DataTemplate x:Key="WeatherWidgetTemplate">
-            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
                 <controls:WeatherWidgetControl x:Name="WeatherWidget" />
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="FinancesWidgetTemplate">
-            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
                 <controls:FinancesWidgetControl x:Name="FinancesWidget" />
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="HabitsWidgetTemplate">
-            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
                 <controls:HabitsWidgetControl x:Name="HabitsWidget" />
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="HealthWidgetTemplate">
-            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
                 <controls:HealthWidgetControl x:Name="HealthWidget" />
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="CalendarWidgetTemplate">
-            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
-                <TextBlock Text="Calendar Widget Coming Soon" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
+                <TextBlock Text="Calendar Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="RssFeedWidgetTemplate">
-            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
                 <controls:RssFeedWidgetControl x:Name="RssFeedWidget" ArticleTapped="RssFeedWidget_ArticleTapped" />
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="NotesWidgetTemplate">
-            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
-                <TextBlock Text="Notes Widget Coming Soon" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
+                <TextBlock Text="Notes Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="MediaWidgetTemplate">
-            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
-                <TextBlock Text="Media Widget Coming Soon" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
+                <TextBlock Text="Media Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="SystemInfoWidgetTemplate">
-            <Border Background="{StaticResource WidgetBrush}" BorderBrush="{StaticResource WidgetBorderBrush}" BorderThickness="1" CornerRadius="16" Tapped="Widget_Tapped">
-                <TextBlock Text="System Info Widget Coming Soon" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
+                <TextBlock Text="System Info Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
         </DataTemplate>
 
@@ -82,86 +78,108 @@
             SystemInfoTemplate="{StaticResource SystemInfoWidgetTemplate}" />
     </Page.Resources>
 
-    <Grid Background="{StaticResource DashboardBackgroundBrush}">
-        <!-- Full-page background artwork -->
-        <Image Source="ms-appx:///Assets/appbg.png" Stretch="UniformToFill" Opacity="0.10" IsHitTestVisible="False" />
+    <Grid Background="{ThemeResource AppBgBrush}">
+        <!-- Top-bar artwork -->
+        <Image Source="Assets/apptopbar.png"
+               VerticalAlignment="Top" HorizontalAlignment="Stretch"
+               Height="110" Stretch="Fill"
+               Opacity="0.20" IsHitTestVisible="False"/>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="32" Spacing="24">
-                <!-- Header Row -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Dashboard" FontFamily="Segoe UI Variable Display" FontSize="42" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
-                    
-                    <!-- User Account Button -->
-                    <Button x:Name="AccountButton" Grid.Column="1" VerticalAlignment="Center"
-                            Background="#20FFFFFF" BorderThickness="0" CornerRadius="20" Padding="12,6"
-                            Height="40">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <PersonPicture x:Name="UserAvatar" Width="28" Height="28" DisplayName="?" />
-                            <TextBlock x:Name="UserEmailText" Text="Not signed in" FontSize="13" 
-                                       Foreground="#BBFFFFFF" VerticalAlignment="Center" MaxWidth="150"
-                                       TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                        <Button.Flyout>
-                            <MenuFlyout>
-                                <MenuFlyoutItem x:Name="SignOutItem" Text="Sign Out" Click="SignOut_Click">
-                                    <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xF3B1;" FontFamily="Segoe Fluent Icons"/>
-                                    </MenuFlyoutItem.Icon>
-                                </MenuFlyoutItem>
-                            </MenuFlyout>
-                        </Button.Flyout>
-                    </Button>
-                </Grid>
-                
-                <!-- Dynamic Widget Grid -->
-                <local:DashboardGridView x:Name="WidgetGridView"
-                          SelectionMode="None"
-                          HorizontalAlignment="Stretch"
-                          Padding="0"
-                          CanDragItems="True"
-                          CanReorderItems="False"
-                          AllowDrop="True"
-                          ScrollViewer.VerticalScrollMode="Disabled"
-                          ScrollViewer.HorizontalScrollMode="Disabled"
-                          ScrollViewer.VerticalScrollBarVisibility="Hidden"
-                          ScrollViewer.HorizontalScrollBarVisibility="Hidden"
-                          DragItemsStarting="WidgetGridView_DragItemsStarting"
-                          DragOver="WidgetGridView_DragOver"
-                          Drop="WidgetGridView_Drop"
-                          SizeChanged="WidgetGridView_SizeChanged"
-                          ItemTemplateSelector="{StaticResource WidgetSelector}">
-                    
-                    <local:DashboardGridView.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <VariableSizedWrapGrid x:Name="DashboardWrapGrid" Orientation="Horizontal" MaximumRowsOrColumns="2" />
-                        </ItemsPanelTemplate>
-                    </local:DashboardGridView.ItemsPanel>
-                    
-                    <local:DashboardGridView.ItemContainerStyle>
-                        <Style TargetType="GridViewItem">
-                            <Setter Property="Margin" Value="8" />
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                            <Setter Property="ContextFlyout">
-                                <Setter.Value>
-                                    <MenuFlyout>
-                                        <MenuFlyoutItem Text="Size: Small (1x1)" Tag="1x1" Click="WidgetResize_Click"/>
-                                        <MenuFlyoutItem Text="Size: Wide (2x1)" Tag="2x1" Click="WidgetResize_Click"/>
-                                        <MenuFlyoutItem Text="Size: Tall (1x2)" Tag="1x2" Click="WidgetResize_Click"/>
-                                        <MenuFlyoutItem Text="Size: Large (2x2)" Tag="2x2" Click="WidgetResize_Click"/>
-                                    </MenuFlyout>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </local:DashboardGridView.ItemContainerStyle>
-                </local:DashboardGridView>
-            </StackPanel>
-        </ScrollViewer>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="110"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Fixed TopBar Row: title + controls, always visible over the image -->
+            <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Dashboard" FontFamily="Segoe UI Variable Display" FontSize="42" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+
+                <!-- Theme Toggle -->
+                <Button x:Name="ThemeToggleButton" Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0"
+                        Background="{ThemeResource AppGlassColorBrush}" BorderThickness="0" CornerRadius="20" Padding="10,6"
+                        Height="40" Click="ThemeToggleButton_Click" ToolTipService.ToolTip="Toggle light/dark theme">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon x:Name="ThemeToggleIcon" Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource AppFgColorBrush}"/>
+                        <TextBlock x:Name="ThemeToggleText" Text="Light" FontSize="13" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- User Account Button -->
+                <Button x:Name="AccountButton" Grid.Column="2" VerticalAlignment="Center"
+                        Background="{ThemeResource AppGlassColorBrush}" BorderThickness="0" CornerRadius="20" Padding="12,6"
+                        Height="40">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <PersonPicture x:Name="UserAvatar" Width="28" Height="28" DisplayName="?" />
+                        <TextBlock x:Name="UserEmailText" Text="Not signed in" FontSize="13" 
+                                   Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" MaxWidth="150"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem x:Name="SignOutItem" Text="Sign Out" Click="SignOut_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xF3B1;" FontFamily="Segoe Fluent Icons"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
+
+            <!-- Scrollable content: widgets -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="20,16,20,20" Spacing="20">
+                    <!-- Dynamic Widget Grid -->
+                    <local:DashboardGridView x:Name="WidgetGridView"
+                              SelectionMode="None"
+                              HorizontalAlignment="Stretch"
+                              Padding="0"
+                              CanDragItems="True"
+                              CanReorderItems="False"
+                              AllowDrop="True"
+                              ScrollViewer.VerticalScrollMode="Disabled"
+                              ScrollViewer.HorizontalScrollMode="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                              ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                              DragItemsStarting="WidgetGridView_DragItemsStarting"
+                              DragOver="WidgetGridView_DragOver"
+                              Drop="WidgetGridView_Drop"
+                              SizeChanged="WidgetGridView_SizeChanged"
+                              ItemTemplateSelector="{StaticResource WidgetSelector}">
+
+                        <local:DashboardGridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VariableSizedWrapGrid x:Name="DashboardWrapGrid" Orientation="Horizontal" MaximumRowsOrColumns="2" />
+                            </ItemsPanelTemplate>
+                        </local:DashboardGridView.ItemsPanel>
+
+                        <local:DashboardGridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem">
+                                <Setter Property="Margin" Value="6" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                <Setter Property="ContextFlyout">
+                                    <Setter.Value>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem Text="Size: Small (1x1)" Tag="1x1" Click="WidgetResize_Click"/>
+                                            <MenuFlyoutItem Text="Size: Wide (2x1)" Tag="2x1" Click="WidgetResize_Click"/>
+                                            <MenuFlyoutItem Text="Size: Tall (1x2)" Tag="1x2" Click="WidgetResize_Click"/>
+                                            <MenuFlyoutItem Text="Size: Large (2x2)" Tag="2x2" Click="WidgetResize_Click"/>
+                                        </MenuFlyout>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </local:DashboardGridView.ItemContainerStyle>
+                    </local:DashboardGridView>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </Page>

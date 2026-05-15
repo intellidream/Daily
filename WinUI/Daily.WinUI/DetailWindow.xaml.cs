@@ -26,6 +26,12 @@ public sealed partial class DetailWindow : Window
         Content = null;
     }
 
+    public void ApplyTheme(ElementTheme theme)
+    {
+        if (Content is FrameworkElement root)
+            root.RequestedTheme = theme;
+    }
+
     public void NavigateTo(Type pageType, object parameter = null)
     {
         try

@@ -20,41 +20,36 @@
             <GradientStop Color="#000B1121" Offset="0" />
             <GradientStop Color="#FF0B1121" Offset="1" />
         </LinearGradientBrush>
-        <!-- Frosted-glass panel brushes -->
-        <SolidColorBrush x:Key="GlassPanelBrush"       Color="#22FFFFFF" />
-        <SolidColorBrush x:Key="GlassPanelBorderBrush" Color="#44FFFFFF" />
-        <SolidColorBrush x:Key="GlassSubPanelBrush"    Color="#16FFFFFF" />
+
     </Page.Resources>
 
-    <Grid Background="{StaticResource RssPageBgBrush}">
+    <Grid Background="{ThemeResource AppBgBrush}">
 
-        <!-- Full-page background artwork -->
-        <Image Source="ms-appx:///Assets/appbg.png" Stretch="UniformToFill" Opacity="0.10" IsHitTestVisible="False" />
 
         <!-- State 1: List View -->
         <Grid x:Name="ListViewContainer" Visibility="Visible">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="110"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Header -->
-            <Grid Grid.Row="0" Margin="32,32,32,16">
+            <!-- Fixed TopBar Row: icon + title + feed selector -->
+            <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Border Width="44" Height="44" CornerRadius="22" Background="#30FFFFFF" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE736;" FontFamily="Segoe Fluent Icons" FontSize="22" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border Width="44" Height="44" CornerRadius="22" Background="{ThemeResource AppGlassColorBrush}" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE736;" FontFamily="Segoe Fluent Icons" FontSize="22" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="News" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="White"/>
-                    <TextBlock Text="Latest articles from your selected feed" FontSize="12" Foreground="#99FFFFFF"/>
+                    <TextBlock Text="News" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}"/>
+                    <TextBlock Text="Latest articles from your selected feed" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                 </StackPanel>
 
-                <Border Grid.Column="2" Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="14" VerticalAlignment="Center">
+                <Border Grid.Column="2" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="14" VerticalAlignment="Center">
                     <ComboBox x:Name="FeedComboBox"
                               Width="220" Height="40"
                               Background="Transparent"
@@ -62,15 +57,15 @@
                               DisplayMemberPath="Name"
                               SelectionChanged="FeedComboBox_SelectionChanged"
                               VerticalAlignment="Center"
-                              Foreground="White"/>
+                              Foreground="{ThemeResource AppFgColorBrush}"/>
                 </Border>
             </Grid>
 
-            <!-- Content Area -->
-            <Grid Grid.Row="1" Margin="32,0,32,32">
+            <!-- Scrollable content: article list -->
+            <Grid Grid.Row="1" Margin="20,16,20,20">
                 <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
                     <ProgressRing IsActive="True" Width="56" Height="56"/>
-                    <TextBlock Text="Fetching latest news..." Foreground="#AAFFFFFF" FontSize="16"/>
+                    <TextBlock Text="Fetching latest news..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
                 </StackPanel>
 
                 <ListView x:Name="ArticlesListView"
@@ -103,9 +98,10 @@
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="{StaticResource GlassPanelBrush}"
-                                    BorderBrush="{StaticResource GlassPanelBorderBrush}"
+                            <Border Background="{ThemeResource AppGlassColorBrush}"
+                                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
                                     BorderThickness="1"
+                                    Style="{StaticResource GlassPanelStyle}" Translation="0,0,18"
                                     CornerRadius="18"
                                     Padding="20"
                                     Margin="0,0,0,16"
@@ -117,7 +113,7 @@
                                     </Grid.ColumnDefinitions>
 
                                     <!-- Article Thumbnail -->
-                                    <Border Width="200" Height="130" CornerRadius="10" Background="{StaticResource GlassSubPanelBrush}">
+                                    <Border Width="200" Height="130" CornerRadius="10" Background="{ThemeResource AppGlassSubColorBrush}">
                                         <Image Source="{Binding ImageUrl}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
 
@@ -125,7 +121,7 @@
                                         <TextBlock Text="{Binding Title}"
                                                    FontSize="20"
                                                    FontWeight="Bold"
-                                                   Foreground="White"
+                                                   Foreground="{ThemeResource AppFgColorBrush}"
                                                    TextWrapping="Wrap"
                                                    MaxLines="2"
                                                    TextTrimming="CharacterEllipsis"/>
@@ -133,16 +129,16 @@
                                         <StackPanel Orientation="Horizontal" Margin="0,8,0,12" Spacing="8">
                                             <TextBlock Text="{Binding PublishDate}"
                                                        FontSize="13"
-                                                       Foreground="#AAFFFFFF"/>
-                                            <TextBlock Text="•" Foreground="#66FFFFFF"/>
+                                                       Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                            <TextBlock Text="•" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                                             <TextBlock Text="{Binding Author}"
                                                        FontSize="13"
-                                                       Foreground="#AAFFFFFF"/>
+                                                       Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                                         </StackPanel>
 
                                         <TextBlock Text="{Binding Description}"
                                                    FontSize="15"
-                                                   Foreground="#CCFFFFFF"
+                                                   Foreground="{ThemeResource AppFgColorBrush}"
                                                    TextWrapping="Wrap"
                                                    MaxLines="3"
                                                    TextTrimming="CharacterEllipsis"
@@ -159,16 +155,16 @@
         <!-- State 2: Reader View -->
         <Grid x:Name="ReaderViewContainer" Visibility="Collapsed" Background="Transparent">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="110"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Toolbar -->
-            <Grid Grid.Row="0" Margin="32,32,32,16" Height="48">
-                <Button x:Name="BackButton" Click="BackButton_Click" Background="{StaticResource GlassPanelBrush}" BorderBrush="{StaticResource GlassPanelBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="14,8">
+            <!-- Fixed TopBar Row: back button -->
+            <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center">
+                <Button x:Name="BackButton" Click="BackButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="14" Padding="14,8" Height="40" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE72B;" FontSize="16" Foreground="White"/>
-                        <TextBlock Text="Back to List" FontSize="15" Foreground="White"/>
+                        <FontIcon Glyph="&#xE72B;" FontSize="16" Foreground="{ThemeResource AppFgColorBrush}"/>
+                        <TextBlock Text="Back to List" FontSize="15" Foreground="{ThemeResource AppFgColorBrush}"/>
                     </StackPanel>
                 </Button>
             </Grid>
@@ -176,7 +172,7 @@
             <!-- Reader Loading State -->
             <StackPanel Grid.Row="1" x:Name="ReaderLoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
                 <ProgressRing IsActive="True" Width="56" Height="56"/>
-                <TextBlock Text="Extracting article..." Foreground="#AAFFFFFF" FontSize="16"/>
+                <TextBlock Text="Extracting article..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
             </StackPanel>
 
             <!-- WebView2 for Reader Content -->

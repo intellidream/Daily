@@ -14,10 +14,11 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#FF0E1F3A" Offset="0" />
-            <GradientStop Color="#FF163760" Offset="0.45" />
-            <GradientStop Color="#FF236A88" Offset="1" />
+        <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FF0B1121" Offset="0" />
+            <GradientStop Color="#FF0B1121" Offset="0.35" />
+            <GradientStop Color="#820B1121" Offset="0.65" />
+            <GradientStop Color="#600B1121" Offset="1" />
         </LinearGradientBrush>
         <SolidColorBrush x:Key="AccentBlueBrush" Color="#FF69B6FF" />
         <SolidColorBrush x:Key="AccentMintBrush" Color="#FF7FF0D5" />
@@ -34,7 +35,7 @@
         <SolidColorBrush x:Key="ForecastCardBorderBrush" Color="#33FFFFFF" />
     </Page.Resources>
 
-    <Grid Background="Transparent">
+    <Grid Background="{ThemeResource AppBgBrush}">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="MobileState">
@@ -42,7 +43,7 @@
                         <AdaptiveTrigger MinWindowWidth="0" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="GlassShell.Margin" Value="12" />
+                        <Setter Target="GlassShell.Margin" Value="12,16,12,12" />
                         <Setter Target="GlassShell.Padding" Value="14" />
                         <Setter Target="DashboardGrid.ColumnSpacing" Value="0" />
                         <Setter Target="PrimaryPanel.(Grid.ColumnSpan)" Value="2" />
@@ -56,7 +57,7 @@
                         <AdaptiveTrigger MinWindowWidth="1000" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="GlassShell.Margin" Value="28" />
+                        <Setter Target="GlassShell.Margin" Value="28,16,28,28" />
                         <Setter Target="GlassShell.Padding" Value="26" />
                         <Setter Target="DashboardGrid.ColumnSpacing" Value="16" />
                         <Setter Target="PrimaryPanel.(Grid.ColumnSpan)" Value="1" />
@@ -68,54 +69,68 @@
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" VerticalScrollMode="Enabled" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled">
-            <Border x:Name="GlassShell" Margin="20" Background="{StaticResource ShellBrush}" BorderBrush="{StaticResource ShellBorderBrush}" BorderThickness="1" CornerRadius="28" Padding="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="110" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Fixed TopBar Row: icon + title + location search + action buttons -->
+        <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource AppGlassColorBrush}" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,16,0">
+                <TextBlock Text="Weather" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}"/>
+                <TextBlock Text="Live conditions and forecast" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+            </StackPanel>
+
+            <editors:SfComboBox
+                Grid.Column="2"
+                x:Name="LocationSearchBox"
+                PlaceholderText="Search city, e.g. London, UK"
+                IsEditable="True"
+                IsFilteringEnabled="False"
+                IsTextSearchEnabled="False"
+                TextMemberPath="DisplayName"
+                DisplayMemberPath="DisplayName"
+                SelectionChanged="LocationSearchBox_SelectionChanged"
+                InputSubmitted="LocationSearchBox_InputSubmitted"
+                Loaded="LocationSearchBox_ComboBoxLoaded"
+                FontSize="15"
+                VerticalAlignment="Center" />
+
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button x:Name="FavoriteToggleButton" Content="Add Favorite" Click="FavoriteToggleButton_Click" Background="{StaticResource ButtonPrimaryBrush}" Foreground="{ThemeResource AppFgColorBrush}" Padding="12,8" MinWidth="110" />
+                <Button x:Name="FavoritePinButton" Content="Pin" Click="FavoritePinButton_Click" Background="{StaticResource ButtonSecondaryBrush}" Foreground="{ThemeResource AppFgColorBrush}" Padding="12,8" MinWidth="84" />
+                <Button x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click" Background="{StaticResource ButtonSecondaryBrush}" Foreground="{ThemeResource AppFgColorBrush}" Padding="12,8" MinWidth="92" />
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="8,0,0,0">
+                    <TextBlock Text="Glass" VerticalAlignment="Center" Opacity="0.75" />
+                    <ComboBox x:Name="GlassIntensityComboBox" Width="120" SelectionChanged="GlassIntensityComboBox_SelectionChanged" SelectedIndex="1">
+                        <x:String>Low</x:String>
+                        <x:String>Medium</x:String>
+                        <x:String>High</x:String>
+                    </ComboBox>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- Scrollable content: weather dashboard -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" VerticalScrollMode="Enabled" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled">
+            <Border x:Name="GlassShell" Margin="20,16,20,20" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="28" Padding="22">
                 <Grid RowSpacing="14">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0" ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <editors:SfComboBox
-                            Grid.Column="0"
-                            x:Name="LocationSearchBox"
-                            PlaceholderText="Search city, e.g. London, UK"
-                            IsEditable="True"
-                            IsFilteringEnabled="False"
-                            IsTextSearchEnabled="False"
-                            TextMemberPath="DisplayName"
-                            DisplayMemberPath="DisplayName"
-                            SelectionChanged="LocationSearchBox_SelectionChanged"
-                            InputSubmitted="LocationSearchBox_InputSubmitted"
-                            Loaded="LocationSearchBox_ComboBoxLoaded"
-                            FontSize="15"
-                            MaxWidth="720" />
-
-                        <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
-                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,0">
-                                <Button x:Name="FavoriteToggleButton" Content="Add Favorite" Click="FavoriteToggleButton_Click" Background="{StaticResource ButtonPrimaryBrush}" Foreground="White" Padding="12,8" MinWidth="110" />
-                                <Button x:Name="FavoritePinButton" Content="Pin" Click="FavoritePinButton_Click" Background="{StaticResource ButtonSecondaryBrush}" Foreground="White" Padding="12,8" MinWidth="84" />
-                                <Button x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click" Background="{StaticResource ButtonSecondaryBrush}" Foreground="White" Padding="12,8" MinWidth="92" />
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="8,0,0,0">
-                                    <TextBlock Text="Glass" VerticalAlignment="Center" Opacity="0.75" />
-                                    <ComboBox x:Name="GlassIntensityComboBox" Width="120" SelectionChanged="GlassIntensityComboBox_SelectionChanged" SelectedIndex="1">
-                                        <x:String>Low</x:String>
-                                        <x:String>Medium</x:String>
-                                        <x:String>High</x:String>
-                                    </ComboBox>
-                                </StackPanel>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </Grid>
-
-                    <Grid x:Name="DashboardGrid" Grid.Row="1" ColumnSpacing="14" RowSpacing="14">
+                    <Grid x:Name="DashboardGrid" Grid.Row="0" ColumnSpacing="14" RowSpacing="14">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="2*" />
                             <ColumnDefinition Width="*" />
@@ -126,7 +141,7 @@
                         </Grid.RowDefinitions>
 
                         <StackPanel x:Name="PrimaryPanel" Grid.Row="0" Grid.Column="0" Spacing="14">
-                            <Border Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="20" Padding="18">
+                            <Border Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="20" Padding="18">
                                 <Grid ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -178,7 +193,7 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="8">
+                                <Border Grid.Row="0" Grid.Column="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="8">
                                     <StackPanel Spacing="0" HorizontalAlignment="Center">
                                         <TextBlock Text="Humidity" FontSize="11" Opacity="0.65" HorizontalAlignment="Center" />
                                         <gauge:SfRadialGauge Height="90" Width="90">
@@ -214,7 +229,7 @@
                                     </StackPanel>
                                 </Border>
 
-                                <Border Grid.Row="0" Grid.Column="1" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="8">
+                                <Border Grid.Row="0" Grid.Column="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="8">
                                     <StackPanel Spacing="0" HorizontalAlignment="Center">
                                         <TextBlock Text="Wind" FontSize="11" Opacity="0.65" HorizontalAlignment="Center" />
                                         <gauge:SfRadialGauge Height="90" Width="90">
@@ -250,7 +265,7 @@
                                     </StackPanel>
                                 </Border>
 
-                                <Border Grid.Row="1" Grid.Column="0" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
+                                <Border Grid.Row="1" Grid.Column="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
                                     <StackPanel Spacing="2">
                                         <FontIcon Glyph="&#xE890;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentSunBrush}" />
                                         <TextBlock Text="Visibility" FontSize="12" Opacity="0.65" />
@@ -258,7 +273,7 @@
                                     </StackPanel>
                                 </Border>
 
-                                <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
+                                <Border Grid.Row="1" Grid.Column="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
                                     <StackPanel Spacing="2">
                                         <FontIcon Glyph="&#xE9D9;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentRoseBrush}" />
                                         <TextBlock Text="Pressure" FontSize="12" Opacity="0.65" />
@@ -273,7 +288,7 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <Border x:Name="SunToggleTile" Grid.Column="0" Background="{StaticResource SubTileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="10" Tapped="WeatherToggleTile_Click">
+                                <Border x:Name="SunToggleTile" Grid.Column="0" Background="{StaticResource SubTileBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="10" Tapped="WeatherToggleTile_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="16" />
                                         <TextBlock Text="{x:Bind ViewModel.SunLabel, Mode=OneWay}" Opacity="0.65" />
@@ -281,7 +296,7 @@
                                     </StackPanel>
                                 </Border>
 
-                                <Border x:Name="HumidityToggleTile" Grid.Column="1" Background="{StaticResource SubTileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="10" Tapped="WeatherToggleTile_Click">
+                                <Border x:Name="HumidityToggleTile" Grid.Column="1" Background="{StaticResource SubTileBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="10" Tapped="WeatherToggleTile_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="16" />
                                         <TextBlock Text="{x:Bind ViewModel.MoistureLabel, Mode=OneWay}" Opacity="0.65" />
@@ -292,7 +307,7 @@
                         </StackPanel>
 
                         <StackPanel x:Name="SideRailPanel" Grid.Row="0" Grid.Column="1" Spacing="14">
-                            <Border Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
+                            <Border Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
                                 <StackPanel x:Name="FavoritesPanel" Spacing="10">
                                     <TextBlock Text="Saved Locations" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" />
 
@@ -419,7 +434,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border x:Name="SettingsPanelHost" Background="{StaticResource SubTileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="8">
+                            <Border x:Name="SettingsPanelHost" Background="{StaticResource SubTileBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="8">
                                 <Expander IsExpanded="False">
                                     <Expander.Header>
                                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -483,13 +498,13 @@
                         </StackPanel>
                     </Grid>
 
-                    <Grid Grid.Row="2" ColumnSpacing="14" RowSpacing="14">
+                    <Grid Grid.Row="1" ColumnSpacing="14" RowSpacing="14">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <Border Grid.Row="0" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="12">
+                        <Border Grid.Row="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="12">
                                 <Grid RowSpacing="4" HorizontalAlignment="Stretch">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -626,7 +641,7 @@
                                                                 FontSize="26"
                                                                 FontWeight="Bold"
                                                                 HorizontalAlignment="Center"
-                                                                Foreground="#FFFFFFFF" />
+                                                                Foreground="{ThemeResource AppFgColorBrush}" />
                                                             <!-- Feels like -->
                                                             <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
                                                                 <TextBlock
@@ -738,7 +753,7 @@
                                                             x:Name="CurrentWeatherTemp"
                                                             FontSize="12"
                                                             FontWeight="Bold"
-                                                            Foreground="White"
+                                                            Foreground="{ThemeResource AppFgColorBrush}"
                                                             HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Border>
@@ -747,7 +762,7 @@
                                 </Grid>
                         </Border>
 
-                        <Border Grid.Row="1" Background="{StaticResource TileBrush}" BorderBrush="{StaticResource TileBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="12">
+                        <Border Grid.Row="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="12">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="5-Day Forecast" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" />
                                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.ForecastDays, Mode=OneWay}">

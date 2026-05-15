@@ -58,6 +58,25 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private void ThemeToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        var root = this.XamlRoot?.Content as FrameworkElement;
+        if (root == null) return;
+
+        bool goingLight = root.RequestedTheme == ElementTheme.Dark || root.RequestedTheme == ElementTheme.Default;
+        var newTheme = goingLight ? ElementTheme.Light : ElementTheme.Dark;
+
+        // Apply to main window
+        root.RequestedTheme = newTheme;
+
+        // Propagate to all open detail windows
+        foreach (var win in _openWindows.Values)
+            win.ApplyTheme(newTheme);
+
+        ThemeToggleIcon.Glyph = goingLight ? "\uE706" : "\uE708"; // sun : moon
+        ThemeToggleText.Text  = goingLight ? "Dark"  : "Light";
+    }
+
     private async void SignOut_Click(object sender, RoutedEventArgs e)
     {
         if (_authService.IsAuthenticated)
@@ -255,6 +274,9 @@ public sealed partial class MainPage : Page
         window.Closed += (s, ev) => { _openWindows.Remove(pageType); };
         _openWindows[pageType] = window;
         window.NavigateTo(pageType, parameter);
+        // Inherit current theme
+        var currentTheme = (this.XamlRoot?.Content as FrameworkElement)?.RequestedTheme ?? ElementTheme.Default;
+        if (currentTheme != ElementTheme.Default) window.ApplyTheme(currentTheme);
         window.Activate();
     }
 }

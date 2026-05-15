@@ -26,5 +26,12 @@
         </TitleBar>
 
         <Frame x:Name="RootFrame" Grid.Row="1" />
+
+        <!-- Top-bar artwork: declared after Frame so it overlays the top 110px, matching MainPage -->
+        <Image Source="Assets/apptopbar.png"
+               Grid.Row="1"
+               VerticalAlignment="Top" HorizontalAlignment="Stretch"
+               Height="110" Stretch="Fill"
+               Opacity="0.20" IsHitTestVisible="False"/>
     </Grid>
 </Window>
