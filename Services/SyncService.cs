@@ -444,25 +444,20 @@ namespace Daily.Services
                         var remote = local.ToDomain();
                         
                         // --- CONFLICT RESOLUTION ---
-                        // Check Remote State before Overwriting
                         bool skipPush = false;
                         try 
                         {
-                            var existing = await _supabase.From<UserPreferences>()
+                            var existingResponse = await _supabase.From<UserPreferences>()
                                 .Select("updated_at")
                                 .Where(x => x.Id == userId)
-                                .Single();
+                                .Get();
+                            
+                            var existing = existingResponse.Models.FirstOrDefault();
                             
                             if (existing != null)
                             {
                                 // Remote exists. Compare timestamps.
-                                // If Remote UpdatedAt > Local UpdatedAt (w/ 1s Buffer for precision errors), Server Wins.
-                                
-                                // FIX: Local UpdatedAt is STORED as UTC but retrieved as Unspecified.
-                                // Do NOT call ToUniversalTime() on it, or it will double-convert (Local->UTC).
                                 var localTime = DateTime.SpecifyKind(local.UpdatedAt, DateTimeKind.Utc);
-                                
-                                // Remote is usually ISO8601 UTC, but ensure Kind is UTC.
                                 var remoteTime = existing.UpdatedAt.ToUniversalTime();
 
                                 LogDebug($"[SyncService] CONFLICT CHECK:");
@@ -471,15 +466,13 @@ namespace Daily.Services
                                 var diff = remoteTime - localTime;
                                 LogDebug($"   Diff (Remote - Local): {diff.TotalSeconds} seconds");
 
-                                // FIX: Desktop PC clocks often drift. If local clock is slightly behind the server,
-                                // the server's previous UpdatedAt (set by DB trigger) will appear "newer" than our current local UtcNow!
-                                // Allow a generous 60-second skew buffer so we don't accidentally pull and overwrite local changes.
                                 if (remoteTime > localTime.AddSeconds(60)) 
                                 {
                                     LogDebug($"[SyncService] DECISION: REMOTE WIN. Remote is newer by {diff.TotalSeconds:F2}s. Skipping Push & Pulling.");
                                     skipPush = true;
                                     
-                                    var fullRemote = await _supabase.From<UserPreferences>().Where(x => x.Id == userId).Single();
+                                    var fullRemoteResponse = await _supabase.From<UserPreferences>().Where(x => x.Id == userId).Get();
+                                    var fullRemote = fullRemoteResponse.Models.FirstOrDefault();
                                     if (fullRemote != null)
                                     {
                                         var updatedLocal = fullRemote.ToLocal();
@@ -494,11 +487,6 @@ namespace Daily.Services
                                     LogDebug($"[SyncService] DECISION: LOCAL WIN. Local is Newer or Equal. Proceeding with Push.");
                                 }
                             }
-                        }
-                        catch (InvalidOperationException) 
-                        { 
-                            // .Single() throws if no elements. This means no remote record.
-                            // Safe to Push.
                         }
                         catch (Exception checkEx)
                         {

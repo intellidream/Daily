@@ -64,17 +64,17 @@ namespace Daily.Services
                 await _connection.CreateTableAsync<LocalRssSubscription>().ConfigureAwait(false);
                 
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
-                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN UpdatedAt varchar").ConfigureAwait(false); } catch { /* Ignore if exists */ }
+                await AddColumnIfNotExists("user_preferences", "UpdatedAt", "varchar").ConfigureAwait(false);
                 
                 // Habits & Smokes Migrations
-                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesBaselineDaily integer").ConfigureAwait(false); } catch { }
-                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesPackSize integer").ConfigureAwait(false); } catch { }
-                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesPackCost real").ConfigureAwait(false); } catch { }
-                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesCurrency varchar").ConfigureAwait(false); } catch { }
-                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN SmokesQuitDate bigint").ConfigureAwait(false); } catch { }
+                await AddColumnIfNotExists("user_preferences", "SmokesBaselineDaily", "integer").ConfigureAwait(false);
+                await AddColumnIfNotExists("user_preferences", "SmokesPackSize", "integer").ConfigureAwait(false);
+                await AddColumnIfNotExists("user_preferences", "SmokesPackCost", "real").ConfigureAwait(false);
+                await AddColumnIfNotExists("user_preferences", "SmokesCurrency", "varchar").ConfigureAwait(false);
+                await AddColumnIfNotExists("user_preferences", "SmokesQuitDate", "bigint").ConfigureAwait(false);
                 
                 // WinUI Widgets Migration
-                try { await _connection.ExecuteAsync("ALTER TABLE user_preferences ADD COLUMN WinUIDashboardWidgetsJson varchar").ConfigureAwait(false); } catch { }
+                await AddColumnIfNotExists("user_preferences", "WinUIDashboardWidgetsJson", "varchar").ConfigureAwait(false);
                 
                 Console.WriteLine($"[DatabaseService] Tables Created results: {res1}, {res2}, {res3}, {res4}");
                 
@@ -88,6 +88,28 @@ namespace Daily.Services
             finally
             {
                  _initLock.Release();
+            }
+        }
+
+        private class TableInfo
+        {
+            public string Name { get; set; } = string.Empty;
+        }
+
+        private async Task AddColumnIfNotExists(string tableName, string columnName, string columnType)
+        {
+            try
+            {
+                var columns = await _connection.QueryAsync<TableInfo>($"PRAGMA table_info({tableName})");
+                if (!columns.Any(c => string.Equals(c.Name, columnName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    await _connection.ExecuteAsync($"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType}");
+                    Console.WriteLine($"[DatabaseService] Added column {columnName} to {tableName}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DatabaseService] Add Column Error ({tableName}.{columnName}): {ex.Message}");
             }
         }
 
@@ -112,11 +134,6 @@ namespace Daily.Services
                     }
                     else
                     {
-                         // Both exist? Maybe merge? For now, we assume new code uses new table.
-                         // But if user wants to keep old data, they might be in old table.
-                         // Since this is a dev environment transition, let's just Log and ignore, 
-                         // or maybe we should have merged? 
-                         // Safest: Do nothing if target exists.
                          Console.WriteLine($"[DatabaseService] Migration skipped: {newName} already exists. Old {oldName} remains.");
                     }
                 }
