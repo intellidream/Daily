@@ -180,7 +180,7 @@ public sealed partial class RssFeedDetailPage : Page
         {
             string html = GenerateReaderHtml(fullArticle);
             await ReaderWebView.EnsureCoreWebView2Async();
-            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 11, 17, 33);
             SetupWebViewVirtualHost();
             ReaderWebView.NavigateToString(html);
             ReaderLoadingPanel.Visibility = Visibility.Collapsed;
@@ -199,7 +199,6 @@ public sealed partial class RssFeedDetailPage : Page
             ReaderWebView.Opacity = 0.0;
             
             await ReaderWebView.EnsureCoreWebView2Async();
-            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
             SetupWebViewVirtualHost();
 
             // Safety: wait for the engine to fully attach
@@ -365,6 +364,7 @@ public sealed partial class RssFeedDetailPage : Page
     }
 
     private bool _virtualHostMapped = false;
+    private string? _bgDataUri = null;
     private void SetupWebViewVirtualHost()
     {
         if (_virtualHostMapped || ReaderWebView.CoreWebView2 == null) return;
@@ -382,6 +382,47 @@ public sealed partial class RssFeedDetailPage : Page
         string textColor = isDark ? "#E0E0E0" : "#1A1A1A";
         string linkColor = isDark ? "#66B2FF" : "#0066CC";
         string metaColor = isDark ? "#A0A0A0" : "#666666";
+
+        // Embed background image as base64 so it works from about:blank origin
+        if (_bgDataUri == null)
+        {
+            try
+            {
+                // Try multiple locations to find appbg.png
+                var candidates = new[]
+                {
+                    System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "appbg.png"),
+                    System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", "Assets", "appbg.png"),
+                };
+                foreach (var candidate in candidates)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[BG] Trying: {candidate} exists={System.IO.File.Exists(candidate)}");
+                    if (System.IO.File.Exists(candidate))
+                    {
+                        byte[] bgBytes = System.IO.File.ReadAllBytes(candidate);
+                        _bgDataUri = "data:image/png;base64," + Convert.ToBase64String(bgBytes);
+                        System.Diagnostics.Debug.WriteLine($"[BG] Loaded {bgBytes.Length} bytes, data uri length={_bgDataUri.Length}");
+                        break;
+                    }
+                }
+                if (_bgDataUri == null) { _bgDataUri = ""; System.Diagnostics.Debug.WriteLine("[BG] appbg.png not found in any candidate path"); }
+            }
+            catch (Exception ex) { _bgDataUri = ""; System.Diagnostics.Debug.WriteLine($"[BG] Exception: {ex.Message}"); }
+        }
+        string bgDataUri = _bgDataUri ?? "";
+
+        string bgBeforeRule = string.IsNullOrEmpty(bgDataUri) ? "" : $@"
+        body::before {{
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url('{bgDataUri}');
+            background-size: cover;
+            background-repeat: no-repeat;
+            opacity: 0.10;
+            z-index: -1;
+            pointer-events: none;
+        }}";
 
         string featuredImageHtml = string.IsNullOrEmpty(article.ImageUrl) 
             ? "" 
@@ -404,26 +445,20 @@ public sealed partial class RssFeedDetailPage : Page
         }}
         body {{
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
-            background-color: #0B1121;
+            background-color: transparent;
             position: relative;
             color: {textColor};
             line-height: 1.6;
             margin: 0;
-            padding: 24px;
+            padding: 0;
+            font-size: 18px;
+        }}
+        {bgBeforeRule}
+        .article-wrap {{
             max-width: 800px;
             margin-left: auto;
             margin-right: auto;
-            font-size: 18px;
-        }}
-        body::before {{
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image: url('http://app-assets.local/appbg.png');
-            background-size: cover;
-            background-repeat: no-repeat;
-            opacity: 0.10;
-            z-index: -1;
+            padding: 24px;
         }}
         h1 {{
             font-size: 32px;
@@ -486,12 +521,14 @@ public sealed partial class RssFeedDetailPage : Page
     </style>
 </head>
 <body>
+<div class='article-wrap'>
     <h1>{article.Title}</h1>
     {metaHtml}
     {featuredImageHtml}
     <div class='content'>
         {article.Content ?? article.Description ?? "" }
     </div>
+</div>
 </body>
 </html>";
     }
