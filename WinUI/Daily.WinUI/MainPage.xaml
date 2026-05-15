@@ -98,7 +98,10 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Dashboard" FontFamily="Segoe UI Variable Display" FontSize="42" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <Image Source="Assets/appicon.png" Width="48" Height="48" VerticalAlignment="Center"/>
+                    <TextBlock Text="DayOne" FontFamily="Segoe UI Variable Display" FontSize="42" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                </StackPanel>
 
                 <!-- Theme Toggle -->
                 <Button x:Name="ThemeToggleButton" Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0"
