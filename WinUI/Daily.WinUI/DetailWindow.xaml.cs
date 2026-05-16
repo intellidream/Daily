@@ -1,5 +1,6 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Daily_WinUI.Services;
 using Windows.Graphics;
 using System;
 
@@ -13,13 +14,25 @@ public sealed partial class DetailWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon("Assets/AppIcon.ico");
-        
-        // Unhook native title bar before closing to prevent WinUI 3 access violation
+
+        // Subscribe for future updates, then replay the last known condition immediately
+        WeatherBannerService.WeatherConditionChanged += OnWeatherConditionChanged;
+        if (WeatherBannerService.LastIconCode is { } code)
+            OnWeatherConditionChanged(code);
         this.Closed += DetailWindow_Closed;
+    }
+
+    private void OnWeatherConditionChanged(string iconCode)
+    {
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
+        {
+            TopBarBanner.SetCondition(iconCode);
+        });
     }
 
     private void DetailWindow_Closed(object sender, WindowEventArgs args)
     {
+        WeatherBannerService.WeatherConditionChanged -= OnWeatherConditionChanged;
         this.Closed -= DetailWindow_Closed;
         ExtendsContentIntoTitleBar = false;
         SetTitleBar(null);

@@ -22,6 +22,19 @@ public sealed partial class MainPage : Page
         _authService = App.Current.Services.GetRequiredService<WinUIAuthService>();
         _widgetService = App.Current.Services.GetRequiredService<WinUIWidgetService>();
         Loaded += MainPage_Loaded;
+        Unloaded += (_, _) => WeatherBannerService.WeatherConditionChanged -= OnWeatherConditionChanged;
+        WeatherBannerService.WeatherConditionChanged += OnWeatherConditionChanged;
+        // Replay last known condition if weather already loaded before this page
+        if (WeatherBannerService.LastIconCode is { } code)
+            OnWeatherConditionChanged(code);
+    }
+
+    private void OnWeatherConditionChanged(string iconCode)
+    {
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
+        {
+            TopBarBanner.SetCondition(iconCode);
+        });
     }
 
     private async void MainPage_Loaded(object sender, RoutedEventArgs e)

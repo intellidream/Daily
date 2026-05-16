@@ -47,8 +47,8 @@ public sealed partial class MainWindow : Window
             if (isAuthenticated && !string.IsNullOrEmpty(avatarUrl))
                 TitleBarUserAvatar.ProfilePicture = new BitmapImage(new System.Uri(avatarUrl));
 
-            TitleBarUserEmailText.Text = isAuthenticated ? (email ?? "Signed in") : "Not signed in";
             TitleBarSignOutItem.Text = isAuthenticated ? "Sign Out" : "Sign In";
+            TitleBarUserEmailText.Text = isAuthenticated ? (email ?? "Signed in") : "Not signed in";
         });
     }
 
@@ -155,14 +155,17 @@ public sealed partial class MainWindow : Window
 
     private void AppTitleBar_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (AppWindow.TitleBar != null && RightPaddingColumn != null)
-        {
-            double scaleAdjustment = this.Content?.XamlRoot?.RasterizationScale ?? 1.0;
-            if (scaleAdjustment > 0)
-            {
-                RightPaddingColumn.Width = new GridLength(AppWindow.TitleBar.RightInset / scaleAdjustment);
-            }
-        }
+        if (AppWindow.TitleBar == null) return;
+        double scale = this.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        if (scale <= 0) return;
+
+        // Snap our grid height to exactly match the OS caption-button height
+        double captionHeight = AppWindow.TitleBar.Height / scale;
+        AppTitleBar.Height = captionHeight;
+
+        // Keep the spacer column wide enough to clear the system buttons
+        if (RightPaddingColumn != null)
+            RightPaddingColumn.Width = new GridLength(AppWindow.TitleBar.RightInset / scale);
     }
 
     private void MainWindow_Closed(object sender, WindowEventArgs args)

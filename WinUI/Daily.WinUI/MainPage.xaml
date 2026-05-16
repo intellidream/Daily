@@ -78,12 +78,13 @@
             SystemInfoTemplate="{StaticResource SystemInfoWidgetTemplate}" />
     </Page.Resources>
 
-    <Grid Background="{ThemeResource AppBgBrush}">
-        <!-- Top-bar artwork -->
-        <Image Source="Assets/apptopbar.png"
-               VerticalAlignment="Top" HorizontalAlignment="Stretch"
-               Height="110" Stretch="Fill"
-               Opacity="0.20" IsHitTestVisible="False"/>
+    <Grid Background="Transparent">
+        <!-- Gradient tint over Mica -->
+        <Rectangle IsHitTestVisible="False" Fill="{ThemeResource AppBgBrush}"
+                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+        <!-- Top-bar weather art (native shapes, no SVG) -->
+        <controls:WeatherBannerControl x:Name="TopBarBanner"
+               VerticalAlignment="Top" HorizontalAlignment="Stretch" />
 
         <Grid>
             <Grid.RowDefinitions>

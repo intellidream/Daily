@@ -55,6 +55,9 @@ public sealed partial class WeatherWidgetControl : UserControl
                         ConditionIcon.Source = new BitmapImage(new Uri($"https://openweathermap.org/img/wn/{snapshot.IconCode}@4x.png"));
                     }
                     catch { }
+
+                    // Notify subscribers (e.g. MainPage top-bar art) of the current condition
+                    WeatherBannerService.NotifyConditionChanged(snapshot.IconCode);
                 }
                 else
                 {

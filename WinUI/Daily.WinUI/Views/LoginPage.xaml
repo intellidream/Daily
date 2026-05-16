@@ -29,10 +29,14 @@
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0" Width="360">
             
             <!-- App Icon -->
-            <Image Source="ms-appx:///Assets/AppIcon.ico" Width="72" Height="72" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+            <Image Width="72" Height="72" HorizontalAlignment="Center" Margin="0,0,0,20">
+                <Image.Source>
+                    <SvgImageSource UriSource="ms-appx:///Assets/appicon.theme-dark.svg" RasterizePixelWidth="144" RasterizePixelHeight="144"/>
+                </Image.Source>
+            </Image>
 
             <!-- App Name -->
-            <TextBlock Text="Daily" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center" 
+            <TextBlock Text="DayOne" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center" 
                        Foreground="White" FontFamily="Segoe UI Variable Display" Margin="0,0,0,4"/>
             <TextBlock Text="Your personal dashboard" FontSize="15" HorizontalAlignment="Center" 
                        Foreground="#88FFFFFF" Margin="0,0,0,40"/>

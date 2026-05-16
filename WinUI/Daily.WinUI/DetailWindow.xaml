@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Daily_WinUI"
+    xmlns:controls="using:Daily_WinUI.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="Daily Detail"
     mc:Ignorable="d">
@@ -27,11 +28,9 @@
 
         <Frame x:Name="RootFrame" Grid.Row="1" />
 
-        <!-- Top-bar artwork: declared after Frame so it overlays the top 110px, matching MainPage -->
-        <Image Source="Assets/apptopbar.png"
+        <!-- Top-bar weather art (native shapes, no SVG) -->
+        <controls:WeatherBannerControl x:Name="TopBarBanner"
                Grid.Row="1"
-               VerticalAlignment="Top" HorizontalAlignment="Stretch"
-               Height="110" Stretch="Fill"
-               Opacity="0.20" IsHitTestVisible="False"/>
+               VerticalAlignment="Top" HorizontalAlignment="Stretch" />
     </Grid>
 </Window>
