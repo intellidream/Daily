@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -11,74 +11,96 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Daily.Services;
 using Windows.UI;
+using System.Linq;
+using System.Collections.ObjectModel;
+using Daily.Models;
 
 namespace Daily_WinUI.Controls;
+
+public class WidgetLogEntryViewModel
+{
+    public HabitLog Log { get; set; }
+    public string Icon { get; set; }
+    public string ColorHex { get; set; }
+    public string Label { get; set; }
+    public string Amount { get; set; }
+    public string TimeText { get; set; }
+}
+
+public class WidgetChartData
+{
+    public string Label { get; set; }
+    public double Value { get; set; }
+    public double Goal { get; set; }
+    public double BarHeight => Goal > 0 ? System.Math.Min(100, (Value / Goal) * 100) : (Value > 0 ? 100 : 8);
+    public string DateLabel => Label;
+    public string ColorHex { get; set; }
+}
 
 public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyChanged
 {
     private readonly IHabitsService _habitsService;
     private readonly ISettingsService _settingsService;
 
+    private double _goalValue;
+    public double GoalValue
+    {
+        get => _goalValue;
+        set { _goalValue = value; OnPropertyChanged(); }
+    }
+
     private double _currentProgress;
     public double CurrentProgress
     {
         get => _currentProgress;
-        set
-        {
-            if (Math.Abs(_currentProgress - value) < 0.01) return;
-            _currentProgress = value;
-            OnPropertyChanged();
-        }
-    }
-
-    private double _goalValue = 2000;
-    public double GoalValue
-    {
-        get => _goalValue;
-        set
-        {
-            if (Math.Abs(_goalValue - value) < 0.01) return;
-            _goalValue = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(GoalDisplay));
-        }
+        set { _currentProgress = value; OnPropertyChanged(); }
     }
 
     private string _goalDisplay = "";
     public string GoalDisplay
     {
         get => _goalDisplay;
-        set
-        {
-            if (_goalDisplay == value) return;
-            _goalDisplay = value;
-            OnPropertyChanged();
-        }
+        set { _goalDisplay = value; OnPropertyChanged(); }
     }
 
     private string _moneySavedDisplay = "";
     public string MoneySavedDisplay
     {
         get => _moneySavedDisplay;
+        set { _moneySavedDisplay = value; OnPropertyChanged(); }
+    }
+
+    private SolidColorBrush _gaugeColor = new SolidColorBrush(Colors.DarkGreen);
+    public SolidColorBrush GaugeColor
+    {
+        get => _gaugeColor;
+        set { _gaugeColor = value; OnPropertyChanged(); }
+    }
+
+    private ObservableCollection<WidgetLogEntryViewModel> _logs = new();
+    public ObservableCollection<WidgetLogEntryViewModel> Logs
+    {
+        get => _logs;
         set
         {
-            if (_moneySavedDisplay == value) return;
-            _moneySavedDisplay = value;
+            _logs = value;
             OnPropertyChanged();
         }
     }
 
-    private SolidColorBrush _gaugeColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 2, 136, 209));
-    public SolidColorBrush GaugeColor
+    private ObservableCollection<WidgetChartData> _history = new();
+    public ObservableCollection<WidgetChartData> History
     {
-        get => _gaugeColor;
+        get => _history;
         set
         {
-            if (ReferenceEquals(_gaugeColor, value)) return;
-            _gaugeColor = value;
+            _history = value;
             OnPropertyChanged();
         }
     }
+
+    public bool HasLogs => _logs != null && _logs.Count > 0;
+    public bool HasNoLogs => !HasLogs;
 
     public string CurrentViewLabel => HabitsFlipView?.SelectedIndex == 0 ? "Hydration" : "Smoking";
 
@@ -92,6 +114,30 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
         Loaded += HabitsWidgetControl_Loaded;
         Unloaded += HabitsWidgetControl_Unloaded;
+        SizeChanged += HabitsWidgetControl_SizeChanged;
+    }
+
+    private void HabitsWidgetControl_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.NewSize.Width < 250)
+        {
+            if (e.NewSize.Height >= 250)
+            {
+                VisualStateManager.GoToState(this, "TallState", true);
+            }
+            else
+            {
+                VisualStateManager.GoToState(this, "SmallState", true);
+            }
+        }
+        else if (e.NewSize.Width < 500)
+        {
+            VisualStateManager.GoToState(this, "NormalState", true);
+        }
+        else
+        {
+            VisualStateManager.GoToState(this, "LargeState", true);
+        }
     }
 
     private async void HabitsWidgetControl_Loaded(object sender, RoutedEventArgs e)
@@ -158,9 +204,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                 StartWidth = 0.265,
                 EndWidth = 0.265,
                 WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
-                
-                
-                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(26, 128, 128, 128)) // semi-transparent gray
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(26, 128, 128, 128))
             };
             SmokesRadialAxis.Ranges.Add(bgRange);
 
@@ -171,8 +215,6 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                 StartWidth = 0.265,
                 EndWidth = 0.265,
                 WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
-                
-                
                 Background = GaugeColor
             };
             SmokesRadialAxis.Ranges.Add(progressRange);
@@ -202,9 +244,67 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             }
         }
 
+        // Fetch Logs and History
+        string viewType = isWater ? "water" : "smokes";
+        
+        var todayLogs = await _habitsService.GetLogsAsync(viewType, DateTime.Today);
+        var widgetLogs = new ObservableCollection<WidgetLogEntryViewModel>();
+        foreach (var log in todayLogs.OrderByDescending(l => l.LoggedAt))
+        {
+            string drinkOrType = viewType;
+            if (!string.IsNullOrWhiteSpace(log.Metadata))
+            {
+                try
+                {
+                    var doc = System.Text.Json.JsonDocument.Parse(log.Metadata);
+                    if (doc.RootElement.TryGetProperty("drink", out var d))
+                        drinkOrType = d.GetString()?.ToLowerInvariant() ?? viewType;
+                    else if (doc.RootElement.TryGetProperty("type", out var t))
+                        drinkOrType = t.GetString()?.ToLowerInvariant() ?? viewType;
+                }
+                catch { }
+            }
+
+            string colorHex = GetColorForDrinkOrSmoke(drinkOrType);
+            string icon = viewType == "smokes" ? "\uecb2" : "\ueb7b";
+
+            widgetLogs.Add(new WidgetLogEntryViewModel
+            {
+                Log = log,
+                Icon = icon,
+                ColorHex = colorHex,
+                Label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType),
+                Amount = isWater ? $"{(int)log.Value} ml" : $"{(int)log.Value} unit",
+                TimeText = log.LoggedAt.ToLocalTime().ToString("HH:mm")
+            });
+        }
+        Logs = widgetLogs;
+
+        var historyData = await _habitsService.GetHistoryAsync(viewType, DateTime.Today.AddDays(-6), DateTime.Today);
+        var widgetHistory = new ObservableCollection<WidgetChartData>();
+        
+        // Backfill 7 days
+        for (int i = 6; i >= 0; i--)
+        {
+            var targetDate = DateTime.Today.AddDays(-i);
+            var existing = historyData.FirstOrDefault(x => x.Date.Date == targetDate.Date);
+            
+            double val = existing != null ? existing.TotalValue : 0;
+            
+            widgetHistory.Add(new WidgetChartData
+            {
+                Label = targetDate.ToString("ddd"),
+                Value = val,
+                Goal = GoalValue,
+                ColorHex = val >= GoalValue && GoalValue > 0 ? "#FF4CAF50" : (viewType == "smokes" ? "#FFF44336" : "#FF2196F3")
+            });
+        }
+        History = widgetHistory;
+
+        OnPropertyChanged(nameof(HasLogs));
+        OnPropertyChanged(nameof(HasNoLogs));
         OnPropertyChanged(nameof(CurrentViewLabel));
     }
-
 
     private async void HabitsFlipView_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -223,17 +323,14 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
         axis.Ranges.Clear();
 
-        // Always add background range first
         var bgRange = new Syncfusion.UI.Xaml.Gauges.GaugeRange
         {
             StartValue = 0,
             EndValue = GoalValue > 0 ? GoalValue : 100,
-                StartWidth = 0.265,
-                EndWidth = 0.265,
-                WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
-            
-            
-            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(26, 128, 128, 128)) // semi-transparent gray
+            StartWidth = 0.265,
+            EndWidth = 0.265,
+            WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(26, 128, 128, 128))
         };
         axis.Ranges.Add(bgRange);
 
@@ -250,11 +347,9 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             {
                 StartValue = currentStart,
                 EndValue = currentStart + amount,
-                    StartWidth = 0.265,
-                    EndWidth = 0.265,
-                    WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
-                
-                
+                StartWidth = 0.265,
+                EndWidth = 0.265,
+                WidthUnit = Syncfusion.UI.Xaml.Gauges.SizeUnit.Factor,
                 Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color)
             };
 
