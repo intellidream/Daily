@@ -54,6 +54,9 @@
     <Compile Include="..\..\Services\ReadabilityResult.cs" Link="Services\ReadabilityResult.cs" />
     <Compile Include="..\..\Services\IRenderedHtmlService.cs" Link="Services\IRenderedHtmlService.cs" />
     <Compile Include="..\..\Services\Health\IHealthService.cs" Link="Services\Health\IHealthService.cs" />
+    <Compile Include="..\..\Services\Health\INativeHealthStore.cs" Link="Services\Health\INativeHealthStore.cs" />
+    <Compile Include="..\..\Services\Health\MockNativeHealthStore.cs" Link="Services\Health\MockNativeHealthStore.cs" />
+    <Compile Include="..\..\Services\Health\SupabaseHealthService.cs" Link="Services\Health\SupabaseHealthService.cs" />
     
     <!-- Stubs/Interfaces for Dependencies of SyncService -->
     <Compile Include="..\..\Services\IHabitsService.cs" Link="Services\IHabitsService.cs" />

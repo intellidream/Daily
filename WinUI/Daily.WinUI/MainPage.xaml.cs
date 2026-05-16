@@ -260,6 +260,7 @@ public sealed partial class MainPage : Page
                     OpenDetailWindow(typeof(HabitsDetailPage));
                     break;
                 case "HealthWidget":
+                    OpenDetailWindow(typeof(HealthDetailPage));
                     break;
             }
         }
@@ -315,3 +316,4 @@ public class DashboardGridView : GridView
         }
     }
 }
+

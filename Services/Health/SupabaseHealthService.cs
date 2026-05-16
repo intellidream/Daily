@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using Daily.Models.Health;
 using Microsoft.Extensions.Logging;
 using Supabase;
+using Microsoft.Extensions.DependencyInjection;
+using Daily.Services;
 
 namespace Daily.Services.Health
 {
@@ -369,3 +371,4 @@ namespace Daily.Services.Health
         }
     }
 }
+
