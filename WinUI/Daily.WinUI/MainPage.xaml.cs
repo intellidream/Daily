@@ -48,6 +48,8 @@ public sealed partial class MainPage : Page
         await LoadWidgetsAsync();
     }
 
+    public async void TriggerRefresh() => await LoadWidgetsAsync();
+
     private async System.Threading.Tasks.Task LoadWidgetsAsync()
     {
         var widgetList = await _widgetService.GetWidgetsAsync();

@@ -79,6 +79,12 @@ public sealed partial class MainWindow : Window
 
     // ── Theme toggle handler ──────────────────────────────────────────────────
 
+    private void TitleBarRefresh_Click(object sender, RoutedEventArgs e)
+    {
+        if (RootFrame.Content is MainPage mainPage)
+            mainPage.TriggerRefresh();
+    }
+
     private void TitleBarTheme_Click(object sender, RoutedEventArgs e)
     {
         if (RootFrame.Content is MainPage mainPage)

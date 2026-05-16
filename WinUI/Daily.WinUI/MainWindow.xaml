@@ -29,11 +29,23 @@
                 <ColumnDefinition x:Name="RightPaddingColumn" Width="140" /> <!-- 5: System Caption Buttons Area -->
             </Grid.ColumnDefinitions>
 
-            <!-- Icon -->
-            <Image Grid.Column="0" Source="Assets/Square44x44Logo.targetsize-32_altform-unplated.png" Width="16" Height="16" Margin="16,0,12,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
-
-            <!-- App Title -->
-            <TextBlock Grid.Column="1" Text="DayOne" FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False"/>
+            <!-- DayOne refresh button (replaces static icon + title) -->
+            <Button x:Name="TitleBarRefreshButton"
+                    Grid.Column="0" Grid.ColumnSpan="2"
+                    Background="Transparent" BorderThickness="0"
+                    CornerRadius="0" Padding="12,0"
+                    VerticalAlignment="Stretch"
+                    Click="TitleBarRefresh_Click"
+                    ToolTipService.ToolTip="Refresh dashboard">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Image Width="14" Height="14" VerticalAlignment="Center" IsHitTestVisible="False">
+                        <Image.Source>
+                            <SvgImageSource UriSource="{ThemeResource AppIconSource}" RasterizePixelWidth="28" RasterizePixelHeight="28"/>
+                        </Image.Source>
+                    </Image>
+                    <TextBlock Text="DayOne" FontSize="12" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
 
             <!-- Date text, immediately following the App Title -->
             <TextBlock x:Name="TitleBarDateText"

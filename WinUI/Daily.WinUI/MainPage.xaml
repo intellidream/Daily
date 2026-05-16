@@ -87,34 +87,8 @@
                VerticalAlignment="Top" HorizontalAlignment="Stretch" />
 
         <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="110"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <!-- Fixed TopBar Row: logo/refresh -->
-            <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center">
-                <Button Click="RefreshButton_Click"
-                        Background="{ThemeResource AppGlassColorBrush}"
-                        BorderThickness="0" CornerRadius="20"
-                        Height="40"
-                        Padding="16,4"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Center"
-                        ToolTipService.ToolTip="Refresh dashboard">
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <Image Width="20" Height="20" VerticalAlignment="Center">
-                            <Image.Source>
-                                <SvgImageSource UriSource="{ThemeResource AppIconSource}" RasterizePixelWidth="40" RasterizePixelHeight="40"/>
-                            </Image.Source>
-                        </Image>
-                        <TextBlock Text="DayOne" FontSize="13" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-            </Grid>
-
             <!-- Scrollable content: widgets -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="20,16,20,20" Spacing="20">
                     <!-- Dynamic Widget Grid -->
                     <local:DashboardGridView x:Name="WidgetGridView"
