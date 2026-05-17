@@ -41,6 +41,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 {
     private readonly IHabitsService _habitsService;
     private readonly ISettingsService _settingsService;
+    private readonly ISyncService _syncService;
 
     private double _goalValue;
     public double GoalValue
@@ -111,6 +112,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         InitializeComponent();
         _habitsService = App.Current.Services.GetRequiredService<IHabitsService>();
         _settingsService = App.Current.Services.GetRequiredService<ISettingsService>();
+        _syncService = App.Current.Services.GetRequiredService<ISyncService>();
 
         Loaded += HabitsWidgetControl_Loaded;
         Unloaded += HabitsWidgetControl_Unloaded;
@@ -154,6 +156,13 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
     private void HabitsService_OnHabitsUpdated()
     {
         DispatcherQueue.TryEnqueue(async () => await LoadDataAsync());
+    }
+
+    /// <summary>Called by the dashboard refresh button: pulls latest data from remote, then reloads the UI.</summary>
+    public async Task RefreshAsync()
+    {
+        await _syncService.PullAsync();
+        await LoadDataAsync();
     }
 
     private async Task LoadDataAsync()

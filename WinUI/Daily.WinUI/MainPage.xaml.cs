@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Daily_WinUI.Views;
 using Daily_WinUI.Services;
+using Daily_WinUI.Controls;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,7 +49,29 @@ public sealed partial class MainPage : Page
         await LoadWidgetsAsync();
     }
 
-    public async void TriggerRefresh() => await LoadWidgetsAsync();
+    public void TriggerRefresh() => RefreshLiveWidgets();
+
+    /// <summary>
+    /// Refreshes all live widget controls in-place without rebuilding the grid.
+    /// Walking the visual tree avoids the recreate-on-rebind issue where Loaded
+    /// never re-fires on recycled GridView containers.
+    /// </summary>
+    private void RefreshLiveWidgets()
+    {
+        foreach (var item in _widgets ?? Enumerable.Empty<Daily.Models.WidgetModel>())
+        {
+            var container = WidgetGridView.ContainerFromItem(item) as GridViewItem;
+            if (container == null) continue;
+
+            var border = container.ContentTemplateRoot as Border;
+            if (border?.Child is WeatherWidgetControl weather)
+                _ = weather.RefreshAsync();
+            else if (border?.Child is HabitsWidgetControl habits)
+                _ = habits.RefreshAsync();
+            else if (border?.Child is RssFeedWidgetControl rss)
+                _ = rss.RefreshAsync();
+        }
+    }
 
     private async System.Threading.Tasks.Task LoadWidgetsAsync()
     {
@@ -280,6 +303,7 @@ public sealed partial class MainPage : Page
         }
 
         var window = new DetailWindow();
+        window.RestorePosition(pageType.Name);
         window.Closed += (s, ev) => { _openWindows.Remove(pageType); };
         _openWindows[pageType] = window;
         window.NavigateTo(pageType, parameter);

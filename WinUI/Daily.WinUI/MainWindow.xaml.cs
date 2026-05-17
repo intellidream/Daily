@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Daily_WinUI.Services;
 using Windows.Graphics;
+using System.Runtime.InteropServices;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -120,6 +121,8 @@ public sealed partial class MainWindow : Window
 
     // ── Window management ─────────────────────────────────────────────────────
 
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
+
     private void ConfigureStartupWindow()
     {
         if (AppWindow.Presenter is OverlappedPresenter overlappedPresenter)
@@ -129,19 +132,27 @@ public sealed partial class MainWindow : Window
             overlappedPresenter.IsMinimizable = true;
         }
 
+        // Restore saved position/size if available
         if (_settings.HasWindowPosition && _settings.WindowWidth > 0 && _settings.WindowHeight > 0)
         {
             AppWindow.MoveAndResize(new RectInt32(_settings.WindowX, _settings.WindowY, _settings.WindowWidth, _settings.WindowHeight));
             return;
         }
 
+        // Default: Copilot-style — wide, lower-centre, floating above the taskbar.
+        // Measured on this machine: 1380×790 logical px, centred horizontally, bottom-aligned to work area.
         var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
         var workArea = displayArea.WorkArea;
 
-        var width = Math.Min(600, workArea.Width);
-        var height = Math.Min(800, workArea.Height);
-        var x = workArea.X + (workArea.Width - width) / 2;
-        var y = workArea.Y + (workArea.Height - height) / 2;
+        var hwnd2 = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        double scale2 = GetDpiForWindow(hwnd2) / 96.0;
+
+        int width  = Math.Min((int)(1380 * scale2), workArea.Width);
+        int height = Math.Min((int)(790  * scale2), workArea.Height);
+
+        // Horizontally centred, vertically bottom-aligned (leaves taskbar gap via workArea)
+        int x = workArea.X + (workArea.Width  - width)  / 2;
+        int y = workArea.Y +  workArea.Height - height;
 
         AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
     }
@@ -150,8 +161,19 @@ public sealed partial class MainWindow : Window
     {
         if (!args.DidPositionChange && !args.DidSizeChange) return;
 
-        var bounds = sender.Position;
+        // Enforce minimum window size (500×500 logical px, converted to physical)
+        double scale = this.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        int minPx = (int)(500 * scale);
         var size = sender.Size;
+        if (size.Width < minPx || size.Height < minPx)
+        {
+            sender.ResizeClient(new SizeInt32(
+                Math.Max(size.Width,  minPx),
+                Math.Max(size.Height, minPx)));
+            return; // ResizeClient fires another Changed — skip saving on the clamped event
+        }
+
+        var bounds = sender.Position;
         _settings.WindowX = bounds.X;
         _settings.WindowY = bounds.Y;
         _settings.WindowWidth = size.Width;

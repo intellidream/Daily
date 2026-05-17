@@ -2,6 +2,14 @@ using System.Text.Json;
 
 namespace Daily_WinUI.Services;
 
+public sealed class DetailWindowPosition
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
+}
+
 public sealed class AppSettings
 {
     public double? LastLatitude { get; set; }
@@ -24,6 +32,8 @@ public sealed class AppSettings
     public int WindowWidth { get; set; }
     public int WindowHeight { get; set; }
     public bool HasWindowPosition { get; set; }
+    /// <summary>Saved position per detail page type name (e.g. "WeatherDetailPage").</summary>
+    public Dictionary<string, DetailWindowPosition> DetailWindowPositions { get; set; } = new();
 }
 
 public sealed class SavedLocation

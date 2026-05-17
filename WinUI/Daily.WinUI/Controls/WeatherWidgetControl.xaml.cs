@@ -26,8 +26,12 @@ public sealed partial class WeatherWidgetControl : UserControl
         await RefreshWeatherAsync();
     }
 
+    /// <summary>Called by the dashboard refresh button to reload data in-place.</summary>
+    public Task RefreshAsync() => RefreshWeatherAsync();
+
     public async Task RefreshWeatherAsync()
     {
+
         try
         {
             LoadingOverlay.Visibility = Microsoft.UI.Xaml.Visibility.Visible;

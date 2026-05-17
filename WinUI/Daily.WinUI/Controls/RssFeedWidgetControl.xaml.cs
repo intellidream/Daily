@@ -135,6 +135,13 @@ public sealed partial class RssFeedWidgetControl : UserControl
         }
     }
 
+    /// <summary>Called by the dashboard refresh button to reload the current feed in-place.</summary>
+    public async Task RefreshAsync()
+    {
+        if (_rssService.CurrentFeed != null)
+            await _rssService.LoadFeedAsync(_rssService.CurrentFeed);
+    }
+
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
         if (_rssService.CurrentFeed != null)
