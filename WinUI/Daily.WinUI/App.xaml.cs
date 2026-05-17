@@ -105,6 +105,13 @@ public partial class App : Application
         services.AddSingleton<Daily.Services.IHabitsService, Daily.Services.HabitsService>();
         services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();
         
+        // Finances Services
+        services.AddHttpClient<Daily.Services.Finances.YahooFinanceService>();
+        services.AddHttpClient<Daily.Services.Finances.FinnhubService>();
+        services.AddSingleton<Daily.Services.Finances.IFinancesService, Daily.Services.Finances.FinancesService>();
+        services.AddSingleton<Daily.Services.Finances.IMacroService, Daily.Services.Finances.MacroService>();
+        services.AddSingleton<Daily.Services.Finances.IHeatmapService, Daily.Services.Finances.HeatmapService>();
+        
         // Dummy services to satisfy SyncService dependencies
         services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Services.Health.MockNativeHealthStore>();
         services.AddSingleton<Microsoft.Extensions.Logging.ILogger<Daily.Services.Health.SupabaseHealthService>>(Microsoft.Extensions.Logging.Abstractions.NullLogger<Daily.Services.Health.SupabaseHealthService>.Instance);
