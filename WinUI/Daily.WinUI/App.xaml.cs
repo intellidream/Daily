@@ -23,33 +23,88 @@ public partial class App : Application
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
 
-        // ── Register protocol for the unpackaged exe ──
-        // Writes HKCU\Software\Classes\com.intellidream.daily\shell\open\command
-        // pointing at the CURRENT executable. Idempotent.
-        Microsoft.Windows.AppLifecycle.ActivationRegistrationManager
-            .RegisterForProtocolActivation(
-                "com.intellidream.daily.desktop",
-                "",
-                "Daily Dashboard (Desktop)",
-                System.Environment.ProcessPath ?? "");
+        // ── Single-Instance gate via named Mutex + named pipe for URI forwarding ──
+        const string MutexName   = "DailyWinUI_SingleInstance_Mutex";
+        const string PipeName    = "DailyWinUI_ProtocolPipe";
 
-        // ── Single-Instance gate ──
-        var mainInstance =
-            Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("DailyWinUIMainInstance");
+        bool createdNew;
+        var mutex = new System.Threading.Mutex(true, MutexName, out createdNew);
 
-        if (!mainInstance.IsCurrent)
+        if (!createdNew)
         {
-            // Another instance owns the key – redirect the activation and exit.
-            var activationArgs =
-                Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
-            mainInstance.RedirectActivationToAsync(activationArgs).AsTask().Wait();
+            // Another instance is running. If we were launched by a protocol URL,
+            // forward it via named pipe so the running instance can handle it.
+            var activationArgs = Microsoft.Windows.AppLifecycle.AppInstance
+                .GetCurrent().GetActivatedEventArgs();
+
+            string? uriToForward = null;
+            if (activationArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
+            {
+                var proto = activationArgs.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs;
+                uriToForward = proto?.Uri?.ToString();
+            }
+
+            if (!string.IsNullOrEmpty(uriToForward))
+            {
+                try
+                {
+                    using var client = new System.IO.Pipes.NamedPipeClientStream(".", PipeName,
+                        System.IO.Pipes.PipeDirection.Out);
+                    client.Connect(2000); // 2 second timeout
+                    using var writer = new System.IO.StreamWriter(client);
+                    writer.WriteLine(uriToForward);
+                    writer.Flush();
+                }
+                catch { /* running instance not listening yet — give up gracefully */ }
+            }
+
+            // Bring the running window to front
+            var existing = System.Diagnostics.Process.GetProcessesByName(
+                System.IO.Path.GetFileNameWithoutExtension(System.Environment.ProcessPath ?? "Daily.WinUI"));
+            foreach (var p in existing)
+            {
+                if (p.Id != System.Diagnostics.Process.GetCurrentProcess().Id && p.MainWindowHandle != IntPtr.Zero)
+                {
+                    ShowWindow(p.MainWindowHandle, 9); // SW_RESTORE
+                    SetForegroundWindow(p.MainWindowHandle);
+                    break;
+                }
+            }
             return;
         }
 
-        // ── Wire Activated BEFORE Application.Start so no redirects are lost ──
-        mainInstance.Activated += OnAppInstanceActivated;
+        // We are the main instance — keep mutex alive
+        GC.KeepAlive(mutex);
 
-        // ── Main instance – start normally ──
+        // ── Register protocol handler pointing to this exe ──
+        RegisterProtocolDirectly("com.intellidream.daily.desktop", "DayOne");
+
+        // ── Start listening for protocol URIs forwarded from second instances ──
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            while (true)
+            {
+                try
+                {
+                    using var server = new System.IO.Pipes.NamedPipeServerStream(PipeName,
+                        System.IO.Pipes.PipeDirection.In,
+                        1,
+                        System.IO.Pipes.PipeTransmissionMode.Message,
+                        System.IO.Pipes.PipeOptions.Asynchronous);
+                    server.WaitForConnection();
+                    using var reader = new System.IO.StreamReader(server);
+                    var line = reader.ReadLine();
+                    if (!string.IsNullOrEmpty(line) && Uri.TryCreate(line, UriKind.Absolute, out var uri))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Pipe] Received URI: {uri}");
+                        HandleProtocolUri(uri);
+                    }
+                }
+                catch { /* pipe error — restart listener */ }
+            }
+        });
+
+        // ── Start the app normally ──
         Microsoft.UI.Xaml.Application.Start((p) =>
         {
             var context = new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(
@@ -160,11 +215,53 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Fires on a background thread when a second process redirects its activation here.
+    /// Called from the named pipe listener with the forwarded URI from the OAuth callback.
     /// </summary>
-    private static void OnAppInstanceActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments e)
+    internal static void HandleProtocolUri(Uri uri)
     {
-        HandleActivation(e);
+        System.Diagnostics.Debug.WriteLine($"[WinUIAuth] Protocol URI received: {uri}");
+
+        var code = "";
+        string queryToParse = "";
+
+        if (!string.IsNullOrEmpty(uri.Query)) queryToParse = uri.Query.TrimStart('?');
+        else if (!string.IsNullOrEmpty(uri.Fragment)) queryToParse = uri.Fragment.TrimStart('#');
+
+        if (!string.IsNullOrEmpty(queryToParse))
+        {
+            foreach (var part in queryToParse.Split('&'))
+            {
+                var kv = part.Split('=');
+                if (kv.Length == 2 && kv[0] == "code")
+                {
+                    code = System.Net.WebUtility.UrlDecode(kv[1]);
+                    System.Diagnostics.Debug.WriteLine("[WinUIAuth] Code found via pipe!");
+                    break;
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(code))
+        {
+            var tcs = Daily_WinUI.Services.WinUIAuthService.GoogleAuthTcs;
+            if (tcs != null && !tcs.Task.IsCompleted)
+            {
+                System.Diagnostics.Debug.WriteLine("[WinUIAuth] Setting TCS Result from pipe...");
+                tcs.TrySetResult(code);
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[WinUIAuth] TCS null or done (null: {tcs == null})");
+            }
+        }
+
+        // Bring main window to front
+        var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
+        if (handle != IntPtr.Zero)
+        {
+            ShowWindow(handle, 9);
+            SetForegroundWindow(handle);
+        }
     }
 
     /// <summary>
@@ -238,6 +335,28 @@ public partial class App : Application
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    /// <summary>
+    /// Writes the full HKCU protocol handler directly to the registry.
+    /// More reliable than RegisterForProtocolActivation for unpackaged apps.
+    /// </summary>
+    private static void RegisterProtocolDirectly(string scheme, string appName)
+    {
+        var exePath = System.Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+        var command = $"\"{exePath}\" \"----ms-protocol:%1\"";
+
+        using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey($@"Software\Classes\{scheme}");
+        key.SetValue("", $"URL:{scheme}");
+        key.SetValue("URL Protocol", "");
+
+        using var appKey = key.CreateSubKey("Application");
+        appKey.SetValue("ApplicationName", appName);
+
+        using var cmdKey = key.CreateSubKey(@"shell\open\command");
+        cmdKey.SetValue("", command);
+
+        System.Diagnostics.Debug.WriteLine($"[Protocol] Registered {scheme} -> {exePath}");
+    }
 }
 
 

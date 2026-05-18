@@ -8,21 +8,14 @@ using System.Drawing.Imaging;
 using System.IO;
 
 var assetsDir = Path.Combine(Directory.GetCurrentDirectory(), "Assets");
-var svgPath   = Path.Combine(assetsDir, "appicon.theme-dark.svg");
-
-// Colors
-var navyBg      = Color.FromArgb(255, 11,  17,  33);   // #0B1121
-var yellowFg    = Color.FromArgb(255, 245, 240, 232);  // #F5F0E8 (light yellowish-gray)
-var whiteFg     = Color.FromArgb(255, 255, 255, 255);  // white  (for light-bg version)
+var svgPath   = Path.Combine(assetsDir, "NewIcon.svg");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// Load SVG, replace fill color, rasterize with 4x supersampling then downsample
-Bitmap Render(string svgFile, Color iconColor, Color bgColor, int size)
+// Load SVG as-is (no color/background changes) and rasterize with supersampling
+Bitmap Render(string svgFile, int size)
 {
-    var svgText = File.ReadAllText(svgFile)
-        .Replace("fill:white", $"fill:rgb({iconColor.R},{iconColor.G},{iconColor.B})")
-        .Replace("style=\"fill:white", $"style=\"fill:rgb({iconColor.R},{iconColor.G},{iconColor.B})");
+    var svgText = File.ReadAllText(svgFile);
 
     // Supersample factor — render 4× larger then downsample for crisp edges
     int scale = size <= 48 ? 8 : 4;
@@ -35,7 +28,7 @@ Bitmap Render(string svgFile, Color iconColor, Color bgColor, int size)
     var hiBmp = new Bitmap(hiSize, hiSize, PixelFormat.Format32bppArgb);
     using (var gHi = Graphics.FromImage(hiBmp))
     {
-        gHi.Clear(bgColor);
+        gHi.Clear(Color.Transparent);
         gHi.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         gHi.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
         gHi.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
@@ -117,8 +110,8 @@ foreach (var (file, size) in specs)
     {
         var bmp310 = new Bitmap(310, 150, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp310);
-        g.Clear(navyBg);
-        var icon = Render(svgPath, yellowFg, navyBg, 110);
+        g.Clear(Color.Transparent);
+        var icon = Render(svgPath, 110);
         g.DrawImage(icon, (310 - 110) / 2, (150 - 110) / 2);
         Save(bmp310, Path.Combine(assetsDir, file));
     }
@@ -126,14 +119,14 @@ foreach (var (file, size) in specs)
     {
         var bmp = new Bitmap(620, 300, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp);
-        g.Clear(navyBg);
-        var icon = Render(svgPath, yellowFg, navyBg, 200);
+        g.Clear(Color.Transparent);
+        var icon = Render(svgPath, 200);
         g.DrawImage(icon, (620 - 200) / 2, (300 - 200) / 2);
         Save(bmp, Path.Combine(assetsDir, file));
     }
     else
     {
-        using var bmp = Render(svgPath, yellowFg, navyBg, size);
+        using var bmp = Render(svgPath, size);
         Save(bmp, Path.Combine(assetsDir, file));
     }
 }
@@ -148,21 +141,19 @@ var extraSizes = new (string file, int size)[]
 };
 foreach (var (file, size) in extraSizes)
 {
-    using var bmp = Render(svgPath, yellowFg, navyBg, size);
+    using var bmp = Render(svgPath, size);
     Save(bmp, Path.Combine(assetsDir, file));
 }
 
 // ICO — 16,20,24,32,48,256
 var icoSizes = new[] { 16, 20, 24, 32, 48, 256 };
-var icoBmps  = icoSizes.Select(s => Render(svgPath, yellowFg, navyBg, s)).ToList();
+var icoBmps  = icoSizes.Select(s => Render(svgPath, s)).ToList();
 SaveIco(icoBmps, Path.Combine(assetsDir, "AppIcon.ico"));
 foreach (var b in icoBmps) b.Dispose();
 
-// StoreLogo: light-theme version (dark icon on light bg) for Store
-var storeLight = Render(
-    Path.Combine(assetsDir, "appicon.theme-light.svg"),
-    navyBg, yellowFg, 50);
-Save(storeLight, Path.Combine(assetsDir, "StoreLogo.png"));
-storeLight.Dispose();
+// StoreLogo — same SVG, just 50px
+var storeBmp = Render(svgPath, 50);
+Save(storeBmp, Path.Combine(assetsDir, "StoreLogo.png"));
+storeBmp.Dispose();
 
 Console.WriteLine("Done!");
