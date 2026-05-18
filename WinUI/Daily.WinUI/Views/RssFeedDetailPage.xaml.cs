@@ -182,8 +182,8 @@ public sealed partial class RssFeedDetailPage : Page
             await ReaderWebView.EnsureCoreWebView2Async();
             bool readerIsDark = this.ActualTheme == ElementTheme.Dark;
             ReaderWebView.DefaultBackgroundColor = readerIsDark
-                ? Windows.UI.Color.FromArgb(255, 6, 13, 24)      // #060D18
-                : Windows.UI.Color.FromArgb(255, 212, 201, 176);  // #D4C9B0
+                ? Windows.UI.Color.FromArgb(255, 5, 15, 26)       // #050F1A — matches dark SVG bg
+                : Windows.UI.Color.FromArgb(255, 212, 201, 176);  // #D4C9B0 — matches light SVG bg
             SetupWebViewVirtualHost();
             ReaderWebView.NavigateToString(html);
             ReaderLoadingPanel.Visibility = Visibility.Collapsed;
@@ -386,10 +386,10 @@ public sealed partial class RssFeedDetailPage : Page
         string linkColor = isDark ? "#66B2FF" : "#0066CC";
         string metaColor = isDark ? "#A0A0A0" : "#666666";
 
-        // Gradient matches App.xaml AppBgBrush — top darker, bottom lighter
-        string bgGradient = isDark
-            ? "linear-gradient(to bottom, #060D18 0%, #0B1A30 35%, #122448 65%, #1A3566 100%)"
-            : "linear-gradient(to bottom, #D4C9B0 0%, #DFD5BC 35%, #EDE8DC 65%, #F8F5EF 100%)";
+        string bgImage = isDark
+            ? "url('http://app-assets.local/appbackground.theme-dark.svg')"
+            : "url('http://app-assets.local/appbackground.theme-light.svg')";
+        string bgColor = isDark ? "#050F1A" : "#D4C9B0";
 
         string featuredImageHtml = string.IsNullOrEmpty(article.ImageUrl) 
             ? "" 
@@ -411,7 +411,9 @@ public sealed partial class RssFeedDetailPage : Page
             min-height: 100%;
         }}
         html {{
-            background: {bgGradient};
+            background-color: {bgColor};
+            background-image: {bgImage};
+            background-size: cover;
             background-attachment: fixed;
         }}
         body {{

@@ -6,11 +6,11 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:chart="using:Syncfusion.UI.Xaml.Charts"
     mc:Ignorable="d"
-    Background="{ThemeResource AppBgBrush}" DataContext="{Binding RelativeSource={RelativeSource Mode=Self}}"
+    Background="Transparent" DataContext="{Binding RelativeSource={RelativeSource Mode=Self}}"
     Loaded="Page_Loaded"
     Unloaded="Page_Unloaded">
 
-    <Grid Background="{ThemeResource AppBgBrush}">
+    <Grid Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="110" />
             <RowDefinition Height="*" />

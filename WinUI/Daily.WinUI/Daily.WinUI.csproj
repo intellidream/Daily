@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
@@ -40,6 +40,8 @@
   <ItemGroup>
     <Compile Include="..\..\Configuration\Secrets.cs" Link="Configuration\Secrets.cs" />
     <Compile Include="..\..\Models\**\*.cs" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Remove="Assets\appbackground.theme-dark.svg" />
+    <Content Remove="Assets\appbackground.theme-light.svg" />
     <Page Remove="SettingsWindow.xaml" />
     <Page Remove="Views\AboutPage.xaml" />
     <Page Remove="Views\SettingsPage.xaml" />

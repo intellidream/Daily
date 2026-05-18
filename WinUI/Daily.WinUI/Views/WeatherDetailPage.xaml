@@ -35,7 +35,7 @@
         <SolidColorBrush x:Key="ForecastCardBorderBrush" Color="#33FFFFFF" />
     </Page.Resources>
 
-    <Grid Background="{ThemeResource AppBgBrush}">
+    <Grid Background="Transparent">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="MobileState">

@@ -7,7 +7,7 @@
     xmlns:models="using:Daily.Models.Finances"
     xmlns:controls="using:Daily_WinUI.Controls"
     mc:Ignorable="d"
-    Background="{ThemeResource AppBgBrush}"
+    Background="Transparent"
     Loaded="Page_Loaded">
 
     <Page.Resources>
@@ -24,7 +24,7 @@
         <converters:VolumeFormatConverter x:Key="VolumeFormatConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
     </Page.Resources>
 
-    <Grid Background="{ThemeResource AppBgBrush}">
+    <Grid Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="110" />
             <RowDefinition Height="*" />

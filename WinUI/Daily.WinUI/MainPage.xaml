@@ -79,9 +79,8 @@
     </Page.Resources>
 
     <Grid Background="Transparent">
-        <!-- Gradient tint over Mica -->
-        <Rectangle IsHitTestVisible="False" Fill="{ThemeResource AppBgBrush}"
-                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+        <!-- SVG Background -->
+        <Image Source="{ThemeResource AppBackgroundSource}" Stretch="UniformToFill" IsHitTestVisible="False" />
 
         <Grid>
             <!-- Scrollable content: widgets -->

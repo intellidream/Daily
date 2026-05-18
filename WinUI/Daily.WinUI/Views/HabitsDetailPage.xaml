@@ -7,7 +7,7 @@
       xmlns:gauge="using:Syncfusion.UI.Xaml.Gauges"
       xmlns:controls="using:Daily_WinUI.Controls"
       mc:Ignorable="d"
-      Background="{ThemeResource AppBgBrush}">
+      Background="Transparent">
 
     <Page.Resources>
         <ResourceDictionary>
@@ -147,7 +147,7 @@
 
 
     <!-- Root grid: artwork layer behind content -->
-    <Grid Background="{ThemeResource AppBgBrush}">
+    <Grid Background="Transparent">
 
     <Grid>
         <Grid.RowDefinitions>

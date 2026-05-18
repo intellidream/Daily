@@ -6,7 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Background="{ThemeResource AppBgBrush}">
+    Background="Transparent">
 
     <Page.Resources>
         <!-- Dark navy background matching MainPage -->
@@ -23,7 +23,7 @@
 
     </Page.Resources>
 
-    <Grid Background="{ThemeResource AppBgBrush}">
+    <Grid Background="Transparent">
 
 
         <!-- State 1: List View -->
