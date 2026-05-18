@@ -156,6 +156,7 @@
         <Grid x:Name="ReaderViewContainer" Visibility="Collapsed" Background="Transparent">
             <Grid.RowDefinitions>
                 <RowDefinition Height="110"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -169,14 +170,17 @@
                 </Button>
             </Grid>
 
+            <!-- Color Ribbon Separator - matches darkest tones from SVG gradients -->
+            <Border Grid.Row="1" Height="3" Background="{ThemeResource AppReaderRibbonBrush}"/>
+
             <!-- Reader Loading State -->
-            <StackPanel Grid.Row="1" x:Name="ReaderLoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+            <StackPanel Grid.Row="2" x:Name="ReaderLoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
                 <ProgressRing IsActive="True" Width="56" Height="56"/>
                 <TextBlock Text="Extracting article..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
             </StackPanel>
 
             <!-- WebView2 for Reader Content -->
-            <WebView2 x:Name="ReaderWebView" Grid.Row="1" Margin="0" Visibility="Collapsed"/>
+            <WebView2 x:Name="ReaderWebView" Grid.Row="2" Margin="0" Visibility="Collapsed"/>
         </Grid>
     </Grid>
 </Page>

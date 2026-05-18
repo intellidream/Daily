@@ -384,6 +384,11 @@ public sealed partial class RssFeedDetailPage : Page
         string linkColor = isDark ? "#66B2FF" : "#0066CC";
         string metaColor = isDark ? "#A0A0A0" : "#666666";
 
+        // Extract gradient colors from SVG top area - these match the backgrounds
+        // Dark theme: blue gradient starting with #0F1D35
+        // Light theme: warm tan gradient starting with #D9B08D
+        string bodyBackground = isDark ? "rgba(15, 29, 53, 0.4)" : "rgba(217, 176, 141, 0.15)";
+
         string featuredImageHtml = string.IsNullOrEmpty(article.ImageUrl) 
             ? "" 
             : $"<img class='featured-image' src='{article.ImageUrl}' />";
@@ -408,7 +413,7 @@ public sealed partial class RssFeedDetailPage : Page
         }}
         body {{
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
-            background: transparent;
+            background: {bodyBackground};
             color: {textColor};
             line-height: 1.6;
             margin: 0;
