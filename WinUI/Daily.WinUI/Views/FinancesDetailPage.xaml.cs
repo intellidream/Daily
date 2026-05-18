@@ -6,6 +6,7 @@ using Daily.Models.Finances;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace Daily_WinUI.Views;
 
@@ -25,6 +26,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
     // Stocks
     public ObservableCollection<StockQuote> WatchlistStocks { get; } = new();
+    private List<StockQuote> _allWatchlistStocks = new();
 
     // Money
     private string _netWorthDisplay = "$0";
@@ -106,17 +108,22 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
                 };
             }
             
-            WatchlistStocks.Clear();
-            foreach (var s in allStocks) WatchlistStocks.Add(s);
+            _allWatchlistStocks = allStocks;
             
-            // Add portfolio stocks to watchlist if not present
+            // Add portfolio stocks to all watchlist if not present
             foreach (var p in portfolio)
             {
-                if (!WatchlistStocks.Any(x => x.Symbol == p.Symbol))
+                if (!_allWatchlistStocks.Any(x => x.Symbol == p.Symbol))
                 {
-                    WatchlistStocks.Add(p);
+                    _allWatchlistStocks.Add((StockQuote)p);
                 }
             }
+            
+            string currentFilter = "stock";
+            if (CryptoBtn.IsChecked == true) currentFilter = "crypto";
+            else if (ForexBtn.IsChecked == true) currentFilter = "forex";
+            
+            FilterWatchlist(currentFilter);
 
             // Money
             var nw = await _financesService.GetNetWorthAsync();
@@ -155,6 +162,30 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         else
         {
             this.Frame.Navigate(typeof(MainPage));
+        }
+    }
+
+    private void MarketType_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleButton btn)
+        {
+            StocksBtn.IsChecked = btn == StocksBtn;
+            CryptoBtn.IsChecked = btn == CryptoBtn;
+            ForexBtn.IsChecked = btn == ForexBtn;
+
+            string marketType = btn.Tag?.ToString() ?? "stock";
+            FilterWatchlist(marketType);
+        }
+    }
+
+    private void FilterWatchlist(string marketType)
+    {
+        WatchlistStocks.Clear();
+        var filtered = _allWatchlistStocks.Where(x => x.MarketType?.ToLower() == marketType).ToList();
+
+        foreach (var s in filtered)
+        {
+            WatchlistStocks.Add(s);
         }
     }
 }

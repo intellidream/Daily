@@ -190,7 +190,9 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             ExtendedStocks.Clear();
             
             var top = stocksToDisplay.Take(4).ToList();
-            var extended = stocksToDisplay.Skip(4).Take(10).ToList();
+            
+            var cryptoDefaults = await _financesService.GetStockQuotesAsync(new List<string> { "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD" });
+            var extended = cryptoDefaults.Take(10).ToList();
 
             foreach (var s in top) TopStocks.Add(s);
             foreach (var s in extended) ExtendedStocks.Add(s);
@@ -225,26 +227,7 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             FinancesFlipView.SelectedIndex = 0;
     }
 
-    private void Widget_Tapped(object sender, TappedRoutedEventArgs e)
-    {
-        // Don't navigate if the user tapped on a FlipView navigation button
-        DependencyObject current = e.OriginalSource as DependencyObject;
-        while (current != null)
-        {
-            if (current is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase) return;
-            current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
-        }
 
-        // Open Detail Window or Navigate to Detail Page
-        if (App.Current.MainWindow?.Content is Grid rootGrid)
-        {
-            var frame = rootGrid.Children.OfType<Frame>().FirstOrDefault();
-            if (frame != null)
-            {
-                frame.Navigate(typeof(Views.FinancesDetailPage));
-            }
-        }
-    }
 
     private void Header_PointerEntered(object sender, PointerRoutedEventArgs e)
     {

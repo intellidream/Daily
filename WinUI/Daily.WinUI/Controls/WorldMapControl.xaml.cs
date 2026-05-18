@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using Daily.Models.Finances;
 using Microsoft.UI;
@@ -26,6 +27,7 @@ public sealed partial class WorldMapControl : UserControl
     public WorldMapControl()
     {
         this.InitializeComponent();
+        this.Loaded += (s, e) => UpdateMap();
     }
 
     private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -37,8 +39,23 @@ public sealed partial class WorldMapControl : UserControl
     {
         if (d is WorldMapControl control)
         {
+            if (e.OldValue is INotifyCollectionChanged oldCollection)
+            {
+                oldCollection.CollectionChanged -= control.OnCollectionChanged;
+            }
+
+            if (e.NewValue is INotifyCollectionChanged newCollection)
+            {
+                newCollection.CollectionChanged += control.OnCollectionChanged;
+            }
+
             control.UpdateMap();
         }
+    }
+
+    private void OnCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+    {
+        UpdateMap();
     }
 
     private void UpdateMap()

@@ -130,7 +130,8 @@ public class YahooFinanceService
                                          DayHigh = (decimal?)result["regularMarketDayHigh"]?["raw"],
                                          DayLow = (decimal?)result["regularMarketDayLow"]?["raw"],
                                          Volume = (long?)result["regularMarketVolume"]?["raw"],
-                                         MarketCap = (long?)result["marketCap"]?["raw"]
+                                         MarketCap = (long?)result["marketCap"]?["raw"],
+                                         MarketType = result["quoteType"]?.ToString() ?? "Equity"
                                      };
 
                                      // FIX: Crypto Name Sanitization

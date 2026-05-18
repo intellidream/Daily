@@ -8,7 +8,6 @@
     mc:Ignorable="d"
     d:DesignHeight="320"
     d:DesignWidth="420"
-    Tapped="Widget_Tapped"
     Background="Transparent">
 
     <UserControl.Resources>
@@ -248,7 +247,7 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <PersonPicture Grid.Column="0" ProfilePicture="{x:Bind LogoUrl}" DisplayName="{x:Bind Symbol}" Width="24" Height="24" Margin="0,0,12,0" />
+                                            <PersonPicture Grid.Column="0" ProfilePicture="{Binding LogoUrl}" DisplayName="{Binding Symbol}" Width="24" Height="24" Margin="0,0,12,0" />
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock Text="{x:Bind Symbol}" FontSize="14" FontWeight="SemiBold" />
                                                 <TextBlock Text="{x:Bind CompanyName}" FontSize="10" Opacity="0.5" />
@@ -267,7 +266,7 @@
                     <Grid x:Name="StocksExtendedPanel" Grid.Row="1" Grid.Column="0" Visibility="Collapsed" VerticalAlignment="Stretch">
                         <ListView ItemsSource="{x:Bind ExtendedStocks, Mode=OneWay}" SelectionMode="None">
                             <ListView.Header>
-                                <TextBlock Text="Extended Watchlist" FontSize="12" Opacity="0.5" Margin="0,0,0,8" />
+                                <TextBlock Text="Crypto Watchlist" FontSize="12" Opacity="0.5" Margin="0,0,0,8" />
                             </ListView.Header>
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="models:StockQuote">

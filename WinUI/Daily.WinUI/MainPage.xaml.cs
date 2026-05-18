@@ -278,6 +278,7 @@ public sealed partial class MainPage : Page
                     OpenDetailWindow(typeof(RssFeedDetailPage));
                     break;
                 case "FinancesWidget":
+                    OpenDetailWindow(typeof(FinancesDetailPage));
                     break;
                 case "HabitsWidget":
                     OpenDetailWindow(typeof(HabitsDetailPage));
