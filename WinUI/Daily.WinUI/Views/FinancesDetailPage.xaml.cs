@@ -20,6 +20,16 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
+    // Loading States
+    private bool _isWorldLoading;
+    public bool IsWorldLoading { get => _isWorldLoading; set { _isWorldLoading = value; OnPropertyChanged(); } }
+
+    private bool _isStocksLoading;
+    public bool IsStocksLoading { get => _isStocksLoading; set { _isStocksLoading = value; OnPropertyChanged(); } }
+
+    private bool _isMoneyLoading;
+    public bool IsMoneyLoading { get => _isMoneyLoading; set { _isMoneyLoading = value; OnPropertyChanged(); } }
+
     // World
     public ObservableCollection<MacroIndicator> MacroIndicators { get; } = new();
     public ObservableCollection<CountryEconomicData> HeatmapData { get; } = new();
@@ -79,6 +89,15 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
     private async Task LoadDataAsync()
     {
+        IsWorldLoading = true;
+        IsStocksLoading = true;
+        IsMoneyLoading = true;
+
+        MacroIndicators.Clear();
+        HeatmapData.Clear();
+        Holdings.Clear();
+        Accounts.Clear();
+
         try
         {
             // World
@@ -92,22 +111,20 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
             // Stocks (All stocks in watchlist)
             var portfolio = await _financesService.GetHoldingsWithQuotesAsync();
-            var allStocks = await _financesService.GetStockQuotesAsync(new List<string> { "AAPL", "MSFT", "NVDA", "TSLA", "BTC-USD", "ETH-USD" }); // Fallback or mock list
             
-            // Hard fallback if API fails
-            if (!allStocks.Any())
-            {
-                allStocks = new List<StockQuote>
-                {
-                    new StockQuote { Symbol = "AAPL", CompanyName = "Apple", CurrentPrice = 175.50m, PercentChange = 1.2m, MarketType = "stock" },
-                    new StockQuote { Symbol = "MSFT", CompanyName = "Microsoft", CurrentPrice = 330.10m, PercentChange = 0.5m, MarketType = "stock" },
-                    new StockQuote { Symbol = "NVDA", CompanyName = "Nvidia", CurrentPrice = 450.25m, PercentChange = 2.1m, MarketType = "stock" },
-                    new StockQuote { Symbol = "TSLA", CompanyName = "Tesla", CurrentPrice = 210.80m, PercentChange = -1.5m, MarketType = "stock" },
-                    new StockQuote { Symbol = "BTC-USD", CompanyName = "Bitcoin", CurrentPrice = 45000.00m, PercentChange = 3.5m, MarketType = "crypto" },
-                    new StockQuote { Symbol = "ETH-USD", CompanyName = "Ethereum", CurrentPrice = 2500.00m, PercentChange = 4.2m, MarketType = "crypto" }
-                };
-            }
-            
+            var watchlistSymbols = await _financesService.GetWatchlistSymbolsAsync();
+            var _trackedSymbols = new List<string> 
+            { 
+                "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META",
+                "TLV.RO", "H2O.RO", "SNG.RO", "SNP.RO",
+                "ASML", "TSM", "SAP", "RMS.PA" 
+            };
+            var _cryptoSymbols = new List<string> { "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "DOT-USD", "LINK-USD" };
+            var _forexSymbols = new List<string> { "EURUSD=X", "JPY=X", "GBPUSD=X", "AUDUSD=X" };
+
+            var allSymbols = _trackedSymbols.Concat(watchlistSymbols).Concat(_cryptoSymbols).Concat(_forexSymbols).Distinct().ToList();
+            var allStocks = await _financesService.GetStockQuotesAsync(allSymbols);
+
             _allWatchlistStocks = allStocks;
             
             // Add portfolio stocks to all watchlist if not present
@@ -146,6 +163,12 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         {
             System.Diagnostics.Debug.WriteLine($"Error loading finances detail: {ex}");
         }
+        finally
+        {
+            IsWorldLoading = false;
+            IsStocksLoading = false;
+            IsMoneyLoading = false;
+        }
     }
 
     private async void RefreshBtn_Click(object sender, RoutedEventArgs e)
@@ -178,14 +201,21 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         }
     }
 
-    private void FilterWatchlist(string marketType)
+    private async void FilterWatchlist(string marketType)
     {
+        IsStocksLoading = true;
         WatchlistStocks.Clear();
+        
+        // Brief delay to allow UI to render spinner
+        await Task.Delay(50);
+        
         var filtered = _allWatchlistStocks.Where(x => x.MarketType?.ToLower() == marketType).ToList();
 
         foreach (var s in filtered)
         {
             WatchlistStocks.Add(s);
         }
+        
+        IsStocksLoading = false;
     }
 }

@@ -21,6 +21,7 @@
         <converters:HeatmapBorderConverter x:Key="HeatmapBorderConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
         <converters:HeatmapForegroundConverter x:Key="HeatmapForegroundConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
         <converters:CountryFlagConverter x:Key="CountryFlagConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
+        <converters:VolumeFormatConverter x:Key="VolumeFormatConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
     </Page.Resources>
 
     <Grid Padding="24">
@@ -52,6 +53,8 @@
             
             <!-- WORLD / MACRO -->
             <PivotItem Header="World">
+                <Grid>
+                    <ProgressRing IsActive="{x:Bind IsWorldLoading, Mode=OneWay}" Width="64" Height="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
                     <StackPanel Spacing="24">
                         
@@ -70,7 +73,7 @@
                                 <ItemsControl ItemsSource="{x:Bind MacroIndicators, Mode=OneWay}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="3" />
+                                            <ItemsWrapGrid Orientation="Horizontal" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
@@ -78,7 +81,7 @@
                                             <Border CornerRadius="12" 
                                                     Background="{x:Bind PercentChange, Converter={StaticResource IndicatorBackgroundConverter}}" 
                                                     BorderBrush="{x:Bind PercentChange, Converter={StaticResource IndicatorBorderConverter}}" 
-                                                    BorderThickness="1" Padding="16" Margin="0,0,12,12" Width="280">
+                                                    BorderThickness="1" Padding="16" Margin="0,0,12,12" MinWidth="280">
                                                 <StackPanel>
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
@@ -172,7 +175,7 @@
                                 <ItemsControl ItemsSource="{x:Bind HeatmapData, Mode=OneWay}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" />
+                                            <ItemsWrapGrid Orientation="Horizontal" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
@@ -180,7 +183,7 @@
                                             <Border CornerRadius="12" 
                                                     Background="{x:Bind RealRate, Converter={StaticResource HeatmapBackgroundConverter}}" 
                                                     BorderBrush="{x:Bind RealRate, Converter={StaticResource HeatmapBorderConverter}}" 
-                                                    BorderThickness="1" Padding="12" Margin="0,0,12,12" Width="200">
+                                                    BorderThickness="1" Padding="12" Margin="0,0,12,12" MinWidth="200">
                                                 <StackPanel>
                                                     <Grid Margin="0,0,0,8">
                                                         <Grid.ColumnDefinitions>
@@ -229,10 +232,13 @@
 
                     </StackPanel>
                 </ScrollViewer>
+                </Grid>
             </PivotItem>
 
             <!-- STOCKS -->
             <PivotItem Header="Stocks">
+                <Grid>
+                    <ProgressRing IsActive="{x:Bind IsStocksLoading, Mode=OneWay}" Width="64" Height="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
                     <StackPanel Spacing="24">
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="20">
@@ -265,7 +271,12 @@
                                                             <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
                                                         
-                                                        <PersonPicture Grid.Column="0" ProfilePicture="{Binding LogoUrl}" DisplayName="{Binding Symbol}" Width="44" Height="44" Margin="0,0,16,0" />
+                                                        <Border Grid.Column="0" Width="44" Height="44" CornerRadius="22" Margin="0,0,16,0"
+                                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                >
+                                                            <Image Source="{Binding LogoUrl}" Stretch="UniformToFill"
+                                                                   Width="44" Height="44" />
+                                                        </Border>
                                                         
                                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                             <TextBlock Text="{x:Bind Symbol}" FontSize="16" FontWeight="SemiBold" />
@@ -273,7 +284,10 @@
                                                         </StackPanel>
                                                         
                                                         <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                                            <TextBlock Text="{x:Bind CurrentPrice, Converter={StaticResource CurrencyConverter}}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Right" />
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                                                <TextBlock Text="{x:Bind CurrentPrice, Converter={StaticResource CurrencyConverter}}" FontSize="16" FontWeight="Bold" />
+                                                                <TextBlock Text="{x:Bind Currency}" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="4,0,0,2" VerticalAlignment="Bottom" />
+                                                            </StackPanel>
                                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2">
                                                                 <FontIcon Glyph="{x:Bind PercentChange, Converter={StaticResource IndicatorIconConverter}}" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{x:Bind PercentChange, Converter={StaticResource IndicatorForegroundConverter}}" VerticalAlignment="Center"/>
                                                                 <TextBlock Text="{x:Bind PercentChange, Converter={StaticResource PercentConverter}}" FontSize="12" FontWeight="Bold" Foreground="{x:Bind PercentChange, Converter={StaticResource IndicatorForegroundConverter}}" VerticalAlignment="Center" />
@@ -288,13 +302,15 @@
                                                         </Grid.ColumnDefinitions>
                                                         <StackPanel Grid.Column="0" HorizontalAlignment="Left">
                                                             <TextBlock Text="Day Range" FontSize="10" Opacity="0.5" />
-                                                            <TextBlock FontSize="10" FontWeight="Bold">
-                                                                <Run Text="{Binding DayLow, TargetNullValue='-'}" /><Run Text=" - " /><Run Text="{Binding DayHigh, TargetNullValue='-'}" />
-                                                            </TextBlock>
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding DayLow, TargetNullValue='-'}" FontSize="10" FontWeight="Bold" />
+                                                                <TextBlock Text=" - " FontSize="10" FontWeight="Bold" />
+                                                                <TextBlock Text="{Binding DayHigh, TargetNullValue='-'}" FontSize="10" FontWeight="Bold" />
+                                                            </StackPanel>
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" HorizontalAlignment="Right">
                                                             <TextBlock Text="Volume" FontSize="10" Opacity="0.5" HorizontalAlignment="Right" />
-                                                            <TextBlock Text="{Binding Volume, TargetNullValue='-'}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Right" />
+                                                            <TextBlock Text="{x:Bind Volume, Converter={StaticResource VolumeFormatConverter}}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Right" />
                                                         </StackPanel>
                                                     </Grid>
                                                 </StackPanel>
@@ -306,10 +322,13 @@
                         </Border>
                     </StackPanel>
                 </ScrollViewer>
+                </Grid>
             </PivotItem>
 
             <!-- MONEY -->
             <PivotItem Header="Money">
+                <Grid>
+                    <ProgressRing IsActive="{x:Bind IsMoneyLoading, Mode=OneWay}" Width="64" Height="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
                     <StackPanel Spacing="24">
                         
@@ -370,7 +389,9 @@
                                                             <ColumnDefinition Width="Auto" />
                                                             <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
-                                                        <PersonPicture Grid.Column="0" ProfilePicture="{Binding LogoUrl}" DisplayName="{Binding Symbol}" Width="32" Height="32" Margin="0,0,16,0" />
+                                                        <Border Grid.Column="0" Width="32" Height="32" CornerRadius="16" Margin="0,0,16,0" Background="Transparent">
+                                                            <Image Source="{Binding LogoUrl}" Stretch="UniformToFill" Width="32" Height="32" />
+                                                        </Border>
                                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                             <TextBlock Text="{Binding Symbol}" FontSize="16" FontWeight="SemiBold" />
                                                             <TextBlock Text="{Binding CompanyName}" FontSize="12" Opacity="0.6" />
@@ -394,8 +415,15 @@
 
                     </StackPanel>
                 </ScrollViewer>
+                </Grid>
             </PivotItem>
 
         </Pivot>
     </Grid>
 </Page>
+
+
+
+
+
+

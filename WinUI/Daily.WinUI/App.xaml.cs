@@ -108,8 +108,9 @@ public partial class App : Application
         // Finances Services
         services.AddHttpClient<Daily.Services.Finances.YahooFinanceService>();
         services.AddHttpClient<Daily.Services.Finances.FinnhubService>();
+        services.AddHttpClient<Daily.Services.Finances.MacroService>();
         services.AddSingleton<Daily.Services.Finances.IFinancesService, Daily.Services.Finances.FinancesService>();
-        services.AddSingleton<Daily.Services.Finances.IMacroService, Daily.Services.Finances.MacroService>();
+        services.AddTransient<Daily.Services.Finances.IMacroService>(sp => sp.GetRequiredService<Daily.Services.Finances.MacroService>());
         services.AddSingleton<Daily.Services.Finances.IHeatmapService, Daily.Services.Finances.HeatmapService>();
         
         // Dummy services to satisfy SyncService dependencies

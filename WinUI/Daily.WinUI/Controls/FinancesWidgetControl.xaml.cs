@@ -23,6 +23,13 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
     private void OnPropertyChanged([CallerMemberName] string propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
+        private bool _isLoading;
+    public bool IsLoading
+    {
+        get => _isLoading;
+        set { _isLoading = value; OnPropertyChanged(); }
+    }
+
     private string _currentViewLabel = "World";
     public string CurrentViewLabel
     {
@@ -136,8 +143,14 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         }
     }
 
-    public async Task LoadDataAsync()
+        public async Task LoadDataAsync()
     {
+        IsLoading = true;
+        MacroIndicators.Clear();
+        HeatmapData.Clear();
+        TopStocks.Clear();
+        ExtendedStocks.Clear();
+
         try
         {
             // 1. World Data
@@ -191,7 +204,8 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             
             var top = stocksToDisplay.Take(4).ToList();
             
-            var cryptoDefaults = await _financesService.GetStockQuotesAsync(new List<string> { "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD" });
+            var _cryptoSymbols = new List<string> { "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "DOT-USD", "LINK-USD" };
+            var cryptoDefaults = await _financesService.GetStockQuotesAsync(_cryptoSymbols);
             var extended = cryptoDefaults.Take(10).ToList();
 
             foreach (var s in top) TopStocks.Add(s);
@@ -201,6 +215,10 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Error loading finance widget data: {ex}");
+        }
+        finally
+        {
+            IsLoading = false;
         }
     }
 
@@ -239,3 +257,4 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         HeaderGrid.Opacity = 1.0;
     }
 }
+

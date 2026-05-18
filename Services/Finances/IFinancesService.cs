@@ -22,5 +22,8 @@ namespace Daily.Services.Finances
         // Portfolio Features
         Task<decimal> GetNetWorthAsync();
         Task<List<StockQuote>> GetHoldingsWithQuotesAsync();
+
+        // Watchlist
+        Task<List<string>> GetWatchlistSymbolsAsync();
     }
 }

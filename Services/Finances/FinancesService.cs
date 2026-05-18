@@ -67,6 +67,7 @@ namespace Daily.Services.Finances
 
                     if (cached != null)
                     {
+                        cached.Type = MapMarketType(cached.Type, symbol);
                         // Check Freshness (15 mins)
                         if (cached.LastUpdatedAt.HasValue && cached.LastUpdatedAt.Value > DateTime.UtcNow.AddMinutes(-15))
                         {
@@ -79,19 +80,8 @@ namespace Daily.Services.Finances
                             isRich = true;
                         }
                         
-                        // FIX: Force update if using old/broken FMP or Clearbit icons
-                        if (cached.LogoUrl != null && (cached.LogoUrl.Contains("financialmodelingprep.com") || cached.LogoUrl.Contains("clearbit.com")))
-                        {
-                            // Invalidate to force Google Favicon logic (via YahooService fetch)
-                             isFresh = false; 
-                        }
+                        // Cache invalidations removed to prevent loops
 
-                        // FIX: Force update if Crypto name is generic "USD"
-                        // RELAXED: Removed "Name == Symbol" check to prevent loops for valid symbols like "SOL"
-                        if (cached.Type == "crypto" && cached.Name == "USD")
-                        {
-                            isFresh = false;
-                        }
 
                         // Use cached if valid-ish (we can show stale data while fetching)
                         results.Add(MapToQuote(cached));
@@ -121,6 +111,23 @@ namespace Daily.Services.Finances
                     
                     var yahooData = await _yahooService.GetMarketDataAsync(symbolsToFetchFromYahoo);
                     
+                    var missingSymbols = symbolsToFetchFromYahoo.Where(s => yahooData == null || !yahooData.ContainsKey(s)).ToList();
+                    if (missingSymbols.Any())
+                    {
+                        yahooData ??= new Dictionary<string, StockQuote>();
+                        var tasks = missingSymbols.Select(async missing =>
+                        {
+                            try {
+                                var finnhubQuote = await _finnhubService.GetQuoteAsync(missing);
+                                if (finnhubQuote != null)
+                                {
+                                    lock (yahooData) { yahooData[missing] = finnhubQuote; }
+                                }
+                            } catch { }
+                        });
+                        await Task.WhenAll(tasks);
+                    }
+
                     if (yahooData != null && yahooData.Any())
                     {
                         foreach (var kvp in yahooData)
@@ -133,7 +140,7 @@ namespace Daily.Services.Finances
                             var finalName = string.IsNullOrEmpty(freshQuote.CompanyName) || freshQuote.CompanyName == symbol ? (cached?.Name ?? symbol) : freshQuote.CompanyName;
                             
                             // Normalize Market Type here!
-                            freshQuote.MarketType = MapMarketType(freshQuote.MarketType);
+                            freshQuote.MarketType = MapMarketType(freshQuote.MarketType, symbol);
                             
                             var finalLogoUrl = cached?.LogoUrl ?? GetLogoUrl(symbol, finalName, freshQuote.MarketType);
 
@@ -155,7 +162,7 @@ namespace Daily.Services.Finances
                                     Name = freshQuote.CompanyName, 
                                     LatestPrice = freshQuote.CurrentPrice,
                                     LastUpdatedAt = DateTime.UtcNow,
-                                    Type = MapMarketType(freshQuote.MarketType),
+                                    Type = MapMarketType(freshQuote.MarketType, symbol),
                                     Change = freshQuote.Change,
                                     PercentChange = freshQuote.PercentChange,
                                     
@@ -275,17 +282,48 @@ namespace Daily.Services.Finances
             return name;
         }
 
-        private string MapMarketType(string rawType)
+        private string MapMarketType(string rawType, string symbol = "")
         {
-            // Yahoo might return "EQUITY", "CURRENCY", "CRYPTOCURRENCY"
-            // Map to our "stock", "forex", "crypto"
-            return rawType?.ToUpper() switch
+            if (!string.IsNullOrEmpty(symbol))
+            {
+                if (symbol.EndsWith("-USD") || symbol.EndsWith("USDT")) return "crypto";
+                if (symbol.Contains("=X")) return "forex";
+            }
+            string mapped = rawType?.ToUpper() switch
             {
                 "EQUITY" => "stock",
                 "CURRENCY" => "forex",
                 "CRYPTOCURRENCY" => "crypto",
                 _ => rawType?.ToLower() ?? "stock"
             };
+            if (mapped != "crypto" && mapped != "forex" && mapped != "stock") return "stock";
+            return mapped;
+        }
+
+        public async Task<List<string>> GetWatchlistSymbolsAsync()
+        {
+            try
+            {
+                var userId = _supabaseClient.Auth.CurrentUser?.Id;
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var response = await _supabaseClient
+                        .From<Daily.Models.Finances.UserWatchlist>()
+                        .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userId)
+                        .Order("display_order", Supabase.Postgrest.Constants.Ordering.Ascending)
+                        .Get();
+
+                    if (response.Models != null && response.Models.Any())
+                    {
+                        return response.Models.Select(m => m.Symbol).ToList();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[FinancesService] Failed to load watchlist from Supabase: " + ex.Message);
+            }
+            return new List<string>();
         }
 
         public Task<MoneyData> GetMoneyDataAsync()

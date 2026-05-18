@@ -104,3 +104,4 @@ public class FinnhubService
         public decimal PreviousClose { get; set; }
     }
 }
+
