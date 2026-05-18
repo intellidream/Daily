@@ -180,10 +180,8 @@ public sealed partial class RssFeedDetailPage : Page
         {
             string html = GenerateReaderHtml(fullArticle);
             await ReaderWebView.EnsureCoreWebView2Async();
-            bool readerIsDark = this.ActualTheme == ElementTheme.Dark;
-            ReaderWebView.DefaultBackgroundColor = readerIsDark
-                ? Windows.UI.Color.FromArgb(255, 5, 15, 26)       // #050F1A — matches dark SVG bg
-                : Windows.UI.Color.FromArgb(255, 212, 201, 176);  // #D4C9B0 — matches light SVG bg
+            // Set to fully transparent (alpha = 0) to let mica effect show through
+            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
             SetupWebViewVirtualHost();
             ReaderWebView.NavigateToString(html);
             ReaderLoadingPanel.Visibility = Visibility.Collapsed;
@@ -386,11 +384,6 @@ public sealed partial class RssFeedDetailPage : Page
         string linkColor = isDark ? "#66B2FF" : "#0066CC";
         string metaColor = isDark ? "#A0A0A0" : "#666666";
 
-        string bgImage = isDark
-            ? "url('http://app-assets.local/appbackground.theme-dark.svg')"
-            : "url('http://app-assets.local/appbackground.theme-light.svg')";
-        string bgColor = isDark ? "#050F1A" : "#D4C9B0";
-
         string featuredImageHtml = string.IsNullOrEmpty(article.ImageUrl) 
             ? "" 
             : $"<img class='featured-image' src='{article.ImageUrl}' />";
@@ -411,10 +404,7 @@ public sealed partial class RssFeedDetailPage : Page
             min-height: 100%;
         }}
         html {{
-            background-color: {bgColor};
-            background-image: {bgImage};
-            background-size: cover;
-            background-attachment: fixed;
+            background: transparent;
         }}
         body {{
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
