@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Daily_WinUI.Views;
 
@@ -20,6 +22,7 @@ public sealed partial class SettingsPage : Page
     {
         InitializeComponent();
         Loaded += SettingsPage_Loaded;
+        ActualThemeChanged += SettingsPage_ThemeChanged;
     }
 
     private void SettingsPage_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
@@ -27,6 +30,23 @@ public sealed partial class SettingsPage : Page
         // Select "DayOne" by default
         NavView.SelectedItem = NavAbout;
         NavigateTo("DayOne");
+
+        // Set theme-aware icon
+        UpdateDayOneIcon();
+    }
+
+    private void SettingsPage_ThemeChanged(FrameworkElement sender, object args)
+    {
+        UpdateDayOneIcon();
+    }
+
+    private void UpdateDayOneIcon()
+    {
+        var isDark = ActualTheme == ElementTheme.Dark;
+        var iconPath = isDark
+            ? "ms-appx:///Assets/appicon.theme-dark.svg"
+            : "ms-appx:///Assets/appicon.theme-light.svg";
+        DayOneIconSource.UriSource = new System.Uri(iconPath);
     }
 
     private void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
