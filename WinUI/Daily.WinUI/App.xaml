@@ -20,10 +20,10 @@
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#44FFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#16FFFFFF"/>
                     <LinearGradientBrush x:Key="AppBgBrush" StartPoint="0,0" EndPoint="0,1">
-                        <GradientStop Color="#FF060D18" Offset="0"/>
-                        <GradientStop Color="#FF0B1A30" Offset="0.35"/>
-                        <GradientStop Color="#FF122448" Offset="0.65"/>
-                        <GradientStop Color="#FF1A3566" Offset="1"/>
+                        <GradientStop Color="#FF030609" Offset="0"/>
+                        <GradientStop Color="#FF050F1A" Offset="0.35"/>
+                        <GradientStop Color="#FF0D1A35" Offset="0.65"/>
+                        <GradientStop Color="#FF132B4A" Offset="1"/>
                     </LinearGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">

@@ -74,7 +74,7 @@
                           Visibility="Collapsed"
                           IsItemClickEnabled="True"
                           ItemClick="ArticlesListView_ItemClick"
-                          Padding="0,0,0,32">
+                          Padding="0,0,0,20">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>

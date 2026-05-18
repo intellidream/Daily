@@ -24,14 +24,14 @@
         <converters:VolumeFormatConverter x:Key="VolumeFormatConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
     </Page.Resources>
 
-    <Grid Padding="24">
+    <Grid Background="{ThemeResource AppBgBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="110" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <!-- Top Bar with Back Button -->
-        <Grid Grid.Row="0" Margin="0,0,0,24">
+        <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -40,7 +40,7 @@
             
             <Button x:Name="BackButton" Style="{StaticResource NavigationBackButtonNormalStyle}" Click="BackButton_Click" />
             
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" Margin="16,0,0,0" VerticalAlignment="Center">
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <FontIcon Glyph="&#xE825;" FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
                 <TextBlock Text="Finances" FontSize="24" FontWeight="SemiBold" />
             </StackPanel>
@@ -49,17 +49,17 @@
         </Grid>
 
         <!-- Main Content -->
-        <Pivot Grid.Row="1" x:Name="MainPivot">
+        <Pivot Grid.Row="1" x:Name="MainPivot" Margin="20,0,0,0">
             
             <!-- WORLD / MACRO -->
             <PivotItem Header="World">
                 <Grid>
                     <ProgressRing IsActive="{x:Bind IsWorldLoading, Mode=OneWay}" Width="64" Height="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
-                    <StackPanel Spacing="24">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="24" Padding="0,16,20,20">
                         
                         <!-- Macro Indicators -->
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="20">
+                        <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="20">
                             <StackPanel>
                                 <Grid Margin="0,0,0,16">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -134,7 +134,7 @@
                         </Border>
 
                         <!-- Global Heatmap -->
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="20">
+                        <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="20">
                             <StackPanel>
                                 <Grid Margin="0,0,0,16">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -239,9 +239,9 @@
             <PivotItem Header="Stocks">
                 <Grid>
                     <ProgressRing IsActive="{x:Bind IsStocksLoading, Mode=OneWay}" Width="64" Height="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
-                    <StackPanel Spacing="24">
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="24" Padding="0,16,20,20">
+                        <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="20">
                             <StackPanel>
                                 <Grid Margin="0,0,0,16">
                                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left" VerticalAlignment="Center">
@@ -329,11 +329,11 @@
             <PivotItem Header="Money">
                 <Grid>
                     <ProgressRing IsActive="{x:Bind IsMoneyLoading, Mode=OneWay}" Width="64" Height="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
-                    <StackPanel Spacing="24">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="24" Padding="0,16,20,20">
                         
                         <!-- Net Worth Hero -->
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="32">
+                        <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="32">
                             <StackPanel HorizontalAlignment="Center">
                                 <TextBlock Text="NET WORTH" FontSize="14" Opacity="0.6" HorizontalAlignment="Center" CharacterSpacing="100" Margin="0,0,0,8" />
                                 <TextBlock Text="{x:Bind NetWorthDisplay, Mode=OneWay}" FontSize="64" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{ThemeResource SystemFillColorSuccessBrush}" Margin="0,-12,0,16" />
@@ -355,7 +355,7 @@
                             <TabView.TabItems>
                                 <!-- Accounts Tab -->
                                 <TabViewItem Header="Accounts">
-                                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="0,0,16,16" Padding="20">
+                                    <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="0,0,16,16" Padding="20">
                                         <ListView ItemsSource="{x:Bind Accounts, Mode=OneWay}" SelectionMode="None">
                                             <ListView.ItemTemplate>
                                                 <DataTemplate x:DataType="models:LocalAccount">
@@ -378,7 +378,7 @@
 
                                 <!-- Investments Tab -->
                                 <TabViewItem Header="Investments">
-                                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="0,0,16,16" Padding="20">
+                                    <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="0,0,16,16" Padding="20">
                                         <ListView ItemsSource="{x:Bind Holdings, Mode=OneWay}" SelectionMode="None">
                                             <ListView.ItemTemplate>
                                                 <DataTemplate x:DataType="models:StockQuote">
