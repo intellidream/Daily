@@ -30,19 +30,22 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top Bar with Back Button -->
+        <!-- Top Bar with Icon, Title and Action Button -->
         <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            
-            <Button x:Name="BackButton" Style="{StaticResource NavigationBackButtonNormalStyle}" Click="BackButton_Click" />
-            
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE825;" FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
-                <TextBlock Text="Finances" FontSize="24" FontWeight="SemiBold" />
+
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource AppGlassColorBrush}">
+                    <FontIcon Glyph="&#xE825;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Finances" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                    <TextBlock Text="Portfolio overview and market insights" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                </StackPanel>
             </StackPanel>
 
             <Button x:Name="RefreshBtn" Grid.Column="2" Content="Refresh" Click="RefreshBtn_Click" />

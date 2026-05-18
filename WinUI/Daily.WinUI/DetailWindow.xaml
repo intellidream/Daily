@@ -27,10 +27,5 @@
         </TitleBar>
 
         <Frame x:Name="RootFrame" Grid.Row="1" />
-
-        <!-- Top-bar weather art (native shapes, no SVG) -->
-        <controls:WeatherBannerControl x:Name="TopBarBanner"
-               Grid.Row="1"
-               VerticalAlignment="Top" HorizontalAlignment="Stretch" />
     </Grid>
 </Window>

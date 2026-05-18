@@ -10,27 +10,28 @@
     Loaded="Page_Loaded"
     Unloaded="Page_Unloaded">
 
-    <Grid Background="{ThemeResource AppBgBrush}" DataContext="{Binding RelativeSource={RelativeSource Mode=Self}}"
-    Loaded="Page_Loaded"
-    Unloaded="Page_Unloaded">
+    <Grid Background="{ThemeResource AppBgBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="110" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top Bar with Back Button -->
+        <!-- Top Bar with Icon, Title and Action Button -->
         <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            
-            <Button x:Name="BackButton" Style="{StaticResource NavigationBackButtonNormalStyle}" Click="BackButton_Click" />
-            
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE95E;" FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
-                <TextBlock Text="Health" FontSize="24" FontWeight="SemiBold" />
+
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource AppGlassColorBrush}">
+                    <FontIcon Glyph="&#xE95E;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Health" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                    <TextBlock Text="Vital metrics and wellness trends" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                </StackPanel>
             </StackPanel>
 
             <Button x:Name="SyncButton" Grid.Column="2" Content="Force Native Sync" Click="SyncButton_Click" IsEnabled="{x:Bind IsNotSyncing, Mode=OneWay}" />

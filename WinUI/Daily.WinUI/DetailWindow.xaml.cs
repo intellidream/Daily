@@ -23,10 +23,6 @@ public sealed partial class DetailWindow : Window
 
         _settings = SettingsService.Load();
 
-        WeatherBannerService.WeatherConditionChanged += OnWeatherConditionChanged;
-        if (WeatherBannerService.LastIconCode is { } code)
-            OnWeatherConditionChanged(code);
-
         AppWindow.Changed += AppWindow_Changed;
         this.Closed += DetailWindow_Closed;
     }
@@ -87,17 +83,8 @@ public sealed partial class DetailWindow : Window
         }
     }
 
-    private void OnWeatherConditionChanged(string iconCode)
-    {
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
-        {
-            TopBarBanner.SetCondition(iconCode);
-        });
-    }
-
     private void DetailWindow_Closed(object sender, WindowEventArgs args)
     {
-        WeatherBannerService.WeatherConditionChanged -= OnWeatherConditionChanged;
         AppWindow.Changed -= AppWindow_Changed;
         this.Closed -= DetailWindow_Closed;
         ExtendsContentIntoTitleBar = false;

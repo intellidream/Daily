@@ -35,7 +35,7 @@ public sealed partial class MainPage : Page
     {
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
         {
-            TopBarBanner.SetCondition(iconCode);
+            // TopBarBanner removed - using solid background instead
         });
     }
 

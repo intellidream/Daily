@@ -82,9 +82,6 @@
         <!-- Gradient tint over Mica -->
         <Rectangle IsHitTestVisible="False" Fill="{ThemeResource AppBgBrush}"
                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
-        <!-- Top-bar weather art (native shapes, no SVG) -->
-        <controls:WeatherBannerControl x:Name="TopBarBanner"
-               VerticalAlignment="Top" HorizontalAlignment="Stretch" />
 
         <Grid>
             <!-- Scrollable content: widgets -->
