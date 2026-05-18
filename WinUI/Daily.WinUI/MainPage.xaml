@@ -79,10 +79,10 @@
     </Page.Resources>
 
     <Grid Background="Transparent">
-        <!-- SVG Background -->
-        <Image Source="{ThemeResource AppBackgroundSource}" Stretch="UniformToFill" IsHitTestVisible="False" />
+        <!-- SVG Background - wavy gradient pattern -->
+        <Image Source="{ThemeResource AppBackgroundSource}" Stretch="UniformToFill" IsHitTestVisible="False" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
 
-        <Grid>
+        <Grid Background="Transparent">
             <!-- Scrollable content: widgets -->
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="20,16,20,20" Spacing="20">
