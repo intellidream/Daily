@@ -140,30 +140,64 @@ public sealed partial class MainPage : Page
     {
         if (args.Item is Daily.Models.WidgetModel widget && args.ItemContainer is GridViewItem itemContainer)
         {
-            // Set the VariableSizedWrapGrid spans based on the widget model
-            VariableSizedWrapGrid.SetColumnSpan(itemContainer, widget.ColumnSpan);
+            int clampedSpan = System.Math.Min(widget.ColumnSpan, _currentColumns);
+            VariableSizedWrapGrid.SetColumnSpan(itemContainer, clampedSpan);
             VariableSizedWrapGrid.SetRowSpan(itemContainer, widget.RowSpan);
 
-            // Important: We need to set the width and height of the container to stretch so the content fills the cell(s)
             itemContainer.HorizontalContentAlignment = HorizontalAlignment.Stretch;
             itemContainer.VerticalContentAlignment = VerticalAlignment.Stretch;
         }
     }
 
     private Daily.Models.WidgetModel _draggedWidget;
+    private int _currentColumns = 2; // tracks last computed column count
 
     private void WidgetGridView_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (WidgetGridView.ActualWidth > 0)
+        var availableWidth = WidgetGridView.ActualWidth;
+        if (availableWidth <= 0) return;
+
+        var panel = WidgetGridView.ItemsPanelRoot as VariableSizedWrapGrid;
+        if (panel == null) return;
+
+        // One column per ~340 logical px; minimum 1 column.
+        const double MinCellWidth = 340.0;
+        int columns = System.Math.Max(1, (int)(availableWidth / MinCellWidth));
+
+        if (columns != _currentColumns || e.NewSize.Width != e.PreviousSize.Width)
         {
-            var panel = WidgetGridView.ItemsPanelRoot as VariableSizedWrapGrid;
-            if (panel != null)
-            {
-                // VariableSizedWrapGrid.ItemWidth is the total cell width including margins.
-                // To perfectly fill the GridView, we simply divide by 2.
-                panel.ItemWidth = System.Math.Floor(WidgetGridView.ActualWidth / 2);
-            }
+            _currentColumns = columns;
+            panel.MaximumRowsOrColumns = columns;
+            panel.ItemWidth = System.Math.Floor(availableWidth / columns);
+
+            // Re-clamp spans on all live containers so no widget overflows the new column count
+            ReapplySpans();
         }
+        else
+        {
+            // Width changed within same column count — keep ItemWidth pixel-perfect
+            panel.ItemWidth = System.Math.Floor(availableWidth / columns);
+        }
+    }
+
+    /// <summary>Re-applies ColumnSpan (clamped to current column count) and RowSpan to every visible container.</summary>
+    private void ReapplySpans()
+    {
+        if (_widgets == null) return;
+
+        var panel = WidgetGridView.ItemsPanelRoot as VariableSizedWrapGrid;
+
+        foreach (var item in _widgets)
+        {
+            var container = WidgetGridView.ContainerFromItem(item) as GridViewItem;
+            if (container == null) continue;
+
+            int clampedSpan = System.Math.Min(item.ColumnSpan, _currentColumns);
+            VariableSizedWrapGrid.SetColumnSpan(container, clampedSpan);
+            VariableSizedWrapGrid.SetRowSpan(container, item.RowSpan);
+        }
+
+        panel?.InvalidateMeasure();
     }
 
     private void WidgetGridView_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
@@ -360,23 +394,28 @@ public class DashboardGridView : GridView
         base.PrepareContainerForItemOverride(element, item);
         if (item is Daily.Models.WidgetModel widget && element is GridViewItem itemContainer)
         {
-            // Apply immediately (might be dropped by VariableSizedWrapGrid layout pass)
-            VariableSizedWrapGrid.SetColumnSpan(itemContainer, widget.ColumnSpan);
-            VariableSizedWrapGrid.SetRowSpan(itemContainer, widget.RowSpan);
-
             itemContainer.HorizontalContentAlignment = HorizontalAlignment.Stretch;
             itemContainer.VerticalContentAlignment = VerticalAlignment.Stretch;
 
-            // GUARANTEE the sizes stick by forcefully re-injecting them once the item is fully loaded into the Visual Tree
+            // Clamp span to the panel's current column count so widgets never overflow
+            ApplySpans(itemContainer, widget);
+
+            // Re-apply once fully in the visual tree (VariableSizedWrapGrid can drop spans on first pass)
             itemContainer.Loaded += (s, e) =>
             {
-                VariableSizedWrapGrid.SetColumnSpan(itemContainer, widget.ColumnSpan);
-                VariableSizedWrapGrid.SetRowSpan(itemContainer, widget.RowSpan);
-                
-                var panel = this.ItemsPanelRoot as VariableSizedWrapGrid;
-                panel?.InvalidateMeasure();
+                ApplySpans(itemContainer, widget);
+                (this.ItemsPanelRoot as VariableSizedWrapGrid)?.InvalidateMeasure();
             };
         }
+    }
+
+    private void ApplySpans(GridViewItem container, Daily.Models.WidgetModel widget)
+    {
+        int maxCols = (this.ItemsPanelRoot is VariableSizedWrapGrid p && p.MaximumRowsOrColumns > 0)
+            ? p.MaximumRowsOrColumns
+            : 2;
+        VariableSizedWrapGrid.SetColumnSpan(container, System.Math.Min(widget.ColumnSpan, maxCols));
+        VariableSizedWrapGrid.SetRowSpan(container, widget.RowSpan);
     }
 }
 
