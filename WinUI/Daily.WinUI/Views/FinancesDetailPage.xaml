@@ -93,7 +93,7 @@
                                                             <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
                                                         
-                                                        <Border Grid.Column="0" Width="44" Height="44" CornerRadius="8" Background="#0A000000" Margin="0,0,12,0">
+                                                        <Border Grid.Column="0" Width="44" Height="44" CornerRadius="8" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Margin="0,0,12,0">
                                                             <TextBlock Text="{x:Bind Emoji}" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                         </Border>
                                                         
@@ -150,7 +150,7 @@
                                 <controls:WorldMapControl Data="{x:Bind HeatmapData, Mode=OneWay}" Height="360" Margin="0,0,0,16" />
 
                                 <!-- Legend -->
-                                <Border Background="#08FFFFFF" CornerRadius="8" Padding="12,8" Margin="0,0,0,20">
+                                <Border Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="12,8" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -252,7 +252,7 @@
                                         <TextBlock Text="Watchlist" FontSize="20" FontWeight="SemiBold" />
                                     </StackPanel>
                                     
-                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Padding="4" CornerRadius="8">
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="8" CornerRadius="12">
                                         <ToggleButton x:Name="StocksBtn" Content="Stocks" IsChecked="True" Click="MarketType_Click" Tag="stock" CornerRadius="6" Padding="12,4"/>
                                         <ToggleButton x:Name="CryptoBtn" Content="Crypto" Click="MarketType_Click" Tag="crypto" CornerRadius="6" Padding="12,4"/>
                                         <ToggleButton x:Name="ForexBtn" Content="Forex" Click="MarketType_Click" Tag="forex" CornerRadius="6" Padding="12,4"/>
@@ -275,7 +275,9 @@
                                                         </Grid.ColumnDefinitions>
                                                         
                                                         <Border Grid.Column="0" Width="44" Height="44" CornerRadius="22" Margin="0,0,16,0"
-                                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                Background="{ThemeResource AppGlassSubColorBrush}"
+                                                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                                                BorderThickness="1"
                                                                 >
                                                             <Image Source="{Binding LogoUrl}" Stretch="UniformToFill"
                                                                    Width="44" Height="44" />
