@@ -7,7 +7,7 @@
     xmlns:models="using:Daily.Models.Finances"
     xmlns:controls="using:Daily_WinUI.Controls"
     mc:Ignorable="d"
-    Background="Transparent"
+    Background="{ThemeResource AppBgBrush}"
     Loaded="Page_Loaded">
 
     <Page.Resources>

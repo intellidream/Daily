@@ -7,7 +7,7 @@
       xmlns:gauge="using:Syncfusion.UI.Xaml.Gauges"
       xmlns:controls="using:Daily_WinUI.Controls"
       mc:Ignorable="d"
-      Background="Transparent">
+      Background="{ThemeResource AppBgBrush}">
 
     <Page.Resources>
         <ResourceDictionary>
