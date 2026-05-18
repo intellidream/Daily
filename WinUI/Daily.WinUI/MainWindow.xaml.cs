@@ -48,7 +48,8 @@ public sealed partial class MainWindow : Window
             if (isAuthenticated && !string.IsNullOrEmpty(avatarUrl))
                 TitleBarUserAvatar.ProfilePicture = new BitmapImage(new System.Uri(avatarUrl));
 
-            TitleBarSignOutItem.Text = isAuthenticated ? "Sign Out" : "Sign In";
+            TitleBarAuthItem.Text = isAuthenticated ? "Sign Out" : "Sign In";
+            TitleBarAuthIcon.Glyph = isAuthenticated ? "\uF3B1" : "\uE77B"; // sign-out : person
             TitleBarUserEmailText.Text = isAuthenticated ? (email ?? "Signed in") : "Not signed in";
         });
     }
@@ -59,7 +60,6 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(() =>
         {
             TitleBarThemeIcon.Glyph = isDark ? "\uE708" : "\uE706"; // moon : sun
-            TitleBarThemeText.Text = isDark ? "Light" : "Dark";
         });
     }
 
@@ -92,13 +92,28 @@ public sealed partial class MainWindow : Window
             mainPage.ApplyThemeToggle();
     }
 
-    // ── Sign-out flyout handler ───────────────────────────────────────────────
+    // ── Auth flyout handler (Sign In / Sign Out) ─────────────────────────────
 
-    private async void TitleBarSignOut_Click(object sender, RoutedEventArgs e)
+    private async void TitleBarAuth_Click(object sender, RoutedEventArgs e)
     {
-        // Delegate to the currently active MainPage if present
         if (RootFrame.Content is MainPage mainPage)
+        {
+            // Authenticated → sign out
             await mainPage.HandleSignOutAsync();
+        }
+        else
+        {
+            // Not authenticated → navigate to login
+            RootFrame.Navigate(typeof(Views.LoginPage));
+        }
+    }
+
+    // ── Settings button handler ───────────────────────────────────────────────
+
+    internal void TitleBarSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (RootFrame.Content is MainPage mainPage)
+            mainPage.OpenSettings();
     }
 
     // ── Navigation after auth hydration ──────────────────────────────────────

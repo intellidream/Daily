@@ -13,6 +13,7 @@ namespace Daily_WinUI;
 public sealed partial class MainPage : Page
 {
     private readonly Dictionary<System.Type, DetailWindow> _openWindows = new();
+    private SettingsWindow? _settingsWindow;
     private readonly WinUIAuthService _authService;
     private readonly WinUIWidgetService _widgetService;
     private System.Collections.ObjectModel.ObservableCollection<Daily.Models.WidgetModel> _widgets;
@@ -114,6 +115,9 @@ public sealed partial class MainPage : Page
         foreach (var win in _openWindows.Values)
             win.ApplyTheme(newTheme);
 
+        // Propagate to settings window if open
+        _settingsWindow?.ApplyTheme(newTheme);
+
         // Sync title bar theme button icon/text
         App.Current.MainWindow?.UpdateThemeIcon(isDark: !goingLight);
     }
@@ -125,6 +129,9 @@ public sealed partial class MainPage : Page
     {
         if (_authService.IsAuthenticated)
             await _authService.SignOutAsync();
+
+        // Reset the title-bar avatar/email/flyout text before leaving this page
+        UpdateUserUI();
 
         Frame?.Navigate(typeof(LoginPage));
     }
@@ -312,6 +319,37 @@ public sealed partial class MainPage : Page
         var currentTheme = (this.XamlRoot?.Content as FrameworkElement)?.RequestedTheme ?? ElementTheme.Default;
         if (currentTheme != ElementTheme.Default) window.ApplyTheme(currentTheme);
         window.Activate();
+    }
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool EnableWindow(IntPtr hWnd, bool bEnable);
+
+    public void OpenSettings()
+    {
+        if (_settingsWindow != null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        // Disable the main window so Settings behaves modally
+        var mainHwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.Current.MainWindow!);
+        EnableWindow(mainHwnd, false);
+
+        _settingsWindow = new SettingsWindow();
+
+        _settingsWindow.Closed += (s, ev) =>
+        {
+            _settingsWindow = null;
+            // Re-enable and bring main window back to front
+            EnableWindow(mainHwnd, true);
+            App.Current.MainWindow!.Activate();
+        };
+
+        // Inherit current theme
+        var currentTheme = (this.XamlRoot?.Content as FrameworkElement)?.RequestedTheme ?? ElementTheme.Default;
+        if (currentTheme != ElementTheme.Default) _settingsWindow.ApplyTheme(currentTheme);
+
+        _settingsWindow.Activate();
     }
 }
 

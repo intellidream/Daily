@@ -40,6 +40,23 @@
   <ItemGroup>
     <Compile Include="..\..\Configuration\Secrets.cs" Link="Configuration\Secrets.cs" />
     <Compile Include="..\..\Models\**\*.cs" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Page Remove="SettingsWindow.xaml" />
+    <Page Remove="Views\AboutPage.xaml" />
+    <Page Remove="Views\SettingsPage.xaml" />
+
+    <!-- New Settings/About pages registered as Window/Page -->
+    <Page Include="SettingsWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\AboutPage.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\SettingsPage.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     
     <!-- Services needed for Sync and RSS -->
     <Compile Include="..\..\Services\IDatabaseService.cs" Link="Services\IDatabaseService.cs" />
@@ -99,6 +116,8 @@
     <PackageReference Include="Supabase" Version="1.1.1" />
     <PackageReference Include="postgrest-csharp" Version="3.5.1" />
     <PackageReference Include="YahooFinanceApi" Version="2.3.3" />
+  </ItemGroup>
+  <ItemGroup>
   </ItemGroup>
 
   <!--

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Daily_WinUI.Views.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Background="Transparent"
+    mc:Ignorable="d">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,32">
+        <StackPanel MaxWidth="520" HorizontalAlignment="Left" Spacing="0">
+
+            <!-- App icon + name -->
+            <StackPanel Orientation="Horizontal" Spacing="20" VerticalAlignment="Center" Margin="0,0,0,28">
+                <Border Width="72" Height="72" CornerRadius="16"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <Image Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Image.Source>
+                            <SvgImageSource UriSource="ms-appx:///Assets/NewIcon.svg"
+                                            RasterizePixelWidth="96" RasterizePixelHeight="96"/>
+                        </Image.Source>
+                    </Image>
+                </Border>
+                <StackPanel VerticalAlignment="Center" Spacing="4">
+                    <TextBlock Text="DayOne" FontSize="26" FontWeight="SemiBold"
+                               CharacterSpacing="20"/>
+                    <TextBlock x:Name="VersionText" Text="Version 1.0.0"
+                               FontSize="13" Opacity="0.6"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Divider -->
+            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,0,0,24"/>
+
+            <!-- Description -->
+            <TextBlock TextWrapping="Wrap" FontSize="14" LineHeight="22" Opacity="0.85"
+                       Margin="0,0,0,28">
+                DayOne is your personal daily command centre — bringing together health, habits,
+                finances, weather and news in one focused, beautiful dashboard.
+            </TextBlock>
+
+            <!-- Built with section -->
+            <TextBlock Text="Built with" FontSize="12" Opacity="0.5" Margin="0,0,0,12"
+                       FontWeight="SemiBold" CharacterSpacing="60"/>
+
+            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,32">
+
+                <!-- Gemini chip -->
+                <Border CornerRadius="20" Padding="14,8"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <!-- Gemini sparkle icon (Unicode star cluster approximation) -->
+                        <TextBlock Text="✦" FontSize="14" VerticalAlignment="Center"
+                                   Foreground="#8AB4F8"/>
+                        <TextBlock Text="Gemini" FontSize="13" FontWeight="Medium"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Copilot chip -->
+                <Border CornerRadius="20" Padding="14,8"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <!-- Copilot icon via Segoe Fluent Icons -->
+                        <FontIcon Glyph="&#xE943;" FontFamily="Segoe Fluent Icons" FontSize="14"
+                                  Foreground="#7B68EE" VerticalAlignment="Center"/>
+                        <TextBlock Text="GitHub Copilot" FontSize="13" FontWeight="Medium"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+
+            <!-- Divider -->
+            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,0,0,20"/>
+
+            <!-- Links row -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <HyperlinkButton Content="GitHub" NavigateUri="https://github.com/intellidream/Daily"
+                                 Padding="0" FontSize="12"/>
+                <TextBlock Text="·" FontSize="12" Opacity="0.4" VerticalAlignment="Center"/>
+                <HyperlinkButton Content="Privacy Policy" NavigateUri="https://github.com/intellidream/Daily"
+                                 Padding="0" FontSize="12"/>
+            </StackPanel>
+
+            <!-- Copyright -->
+            <TextBlock x:Name="CopyrightText"
+                       Text="© 2025 intellidream. All rights reserved."
+                       FontSize="11" Opacity="0.4" Margin="0,12,0,0"/>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

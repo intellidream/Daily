@@ -68,8 +68,17 @@
                         ToolTipService.ToolTip="Toggle light/dark theme">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                         <FontIcon x:Name="TitleBarThemeIcon" Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="12"/>
-                        <TextBlock x:Name="TitleBarThemeText" Text="Light" FontSize="11" VerticalAlignment="Center"/>
                     </StackPanel>
+                </Button>
+
+                <!-- Settings -->
+                <Button x:Name="TitleBarSettingsButton"
+                        Background="Transparent" BorderThickness="0"
+                        CornerRadius="0" Padding="10,0"
+                        VerticalAlignment="Stretch"
+                        Click="TitleBarSettings_Click"
+                        ToolTipService.ToolTip="Settings">
+                    <FontIcon Glyph="&#xE713;" FontFamily="Segoe Fluent Icons" FontSize="13"/>
                 </Button>
 
                 <!-- User account -->
@@ -87,9 +96,9 @@
                     </StackPanel>
                     <Button.Flyout>
                         <MenuFlyout>
-                            <MenuFlyoutItem x:Name="TitleBarSignOutItem" Text="Sign Out" Click="TitleBarSignOut_Click">
+                            <MenuFlyoutItem x:Name="TitleBarAuthItem" Text="Sign In" Click="TitleBarAuth_Click">
                                 <MenuFlyoutItem.Icon>
-                                    <FontIcon Glyph="&#xF3B1;" FontFamily="Segoe Fluent Icons"/>
+                                    <FontIcon x:Name="TitleBarAuthIcon" Glyph="&#xE77B;" FontFamily="Segoe Fluent Icons"/>
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                         </MenuFlyout>
