@@ -290,7 +290,26 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             }
 
             string colorHex = GetColorForDrinkOrSmoke(drinkOrType);
-            string icon = viewType == "smokes" ? "\uecb2" : "\ueb7b";
+            
+            // Icon glyphs (Tabler Icons)
+            string icon = viewType == "smokes"
+                ? drinkOrType switch
+                {
+                    var s when s.Contains("heated") => "\xec2c",  // heated
+                    var s when s.Contains("rolled") => "\x100bd",  // rolled
+                    var s when s.Contains("cigarillo") => "\xeed2",  // cigarillo
+                    _ => "\xecc4"   // smoking icon (cigarette)
+                }
+                : drinkOrType switch
+                {
+                    var s when s.Contains("coffee") => "\ue96e",  // coffee
+                    var s when s.Contains("tea") => "\uecfe",  // cup
+                    var s when s.Contains("juice") => "\ued09",  // lemon
+                    var s when s.Contains("beer") => "\uecf5",  // beer
+                    var s when s.Contains("wine") => "\uecf6",  // bottle
+                    _ => "\ueb7b"   // droplet
+                };
+
 
             widgetLogs.Add(new WidgetLogEntryViewModel
             {

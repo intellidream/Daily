@@ -149,19 +149,19 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                             : drinkOrType.Contains("beer") ? "beer"
                             : drinkOrType.Contains("wine") ? "wine"
                             : drinkOrType.Contains("cigarillo") ? "cigarillo"
-                            : drinkOrType.Contains("roll") ? "rolled"
+                            : drinkOrType.Contains("rolled") ? "rolled"
                             : drinkOrType.Contains("heated") ? "heated"
-                            : drinkOrType.Contains("cig") ? "cigarette"
+                            : drinkOrType.Contains("cigarette") ? "cigarette"
                             : _currentType == "smokes" ? "cigarette" : "water");
 
             // Icon glyphs (Tabler Icons)
             string icon = _currentType == "smokes"
                 ? drinkOrType switch
                 {
-                    var s when s.Contains("heat")                       => "\ue941",  // device-desktop (vape/device)
-                    var s when s.Contains("roll")                       => "\uea77",  // pencil (roll-up)
-                    var s when s.Contains("cigarillo")                  => "\ueb7e",  // minus-vertical
-                    _                                                   => "\uecb2"   // smoking icon (cigarette)
+                    var s when s.Contains("heated")                         => "\xec2c",  // heated
+                    var s when s.Contains("rolled")                         => "\x100bd",  // rolled
+                    var s when s.Contains("cigarillo")                      => "\xeed2",  // cigarillo
+                    _                                                       => "\xecc4"   // smoking icon (cigarette)
                 }
                 : drinkOrType switch
                 {
