@@ -18,6 +18,9 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- SVG Background - spans titlebar + content -->
+        <Image Source="{ThemeResource AppBackgroundSource}" Stretch="UniformToFill" IsHitTestVisible="False" Grid.RowSpan="2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
+
         <!-- Custom TitleBar Grid bypassing the buggy TitleBar control entirely -->
         <Grid x:Name="AppTitleBar" Background="Transparent" VerticalAlignment="Top" SizeChanged="AppTitleBar_SizeChanged">
             <Grid.ColumnDefinitions>

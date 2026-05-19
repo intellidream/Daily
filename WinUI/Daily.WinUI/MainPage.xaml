@@ -79,9 +79,6 @@
     </Page.Resources>
 
     <Grid Background="Transparent">
-        <!-- SVG Background - wavy gradient pattern -->
-        <Image Source="{ThemeResource AppBackgroundSource}" Stretch="UniformToFill" IsHitTestVisible="False" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
-
         <Grid Background="Transparent">
             <!-- Scrollable content: widgets -->
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
