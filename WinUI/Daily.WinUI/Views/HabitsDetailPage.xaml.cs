@@ -337,6 +337,11 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         }
     }
 
+    public async Task RefreshFromTitleBarAsync()
+    {
+        await LoadDataSafeAsync();
+    }
+
     private void HabitTypeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (sender is ComboBox comboBox && comboBox.SelectedItem is ComboBoxItem selectedItem)

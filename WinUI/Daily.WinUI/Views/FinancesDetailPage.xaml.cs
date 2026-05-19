@@ -176,6 +176,11 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         await LoadDataAsync();
     }
 
+    public async Task RefreshFromTitleBarAsync()
+    {
+        await LoadDataAsync();
+    }
+
     private void BackButton_Click(object sender, RoutedEventArgs e)
     {
         if (this.Frame.CanGoBack)

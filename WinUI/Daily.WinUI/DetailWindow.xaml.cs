@@ -4,6 +4,8 @@ using Daily_WinUI.Services;
 using Windows.Graphics;
 using System;
 using System.Runtime.InteropServices;
+using Daily_WinUI.Views;
+using Microsoft.UI.Dispatching;
 
 namespace Daily_WinUI;
 
@@ -11,6 +13,7 @@ public sealed partial class DetailWindow : Window
 {
     private readonly AppSettings _settings;
     private string? _pageKey;
+    private string _currentSectionName = "Detail";
 
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
 
@@ -25,6 +28,8 @@ public sealed partial class DetailWindow : Window
 
         AppWindow.Changed += AppWindow_Changed;
         this.Closed += DetailWindow_Closed;
+
+        UpdateSectionTitleBar("Detail");
     }
 
     /// <summary>
@@ -33,6 +38,7 @@ public sealed partial class DetailWindow : Window
     public void RestorePosition(string pageKey)
     {
         _pageKey = pageKey;
+        UpdateSectionTitleBar(MapSectionNameFromPageKey(pageKey));
 
         if (_settings.DetailWindowPositions.TryGetValue(pageKey, out var pos)
             && pos.Width > 0 && pos.Height > 0)
@@ -104,11 +110,100 @@ public sealed partial class DetailWindow : Window
         try
         {
             RootFrame.Navigate(pageType, parameter);
+            UpdateSectionTitleBar(MapSectionNameFromPageType(pageType));
         }
         catch (Exception ex)
         {
             System.IO.File.WriteAllText("crash_log.txt", ex.ToString());
             throw;
+        }
+    }
+
+    private void AppTitleBar_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var inset = AppWindow.TitleBar?.RightInset ?? 140;
+        RightPaddingColumn.Width = new GridLength(Math.Max(140, inset));
+    }
+
+    private static string MapSectionNameFromPageKey(string pageKey)
+    {
+        if (string.IsNullOrWhiteSpace(pageKey)) return "Detail";
+        var key = pageKey.ToLowerInvariant();
+        if (key.Contains("weather")) return "Weather";
+        if (key.Contains("habits")) return "Habits";
+        if (key.Contains("health")) return "Health";
+        if (key.Contains("finance")) return "Finances";
+        if (key.Contains("rss") || key.Contains("news")) return "News";
+        return "Detail";
+    }
+
+    private static string MapSectionNameFromPageType(Type pageType)
+    {
+        if (pageType == typeof(WeatherDetailPage)) return "Weather";
+        if (pageType == typeof(HabitsDetailPage)) return "Habits";
+        if (pageType == typeof(HealthDetailPage)) return "Health";
+        if (pageType == typeof(FinancesDetailPage)) return "Finances";
+        if (pageType == typeof(RssFeedDetailPage)) return "News";
+        return "Detail";
+    }
+
+    private static string GetSectionGlyph(string section)
+    {
+        // Match each page's top-bar icon exactly
+        return section switch
+        {
+            "Weather" => "\uE753",  // WeatherDetailPage top icon
+            "Habits" => "\uED23",   // HabitsDetailPage top icon (Tabler)
+            "Health" => "\uE95E",   // HealthDetailPage top icon
+            "Finances" => "\uE825", // FinancesDetailPage top icon
+            "News" => "\uE736",     // RssFeedDetailPage top icon
+            _ => "\uE706"
+        };
+    }
+
+    private void UpdateSectionTitleBar(string section)
+    {
+        _currentSectionName = section;
+        DetailTitleBarSectionText.Text = $"DayOne - {section}";
+        DetailTitleBarSectionIcon.Glyph = GetSectionGlyph(section);
+        DetailTitleBarSectionIcon.FontFamily = section == "Habits"
+            ? (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"]
+            : new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons");
+    }
+
+    private async void DetailTitleBarRefreshButton_Click(object sender, RoutedEventArgs e)
+    {
+        DetailTitleBarRefreshButton.IsEnabled = false;
+        try
+        {
+            if (RootFrame.Content is WeatherDetailPage weatherPage)
+            {
+                await weatherPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is HabitsDetailPage habitsPage)
+            {
+                await habitsPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is HealthDetailPage healthPage)
+            {
+                await healthPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is FinancesDetailPage financesPage)
+            {
+                await financesPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is RssFeedDetailPage newsPage)
+            {
+                await newsPage.RefreshFromTitleBarAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DetailWindow] Refresh failed for {_currentSectionName}: {ex}");
+        }
+        finally
+        {
+            DetailTitleBarRefreshButton.IsEnabled = true;
         }
     }
 }

@@ -23,11 +23,37 @@
         <!-- SVG Background - wavy gradient pattern -->
         <Image Source="{ThemeResource AppBackgroundSource}" Stretch="UniformToFill" IsHitTestVisible="False" Grid.RowSpan="2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
 
-        <TitleBar x:Name="AppTitleBar" Title="DayOne">
-            <TitleBar.IconSource>
-                <BitmapIconSource UriSource="Assets/Square44x44Logo.targetsize-32_altform-unplated.png" ShowAsMonochrome="False" />
-            </TitleBar.IconSource>
-        </TitleBar>
+        <!-- Custom TitleBar area to mirror main window behavior -->
+        <Grid x:Name="AppTitleBar" Background="Transparent" VerticalAlignment="Top" Height="48" SizeChanged="AppTitleBar_SizeChanged">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="RightPaddingColumn" Width="140" />
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="DetailTitleBarRefreshButton"
+                    Grid.Column="0"
+                    Height="48"
+                    Background="Transparent" BorderThickness="0"
+                    CornerRadius="0" Padding="14,0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Stretch"
+                    Click="DetailTitleBarRefreshButton_Click"
+                    ToolTipService.ToolTip="Refresh section">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <FontIcon x:Name="DetailTitleBarSectionIcon"
+                              Glyph="&#xE706;"
+                              FontFamily="Segoe Fluent Icons"
+                              FontSize="14"
+                              Foreground="{ThemeResource AppFgColorBrush}" />
+                    <TextBlock x:Name="DetailTitleBarSectionText"
+                               Text="DayOne - Detail"
+                               FontSize="12"
+                               Foreground="{ThemeResource AppFgColorBrush}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+        </Grid>
 
         <Frame x:Name="RootFrame" Grid.Row="1" />
     </Grid>

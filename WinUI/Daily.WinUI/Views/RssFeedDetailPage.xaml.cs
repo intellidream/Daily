@@ -107,7 +107,7 @@ public sealed partial class RssFeedDetailPage : Page
         {
             _articles.Add(item);
         }
-        
+
         if (_rssService.IsLoading)
         {
             LoadingPanel.Visibility = Visibility.Visible;
@@ -117,6 +117,29 @@ public sealed partial class RssFeedDetailPage : Page
         {
             LoadingPanel.Visibility = Visibility.Collapsed;
             ArticlesListView.Visibility = Visibility.Visible;
+        }
+    }
+
+    public async Task RefreshFromTitleBarAsync()
+    {
+        if (_selectedItem != null)
+        {
+            await OpenReaderViewAsync(_selectedItem);
+            return;
+        }
+
+        if (FeedComboBox.SelectedItem is FeedSource selectedFeed)
+        {
+            LoadingPanel.Visibility = Visibility.Visible;
+            ArticlesListView.Visibility = Visibility.Collapsed;
+            _rssService.SelectFeed(selectedFeed);
+            await _rssService.LoadFeedAsync(selectedFeed);
+        }
+        else if (_rssService.CurrentFeed != null)
+        {
+            LoadingPanel.Visibility = Visibility.Visible;
+            ArticlesListView.Visibility = Visibility.Collapsed;
+            await _rssService.LoadFeedAsync(_rssService.CurrentFeed);
         }
     }
 

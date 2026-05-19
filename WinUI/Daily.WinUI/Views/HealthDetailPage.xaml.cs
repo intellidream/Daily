@@ -47,6 +47,11 @@ namespace Daily_WinUI.Views
 
         private async void SyncButton_Click(object sender, RoutedEventArgs e)
         {
+            await RefreshFromTitleBarAsync();
+        }
+
+        public async Task RefreshFromTitleBarAsync()
+        {
             if (_isSyncing) return;
             IsSyncing = true;
             try

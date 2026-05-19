@@ -1,6 +1,10 @@
 using Daily.Models;
 using Daily.Models.Finances;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Daily.Services
 {
@@ -94,7 +98,7 @@ namespace Daily.Services
 
             // 1. Push Logs
             var dirtyLogs = await _databaseService.Connection.Table<LocalHabitLog>()
-                                .Where(l => l.SyncedAt == null && l.UserId == userId)
+                                .Where(l => !l.SyncedAt.HasValue && l.UserId == userId)
                                 .ToListAsync();
 
             Console.WriteLine($"[SyncService] Found {dirtyLogs.Count} dirty logs for User {userId}.");
@@ -155,7 +159,7 @@ namespace Daily.Services
 
             // 2. Push Goals
              var dirtyGoals = await _databaseService.Connection.Table<LocalHabitGoal>()
-                                .Where(g => g.SyncedAt == null && g.UserId == userId)
+                                .Where(g => !g.SyncedAt.HasValue && g.UserId == userId)
                                 .ToListAsync();
 
             if (dirtyGoals.Any())
@@ -349,14 +353,14 @@ namespace Daily.Services
         // --- Helper for Debugging ---
         // --- Helper for Debugging ---
         public string DebugLog { get; private set; } = "";
-        public event Action? OnDebugLogUpdated;
-        public event Action? OnPreferencesPulled;
-        public event Action? OnSavedArticlesPulled;
+        public event Action OnDebugLogUpdated;
+        public event Action OnPreferencesPulled;
+        public event Action OnSavedArticlesPulled;
 
         private async Task PushRssSubscriptionsAsync(string userId)
         {
             var dirty = await _databaseService.Connection.Table<LocalRssSubscription>()
-                                .Where(x => x.SyncedAt == null && x.UserId == userId)
+                                .Where(x => !x.SyncedAt.HasValue && x.UserId == userId)
                                 .ToListAsync();
             if (dirty.Any())
             {
@@ -446,7 +450,7 @@ namespace Daily.Services
             LogDebug($"[SyncService] Total Local Prefs: {allPrefs.Count}. IDs: {string.Join(", ", allPrefs.Select(x => $"{x.Id} (Synced: {x.SyncedAt}, Updated: {x.UpdatedAt})"))}");
 
             var dirtyPrefs = await _databaseService.Connection.Table<LocalUserPreferences>()
-                                .Where(p => p.SyncedAt == null && p.Id == userId)
+                                .Where(p => !p.SyncedAt.HasValue && p.Id == userId)
                                 .ToListAsync();
 
             LogDebug($"[SyncService] Dirty Prefs for {userId}: {dirtyPrefs.Count}");
@@ -666,7 +670,7 @@ namespace Daily.Services
         private async Task PushSummariesAsync(string userId)
         {
              var dirty = await _databaseService.Connection.Table<LocalDailySummary>()
-                                .Where(s => s.SyncedAt == null && s.UserId == userId)
+                                .Where(s => !s.SyncedAt.HasValue && s.UserId == userId)
                                 .ToListAsync();
 
              if (dirty.Any())
@@ -702,7 +706,7 @@ namespace Daily.Services
                 // 1. Get the latest date of a SAFELY SYNCED summary from local DB
                 // We only trust our local state if it says it's synced.
                 var latestSyncedSummary = await _databaseService.Connection.Table<LocalDailySummary>()
-                                            .Where(s => s.UserId == userId && s.SyncedAt != null)
+                                            .Where(s => s.UserId == userId && s.SyncedAt.HasValue)
                                             .OrderByDescending(s => s.Date)
                                             .FirstOrDefaultAsync();
 
@@ -810,8 +814,8 @@ namespace Daily.Services
              {
                  Console.WriteLine($"[SyncService] Pull Summaries Error: {ex.Message}");
              }
+
              return 0;
-              return 0;
          }
 
         // ==========================================
@@ -1111,7 +1115,7 @@ namespace Daily.Services
             try
             {
                 var dirty = await _databaseService.Connection.Table<LocalSavedArticle>()
-                    .Where(a => a.SyncedAt == null && a.UserId == userId)
+                    .Where(a => !a.SyncedAt.HasValue && a.UserId == userId)
                     .ToListAsync();
 
                 if (dirty.Any())

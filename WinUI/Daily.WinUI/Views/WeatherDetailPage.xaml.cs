@@ -5,7 +5,12 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Input;
 using Windows.UI;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Daily_WinUI.Models;
 using Daily_WinUI.Services;
 using Daily_WinUI.ViewModels;
@@ -196,6 +201,11 @@ public sealed partial class WeatherDetailPage : Page
     }
 
     private async void RefreshButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        await RefreshWeatherAsync();
+    }
+
+    public async Task RefreshFromTitleBarAsync()
     {
         await RefreshWeatherAsync();
     }
