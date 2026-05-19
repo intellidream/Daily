@@ -376,7 +376,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             "tea" => "#FF27AE60",
             "juice" => "#FFE91E63",
             "cigarette" => "#FFF44336",
-            "vape" => "#FF1976D2",
+            "heated" => "#FF1976D2",
             "rolled" => "#FFEF6C00",
             "cigarillo" => "#FF8E24AA",
             _ => "#FF808080"
@@ -475,9 +475,9 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Cigarette\"}");
     }
 
-    private async void AddVape_Click(object sender, RoutedEventArgs e)
+    private async void AddHeated_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Vape\"}");
+        await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Heated\"}");
     }
 
     private async void AddRolled_Click(object sender, RoutedEventArgs e)

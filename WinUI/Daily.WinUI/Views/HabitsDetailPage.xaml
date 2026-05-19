@@ -576,10 +576,10 @@
                                                         <TextBlock Text="Cigarette" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
-                                                <Button Grid.Row="0" Grid.Column="1" Click="AddVape_Click" CornerRadius="18" Padding="10" Background="#FF1976D2" BorderThickness="0">
+                                                <Button Grid.Row="0" Grid.Column="1" Click="AddHeated_Click" CornerRadius="18" Padding="10" Background="#FF1976D2" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
                                                         <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="Vape" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                        <TextBlock Text="Heated" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
                                                 <Button Grid.Row="1" Grid.Column="0" Click="AddRolled_Click" CornerRadius="18" Padding="10" Background="#FFEF6C00" BorderThickness="0">
@@ -638,10 +638,10 @@
                                                 <TextBlock Text="Cigarette" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
-                                        <Button Grid.Row="0" Grid.Column="1" Click="AddVape_Click" CornerRadius="18" Padding="10" Background="#FF1976D2" BorderThickness="0">
+                                        <Button Grid.Row="0" Grid.Column="1" Click="AddHeated_Click" CornerRadius="18" Padding="10" Background="#FF1976D2" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
                                                 <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                <TextBlock Text="Vape" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                <TextBlock Text="Heated" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
                                         <Button Grid.Row="1" Grid.Column="0" Click="AddRolled_Click" CornerRadius="18" Padding="10" Background="#FFEF6C00" BorderThickness="0">

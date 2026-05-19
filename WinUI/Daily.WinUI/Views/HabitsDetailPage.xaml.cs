@@ -150,7 +150,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                             : drinkOrType.Contains("wine") ? "wine"
                             : drinkOrType.Contains("cigarillo") ? "cigarillo"
                             : drinkOrType.Contains("roll") ? "rolled"
-                            : drinkOrType.Contains("vape") || drinkOrType.Contains("heat") ? "vape"
+                            : drinkOrType.Contains("heated") ? "heated" : drinkOrType.Contains("vape") ? "vape"
                             : drinkOrType.Contains("cig") ? "cigarette"
                             : _currentType == "smokes" ? "cigarette" : "water");
 
@@ -701,9 +701,9 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         await _habitsService.AddLogAsync("smokes", 1, "unit", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"type\":\"Cigarette\"}");
     }
 
-    private async void AddVape_Click(object sender, RoutedEventArgs e)
+    private async void AddHeated_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("smokes", 1, "unit", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"type\":\"Heated Tobacco\"}");
+        await _habitsService.AddLogAsync("smokes", 1, "unit", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"type\":\"Heated\"}");
     }
 
     private async void AddRolled_Click(object sender, RoutedEventArgs e)
