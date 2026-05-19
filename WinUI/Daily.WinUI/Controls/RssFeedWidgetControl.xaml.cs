@@ -62,7 +62,15 @@ public sealed partial class RssFeedWidgetControl : UserControl
 
     private async void RssService_OnFeedChanged()
     {
-        DispatcherQueue.TryEnqueue(async () =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _ = HandleFeedChangedSafeAsync();
+        });
+    }
+
+    private async Task HandleFeedChangedSafeAsync()
+    {
+        try
         {
             if (FeedComboBox.ItemsSource != _rssService.Feeds)
             {
@@ -72,7 +80,7 @@ public sealed partial class RssFeedWidgetControl : UserControl
             {
                 FeedComboBox.SelectedItem = _rssService.CurrentFeed;
             }
-            
+
             // Auto-load: InitializeAsync seeds feeds AFTER the widget is already loaded,
             // so this is the first moment we know CurrentFeed is set. Load articles now.
             if (_rssService.CurrentFeed != null && !_rssService.Items.Any() && !_rssService.IsLoading)
@@ -81,7 +89,11 @@ public sealed partial class RssFeedWidgetControl : UserControl
                 ArticlesListView.Visibility = Visibility.Collapsed;
                 await _rssService.LoadFeedAsync(_rssService.CurrentFeed);
             }
-        });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[RssFeedWidgetControl] Feed change handling failed: {ex}");
+        }
     }
 
     private void RssService_OnItemsUpdated()

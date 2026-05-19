@@ -114,7 +114,25 @@ public partial class App : Application
         });
     }
 
-    public App() { this.UnhandledException += (s, e) => { Console.WriteLine("UNHANDLED XAML EXCEPTION: " + e.Exception); e.Handled = true; }; AppDomain.CurrentDomain.UnhandledException += (s, e) => { Console.WriteLine("UNHANDLED APPDOMAIN EXCEPTION: " + e.ExceptionObject); };
+    public App()
+    {
+        this.UnhandledException += (s, e) =>
+        {
+            Console.WriteLine("UNHANDLED XAML EXCEPTION: " + e.Exception);
+            e.Handled = true;
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            Console.WriteLine("UNHANDLED APPDOMAIN EXCEPTION: " + e.ExceptionObject);
+        };
+
+        TaskScheduler.UnobservedTaskException += (s, e) =>
+        {
+            Console.WriteLine("UNOBSERVED TASK EXCEPTION: " + e.Exception);
+            e.SetObserved();
+        };
+
         Syncfusion.Licensing.SyncfusionLicenseProvider.RegisterLicense(Secrets.SyncfusionLicenseKey);
         this.InitializeComponent();
     }

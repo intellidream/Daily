@@ -155,7 +155,22 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
     private void HabitsService_OnHabitsUpdated()
     {
-        DispatcherQueue.TryEnqueue(async () => await LoadDataAsync());
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _ = LoadDataSafeAsync();
+        });
+    }
+
+    private async Task LoadDataSafeAsync()
+    {
+        try
+        {
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[HabitsWidgetControl] LoadData failed: {ex}");
+        }
     }
 
     /// <summary>Called by the dashboard refresh button: pulls latest data from remote, then reloads the UI.</summary>

@@ -87,7 +87,15 @@ public sealed partial class WeatherDetailPage : Page
     private void LocationService_PositionChanged(object? sender, (double Latitude, double Longitude) coords)
     {
         // PositionChanged fires on a background thread — marshal to the UI thread.
-        DispatcherQueue.TryEnqueue(async () =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _ = HandleLocationPositionChangedSafeAsync(coords);
+        });
+    }
+
+    private async Task HandleLocationPositionChangedSafeAsync((double Latitude, double Longitude) coords)
+    {
+        try
         {
             // Only update if the user hasn't pinned a manual location.
             if (_selectedLocation is null || _settings.LastLocationWasAuto)
@@ -104,7 +112,11 @@ public sealed partial class WeatherDetailPage : Page
                 SetLocationText(_selectedLocation.DisplayName);
                 await RefreshWeatherAsync();
             }
-        });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[WeatherDetailPage] Auto-location refresh failed: {ex}");
+        }
     }
 
     /// <summary>Appends a degree symbol to every Y-axis label on the hourly chart.</summary>

@@ -22,6 +22,15 @@ namespace Daily.Services
 
         private System.Threading.Timer? _syncTimer;
 
+        private void LogSyncException(string context, Exception ex)
+        {
+            LastSyncError = ex.Message;
+            var root = ex.GetBaseException();
+            var sessionUser = _supabase.Auth.CurrentUser?.Id ?? "<no-user>";
+            Debug.WriteLine($"[SyncService] {context}: {ex.GetType().Name}: {ex.Message} | Root: {root.GetType().Name}: {root.Message} | User: {sessionUser}");
+            Console.WriteLine($"[SyncService] {context}: {ex.GetType().Name}: {ex.Message}");
+        }
+
         public async Task SyncAsync()
         {
             LastSyncError = null;
@@ -40,8 +49,7 @@ namespace Daily.Services
             }
             catch (Exception ex)
             {
-                LastSyncError = ex.Message;
-                Debug.WriteLine($"[SyncService] Sync Error: {ex}");
+                LogSyncException("SyncAsync", ex);
             }
         }
 
@@ -50,14 +58,26 @@ namespace Daily.Services
             if (_syncTimer == null)
             {
                 // Sync every 15 minutes (900000 ms)
-                _syncTimer = new System.Threading.Timer(async _ => 
+                _syncTimer = new System.Threading.Timer(_ =>
                 {
                     if (_supabase.Auth.CurrentSession != null)
                     {
-                        await SyncAsync();
+                        _ = SafeBackgroundSyncAsync();
                     }
-                }, null, 10000, 900000); 
+                }, null, 10000, 900000);
                 Console.WriteLine("[SyncService] Background Sync Started.");
+            }
+        }
+
+        private async Task SafeBackgroundSyncAsync()
+        {
+            try
+            {
+                await SyncAsync();
+            }
+            catch (Exception ex)
+            {
+                LogSyncException("SafeBackgroundSyncAsync", ex);
             }
         }
 

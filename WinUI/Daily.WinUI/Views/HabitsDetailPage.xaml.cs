@@ -319,10 +319,22 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     private void HabitsService_OnHabitsUpdated()
     {
-        DispatcherQueue.TryEnqueue(async () =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _ = LoadDataSafeAsync();
+        });
+    }
+
+    private async Task LoadDataSafeAsync()
+    {
+        try
         {
             await LoadDataAsync();
-        });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[HabitsDetailPage] LoadData failed: {ex}");
+        }
     }
 
     private void HabitTypeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
