@@ -302,28 +302,68 @@ namespace Daily.Services.Finances
 
         public async Task<List<string>> GetWatchlistSymbolsAsync()
         {
+            await _databaseService.InitializeAsync();
+
+            var userId = _supabaseClient.Auth.CurrentUser?.Id;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return new List<string>();
+            }
+
+            List<LocalWatchlist> cached = new();
             try
             {
-                var userId = _supabaseClient.Auth.CurrentUser?.Id;
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    var response = await _supabaseClient
-                        .From<Daily.Models.Finances.UserWatchlist>()
-                        .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userId)
-                        .Order("display_order", Supabase.Postgrest.Constants.Ordering.Ascending)
-                        .Get();
+                cached = await _databaseService.Connection.Table<LocalWatchlist>()
+                    .Where(w => w.UserId == userId)
+                    .OrderBy(w => w.DisplayOrder)
+                    .ToListAsync();
 
-                    if (response.Models != null && response.Models.Any())
+                if (cached.Any())
+                {
+                    var oldest = cached.Min(w => w.LastUpdatedAt ?? DateTime.MinValue);
+                    if (oldest > DateTime.UtcNow.AddMinutes(-15))
                     {
-                        return response.Models.Select(m => m.Symbol).ToList();
+                        Console.WriteLine($"[FinancesService] Serving {cached.Count} cached watchlist symbols");
+                        return cached.Select(w => w.Symbol).ToList();
                     }
                 }
+
+                var response = await _supabaseClient
+                    .From<Daily.Models.Finances.UserWatchlist>()
+                    .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userId)
+                    .Order("display_order", Supabase.Postgrest.Constants.Ordering.Ascending)
+                    .Get();
+
+                if (response.Models != null && response.Models.Any())
+                {
+                    var now = DateTime.UtcNow;
+                    var freshLocal = response.Models
+                        .OrderBy(m => m.DisplayOrder)
+                        .Select(m => new LocalWatchlist
+                        {
+                            Id = m.Id,
+                            UserId = m.UserId,
+                            Symbol = m.Symbol,
+                            DisplayOrder = m.DisplayOrder,
+                            CreatedAt = m.CreatedAt,
+                            LastUpdatedAt = now
+                        })
+                        .ToList();
+
+                    await _databaseService.Connection.ExecuteAsync("DELETE FROM watchlists WHERE UserId = ?", userId);
+                    await _databaseService.Connection.InsertAllAsync(freshLocal);
+
+                    return freshLocal.Select(w => w.Symbol).ToList();
+                }
+
+                // No remote rows: keep using stale cache if we have one.
+                return cached.Select(w => w.Symbol).ToList();
             }
             catch (Exception ex)
             {
-                Console.WriteLine("[FinancesService] Failed to load watchlist from Supabase: " + ex.Message);
+                Console.WriteLine("[FinancesService] Failed to load watchlist symbols: " + ex.Message);
+                return cached.Select(w => w.Symbol).ToList();
             }
-            return new List<string>();
         }
 
         public Task<MoneyData> GetMoneyDataAsync()

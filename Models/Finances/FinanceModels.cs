@@ -199,4 +199,23 @@ namespace Daily.Models.Finances
         public DateTime? SyncedAt { get; set; }
         public bool IsDeleted { get; set; }
     }
+
+    [SQLite.Table("watchlists")]
+    public class LocalWatchlist
+    {
+        [SQLite.PrimaryKey]
+        public string Id { get; set; }
+
+        [SQLite.Indexed]
+        public string UserId { get; set; }
+
+        [SQLite.Indexed]
+        public string Symbol { get; set; }
+
+        public int DisplayOrder { get; set; }
+        public DateTime CreatedAt { get; set; }
+
+        [SQLite.Indexed]
+        public DateTime? LastUpdatedAt { get; set; }
+    }
 }
