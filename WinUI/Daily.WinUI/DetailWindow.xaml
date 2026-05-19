@@ -24,7 +24,7 @@
         <Image Source="{ThemeResource AppBackgroundSource}" Stretch="UniformToFill" IsHitTestVisible="False" Grid.RowSpan="2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
 
         <!-- Custom TitleBar area to mirror main window behavior -->
-        <Grid x:Name="AppTitleBar" Background="Transparent" VerticalAlignment="Top" Height="48" SizeChanged="AppTitleBar_SizeChanged">
+        <Grid x:Name="AppTitleBar" Background="Transparent" VerticalAlignment="Top" Height="32" SizeChanged="AppTitleBar_SizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -33,7 +33,7 @@
 
             <Button x:Name="DetailTitleBarRefreshButton"
                     Grid.Column="0"
-                    Height="48"
+                    Height="32"
                     Background="Transparent" BorderThickness="0"
                     CornerRadius="0" Padding="14,0"
                     HorizontalAlignment="Left"
