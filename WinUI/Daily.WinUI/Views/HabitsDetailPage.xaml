@@ -386,7 +386,7 @@
                                                 </Button>
                                                 <Button Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Padding="10" Background="#FFE91E63" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xeab8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                                         <TextBlock Text="Juice" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
@@ -398,7 +398,7 @@
                                                 </Button>
                                                 <Button Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Padding="10" Background="#FF27AE60" BorderThickness="0">
                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                        <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                                         <TextBlock Text="Tea" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
@@ -433,7 +433,7 @@
                                                             <ColumnDefinition Width="Auto" />
                                                             <ColumnDefinition Width="*" />
                                                         </Grid.ColumnDefinitions>
-                                                        <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
+                                                        <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
                                                         <TextBlock Grid.Column="1" Text="Tea" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Right" />
                                                     </Grid>
                                                     <Grid Grid.Row="3">
@@ -488,7 +488,7 @@
                                         </Button>
                                         <Button Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Padding="10" Background="#FFE91E63" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xeab8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                                 <TextBlock Text="Juice" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
@@ -500,7 +500,7 @@
                                         </Button>
                                         <Button Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Padding="10" Background="#FF27AE60" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                                 <TextBlock Text="Tea" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Button>

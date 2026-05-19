@@ -214,7 +214,7 @@
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
+                                                <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
                                                 <TextBlock Text="Tea" FontSize="12" Opacity="0.7" />
                                             </StackPanel>
                                         </Grid>
@@ -244,28 +244,28 @@
                                     <Button Grid.Row="0" Grid.Column="0" Click="AddWater_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A0288D1" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF0288D1" />
-                                            <TextBlock Text="250" FontSize="11" FontWeight="SemiBold" Foreground="#FF0288D1" />
+                                            <TextBlock Text="Water" FontSize="11" FontWeight="SemiBold" Foreground="#FF0288D1" />
                                         </StackPanel>
                                     </Button>
                                     
                                     <Button Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AE91E63" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <FontIcon Glyph="&#xeab8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFE91E63" />
-                                            <TextBlock Text="250" FontSize="11" FontWeight="SemiBold" Foreground="#FFE91E63" />
+                                            <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFE91E63" />
+                                            <TextBlock Text="Juice" FontSize="11" FontWeight="SemiBold" Foreground="#FFE91E63" />
                                         </StackPanel>
                                     </Button>
                                     
                                     <Button Grid.Row="1" Grid.Column="0" Click="AddCoffee_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AF2994A" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFF2994A" />
-                                            <TextBlock Text="150" FontSize="11" FontWeight="SemiBold" Foreground="#FFF2994A" />
+                                            <TextBlock Text="Coffee" FontSize="11" FontWeight="SemiBold" Foreground="#FFF2994A" />
                                         </StackPanel>
                                     </Button>
                                     
                                     <Button Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A27AE60" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
-                                            <TextBlock Text="200" FontSize="11" FontWeight="SemiBold" Foreground="#FF27AE60" />
+                                            <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
+                                            <TextBlock Text="Tea" FontSize="11" FontWeight="SemiBold" Foreground="#FF27AE60" />
                                         </StackPanel>
                                     </Button>
                                 </Grid>

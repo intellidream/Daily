@@ -158,19 +158,19 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
             string icon = _currentType == "smokes"
                 ? drinkOrType switch
                 {
-                    var s when s.Contains("heated")                         => "\xec2c",  // heated
-                    var s when s.Contains("rolled")                         => "\x100bd",  // rolled
-                    var s when s.Contains("cigarillo")                      => "\xeed2",  // cigarillo
-                    _                                                       => "\xecc4"   // smoking icon (cigarette)
+                    var s when s.Contains("heated")     => "\xec2c",  // heated
+                    var s when s.Contains("rolled")     => "\x100bd",  // rolled
+                    var s when s.Contains("cigarillo")  => "\xeed2",  // cigarillo
+                    _                                   => "\xecc4"   // cigarette
                 }
                 : drinkOrType switch
                 {
-                    var s when s.Contains("coffee") => "\ue96e",  // coffee
-                    var s when s.Contains("tea")    => "\uecfe",  // cup
-                    var s when s.Contains("juice")  => "\ued09",  // lemon
-                    var s when s.Contains("beer")   => "\uecf5",  // beer
-                    var s when s.Contains("wine")   => "\uecf6",  // bottle
-                    _                               => "\ueb7b"   // droplet
+                    var s when s.Contains("coffee")     => "\xef0e",  // coffee
+                    var s when s.Contains("tea")        => "\xf552",  // tea
+                    var s when s.Contains("juice")      => "\xef28",  // juice
+                    var s when s.Contains("beer")       => "\xefa1",  // beer
+                    var s when s.Contains("wine")       => "\xeab7",  // wine
+                    _                                   => "\xea97"   // water
                 };
 
             string label = _currentType == "smokes"
