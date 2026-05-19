@@ -20,7 +20,7 @@
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#20FFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#44FFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#16FFFFFF"/>
-                    <SolidColorBrush x:Key="AppReaderRibbonBrush" Color="#FF0A1428"/>
+                    <SolidColorBrush x:Key="AppReaderRibbonBrush" Color="#FF4B3564"/>
                     <LinearGradientBrush x:Key="AppBgBrush" StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#FF030609" Offset="0"/>
                         <GradientStop Color="#FF050F1A" Offset="0.35"/>

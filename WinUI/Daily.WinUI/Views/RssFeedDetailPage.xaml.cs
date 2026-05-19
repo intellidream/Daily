@@ -408,9 +408,9 @@ public sealed partial class RssFeedDetailPage : Page
         string metaColor = isDark ? "#A0A0A0" : "#666666";
 
         // Extract gradient colors from SVG top area - these match the backgrounds
-        // Dark theme: blue gradient starting with #0F1D35
+        // Dark theme: purple tone sampled from the dark gradient's top region
         // Light theme: warm tan gradient starting with #D9B08D
-        string bodyBackground = isDark ? "rgba(15, 29, 53, 0.4)" : "rgba(217, 176, 141, 0.15)";
+        string bodyBackground = isDark ? "rgba(52, 44, 66, 0.45)" : "rgba(217, 176, 141, 0.15)";
 
         string featuredImageHtml = string.IsNullOrEmpty(article.ImageUrl) 
             ? "" 
