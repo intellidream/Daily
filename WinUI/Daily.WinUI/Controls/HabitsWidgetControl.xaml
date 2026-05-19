@@ -408,7 +408,7 @@
                                     
                                     <Button Grid.Row="1" Grid.Column="1" Click="AddCigarillo_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A8E24AA" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF8E24AA" />
+                                            <FontIcon Glyph="&#xeed2;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF8E24AA" />
                                             <TextBlock Text="Cigarillo" FontSize="11" FontWeight="SemiBold" Foreground="#FF8E24AA" />
                                         </StackPanel>
                                     </Button>
