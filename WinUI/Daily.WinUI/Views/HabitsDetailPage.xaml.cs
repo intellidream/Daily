@@ -19,6 +19,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 {
     private readonly IHabitsService _habitsService;
     private readonly ISettingsService _settingsService;
+    private readonly ISyncService _syncService;
     private string _currentType = "water";
     private bool _isReconciling;
     private bool _isSyncingPointer;  // blocks ValueChanged snap during programmatic set
@@ -301,6 +302,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         this.DataContext = this;
         _habitsService = App.Current.Services.GetRequiredService<IHabitsService>();
         _settingsService = App.Current.Services.GetRequiredService<ISettingsService>();
+        _syncService = App.Current.Services.GetRequiredService<ISyncService>();
         
         Loaded += HabitsDetailPage_Loaded;
         Unloaded += HabitsDetailPage_Unloaded;
@@ -339,6 +341,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     public async Task RefreshFromTitleBarAsync()
     {
+        await _syncService.SyncAsync();
         await LoadDataSafeAsync();
     }
 

@@ -173,10 +173,10 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         }
     }
 
-    /// <summary>Called by the dashboard refresh button: pulls latest data from remote, then reloads the UI.</summary>
+    /// <summary>Called by the dashboard refresh button: runs full sync (push + pull), then reloads the UI.</summary>
     public async Task RefreshAsync()
     {
-        await _syncService.PullAsync();
+        await _syncService.SyncAsync();
         await LoadDataAsync();
     }
 
