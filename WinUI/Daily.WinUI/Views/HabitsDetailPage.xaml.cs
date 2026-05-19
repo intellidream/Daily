@@ -610,7 +610,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
             "beer"      => "#FFFFA000",
             "wine"      => "#FF9C27B0",
             "cigarette" => "#FFF44336",
-            "vape"      => "#FF1976D2",
+            "heated"    => "#FF1976D2",
             "rolled"    => "#FFEF6C00",
             "cigarillo" => "#FF8E24AA",
             _           => "#FF808080"

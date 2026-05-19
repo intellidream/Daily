@@ -403,18 +403,21 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
     private string GetColorForDrinkOrSmoke(string item)
     {
-        return item.ToLowerInvariant() switch
-        {
-            "water" => "#FF2196F3",
-            "coffee" => "#FFF2994A",
-            "tea" => "#FF27AE60",
-            "juice" => "#FFE91E63",
-            "cigarette" => "#FFF44336",
-            "heated" => "#FF1976D2",
-            "rolled" => "#FFEF6C00",
-            "cigarillo" => "#FF8E24AA",
-            _ => "#FF808080"
-        };
+        var normalized = (item ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (normalized.Contains("water")) return "#FF2196F3";
+        if (normalized.Contains("coffee")) return "#FFF2994A";
+        if (normalized.Contains("tea")) return "#FF27AE60";
+        if (normalized.Contains("juice")) return "#FFE91E63";
+        if (normalized.Contains("beer")) return "#FFFFA000";
+        if (normalized.Contains("wine")) return "#FF9C27B0";
+
+        if (normalized.Contains("heat")) return "#FF1976D2";      // Heated / Heated Tobacco
+        if (normalized.Contains("roll")) return "#FFEF6C00";      // Rolled
+        if (normalized.Contains("cigarillo")) return "#FF8E24AA"; // Cigarillo
+        if (normalized.Contains("cigarette")) return "#FFF44336"; // Cigarette
+
+        return "#FF808080";
     }
 
     private Windows.UI.Color GetColorFromHex(string hex)
