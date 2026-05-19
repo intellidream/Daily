@@ -150,7 +150,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                             : drinkOrType.Contains("wine") ? "wine"
                             : drinkOrType.Contains("cigarillo") ? "cigarillo"
                             : drinkOrType.Contains("roll") ? "rolled"
-                            : drinkOrType.Contains("heated") ? "heated" : drinkOrType.Contains("vape") ? "vape"
+                            : drinkOrType.Contains("heated") ? "heated"
                             : drinkOrType.Contains("cig") ? "cigarette"
                             : _currentType == "smokes" ? "cigarette" : "water");
 
@@ -158,10 +158,10 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
             string icon = _currentType == "smokes"
                 ? drinkOrType switch
                 {
-                    var s when s.Contains("vape") || s.Contains("heat") => "\ue941",  // device-desktop (vape/device)
-                    var s when s.Contains("roll")                        => "\uea77",  // pencil (roll-up)
-                    var s when s.Contains("cigarillo")                   => "\ueb7e",  // minus-vertical
-                    _                                                     => "\uecb2"   // smoking icon (cigarette)
+                    var s when s.Contains("heat")                       => "\ue941",  // device-desktop (vape/device)
+                    var s when s.Contains("roll")                       => "\uea77",  // pencil (roll-up)
+                    var s when s.Contains("cigarillo")                  => "\ueb7e",  // minus-vertical
+                    _                                                   => "\uecb2"   // smoking icon (cigarette)
                 }
                 : drinkOrType switch
                 {
@@ -703,7 +703,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     private async void AddHeated_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("smokes", 1, "unit", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"type\":\"Heated\"}");
+        await _habitsService.AddLogAsync("smokes", 1, "unit", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"type\":\"Heated Tobacco\"}");
     }
 
     private async void AddRolled_Click(object sender, RoutedEventArgs e)
@@ -1025,10 +1025,10 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         // Map type name to colour key used in GetColorForDrinkOrSmoke
         string colorKey = _lastSmokeTypeName.ToLowerInvariant() switch
         {
-            var s when s.Contains("vape") || s.Contains("heated") => "vape",
-            var s when s.Contains("roll")                         => "rolled",
-            var s when s.Contains("cigarillo")                    => "cigarillo",
-            _                                                      => "cigarette"
+            var s when s.Contains("heat")                           => "heated",
+            var s when s.Contains("roll")                           => "rolled",
+            var s when s.Contains("cigarillo")                      => "cigarillo",
+            _                                                       => "cigarette"
         };
 
         // Short label for the bottom half of the handle

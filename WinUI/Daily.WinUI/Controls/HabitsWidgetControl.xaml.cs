@@ -477,7 +477,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
     private async void AddHeated_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Heated\"}");
+        await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Heated Tobacco\"}");
     }
 
     private async void AddRolled_Click(object sender, RoutedEventArgs e)

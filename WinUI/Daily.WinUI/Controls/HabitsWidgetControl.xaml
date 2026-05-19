@@ -394,14 +394,14 @@
                                     
                                     <Button Grid.Row="0" Grid.Column="1" Click="AddHeated_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A1976D2" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF1976D2" />
+                                            <FontIcon Glyph="&#xec2c;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF1976D2" />
                                             <TextBlock Text="Heated" FontSize="11" FontWeight="SemiBold" Foreground="#FF1976D2" />
                                         </StackPanel>
                                     </Button>
                                     
                                     <Button Grid.Row="1" Grid.Column="0" Click="AddRolled_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AEF6C00" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFEF6C00" />
+                                            <FontIcon Glyph="&#x100bd;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFEF6C00" />
                                             <TextBlock Text="Rolled" FontSize="11" FontWeight="SemiBold" Foreground="#FFEF6C00" />
                                         </StackPanel>
                                     </Button>
