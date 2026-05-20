@@ -31,5 +31,10 @@ namespace Daily_WinUI.Services
         {
             return Task.FromResult(new List<VitalMetric>());
         }
+
+        public Task InitializeAsync()
+        {
+            return Task.CompletedTask;
+        }
     }
 }

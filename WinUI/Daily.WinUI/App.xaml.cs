@@ -225,6 +225,13 @@ public partial class App : Application
         var rssService = Services.GetRequiredService<Daily.Services.IRssFeedService>();
         await rssService.InitializeCustomFeedsAsync();
 
+        // Initialize Habits and Health services (sets up Realtime subscriptions)
+        var habitsService = Services.GetRequiredService<Daily.Services.IHabitsService>();
+        await habitsService.InitializeAsync();
+
+        var healthService = Services.GetRequiredService<Daily.Services.Health.IHealthService>();
+        await healthService.InitializeAsync();
+
         if (SupabaseClient.Auth.CurrentSession != null)
         {
             var syncService = Services.GetRequiredService<Daily.Services.ISyncService>();

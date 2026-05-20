@@ -178,7 +178,7 @@ namespace Daily.Services
             {
                 if (_preferencesChannel == null)
                 {
-                    _preferencesChannel = _supabase.Realtime.Channel("public:user_preferences");
+                    _preferencesChannel = _supabase.Realtime.Channel("realtime", "public", "user_preferences");
                     _preferencesChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnPreferencesReceived);
                     await _preferencesChannel.Subscribe();
                     Console.WriteLine("[SettingsService] Realtime subscribed to user_preferences");

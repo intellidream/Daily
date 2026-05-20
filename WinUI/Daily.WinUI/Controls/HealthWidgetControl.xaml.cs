@@ -44,12 +44,23 @@ namespace Daily_WinUI.Controls
             }
         }
 
-        private async Task OnRefreshRequested()
+        private Task OnRefreshRequested()
         {
-            await LoadDataAsync();
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    await LoadDataAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[HealthWidgetControl] Threaded refresh failed: {ex.Message}");
+                }
+            });
+            return Task.CompletedTask;
         }
 
-        private async Task LoadDataAsync()
+        public async Task LoadDataAsync()
         {
             if (_healthService == null) return;
 

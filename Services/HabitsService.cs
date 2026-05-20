@@ -255,7 +255,7 @@ namespace Daily.Services
             {
                 if (_habitsLogsChannel == null)
                 {
-                    _habitsLogsChannel = _supabase.Realtime.Channel("public:habits_logs");
+                    _habitsLogsChannel = _supabase.Realtime.Channel("realtime", "public", "habits_logs");
                     _habitsLogsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHabitLogReceived);
                     await _habitsLogsChannel.Subscribe();
                     Console.WriteLine("[HabitsService] Realtime subscribed to habits_logs");
@@ -263,7 +263,7 @@ namespace Daily.Services
 
                 if (_habitsGoalsChannel == null)
                 {
-                    _habitsGoalsChannel = _supabase.Realtime.Channel("public:habits_goals");
+                    _habitsGoalsChannel = _supabase.Realtime.Channel("realtime", "public", "habits_goals");
                     _habitsGoalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHabitGoalReceived);
                     await _habitsGoalsChannel.Subscribe();
                     Console.WriteLine("[HabitsService] Realtime subscribed to habits_goals");

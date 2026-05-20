@@ -26,11 +26,12 @@ namespace Daily
         private readonly IHabitsService _habitsService;
         private readonly ISyncService _syncService;
         private readonly IRenderedHtmlService _renderedHtmlService;
+        private readonly Daily.Services.Health.IHealthService _healthService;
 
         private readonly WindowManagerService _windowManagerService;
         private readonly DebugLogger _logger;
 
-        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService, WindowManagerService windowManagerService, DebugLogger logger, IRenderedHtmlService renderedHtmlService)
+        public App(ITrayService trayService, IRefreshService refreshService, IBackButtonService backButtonService, Supabase.Client supabase, IDatabaseService databaseService, ISettingsService settingsService, IHabitsService habitsService, ISyncService syncService, WindowManagerService windowManagerService, DebugLogger logger, IRenderedHtmlService renderedHtmlService, Daily.Services.Health.IHealthService healthService)
         {
             InitializeComponent();
             _renderedHtmlService = renderedHtmlService;
@@ -44,6 +45,7 @@ namespace Daily
             _refreshService = refreshService;
             _backButtonService = backButtonService;
             _logger = logger;
+            _healthService = healthService;
 #if MACCATALYST
             // Daily.Platforms.MacCatalyst.MacTrayService.Log("App Constructor Called");
 #endif
@@ -107,6 +109,7 @@ namespace Daily
                 _logger.Log($"[App] Settings Initialized. IsAuthenticated: {_settingsService.IsAuthenticated}");
                 
                 await _habitsService.InitializeAsync();
+                await _healthService.InitializeAsync();
                 
                 _syncService.StartBackgroundSync();
 

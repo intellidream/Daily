@@ -100,7 +100,14 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             _macroService = App.Current.Services.GetRequiredService<IMacroService>();
             _heatmapService = App.Current.Services.GetRequiredService<IHeatmapService>();
             _refreshService = App.Current.Services.GetRequiredService<Daily.Services.IRefreshService>();
-            _refreshService.RefreshRequested += async () => await LoadDataAsync();
+            _refreshService.RefreshRequested += () =>
+            {
+                DispatcherQueue.TryEnqueue(async () =>
+                {
+                    await LoadDataAsync();
+                });
+                return Task.CompletedTask;
+            };
 
             this.Loaded += OnLoaded;
             this.SizeChanged += OnSizeChanged;

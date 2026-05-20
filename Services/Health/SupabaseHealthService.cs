@@ -16,12 +16,16 @@ namespace Daily.Services.Health
         private readonly INativeHealthStore _nativeHealthStore;
         private readonly ILogger<SupabaseHealthService> _logger;
         private readonly IServiceProvider _serviceProvider; // Lazy Resolution
+        private readonly IRefreshService _refreshService;
+        private Supabase.Realtime.RealtimeChannel? _vitalsChannel;
 
         // Simple memory cache to avoid excessive DB calls during session
         private  List<VitalMetric> _cache = new();
         private DateTime _lastCacheUpdate = DateTime.MinValue;
 
-        public SupabaseHealthService(Supabase.Client supabase, INativeHealthStore nativeHealthStore, ILogger<SupabaseHealthService> logger, IServiceProvider serviceProvider)
+        private bool IsAuthenticated => _supabase.Auth.CurrentSession != null && _supabase.Auth.CurrentUser != null;
+
+        public SupabaseHealthService(Supabase.Client supabase, INativeHealthStore nativeHealthStore, ILogger<SupabaseHealthService> logger, IServiceProvider serviceProvider, IRefreshService refreshService)
         {
             try 
             {
@@ -29,10 +33,114 @@ namespace Daily.Services.Health
                 _nativeHealthStore = nativeHealthStore;
                 _logger = logger;
                 _serviceProvider = serviceProvider;
+                _refreshService = refreshService;
+
+                // Setup Auth Listener ONCE in Constructor
+                _supabase.Auth.AddStateChangedListener((sender, state) => 
+                {
+                    Console.WriteLine($"[SupabaseHealthService] Auth State Changed: {state}");
+                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || state == Supabase.Gotrue.Constants.AuthState.SignedOut)
+                    {
+                         Task.Run(async () => 
+                         {
+                             try 
+                             {
+                                 await InitializeAsync();
+                             }
+                             catch(Exception ex)
+                             {
+                                 Console.WriteLine($"[SupabaseHealthService] Post-Auth Init Failed: {ex}");
+                             }
+                         });
+                    }
+                });
             }
             catch(Exception ex)
             {
                 Console.WriteLine($"[SupabaseHealthService] Constructor FAULT: {ex}");
+            }
+        }
+
+        public async Task InitializeAsync()
+        {
+            if (IsAuthenticated)
+            {
+                await SetupRealtimeAsync();
+            }
+            else
+            {
+                // Clean up channel if logged out
+                if (_vitalsChannel != null)
+                {
+                    try
+                    {
+                        _vitalsChannel.Unsubscribe();
+                    }
+                    catch { }
+                    _vitalsChannel = null;
+                }
+            }
+        }
+
+        private async Task SetupRealtimeAsync()
+        {
+            if (!IsAuthenticated) return;
+
+            try
+            {
+                if (_vitalsChannel == null)
+                {
+                    _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals");
+                    _vitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnVitalReceived);
+                    await _vitalsChannel.Subscribe();
+                    Console.WriteLine("[SupabaseHealthService] Realtime subscribed to vitals");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SupabaseHealthService] Realtime setup failed: {ex.Message}");
+            }
+        }
+
+        private void OnVitalReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
+        {
+            try
+            {
+                Console.WriteLine($"[SupabaseHealthService] Realtime Vital Postgres Change received! Event: {e.Event}, Topic: {e.Topic}");
+                var remoteVital = e.Model<VitalMetric>();
+                if (remoteVital == null)
+                {
+                    Console.WriteLine("[SupabaseHealthService] Realtime: remoteVital is NULL! Cannot parse database change.");
+                    return;
+                }
+
+                var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                string currentUserIdStr = user?.Id ?? "NULL";
+                Console.WriteLine($"[SupabaseHealthService] Realtime parsed remoteVital: Id={remoteVital.Id}, UserId={remoteVital.UserId}, Type={remoteVital.TypeString}, Value={remoteVital.Value}, CurrentUserId={currentUserIdStr}");
+
+                bool isMatch = false;
+                if (user != null && Guid.TryParse(user.Id, out var uid))
+                {
+                    isMatch = remoteVital.UserId == uid;
+                }
+
+                if (isMatch)
+                {
+                    Console.WriteLine($"[SupabaseHealthService] Realtime: Match found. Invalidating cache and triggering refresh.");
+                    _cache.Clear();
+                    _lastCacheUpdate = DateTime.MinValue;
+                    
+                    // Trigger UI refresh
+                    _ = _refreshService.TriggerRefreshAsync();
+                }
+                else
+                {
+                    Console.WriteLine($"[SupabaseHealthService] Realtime: User ID mismatch. remoteVital.UserId={remoteVital.UserId}, uid={user?.Id}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SupabaseHealthService] Realtime Vital Error in OnVitalReceived: {ex}");
             }
         }
 

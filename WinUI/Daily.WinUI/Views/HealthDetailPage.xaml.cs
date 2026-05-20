@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -17,12 +17,14 @@ namespace Daily_WinUI.Views
     public sealed partial class HealthDetailPage : Page, INotifyPropertyChanged
     {
         private IHealthService _healthService;
+        private IRefreshService _refreshService;
         private List<VitalMetric> _metrics = new();
 
         public HealthDetailPage()
         {
             this.InitializeComponent();
             _healthService = App.Current.Services.GetService<IHealthService>();
+            _refreshService = App.Current.Services.GetService<IRefreshService>();
             
             StepsHistory = new ObservableCollection<ChartData>();
             HrHistory = new ObservableCollection<ChartData>();
@@ -30,11 +32,35 @@ namespace Daily_WinUI.Views
 
         private async void Page_Loaded(object sender, RoutedEventArgs e)
         {
+            if (_refreshService != null)
+            {
+                _refreshService.RefreshRequested += OnRefreshRequested;
+            }
             await LoadDataAsync();
         }
 
         private void Page_Unloaded(object sender, RoutedEventArgs e)
         {
+            if (_refreshService != null)
+            {
+                _refreshService.RefreshRequested -= OnRefreshRequested;
+            }
+        }
+
+        private Task OnRefreshRequested()
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    await LoadDataAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[HealthDetailPage] Threaded refresh failed: {ex.Message}");
+                }
+            });
+            return Task.CompletedTask;
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)

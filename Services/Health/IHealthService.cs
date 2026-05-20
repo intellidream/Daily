@@ -33,5 +33,10 @@ namespace Daily.Services.Health
         /// Retrieves daily values for a specific metric type over a date range (for trend charts).
         /// </summary>
         Task<List<VitalMetric>> GetHistoryAsync(VitalType type, int days = 7);
+
+        /// <summary>
+        /// Initializes the service, e.g., registers realtime subscriptions.
+        /// </summary>
+        Task InitializeAsync();
     }
 }
