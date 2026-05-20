@@ -8,6 +8,8 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Daily_WinUI.Controls;
 
@@ -17,6 +19,7 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
     private IMacroService _macroService;
     private IHeatmapService _heatmapService;
     private Daily.Services.IRefreshService _refreshService;
+    private readonly SemaphoreSlim _loadLock = new(1, 1);
 
     // View State
     public event PropertyChangedEventHandler PropertyChanged;
@@ -100,24 +103,38 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             _macroService = App.Current.Services.GetRequiredService<IMacroService>();
             _heatmapService = App.Current.Services.GetRequiredService<IHeatmapService>();
             _refreshService = App.Current.Services.GetRequiredService<Daily.Services.IRefreshService>();
-            _refreshService.RefreshRequested += () =>
-            {
-                DispatcherQueue.TryEnqueue(async () =>
-                {
-                    await LoadDataAsync();
-                });
-                return Task.CompletedTask;
-            };
 
             this.Loaded += OnLoaded;
+            this.Unloaded += OnUnloaded;
             this.SizeChanged += OnSizeChanged;
         }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        if (_refreshService != null)
+        {
+            _refreshService.RefreshRequested += OnRefreshRequested;
+        }
         await LoadDataAsync();
         UpdateAdaptiveState(this.ActualWidth, this.ActualHeight);
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_refreshService != null)
+        {
+            _refreshService.RefreshRequested -= OnRefreshRequested;
+        }
+    }
+
+    private Task OnRefreshRequested()
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            await LoadDataAsync();
+        });
+        return Task.CompletedTask;
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -150,16 +167,18 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         }
     }
 
-        public async Task LoadDataAsync()
+    public async Task LoadDataAsync()
     {
-        IsLoading = true;
-        MacroIndicators.Clear();
-        HeatmapData.Clear();
-        TopStocks.Clear();
-        ExtendedStocks.Clear();
-
+        await _loadLock.WaitAsync();
         try
         {
+            IsLoading = true;
+            MacroIndicators.Clear();
+            HeatmapData.Clear();
+            TopStocks.Clear();
+            ExtendedStocks.Clear();
+            Accounts.Clear();
+
             // 1. World Data
             var macros = await _macroService.GetMacroIndicatorsAsync();
             MacroIndicators.Clear();
@@ -226,6 +245,7 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         finally
         {
             IsLoading = false;
+            _loadLock.Release();
         }
     }
 

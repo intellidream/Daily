@@ -7,6 +7,7 @@
 @inject IWindowManagerService WindowManager
 @inject IRefreshService RefreshService
 @inject NavigationManager NavManager
+@implements IDisposable
 
 <!-- Widget Container -->
 <div class="d-flex flex-column h-100 w-100 gap-2">
@@ -293,5 +294,10 @@
             char.ConvertFromUtf32(0x1F1E6 - 'A' + upper[0]),
             char.ConvertFromUtf32(0x1F1E6 - 'A' + upper[1])
         );
+    }
+
+    public void Dispose()
+    {
+        RefreshService.RefreshRequested -= RefreshData;
     }
 }

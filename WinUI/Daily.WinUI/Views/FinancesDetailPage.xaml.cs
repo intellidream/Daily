@@ -7,6 +7,8 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Daily_WinUI.Views;
 
@@ -15,6 +17,8 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
     private IFinancesService _financesService;
     private IMacroService _macroService;
     private IHeatmapService _heatmapService;
+    private readonly SemaphoreSlim _loadLock = new(1, 1);
+    private readonly SemaphoreSlim _watchlistLock = new(1, 1);
 
     public event PropertyChangedEventHandler PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string propertyName = null) =>
@@ -89,17 +93,18 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
     private async Task LoadDataAsync()
     {
-        IsWorldLoading = true;
-        IsStocksLoading = true;
-        IsMoneyLoading = true;
-
-        MacroIndicators.Clear();
-        HeatmapData.Clear();
-        Holdings.Clear();
-        Accounts.Clear();
-
+        await _loadLock.WaitAsync();
         try
         {
+            IsWorldLoading = true;
+            IsStocksLoading = true;
+            IsMoneyLoading = true;
+
+            MacroIndicators.Clear();
+            HeatmapData.Clear();
+            Holdings.Clear();
+            Accounts.Clear();
+
             // World
             var macros = await _macroService.GetMacroIndicatorsAsync();
             MacroIndicators.Clear();
@@ -140,7 +145,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             if (CryptoBtn.IsChecked == true) currentFilter = "crypto";
             else if (ForexBtn.IsChecked == true) currentFilter = "forex";
             
-            FilterWatchlist(currentFilter);
+            await FilterWatchlistAsync(currentFilter);
 
             // Money
             var nw = await _financesService.GetNetWorthAsync();
@@ -168,6 +173,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             IsWorldLoading = false;
             IsStocksLoading = false;
             IsMoneyLoading = false;
+            _loadLock.Release();
         }
     }
 
@@ -202,25 +208,32 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             ForexBtn.IsChecked = btn == ForexBtn;
 
             string marketType = btn.Tag?.ToString() ?? "stock";
-            FilterWatchlist(marketType);
+            _ = FilterWatchlistAsync(marketType);
         }
     }
 
-    private async void FilterWatchlist(string marketType)
+    private async Task FilterWatchlistAsync(string marketType)
     {
         IsStocksLoading = true;
-        WatchlistStocks.Clear();
-        
-        // Brief delay to allow UI to render spinner
-        await Task.Delay(50);
-        
-        var filtered = _allWatchlistStocks.Where(x => x.MarketType?.ToLower() == marketType).ToList();
-
-        foreach (var s in filtered)
+        await _watchlistLock.WaitAsync();
+        try
         {
-            WatchlistStocks.Add(s);
+            WatchlistStocks.Clear();
+            
+            // Brief delay to allow UI to render spinner
+            await Task.Delay(50);
+            
+            var filtered = _allWatchlistStocks.Where(x => x.MarketType?.ToLower() == marketType).ToList();
+
+            foreach (var s in filtered)
+            {
+                WatchlistStocks.Add(s);
+            }
         }
-        
-        IsStocksLoading = false;
+        finally
+        {
+            _watchlistLock.Release();
+            IsStocksLoading = false;
+        }
     }
 }

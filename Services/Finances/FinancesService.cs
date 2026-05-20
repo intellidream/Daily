@@ -45,7 +45,9 @@ namespace Daily.Services.Finances
 
             if (symbols == null || !symbols.Any()) return results;
 
-            // Ensure DB is initialized
+            // Deduplicate incoming symbols case-insensitively
+            symbols = symbols.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
             // Ensure DB is initialized
             await _databaseService.InitializeAsync();
 
@@ -60,7 +62,7 @@ namespace Daily.Services.Finances
 
                 foreach (var symbol in symbols)
                 {
-                    var cached = cachedSecurities.FirstOrDefault(s => s.Symbol == symbol);
+                    var cached = cachedSecurities.FirstOrDefault(s => string.Equals(s.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
                     
                     bool isFresh = false;
                     bool isRich = false;
@@ -81,7 +83,6 @@ namespace Daily.Services.Finances
                         }
                         
                         // Cache invalidations removed to prevent loops
-
 
                         // Use cached if valid-ish (we can show stale data while fetching)
                         results.Add(MapToQuote(cached));
@@ -136,7 +137,7 @@ namespace Daily.Services.Finances
                             var symbol = kvp.Key;
 
                             // Fallback logic for Name/Logo
-                            var cached = cachedSecurities.FirstOrDefault(s => s.Symbol == symbol);
+                            var cached = cachedSecurities.FirstOrDefault(s => string.Equals(s.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
                             var finalName = string.IsNullOrEmpty(freshQuote.CompanyName) || freshQuote.CompanyName == symbol ? (cached?.Name ?? symbol) : freshQuote.CompanyName;
                             
                             // Normalize Market Type here!
@@ -147,8 +148,8 @@ namespace Daily.Services.Finances
                             freshQuote.CompanyName = finalName;
                             freshQuote.LogoUrl = finalLogoUrl;
 
-                            // Remove stale entry if exists
-                            var existing = results.FirstOrDefault(r => r.Symbol == symbol);
+                            // Remove stale entry if exists (case-insensitive)
+                            var existing = results.FirstOrDefault(r => string.Equals(r.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
                             if (existing != null) results.Remove(existing);
                             
                             results.Add(freshQuote);
@@ -447,7 +448,7 @@ namespace Daily.Services.Finances
             // 2. Get Quotes (Global)
             var symbols = holdings.Select(h => h.SecuritySymbol).Distinct().ToList();
             var quotes = await GetStockQuotesAsync(symbols);
-            var quoteMap = quotes.ToDictionary(q => q.Symbol, q => q);
+            var quoteMap = quotes.ToDictionary(q => q.Symbol, q => q, StringComparer.OrdinalIgnoreCase);
 
             // 3. Merge
             var result = new List<StockQuote>();
