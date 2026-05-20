@@ -43,47 +43,6 @@ public sealed partial class MainPage : Page
     {
         UpdateUserUI();
         await LoadWidgetsAsync();
-
-        // Start test insertion after 7 seconds to test Realtime
-        _ = System.Threading.Tasks.Task.Run(async () =>
-        {
-            await System.Threading.Tasks.Task.Delay(7000);
-            try
-            {
-                var supabase = App.Current.Services.GetService<Supabase.Client>();
-                if (supabase == null)
-                {
-                    Console.WriteLine("[TEST-REALTIME] Supabase client is null!");
-                    return;
-                }
-                var user = supabase.Auth.CurrentUser ?? supabase.Auth.CurrentSession?.User;
-                if (user != null && Guid.TryParse(user.Id, out var uid))
-                {
-                    Console.WriteLine($"[TEST-REALTIME] Preparing to insert test vital for user: {uid}");
-                    var testMetric = new Daily.Models.Health.VitalMetric
-                    {
-                        Id = Guid.NewGuid(),
-                        UserId = uid,
-                        Date = DateTime.UtcNow,
-                        TypeString = "Steps",
-                        Value = 8888, // 8.9k steps
-                        SourceDevice = "Manual",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    await supabase.From<Daily.Models.Health.VitalMetric>().Insert(testMetric);
-                    Console.WriteLine("[TEST-REALTIME] Test vital inserted successfully!");
-                }
-                else
-                {
-                    Console.WriteLine("[TEST-REALTIME] No authenticated user found for test vital insertion.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[TEST-REALTIME] Insertion failed: {ex}");
-            }
-        });
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
