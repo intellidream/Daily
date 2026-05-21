@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -78,6 +78,41 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         set { _gaugeColor = value; OnPropertyChanged(); }
     }
 
+    private string _daysSinceQuitShort = "-";
+    public string DaysSinceQuitShort
+    {
+        get => _daysSinceQuitShort;
+        set { _daysSinceQuitShort = value; OnPropertyChanged(); }
+    }
+
+    private string _smokesAvoidedShort = "-";
+    public string SmokesAvoidedShort
+    {
+        get => _smokesAvoidedShort;
+        set { _smokesAvoidedShort = value; OnPropertyChanged(); }
+    }
+
+    private string _moneySavedShort = "-";
+    public string MoneySavedShort
+    {
+        get => _moneySavedShort;
+        set { _moneySavedShort = value; OnPropertyChanged(); }
+    }
+
+    private string _remainingWaterText = "-";
+    public string RemainingWaterText
+    {
+        get => _remainingWaterText;
+        set { _remainingWaterText = value; OnPropertyChanged(); }
+    }
+
+    private string _progressPercentageText = "-";
+    public string ProgressPercentageText
+    {
+        get => _progressPercentageText;
+        set { _progressPercentageText = value; OnPropertyChanged(); }
+    }
+
     private ObservableCollection<WidgetLogEntryViewModel> _logs = new();
     public ObservableCollection<WidgetLogEntryViewModel> Logs
     {
@@ -117,34 +152,320 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         Loaded += HabitsWidgetControl_Loaded;
         Unloaded += HabitsWidgetControl_Unloaded;
         SizeChanged += HabitsWidgetControl_SizeChanged;
+        DataContextChanged += HabitsWidgetControl_DataContextChanged;
+
+        HabitsFlipView.Loaded += (s, e) =>
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                HideFlipViewNavigationButtons();
+            });
+        };
     }
 
     private void HabitsWidgetControl_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (e.NewSize.Width < 250)
+        UpdateVisualState();
+    }
+
+    private void HabitsWidgetControl_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+    {
+        UpdateVisualState();
+    }
+
+    private void UpdateVisualState()
+    {
+        string state = "NormalState";
+
+        if (DataContext is WidgetModel widget)
         {
-            if (e.NewSize.Height >= 250)
+            if (widget.ColumnSpan == 1 && widget.RowSpan == 1)
             {
-                VisualStateManager.GoToState(this, "TallState", true);
+                state = "SmallState";
             }
-            else
+            else if (widget.ColumnSpan == 2 && widget.RowSpan == 1)
             {
-                VisualStateManager.GoToState(this, "SmallState", true);
+                state = "NormalState";
             }
-        }
-        else if (e.NewSize.Width < 500)
-        {
-            VisualStateManager.GoToState(this, "NormalState", true);
+            else if (widget.ColumnSpan == 1 && widget.RowSpan == 2)
+            {
+                state = "TallState";
+            }
+            else if (widget.ColumnSpan == 2 && widget.RowSpan == 2)
+            {
+                state = "LargeState";
+            }
         }
         else
         {
-            VisualStateManager.GoToState(this, "LargeState", true);
+            double width = ActualWidth;
+            double height = ActualHeight;
+
+            if (width == 0 || height == 0)
+            {
+                width = Width;
+                height = Height;
+            }
+
+            if (width > 0 && height > 0)
+            {
+                if (width < 450 && height < 350)
+                {
+                    state = "SmallState";
+                }
+                else if (width < 450 && height >= 350)
+                {
+                    state = "TallState";
+                }
+                else if (width >= 450 && height < 350)
+                {
+                    state = "NormalState";
+                }
+                else
+                {
+                    state = "LargeState";
+                }
+            }
         }
+
+        VisualStateManager.GoToState(this, state, true);
+        ApplyGridDefinitions(state);
+    }
+
+    private void SetGridPosition(FrameworkElement element, int row, int col, int rowSpan = 1, int colSpan = 1)
+    {
+        Grid.SetRow(element, row);
+        Grid.SetColumn(element, col);
+        Grid.SetRowSpan(element, rowSpan);
+        Grid.SetColumnSpan(element, colSpan);
+    }
+
+    private void ApplyGridDefinitions(string state)
+    {
+        if (WaterMainCol0 == null || WaterMainCol1 == null || WaterMainRow0 == null || WaterMainRow1 == null ||
+            SmokesMainCol0 == null || SmokesMainCol1 == null || SmokesMainRow0 == null || SmokesMainRow1 == null ||
+            WaterExtCol0 == null || WaterExtCol1 == null || WaterExtRow0 == null || WaterExtRow1 == null || WaterExtRow2 == null ||
+            SmokesExtCol0 == null || SmokesExtCol1 == null || SmokesExtRow0 == null || SmokesExtRow1 == null || SmokesExtRow2 == null ||
+            WaterExtendedPanel == null || SmokesExtendedPanel == null ||
+            WaterGraphBorder == null || SmokesGraphBorder == null ||
+            WaterStatsGrid == null || SmokesStatsGrid == null ||
+            WaterLogsList == null || SmokesLogsList == null ||
+            WaterEmptyText == null || SmokesEmptyText == null)
+        {
+            return;
+        }
+
+        switch (state)
+        {
+            case "SmallState":
+                // Outer layouts: left column only, top row only
+                WaterMainCol0.Width = new GridLength(1, GridUnitType.Star);
+                WaterMainCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                WaterMainRow0.Height = new GridLength(1, GridUnitType.Star);
+                WaterMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
+
+                SmokesMainCol0.Width = new GridLength(1, GridUnitType.Star);
+                SmokesMainCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                SmokesMainRow0.Height = new GridLength(1, GridUnitType.Star);
+                SmokesMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
+
+                // Extended panels grid: Col 0 only, all 3 rows active
+                WaterExtCol0.Width = new GridLength(1, GridUnitType.Star);
+                WaterExtCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                WaterExtRow0.Height = GridLength.Auto;
+                WaterExtRow1.Height = GridLength.Auto;
+                WaterExtRow2.Height = new GridLength(1, GridUnitType.Star);
+
+                SmokesExtCol0.Width = new GridLength(1, GridUnitType.Star);
+                SmokesExtCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                SmokesExtRow0.Height = GridLength.Auto;
+                SmokesExtRow1.Height = GridLength.Auto;
+                SmokesExtRow2.Height = new GridLength(1, GridUnitType.Star);
+
+                // Main grids position
+                SetGridPosition(WaterExtendedPanel, 0, 0);
+                SetGridPosition(SmokesExtendedPanel, 0, 0);
+
+                // Inner grids position
+                SetGridPosition(WaterGraphBorder, 0, 0, 1, 2);
+                SetGridPosition(WaterStatsGrid, 1, 0, 1, 2);
+                SetGridPosition(WaterLogsList, 2, 0, 1, 2);
+                SetGridPosition(WaterEmptyText, 2, 0, 1, 2);
+
+                SetGridPosition(SmokesGraphBorder, 0, 0, 1, 2);
+                SetGridPosition(SmokesStatsGrid, 1, 0, 1, 2);
+                SetGridPosition(SmokesLogsList, 2, 0, 1, 2);
+                SetGridPosition(SmokesEmptyText, 2, 0, 1, 2);
+                break;
+
+            case "NormalState":
+                // Outer layouts: 2 columns side-by-side, top row only
+                WaterMainCol0.Width = new GridLength(1, GridUnitType.Star);
+                WaterMainCol1.Width = new GridLength(1.2, GridUnitType.Star);
+                WaterMainRow0.Height = new GridLength(1, GridUnitType.Star);
+                WaterMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
+
+                SmokesMainCol0.Width = new GridLength(1, GridUnitType.Star);
+                SmokesMainCol1.Width = new GridLength(1.2, GridUnitType.Star);
+                SmokesMainRow0.Height = new GridLength(1, GridUnitType.Star);
+                SmokesMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
+
+                // Extended panels grid: 2 columns side-by-side (Graph left, Logs right), Row 0 only active
+                WaterExtCol0.Width = new GridLength(1, GridUnitType.Star);
+                WaterExtCol1.Width = new GridLength(1, GridUnitType.Star);
+                WaterExtRow0.Height = new GridLength(1, GridUnitType.Star);
+                WaterExtRow1.Height = new GridLength(0, GridUnitType.Pixel);
+                WaterExtRow2.Height = new GridLength(0, GridUnitType.Pixel);
+
+                SmokesExtCol0.Width = new GridLength(1, GridUnitType.Star);
+                SmokesExtCol1.Width = new GridLength(1, GridUnitType.Star);
+                SmokesExtRow0.Height = new GridLength(1, GridUnitType.Star);
+                SmokesExtRow1.Height = new GridLength(0, GridUnitType.Pixel);
+                SmokesExtRow2.Height = new GridLength(0, GridUnitType.Pixel);
+
+                // Main grids position
+                SetGridPosition(WaterExtendedPanel, 0, 1);
+                SetGridPosition(SmokesExtendedPanel, 0, 1);
+
+                // Inner grids position
+                SetGridPosition(WaterGraphBorder, 0, 0, 1, 1);
+                SetGridPosition(WaterStatsGrid, 0, 0, 1, 1);
+                SetGridPosition(WaterLogsList, 0, 1, 1, 1);
+                SetGridPosition(WaterEmptyText, 0, 1, 1, 1);
+
+                SetGridPosition(SmokesGraphBorder, 0, 0, 1, 1);
+                SetGridPosition(SmokesStatsGrid, 0, 0, 1, 1);
+                SetGridPosition(SmokesLogsList, 0, 1, 1, 1);
+                SetGridPosition(SmokesEmptyText, 0, 1, 1, 1);
+                break;
+
+            case "TallState":
+                // Outer layouts: left column only, 2 rows stacked (top 1.3*, bottom 1*)
+                WaterMainCol0.Width = new GridLength(1, GridUnitType.Star);
+                WaterMainCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                WaterMainRow0.Height = new GridLength(1.3, GridUnitType.Star);
+                WaterMainRow1.Height = new GridLength(1, GridUnitType.Star);
+
+                SmokesMainCol0.Width = new GridLength(1, GridUnitType.Star);
+                SmokesMainCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                SmokesMainRow0.Height = new GridLength(1.3, GridUnitType.Star);
+                SmokesMainRow1.Height = new GridLength(1, GridUnitType.Star);
+
+                // Extended panels grid: Col 0 only, all 3 rows active
+                WaterExtCol0.Width = new GridLength(1, GridUnitType.Star);
+                WaterExtCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                WaterExtRow0.Height = GridLength.Auto;
+                WaterExtRow1.Height = GridLength.Auto;
+                WaterExtRow2.Height = new GridLength(1, GridUnitType.Star);
+
+                SmokesExtCol0.Width = new GridLength(1, GridUnitType.Star);
+                SmokesExtCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                SmokesExtRow0.Height = GridLength.Auto;
+                SmokesExtRow1.Height = GridLength.Auto;
+                SmokesExtRow2.Height = new GridLength(1, GridUnitType.Star);
+
+                // Main grids position
+                SetGridPosition(WaterExtendedPanel, 1, 0);
+                SetGridPosition(SmokesExtendedPanel, 1, 0);
+
+                // Inner grids position
+                SetGridPosition(WaterGraphBorder, 0, 0, 1, 2);
+                SetGridPosition(WaterStatsGrid, 1, 0, 1, 2);
+                SetGridPosition(WaterLogsList, 2, 0, 1, 2);
+                SetGridPosition(WaterEmptyText, 2, 0, 1, 2);
+
+                SetGridPosition(SmokesGraphBorder, 0, 0, 1, 2);
+                SetGridPosition(SmokesStatsGrid, 1, 0, 1, 2);
+                SetGridPosition(SmokesLogsList, 2, 0, 1, 2);
+                SetGridPosition(SmokesEmptyText, 2, 0, 1, 2);
+                break;
+
+            case "LargeState":
+                // Outer layouts: 2 columns side-by-side, top row only
+                WaterMainCol0.Width = new GridLength(1, GridUnitType.Star);
+                WaterMainCol1.Width = new GridLength(1.2, GridUnitType.Star);
+                WaterMainRow0.Height = new GridLength(1, GridUnitType.Star);
+                WaterMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
+
+                SmokesMainCol0.Width = new GridLength(1, GridUnitType.Star);
+                SmokesMainCol1.Width = new GridLength(1.2, GridUnitType.Star);
+                SmokesMainRow0.Height = new GridLength(1, GridUnitType.Star);
+                SmokesMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
+
+                // Extended panels grid: Col 0 only, all 3 rows active
+                WaterExtCol0.Width = new GridLength(1, GridUnitType.Star);
+                WaterExtCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                WaterExtRow0.Height = GridLength.Auto;
+                WaterExtRow1.Height = GridLength.Auto;
+                WaterExtRow2.Height = new GridLength(1, GridUnitType.Star);
+
+                SmokesExtCol0.Width = new GridLength(1, GridUnitType.Star);
+                SmokesExtCol1.Width = new GridLength(0, GridUnitType.Pixel);
+                SmokesExtRow0.Height = GridLength.Auto;
+                SmokesExtRow1.Height = GridLength.Auto;
+                SmokesExtRow2.Height = new GridLength(1, GridUnitType.Star);
+
+                // Main grids position
+                SetGridPosition(WaterExtendedPanel, 0, 1, 2, 1);
+                SetGridPosition(SmokesExtendedPanel, 0, 1, 2, 1);
+
+                // Inner grids position
+                SetGridPosition(WaterGraphBorder, 0, 0, 1, 2);
+                SetGridPosition(WaterStatsGrid, 1, 0, 1, 2);
+                SetGridPosition(WaterLogsList, 2, 0, 1, 2);
+                SetGridPosition(WaterEmptyText, 2, 0, 1, 2);
+
+                SetGridPosition(SmokesGraphBorder, 0, 0, 1, 2);
+                SetGridPosition(SmokesStatsGrid, 1, 0, 1, 2);
+                SetGridPosition(SmokesLogsList, 2, 0, 1, 2);
+                SetGridPosition(SmokesEmptyText, 2, 0, 1, 2);
+                break;
+        }
+    }
+
+    private void HideFlipViewNavigationButtons()
+    {
+        if (HabitsFlipView == null) return;
+
+        var buttonsToHide = new[] { "PreviousButtonHorizontal", "NextButtonHorizontal", "PreviousButtonVertical", "NextButtonVertical" };
+        foreach (var name in buttonsToHide)
+        {
+            var btn = FindVisualChildByName<Button>(HabitsFlipView, name);
+            if (btn != null)
+            {
+                btn.Visibility = Visibility.Collapsed;
+                btn.Opacity = 0;
+                btn.Width = 0;
+                btn.Height = 0;
+                btn.IsEnabled = false;
+            }
+        }
+    }
+
+    private T? FindVisualChildByName<T>(DependencyObject parent, string name) where T : DependencyObject
+    {
+        int childCount = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < childCount; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T tChild && child is FrameworkElement fe && fe.Name == name)
+            {
+                return tChild;
+            }
+
+            var result = FindVisualChildByName<T>(child, name);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+        return null;
     }
 
     private async void HabitsWidgetControl_Loaded(object sender, RoutedEventArgs e)
     {
         _habitsService.OnHabitsUpdated += HabitsService_OnHabitsUpdated;
+        UpdateVisualState();
         await LoadDataAsync();
     }
 
@@ -195,6 +516,13 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             CurrentProgress = await _habitsService.GetDailyProgressAsync("water", DateTime.Now);
             GoalDisplay = $"/ {GoalValue:0}";
 
+            ProgressPercentageText = GoalValue > 0 ? $"{(CurrentProgress / GoalValue * 100):0}%" : "0%";
+            RemainingWaterText = $"{(Math.Max(0, GoalValue - CurrentProgress)):0} ml";
+
+            DaysSinceQuitShort = "-";
+            SmokesAvoidedShort = "-";
+            MoneySavedShort = "-";
+
             var breakdown = await _habitsService.GetDailyBreakdownAsync("water", DateTime.Now);
             UpdateGaugeSegments(WaterRadialAxis, breakdown);
 
@@ -205,6 +533,9 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             GoalValue = _settingsService.Settings.SmokesBaselineDaily > 0 ? _settingsService.Settings.SmokesBaselineDaily : 20;
             CurrentProgress = await _habitsService.GetDailyProgressAsync("smokes", DateTime.Now);
             GoalDisplay = $"/ {GoalValue:0}";
+
+            ProgressPercentageText = "-";
+            RemainingWaterText = "-";
 
             if (GoalValue > 0)
             {
@@ -256,15 +587,25 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                     var saved = avoided * costPerCig;
                     var currency = string.IsNullOrEmpty(_settingsService.Settings.SmokesCurrency) ? "USD" : _settingsService.Settings.SmokesCurrency;
                     MoneySavedDisplay = $"{currency} {saved:F0}";
+
+                    DaysSinceQuitShort = $"{days:0}d";
+                    SmokesAvoidedShort = $"{avoided:0}";
+                    MoneySavedShort = $"{currency} {saved:F0}";
                 }
                 else
                 {
                     MoneySavedDisplay = "-";
+                    DaysSinceQuitShort = "-";
+                    SmokesAvoidedShort = "-";
+                    MoneySavedShort = "-";
                 }
             }
             else
             {
                 MoneySavedDisplay = "Not started";
+                DaysSinceQuitShort = "-";
+                SmokesAvoidedShort = "-";
+                MoneySavedShort = "Not started";
             }
         }
 

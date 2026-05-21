@@ -92,7 +92,7 @@ File:
 
 Purpose:
 - Generates all WinUI manifest PNG assets, `AppIcon.ico`, and theme-specific multi-size system tray icons (`TrayIconDarkTheme.ico` and `TrayIconLightTheme.ico`) using high-quality vector sources:
-  - Application icon source: `WinUI/Daily.WinUI/Assets/NewIcon.svg`
+  - Application icon source: `WinUI/Daily.WinUI/Assets/GemIcon.svg`
   - System tray dark-background source: `WinUI/Daily.WinUI/Assets/appicon.theme-dark.svg`
   - System tray light-background source: `WinUI/Daily.WinUI/Assets/appicon.theme-light.svg`
 
@@ -135,7 +135,7 @@ Notes:
 
 ### Recommended workflow when app icon changes
 
-1. Replace `Assets/NewIcon.svg` (for the main app icon) and `Assets/appicon.theme-dark.svg` / `Assets/appicon.theme-light.svg` (for the theme-specific vector paths) with the new master vector assets.
+1. Replace `Assets/GemIcon.svg` (for the main app icon) and `Assets/appicon.theme-dark.svg` / `Assets/appicon.theme-light.svg` (for the theme-specific vector paths) with the new master vector assets.
 2. Run `dotnet script GenerateIcons.csx` to generate all manifest PNGs, `AppIcon.ico`, and `TrayIcon*.ico` files.
 3. Rebuild the solution.
 4. Verify generated files exist in `Assets` and the app build succeeds.

@@ -12,98 +12,297 @@
     Tapped="Widget_Tapped"
     Background="Transparent">
 
-    <Grid Padding="16,12,16,14">
+    <Grid x:Name="RootGrid" Padding="16,12,16,14">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="AdaptiveStates">
-                <!-- SmallState: 1x1, Gauge/Buttons scroll vertically. Extended is hidden. -->
+                <!-- SmallState: 1x1, Gauge/Buttons stack horizontally. Extended is hidden. -->
                 <VisualState x:Name="SmallState">
                     <VisualState.Setters>
-                        <Setter Target="WaterMainCol1.Width" Value="0" />
-                        <Setter Target="WaterMainRow0.Height" Value="*" />
-                        <Setter Target="WaterMainRow1.Height" Value="0" />
-                        <Setter Target="WaterControlsStack.Orientation" Value="Vertical" />
+                        <Setter Target="RootGrid.Padding" Value="8,6,8,8" />
+                        <Setter Target="WaterControlsStack.Orientation" Value="Horizontal" />
                         <Setter Target="WaterLegend.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="WaterExtendedPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterGauge.Width" Value="110" />
+                        <Setter Target="WaterGauge.Height" Value="110" />
+                        <Setter Target="WaterStatsGrid.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
+                        <Setter Target="WaterControlsStack.Spacing" Value="24" />
+                        <Setter Target="WaterLegendAndButtons.Spacing" Value="0" />
+                        <Setter Target="WaterButtonsStack.ColumnSpacing" Value="10" />
+                        <Setter Target="WaterButtonsStack.RowSpacing" Value="10" />
+                        
+                        <!-- Water Buttons size & layout (2x2 icon-only) -->
+                        <Setter Target="WaterBtnWater.Width" Value="44" />
+                        <Setter Target="WaterBtnWater.Height" Value="44" />
+                        <Setter Target="WaterBtnWater.CornerRadius" Value="22" />
+                        <Setter Target="WaterBtnWaterText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnJuice.Width" Value="44" />
+                        <Setter Target="WaterBtnJuice.Height" Value="44" />
+                        <Setter Target="WaterBtnJuice.CornerRadius" Value="22" />
+                        <Setter Target="WaterBtnJuiceText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnCoffee.Width" Value="44" />
+                        <Setter Target="WaterBtnCoffee.Height" Value="44" />
+                        <Setter Target="WaterBtnCoffee.CornerRadius" Value="22" />
+                        <Setter Target="WaterBtnCoffeeText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnTea.Width" Value="44" />
+                        <Setter Target="WaterBtnTea.Height" Value="44" />
+                        <Setter Target="WaterBtnTea.CornerRadius" Value="22" />
+                        <Setter Target="WaterBtnTeaText.Visibility" Value="Collapsed" />
+                        
+                        <Setter Target="WaterProgressText.FontSize" Value="22" />
+                        <Setter Target="WaterGoalDisplayText.FontSize" Value="10" />
 
-                        <Setter Target="SmokesMainCol1.Width" Value="0" />
-                        <Setter Target="SmokesMainRow0.Height" Value="*" />
-                        <Setter Target="SmokesMainRow1.Height" Value="0" />
-                        <Setter Target="SmokesControlsStack.Orientation" Value="Vertical" />
+                        <Setter Target="SmokesControlsStack.Orientation" Value="Horizontal" />
                         <Setter Target="SmokesLegend.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="SmokesExtendedPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesGauge.Width" Value="110" />
+                        <Setter Target="SmokesGauge.Height" Value="110" />
+                        <Setter Target="SmokesStatsGrid.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
+                        <Setter Target="SmokesControlsStack.Spacing" Value="24" />
+                        <Setter Target="SmokesLegendAndButtons.Spacing" Value="0" />
+                        <Setter Target="SmokesButtonsStack.ColumnSpacing" Value="10" />
+                        <Setter Target="SmokesButtonsStack.RowSpacing" Value="10" />
+                        
+                        <!-- Smokes Buttons size & layout (2x2 icon-only) -->
+                        <Setter Target="SmokesBtnCigarette.Width" Value="44" />
+                        <Setter Target="SmokesBtnCigarette.Height" Value="44" />
+                        <Setter Target="SmokesBtnCigarette.CornerRadius" Value="22" />
+                        <Setter Target="SmokesBtnCigaretteText.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesBtnHeated.Width" Value="44" />
+                        <Setter Target="SmokesBtnHeated.Height" Value="44" />
+                        <Setter Target="SmokesBtnHeated.CornerRadius" Value="22" />
+                        <Setter Target="SmokesBtnHeatedText.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesBtnRolled.Width" Value="44" />
+                        <Setter Target="SmokesBtnRolled.Height" Value="44" />
+                        <Setter Target="SmokesBtnRolled.CornerRadius" Value="22" />
+                        <Setter Target="SmokesBtnRolledText.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesBtnCigarillo.Width" Value="44" />
+                        <Setter Target="SmokesBtnCigarillo.Height" Value="44" />
+                        <Setter Target="SmokesBtnCigarillo.CornerRadius" Value="22" />
+                        <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Collapsed" />
+                        
+                        <Setter Target="SmokesProgressText.FontSize" Value="22" />
+                        <Setter Target="SmokesGoalDisplayText.FontSize" Value="10" />
                     </VisualState.Setters>
                 </VisualState>
                 
-                <!-- TallState: 1x2, 50/50 vertical split. Scroller gets top, Extended gets bottom. -->
+                <!-- TallState: 1x2 Adaption, Gauge/Buttons stack vertically, Extended Panel at the bottom. -->
                 <VisualState x:Name="TallState">
                     <VisualState.Setters>
-                        <Setter Target="WaterMainCol1.Width" Value="0" />
-                        <Setter Target="WaterMainRow0.Height" Value="*" />
-                        <Setter Target="WaterMainRow1.Height" Value="*" />
                         <Setter Target="WaterControlsStack.Orientation" Value="Vertical" />
-                        <Setter Target="WaterLegend.Visibility" Value="Visible" />
-                        <Setter Target="WaterExtendedPanel.(Grid.Row)" Value="1" />
-                        <Setter Target="WaterExtendedPanel.(Grid.Column)" Value="0" />
-                        <Setter Target="WaterExtendedPanel.(Grid.RowSpan)" Value="1" />
+                        <Setter Target="WaterLegend.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="WaterExtendedPanel.Visibility" Value="Visible" />
                         <Setter Target="WaterExtendedPanel.Margin" Value="0,16,0,0" />
+                        <Setter Target="WaterGauge.Width" Value="120" />
+                        <Setter Target="WaterGauge.Height" Value="120" />
+                        <Setter Target="WaterStatsGrid.Visibility" Value="Visible" />
+                        <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
+                        
+                        <!-- Water Buttons size & layout (2x2 text) -->
+                        <Setter Target="WaterBtnWater.Width" Value="72" />
+                        <Setter Target="WaterBtnWater.Height" Value="36" />
+                        <Setter Target="WaterBtnWaterText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnJuice.Width" Value="72" />
+                        <Setter Target="WaterBtnJuice.Height" Value="36" />
+                        <Setter Target="WaterBtnJuiceText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnCoffee.Width" Value="72" />
+                        <Setter Target="WaterBtnCoffee.Height" Value="36" />
+                        <Setter Target="WaterBtnCoffeeText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnTea.Width" Value="72" />
+                        <Setter Target="WaterBtnTea.Height" Value="36" />
+                        <Setter Target="WaterBtnTeaText.Visibility" Value="Visible" />
+                        <Setter Target="WaterProgressText.FontSize" Value="24" />
+                        <Setter Target="WaterGoalDisplayText.FontSize" Value="10" />
 
-                        <Setter Target="SmokesMainCol1.Width" Value="0" />
-                        <Setter Target="SmokesMainRow0.Height" Value="*" />
-                        <Setter Target="SmokesMainRow1.Height" Value="*" />
+                        <Setter Target="WaterGraphBorder.Margin" Value="0,0,0,12" />
+                        <Setter Target="WaterGraphBorder.Height" Value="70" />
+                        <Setter Target="WaterLogsList.Margin" Value="0" />
+                        <Setter Target="WaterEmptyText.Margin" Value="0" />
+
                         <Setter Target="SmokesControlsStack.Orientation" Value="Vertical" />
-                        <Setter Target="SmokesLegend.Visibility" Value="Visible" />
-                        <Setter Target="SmokesExtendedPanel.(Grid.Row)" Value="1" />
-                        <Setter Target="SmokesExtendedPanel.(Grid.Column)" Value="0" />
-                        <Setter Target="SmokesExtendedPanel.(Grid.RowSpan)" Value="1" />
+                        <Setter Target="SmokesLegend.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="SmokesExtendedPanel.Visibility" Value="Visible" />
                         <Setter Target="SmokesExtendedPanel.Margin" Value="0,16,0,0" />
+                        <Setter Target="SmokesGauge.Width" Value="120" />
+                        <Setter Target="SmokesGauge.Height" Value="120" />
+                        <Setter Target="SmokesStatsGrid.Visibility" Value="Visible" />
+                        <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
+                        
+                        <!-- Smokes Buttons size & layout (2x2 text) -->
+                        <Setter Target="SmokesBtnCigarette.Width" Value="72" />
+                        <Setter Target="SmokesBtnCigarette.Height" Value="36" />
+                        <Setter Target="SmokesBtnCigaretteText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnHeated.Width" Value="72" />
+                        <Setter Target="SmokesBtnHeated.Height" Value="36" />
+                        <Setter Target="SmokesBtnHeatedText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnRolled.Width" Value="72" />
+                        <Setter Target="SmokesBtnRolled.Height" Value="36" />
+                        <Setter Target="SmokesBtnRolledText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnCigarillo.Width" Value="72" />
+                        <Setter Target="SmokesBtnCigarillo.Height" Value="36" />
+                        <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Visible" />
+                        
+                        <Setter Target="SmokesProgressText.FontSize" Value="24" />
+                        <Setter Target="SmokesGoalDisplayText.FontSize" Value="10" />
+
+                        <Setter Target="SmokesGraphBorder.Margin" Value="0,0,0,12" />
+                        <Setter Target="SmokesGraphBorder.Height" Value="70" />
+                        <Setter Target="SmokesLogsList.Margin" Value="0" />
+                        <Setter Target="SmokesEmptyText.Margin" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
                 
-                <!-- NormalState (Wide): 2x1, Scroller takes all space, Gauge/Buttons stack horizontally! -->
+                <!-- NormalState (Wide): 2x1, Left splits Gauge/Buttons horizontally, Right gets Extended side-by-side. -->
                 <VisualState x:Name="NormalState">
                     <VisualState.Setters>
-                        <Setter Target="WaterMainCol1.Width" Value="0" />
-                        <Setter Target="WaterMainRow0.Height" Value="*" />
-                        <Setter Target="WaterMainRow1.Height" Value="0" />
                         <Setter Target="WaterControlsStack.Orientation" Value="Horizontal" />
-                        <Setter Target="WaterLegend.Visibility" Value="Visible" />
-                        <Setter Target="WaterExtendedPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterLegend.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterLegendAndButtons.Orientation" Value="Vertical" />
+                        <Setter Target="WaterExtendedPanel.Visibility" Value="Visible" />
+                        <Setter Target="WaterExtendedPanel.Margin" Value="16,0,0,0" />
+                        <Setter Target="WaterGauge.Width" Value="80" />
+                        <Setter Target="WaterGauge.Height" Value="80" />
+                        <Setter Target="WaterStatsGrid.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
+                        <Setter Target="WaterControlsStack.Spacing" Value="12" />
+                        <Setter Target="WaterLegendAndButtons.Spacing" Value="0" />
+                        
+                        <!-- Water Buttons size & layout (2x2 icon-only) -->
+                        <Setter Target="WaterBtnWater.Width" Value="36" />
+                        <Setter Target="WaterBtnWater.Height" Value="36" />
+                        <Setter Target="WaterBtnWater.CornerRadius" Value="18" />
+                        <Setter Target="WaterBtnWaterText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnJuice.Width" Value="36" />
+                        <Setter Target="WaterBtnJuice.Height" Value="36" />
+                        <Setter Target="WaterBtnJuice.CornerRadius" Value="18" />
+                        <Setter Target="WaterBtnJuiceText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnCoffee.Width" Value="36" />
+                        <Setter Target="WaterBtnCoffee.Height" Value="36" />
+                        <Setter Target="WaterBtnCoffee.CornerRadius" Value="18" />
+                        <Setter Target="WaterBtnCoffeeText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnTea.Width" Value="36" />
+                        <Setter Target="WaterBtnTea.Height" Value="36" />
+                        <Setter Target="WaterBtnTea.CornerRadius" Value="18" />
+                        <Setter Target="WaterBtnTeaText.Visibility" Value="Collapsed" />
+                        
+                        <Setter Target="WaterProgressText.FontSize" Value="18" />
+                        <Setter Target="WaterGoalDisplayText.FontSize" Value="9" />
+                        
+                        <Setter Target="WaterGraphBorder.Margin" Value="0,0,8,0" />
+                        <Setter Target="WaterGraphBorder.Height" Value="80" />
+                        <Setter Target="WaterLogsList.Margin" Value="8,0,0,0" />
+                        <Setter Target="WaterEmptyText.Margin" Value="8,0,0,0" />
 
-                        <Setter Target="SmokesMainCol1.Width" Value="0" />
-                        <Setter Target="SmokesMainRow0.Height" Value="*" />
-                        <Setter Target="SmokesMainRow1.Height" Value="0" />
                         <Setter Target="SmokesControlsStack.Orientation" Value="Horizontal" />
-                        <Setter Target="SmokesLegend.Visibility" Value="Visible" />
-                        <Setter Target="SmokesExtendedPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesLegend.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesLegendAndButtons.Orientation" Value="Vertical" />
+                        <Setter Target="SmokesExtendedPanel.Visibility" Value="Visible" />
+                        <Setter Target="SmokesExtendedPanel.Margin" Value="16,0,0,0" />
+                        <Setter Target="SmokesGauge.Width" Value="80" />
+                        <Setter Target="SmokesGauge.Height" Value="80" />
+                        <Setter Target="SmokesStatsGrid.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
+                        <Setter Target="SmokesControlsStack.Spacing" Value="12" />
+                        <Setter Target="SmokesLegendAndButtons.Spacing" Value="0" />
+                        
+                        <!-- Smokes Buttons size & layout (2x2 icon-only) -->
+                        <Setter Target="SmokesBtnCigarette.Width" Value="36" />
+                        <Setter Target="SmokesBtnCigarette.Height" Value="36" />
+                        <Setter Target="SmokesBtnCigarette.CornerRadius" Value="18" />
+                        <Setter Target="SmokesBtnCigaretteText.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesBtnHeated.Width" Value="36" />
+                        <Setter Target="SmokesBtnHeated.Height" Value="36" />
+                        <Setter Target="SmokesBtnHeated.CornerRadius" Value="18" />
+                        <Setter Target="SmokesBtnHeatedText.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesBtnRolled.Width" Value="36" />
+                        <Setter Target="SmokesBtnRolled.Height" Value="36" />
+                        <Setter Target="SmokesBtnRolled.CornerRadius" Value="18" />
+                        <Setter Target="SmokesBtnRolledText.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesBtnCigarillo.Width" Value="36" />
+                        <Setter Target="SmokesBtnCigarillo.Height" Value="36" />
+                        <Setter Target="SmokesBtnCigarillo.CornerRadius" Value="18" />
+                        <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Collapsed" />
+                        
+                        <Setter Target="SmokesProgressText.FontSize" Value="18" />
+                        <Setter Target="SmokesGoalDisplayText.FontSize" Value="9" />
+                        
+                        <Setter Target="SmokesGraphBorder.Margin" Value="0,0,8,0" />
+                        <Setter Target="SmokesGraphBorder.Height" Value="80" />
+                        <Setter Target="SmokesLogsList.Margin" Value="8,0,0,0" />
+                        <Setter Target="SmokesEmptyText.Margin" Value="8,0,0,0" />
                     </VisualState.Setters>
                 </VisualState>
                 
-                <!-- LargeState: 2x2, 50/50 horizontal split. Scroller gets left, Extended gets right. -->
+                <!-- LargeState: 2x2, Left splits Gauge/Legend/Buttons vertically, Right gets Extended vertical layout. -->
                 <VisualState x:Name="LargeState">
                     <VisualState.Setters>
-                        <Setter Target="WaterMainCol1.Width" Value="*" />
-                        <Setter Target="WaterMainRow0.Height" Value="*" />
-                        <Setter Target="WaterMainRow1.Height" Value="0" />
                         <Setter Target="WaterControlsStack.Orientation" Value="Vertical" />
                         <Setter Target="WaterLegend.Visibility" Value="Visible" />
-                        <Setter Target="WaterExtendedPanel.(Grid.Row)" Value="0" />
-                        <Setter Target="WaterExtendedPanel.(Grid.Column)" Value="1" />
-                        <Setter Target="WaterExtendedPanel.(Grid.RowSpan)" Value="2" />
+                        <Setter Target="WaterLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="WaterExtendedPanel.Visibility" Value="Visible" />
                         <Setter Target="WaterExtendedPanel.Margin" Value="16,0,0,0" />
+                        <Setter Target="WaterGauge.Width" Value="140" />
+                        <Setter Target="WaterGauge.Height" Value="140" />
+                        <Setter Target="WaterStatsGrid.Visibility" Value="Visible" />
+                        <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
+                        
+                        <!-- Water Buttons size & layout (2x2 text) -->
+                        <Setter Target="WaterBtnWater.Width" Value="72" />
+                        <Setter Target="WaterBtnWater.Height" Value="36" />
+                        <Setter Target="WaterBtnWaterText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnJuice.Width" Value="72" />
+                        <Setter Target="WaterBtnJuice.Height" Value="36" />
+                        <Setter Target="WaterBtnJuiceText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnCoffee.Width" Value="72" />
+                        <Setter Target="WaterBtnCoffee.Height" Value="36" />
+                        <Setter Target="WaterBtnCoffeeText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnTea.Width" Value="72" />
+                        <Setter Target="WaterBtnTea.Height" Value="36" />
+                        <Setter Target="WaterBtnTeaText.Visibility" Value="Visible" />
+                        <Setter Target="WaterProgressText.FontSize" Value="28" />
+                        <Setter Target="WaterGoalDisplayText.FontSize" Value="11" />
 
-                        <Setter Target="SmokesMainCol1.Width" Value="*" />
-                        <Setter Target="SmokesMainRow0.Height" Value="*" />
-                        <Setter Target="SmokesMainRow1.Height" Value="0" />
+                        <Setter Target="WaterGraphBorder.Margin" Value="0,0,0,12" />
+                        <Setter Target="WaterGraphBorder.Height" Value="100" />
+                        <Setter Target="WaterLogsList.Margin" Value="0" />
+                        <Setter Target="WaterEmptyText.Margin" Value="0" />
+
                         <Setter Target="SmokesControlsStack.Orientation" Value="Vertical" />
                         <Setter Target="SmokesLegend.Visibility" Value="Visible" />
-                        <Setter Target="SmokesExtendedPanel.(Grid.Row)" Value="0" />
-                        <Setter Target="SmokesExtendedPanel.(Grid.Column)" Value="1" />
-                        <Setter Target="SmokesExtendedPanel.(Grid.RowSpan)" Value="2" />
+                        <Setter Target="SmokesLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="SmokesExtendedPanel.Visibility" Value="Visible" />
                         <Setter Target="SmokesExtendedPanel.Margin" Value="16,0,0,0" />
+                        <Setter Target="SmokesGauge.Width" Value="140" />
+                        <Setter Target="SmokesGauge.Height" Value="140" />
+                        <Setter Target="SmokesStatsGrid.Visibility" Value="Visible" />
+                        <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
+                        
+                        <!-- Smokes Buttons size & layout (2x2 text) -->
+                        <Setter Target="SmokesBtnCigarette.Width" Value="72" />
+                        <Setter Target="SmokesBtnCigarette.Height" Value="36" />
+                        <Setter Target="SmokesBtnCigaretteText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnHeated.Width" Value="72" />
+                        <Setter Target="SmokesBtnHeated.Height" Value="36" />
+                        <Setter Target="SmokesBtnHeatedText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnRolled.Width" Value="72" />
+                        <Setter Target="SmokesBtnRolled.Height" Value="36" />
+                        <Setter Target="SmokesBtnRolledText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnCigarillo.Width" Value="72" />
+                        <Setter Target="SmokesBtnCigarillo.Height" Value="36" />
+                        <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Visible" />
+                        
+                        <Setter Target="SmokesProgressText.FontSize" Value="28" />
+                        <Setter Target="SmokesGoalDisplayText.FontSize" Value="11" />
+
+                        <Setter Target="SmokesGraphBorder.Margin" Value="0,0,0,12" />
+                        <Setter Target="SmokesGraphBorder.Height" Value="100" />
+                        <Setter Target="SmokesLogsList.Margin" Value="0" />
+                        <Setter Target="SmokesEmptyText.Margin" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -163,7 +362,7 @@
                         <StackPanel x:Name="WaterControlsStack" Orientation="Vertical" Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8">
                             
                             <!-- Gauge -->
-                            <gauge:SfRadialGauge x:Name="WaterGauge" HorizontalAlignment="Center" VerticalAlignment="Center" MaxHeight="130" MaxWidth="130" MinHeight="80" MinWidth="80">
+                            <gauge:SfRadialGauge x:Name="WaterGauge" HorizontalAlignment="Center" VerticalAlignment="Center" MaxHeight="200" MaxWidth="200" MinHeight="50" MinWidth="50">
                                 <gauge:SfRadialGauge.Axes>
                                     <gauge:RadialAxis x:Name="WaterRadialAxis" StartAngle="135" EndAngle="405" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowAxisLine="False" TickLengthUnit="Factor" MajorTickLength="0.265" MinorTickLength="0.13" MinorTicksPerInterval="4" TickOffset="0">
                                         <gauge:RadialAxis.Ranges>
@@ -173,8 +372,8 @@
                                             <gauge:GaugeAnnotation PositionFactor="0" DirectionValue="90">
                                                 <gauge:GaugeAnnotation.Content>
                                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
-                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="10" Opacity="0.55" HorizontalAlignment="Center" />
+                                                         <TextBlock x:Name="WaterProgressText" Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" />
+                                                         <TextBlock x:Name="WaterGoalDisplayText" Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="10" Opacity="0.55" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </gauge:GaugeAnnotation.Content>
                                             </gauge:GaugeAnnotation>
@@ -241,31 +440,31 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     
-                                    <Button Grid.Row="0" Grid.Column="0" Click="AddWater_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A0288D1" BorderThickness="0">
+                                    <Button x:Name="WaterBtnWater" Grid.Row="0" Grid.Column="0" Click="AddWater_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A0288D1" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF0288D1" />
-                                            <TextBlock Text="Water" FontSize="11" FontWeight="SemiBold" Foreground="#FF0288D1" />
+                                            <TextBlock x:Name="WaterBtnWaterText" Text="Water" FontSize="11" FontWeight="SemiBold" Foreground="#FF0288D1" />
                                         </StackPanel>
                                     </Button>
                                     
-                                    <Button Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AE91E63" BorderThickness="0">
+                                    <Button x:Name="WaterBtnJuice" Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AE91E63" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFE91E63" />
-                                            <TextBlock Text="Juice" FontSize="11" FontWeight="SemiBold" Foreground="#FFE91E63" />
+                                            <TextBlock x:Name="WaterBtnJuiceText" Text="Juice" FontSize="11" FontWeight="SemiBold" Foreground="#FFE91E63" />
                                         </StackPanel>
                                     </Button>
                                     
-                                    <Button Grid.Row="1" Grid.Column="0" Click="AddCoffee_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AF2994A" BorderThickness="0">
+                                    <Button x:Name="WaterBtnCoffee" Grid.Row="1" Grid.Column="0" Click="AddCoffee_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AF2994A" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFF2994A" />
-                                            <TextBlock Text="Coffee" FontSize="11" FontWeight="SemiBold" Foreground="#FFF2994A" />
+                                            <TextBlock x:Name="WaterBtnCoffeeText" Text="Coffee" FontSize="11" FontWeight="SemiBold" Foreground="#FFF2994A" />
                                         </StackPanel>
                                     </Button>
                                     
-                                    <Button Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A27AE60" BorderThickness="0">
+                                    <Button x:Name="WaterBtnTea" Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A27AE60" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
-                                            <TextBlock Text="Tea" FontSize="11" FontWeight="SemiBold" Foreground="#FF27AE60" />
+                                            <TextBlock x:Name="WaterBtnTeaText" Text="Tea" FontSize="11" FontWeight="SemiBold" Foreground="#FF27AE60" />
                                         </StackPanel>
                                     </Button>
                                 </Grid>
@@ -275,17 +474,22 @@
 
                     <!-- Extended Data (Logs & Graph) -->
                     <Grid x:Name="WaterExtendedPanel" Grid.Row="1" Grid.Column="0" Visibility="Collapsed" VerticalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" x:Name="WaterExtCol0" />
+                            <ColumnDefinition Width="0" x:Name="WaterExtCol1" />
+                        </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
+                            <RowDefinition x:Name="WaterExtRow0" Height="Auto" />
+                            <RowDefinition x:Name="WaterExtRow1" Height="Auto" />
+                            <RowDefinition x:Name="WaterExtRow2" Height="*" />
                         </Grid.RowDefinitions>
 
                         <!-- Graph -->
-                        <Border Grid.Row="0" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12" Margin="0,0,0,12" Height="100">
+                        <Border x:Name="WaterGraphBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12" Margin="0,0,0,12" Height="100">
                             <ItemsControl ItemsSource="{x:Bind History, Mode=OneWay}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom" HorizontalAlignment="Center" />
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom" HorizontalAlignment="Center" />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
@@ -299,11 +503,33 @@
                             </ItemsControl>
                         </Border>
 
+                        <!-- Stats Grid (Visible only in LargeState) -->
+                        <Grid x:Name="WaterStatsGrid" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" ColumnSpacing="12" Margin="0,0,0,12" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            
+                            <Border Grid.Column="0" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                                <StackPanel Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="Hydration Rate" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Text="{x:Bind ProgressPercentageText, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Foreground="#FF2196F3" />
+                                </StackPanel>
+                            </Border>
+                            
+                            <Border Grid.Column="1" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                                <StackPanel Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="Remaining" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Text="{x:Bind RemainingWaterText, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
                         <!-- Empty Placeholder -->
-                        <TextBlock Grid.Row="1" Text="No habits logged yet today" Visibility="{x:Bind HasNoLogs, Mode=OneWay}" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock x:Name="WaterEmptyText" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Text="No habits logged yet today" Visibility="{x:Bind HasNoLogs, Mode=OneWay}" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
                         <!-- Logs List -->
-                        <ListView Grid.Row="1" ItemsSource="{x:Bind Logs, Mode=OneWay}" Visibility="{x:Bind HasLogs, Mode=OneWay}" SelectionMode="None" VerticalAlignment="Stretch">
+                        <ListView x:Name="WaterLogsList" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" ItemsSource="{x:Bind Logs, Mode=OneWay}" Visibility="{x:Bind HasLogs, Mode=OneWay}" SelectionMode="None" VerticalAlignment="Stretch">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="local:WidgetLogEntryViewModel">
                                     <Grid Margin="0,0,0,8">
@@ -343,7 +569,7 @@
                         <StackPanel x:Name="SmokesControlsStack" Orientation="Vertical" Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8">
                             
                             <!-- Gauge -->
-                            <gauge:SfRadialGauge x:Name="SmokesGauge" HorizontalAlignment="Center" VerticalAlignment="Center" MaxHeight="130" MaxWidth="130" MinHeight="80" MinWidth="80">
+                            <gauge:SfRadialGauge x:Name="SmokesGauge" HorizontalAlignment="Center" VerticalAlignment="Center" MaxHeight="200" MaxWidth="200" MinHeight="50" MinWidth="50">
                                 <gauge:SfRadialGauge.Axes>
                                     <gauge:RadialAxis x:Name="SmokesRadialAxis" StartAngle="135" EndAngle="405" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowAxisLine="False" TickLengthUnit="Factor" MajorTickLength="0.265" MinorTickLength="0.13" MinorTicksPerInterval="4" TickOffset="0">
                                         <gauge:RadialAxis.Ranges>
@@ -353,8 +579,8 @@
                                             <gauge:GaugeAnnotation PositionFactor="0" DirectionValue="90">
                                                 <gauge:GaugeAnnotation.Content>
                                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
-                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{x:Bind GaugeColor, Mode=OneWay}" />
-                                                        <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="10" Opacity="0.55" HorizontalAlignment="Center" />
+                                                         <TextBlock x:Name="SmokesProgressText" Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{x:Bind GaugeColor, Mode=OneWay}" />
+                                                         <TextBlock x:Name="SmokesGoalDisplayText" Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="10" Opacity="0.55" HorizontalAlignment="Center" />
                                                     </StackPanel>
                                                 </gauge:GaugeAnnotation.Content>
                                             </gauge:GaugeAnnotation>
@@ -385,31 +611,31 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     
-                                    <Button Grid.Row="0" Grid.Column="0" Click="AddCigarette_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AF44336" BorderThickness="0">
+                                    <Button x:Name="SmokesBtnCigarette" Grid.Row="0" Grid.Column="0" Click="AddCigarette_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AF44336" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFF44336" />
-                                            <TextBlock Text="Cigarette" FontSize="11" FontWeight="SemiBold" Foreground="#FFF44336" />
+                                            <TextBlock x:Name="SmokesBtnCigaretteText" Text="Cigarette" FontSize="11" FontWeight="SemiBold" Foreground="#FFF44336" />
                                         </StackPanel>
                                     </Button>
                                     
-                                    <Button Grid.Row="0" Grid.Column="1" Click="AddHeated_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A1976D2" BorderThickness="0">
+                                    <Button x:Name="SmokesBtnHeated" Grid.Row="0" Grid.Column="1" Click="AddHeated_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A1976D2" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xec2c;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF1976D2" />
-                                            <TextBlock Text="Heated" FontSize="11" FontWeight="SemiBold" Foreground="#FF1976D2" />
+                                            <TextBlock x:Name="SmokesBtnHeatedText" Text="Heated" FontSize="11" FontWeight="SemiBold" Foreground="#FF1976D2" />
                                         </StackPanel>
                                     </Button>
                                     
-                                    <Button Grid.Row="1" Grid.Column="0" Click="AddRolled_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AEF6C00" BorderThickness="0">
+                                    <Button x:Name="SmokesBtnRolled" Grid.Row="1" Grid.Column="0" Click="AddRolled_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AEF6C00" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#x100bd;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFEF6C00" />
-                                            <TextBlock Text="Rolled" FontSize="11" FontWeight="SemiBold" Foreground="#FFEF6C00" />
+                                            <TextBlock x:Name="SmokesBtnRolledText" Text="Rolled" FontSize="11" FontWeight="SemiBold" Foreground="#FFEF6C00" />
                                         </StackPanel>
                                     </Button>
                                     
-                                    <Button Grid.Row="1" Grid.Column="1" Click="AddCigarillo_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A8E24AA" BorderThickness="0">
+                                    <Button x:Name="SmokesBtnCigarillo" Grid.Row="1" Grid.Column="1" Click="AddCigarillo_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A8E24AA" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xeed2;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF8E24AA" />
-                                            <TextBlock Text="Cigarillo" FontSize="11" FontWeight="SemiBold" Foreground="#FF8E24AA" />
+                                            <TextBlock x:Name="SmokesBtnCigarilloText" Text="Cigarillo" FontSize="11" FontWeight="SemiBold" Foreground="#FF8E24AA" />
                                         </StackPanel>
                                     </Button>
                                 </Grid>
@@ -419,17 +645,22 @@
 
                     <!-- Extended Data (Logs & Graph) -->
                     <Grid x:Name="SmokesExtendedPanel" Grid.Row="1" Grid.Column="0" Visibility="Collapsed" VerticalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" x:Name="SmokesExtCol0" />
+                            <ColumnDefinition Width="0" x:Name="SmokesExtCol1" />
+                        </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
+                            <RowDefinition x:Name="SmokesExtRow0" Height="Auto" />
+                            <RowDefinition x:Name="SmokesExtRow1" Height="Auto" />
+                            <RowDefinition x:Name="SmokesExtRow2" Height="*" />
                         </Grid.RowDefinitions>
 
                         <!-- Graph -->
-                        <Border Grid.Row="0" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12" Margin="0,0,0,12" Height="100">
+                        <Border x:Name="SmokesGraphBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12" Margin="0,0,0,12" Height="100">
                             <ItemsControl ItemsSource="{x:Bind History, Mode=OneWay}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom" HorizontalAlignment="Center" />
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom" HorizontalAlignment="Center" />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
@@ -443,11 +674,41 @@
                             </ItemsControl>
                         </Border>
 
+                        <!-- Stats Grid (Visible only in LargeState) -->
+                        <Grid x:Name="SmokesStatsGrid" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" ColumnSpacing="8" Margin="0,0,0,12" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            
+                            <Border Grid.Column="0" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="8">
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Smoke Free" FontSize="10" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind DaysSinceQuitShort, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="{x:Bind GaugeColor, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Border>
+                            
+                            <Border Grid.Column="1" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="8">
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Avoided" FontSize="10" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind SmokesAvoidedShort, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="#FFF44336" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Border>
+                            
+                            <Border Grid.Column="2" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="8">
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Saved" FontSize="10" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind MoneySavedShort, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="#FF27AE60" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
                         <!-- Empty Placeholder -->
-                        <TextBlock Grid.Row="1" Text="No habits logged yet today" Visibility="{x:Bind HasNoLogs, Mode=OneWay}" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock x:Name="SmokesEmptyText" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Text="No habits logged yet today" Visibility="{x:Bind HasNoLogs, Mode=OneWay}" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
                         <!-- Logs List -->
-                        <ListView Grid.Row="1" ItemsSource="{x:Bind Logs, Mode=OneWay}" Visibility="{x:Bind HasLogs, Mode=OneWay}" SelectionMode="None" VerticalAlignment="Stretch">
+                        <ListView x:Name="SmokesLogsList" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" ItemsSource="{x:Bind Logs, Mode=OneWay}" Visibility="{x:Bind HasLogs, Mode=OneWay}" SelectionMode="None" VerticalAlignment="Stretch">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="local:WidgetLogEntryViewModel">
                                     <Grid Margin="0,0,0,8">

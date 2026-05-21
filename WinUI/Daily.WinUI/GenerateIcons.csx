@@ -6,16 +6,24 @@ using Svg;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Collections.Generic;
 
 var assetsDir = Path.Combine(Directory.GetCurrentDirectory(), "Assets");
-var svgPath   = Path.Combine(assetsDir, "NewIcon.svg");
+var svgPath   = Path.Combine(assetsDir, "GemIcon.svg");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 // Load SVG as-is (no color/background changes) and rasterize with supersampling
-Bitmap Render(string svgFile, int size)
+Bitmap Render(string svgFile, int size, Dictionary<string, string> replacements = null)
 {
     var svgText = File.ReadAllText(svgFile);
+    if (replacements != null)
+    {
+        foreach (var kvp in replacements)
+        {
+            svgText = svgText.Replace(kvp.Key, kvp.Value);
+        }
+    }
 
     // Supersample factor — render 4× larger then downsample for crisp edges
     int scale = size <= 48 ? 8 : 4;
@@ -90,6 +98,19 @@ void SaveIco(IEnumerable<Bitmap> bitmaps, string path)
 // ── Generate ──────────────────────────────────────────────────────────────────
 Console.WriteLine("Generating app icons...");
 
+// Generate appicon.theme-dark.svg and appicon.theme-light.svg from GemIcon.svg
+Console.WriteLine("Generating theme-specific SVG files...");
+var gemIconText = File.ReadAllText(svgPath);
+
+// Create dark theme version (colored, with brighter purple #A799CC for dark background contrast)
+var darkSvgText = gemIconText.Replace("fill:rgb(112,94,142);", "fill:rgb(167,153,204);");
+File.WriteAllText(Path.Combine(assetsDir, "appicon.theme-dark.svg"), darkSvgText);
+Console.WriteLine("  saved appicon.theme-dark.svg");
+
+// Create light theme version (colored, with original brand colors)
+File.WriteAllText(Path.Combine(assetsDir, "appicon.theme-light.svg"), gemIconText);
+Console.WriteLine("  saved appicon.theme-light.svg");
+
 // Manifest PNG assets — dark-theme icon (yellowish on navy) for all sizes
 var specs = new (string file, int size)[]
 {
@@ -160,11 +181,21 @@ storeBmp.Dispose();
 Console.WriteLine("Generating system tray icons...");
 var traySizes = new[] { 16, 20, 24, 32, 48, 256 };
 
-var darkTrayBmps = traySizes.Select(s => Render(Path.Combine(assetsDir, "appicon.theme-dark.svg"), s)).ToList();
+var darkTrayReplacements = new Dictionary<string, string>
+{
+    { "fill:rgb(112,94,142);", "fill:white;" },
+    { "fill:rgb(226,156,18);", "fill:white;" }
+};
+var darkTrayBmps = traySizes.Select(s => Render(svgPath, s, darkTrayReplacements)).ToList();
 SaveIco(darkTrayBmps, Path.Combine(assetsDir, "TrayIconDarkTheme.ico"));
 foreach (var b in darkTrayBmps) b.Dispose();
 
-var lightTrayBmps = traySizes.Select(s => Render(Path.Combine(assetsDir, "appicon.theme-light.svg"), s)).ToList();
+var lightTrayReplacements = new Dictionary<string, string>
+{
+    { "fill:rgb(112,94,142);", "fill:black;" },
+    { "fill:rgb(226,156,18);", "fill:black;" }
+};
+var lightTrayBmps = traySizes.Select(s => Render(svgPath, s, lightTrayReplacements)).ToList();
 SaveIco(lightTrayBmps, Path.Combine(assetsDir, "TrayIconLightTheme.ico"));
 foreach (var b in lightTrayBmps) b.Dispose();
 
