@@ -65,6 +65,8 @@
     <Compile Include="..\..\Services\DatabaseService.cs" Link="Services\DatabaseService.cs" />
     <Compile Include="..\..\Services\ISyncService.cs" Link="Services\ISyncService.cs" />
     <Compile Include="..\..\Services\SyncService.cs" Link="Services\SyncService.cs" />
+    <Compile Include="..\..\Services\IRssArticleService.cs" Link="Services\IRssArticleService.cs" />
+    <Compile Include="..\..\Services\RssArticleService.cs" Link="Services\RssArticleService.cs" />
     <Compile Include="..\..\Services\IRssFeedService.cs" Link="Services\IRssFeedService.cs" />
     <Compile Include="..\..\Services\RssFeedService.cs" Link="Services\RssFeedService.cs" />
     <Compile Include="..\..\Services\SeederService.cs" Link="Services\SeederService.cs" />

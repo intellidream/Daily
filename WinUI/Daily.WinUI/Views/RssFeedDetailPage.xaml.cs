@@ -15,7 +15,10 @@ namespace Daily_WinUI.Views;
 public sealed partial class RssFeedDetailPage : Page
 {
     private readonly Daily.Services.IRssFeedService _rssService;
-    private ObservableCollection<RssItem> _articles = new();
+    private readonly Daily.Services.IRssArticleService _articleService;
+    private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _articles = new();
+    private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _readLaterArticles = new();
+    private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _favoriteArticles = new();
     private RssItem? _selectedItem;
     private RssItem? _currentRenderedArticle;
 
@@ -23,8 +26,12 @@ public sealed partial class RssFeedDetailPage : Page
     {
         InitializeComponent();
         _rssService = App.Current.Services.GetRequiredService<Daily.Services.IRssFeedService>();
+        _articleService = App.Current.Services.GetRequiredService<Daily.Services.IRssArticleService>();
         
         ArticlesListView.ItemsSource = _articles;
+        ReadLaterListView.ItemsSource = _readLaterArticles;
+        FavoritesListView.ItemsSource = _favoriteArticles;
+
         Loaded += RssFeedDetailPage_Loaded;
         Unloaded += RssFeedDetailPage_Unloaded;
         ActualThemeChanged += RssFeedDetailPage_ActualThemeChanged;
@@ -48,6 +55,7 @@ public sealed partial class RssFeedDetailPage : Page
     {
         _rssService.OnFeedChanged += RssService_OnFeedChanged;
         _rssService.OnItemsUpdated += RssService_OnItemsUpdated;
+        _articleService.OnItemsChanged += ArticleService_OnItemsChanged;
 
         if (FeedComboBox.ItemsSource == null)
         {
@@ -79,6 +87,7 @@ public sealed partial class RssFeedDetailPage : Page
     {
         _rssService.OnFeedChanged -= RssService_OnFeedChanged;
         _rssService.OnItemsUpdated -= RssService_OnItemsUpdated;
+        _articleService.OnItemsChanged -= ArticleService_OnItemsChanged;
         ActualThemeChanged -= RssFeedDetailPage_ActualThemeChanged;
     }
 
@@ -120,7 +129,7 @@ public sealed partial class RssFeedDetailPage : Page
         _articles.Clear();
         foreach (var item in _rssService.Items)
         {
-            _articles.Add(item);
+            _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(item));
         }
 
         if (_rssService.IsLoading)
@@ -133,6 +142,8 @@ public sealed partial class RssFeedDetailPage : Page
             LoadingPanel.Visibility = Visibility.Collapsed;
             ArticlesListView.Visibility = Visibility.Visible;
         }
+
+        UpdateSavedLists();
     }
 
     public async Task RefreshFromTitleBarAsync()
@@ -180,16 +191,18 @@ public sealed partial class RssFeedDetailPage : Page
 
     private async void ArticlesListView_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is RssItem item)
+        if (e.ClickedItem is Daily_WinUI.ViewModels.RssItemViewModel vm)
         {
-            _selectedItem = item;
-            await OpenReaderViewAsync(item);
+            _selectedItem = vm.Item;
+            await OpenReaderViewAsync(vm.Item);
         }
     }
 
     private async Task OpenReaderViewAsync(RssItem item)
     {
         _currentRenderedArticle = null;
+        _selectedItem = item;
+        UpdateReaderToolbarStates();
         ListViewContainer.Visibility = Visibility.Collapsed;
         ReaderViewContainer.Visibility = Visibility.Visible;
         ReaderLoadingPanel.Visibility = Visibility.Visible;
@@ -558,6 +571,128 @@ public sealed partial class RssFeedDetailPage : Page
         else
         {
             ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0xED, 0xE5, 0xD9);
+        }
+    }
+
+    private void UpdateSavedLists()
+    {
+        // Update Read Later
+        _readLaterArticles.Clear();
+        foreach (var saved in _articleService.ReadLaterItems)
+        {
+            _readLaterArticles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(saved));
+        }
+        NoReadLaterTextBlock.Visibility = _readLaterArticles.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        // Update Favorites
+        _favoriteArticles.Clear();
+        foreach (var saved in _articleService.FavoriteItems)
+        {
+            _favoriteArticles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(saved));
+        }
+        NoFavoritesTextBlock.Visibility = _favoriteArticles.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ArticleService_OnItemsChanged()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            // Refresh states of live feed items
+            foreach (var vm in _articles)
+            {
+                vm.RefreshState();
+            }
+            
+            // Reload the saved lists (Favorites / Read Later)
+            UpdateSavedLists();
+            
+            // If we are currently viewing an article, update the top bar icons!
+            if (_selectedItem != null)
+            {
+                UpdateReaderToolbarStates();
+            }
+        });
+    }
+
+    private static readonly Microsoft.UI.Xaml.Media.Brush FavoriteActiveBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xF2, 0x99, 0x4A));
+    private static readonly Microsoft.UI.Xaml.Media.Brush ReadLaterActiveBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xFF, 0x52, 0x52));
+    
+    private Microsoft.UI.Xaml.Media.Brush GetMutedBrush()
+    {
+        if (Application.Current.Resources.TryGetValue("AppFgMutedColorBrush", out var brushObj) && brushObj is Microsoft.UI.Xaml.Media.Brush brush)
+        {
+            return brush;
+        }
+        return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x80, 0x80, 0x80));
+    }
+
+    private void UpdateReaderToolbarStates()
+    {
+        if (_selectedItem == null) return;
+        
+        bool isFavorite = _articleService.IsSaved(_selectedItem.Link, SavedArticleType.Favorite);
+        bool isReadLater = _articleService.IsSaved(_selectedItem.Link, SavedArticleType.ReadLater);
+
+        ReaderFavoriteIcon.Glyph = isFavorite ? "\uE735" : "\uE734";
+        ReaderReadLaterIcon.Glyph = isReadLater ? "\uE8A5" : "\uE8A4";
+
+        ReaderFavoriteIcon.Foreground = isFavorite ? FavoriteActiveBrush : GetMutedBrush();
+        ReaderReadLaterIcon.Foreground = isReadLater ? ReadLaterActiveBrush : GetMutedBrush();
+    }
+
+    private async void FavoriteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is Daily_WinUI.ViewModels.RssItemViewModel vm)
+        {
+            await _articleService.ToggleArticleAsync(vm.Item, vm.PublicationName ?? "RSS", vm.PublicationIconUrl, SavedArticleType.Favorite);
+        }
+    }
+
+    private async void ReadLaterButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is Daily_WinUI.ViewModels.RssItemViewModel vm)
+        {
+            await _articleService.ToggleArticleAsync(vm.Item, vm.PublicationName ?? "RSS", vm.PublicationIconUrl, SavedArticleType.ReadLater);
+        }
+    }
+
+    private async void ReaderFavoriteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedItem != null)
+        {
+            await _articleService.ToggleArticleAsync(_selectedItem, _selectedItem.PublicationName ?? "RSS", _selectedItem.PublicationIconUrl, SavedArticleType.Favorite);
+        }
+    }
+
+    private async void ReaderReadLaterButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedItem != null)
+        {
+            await _articleService.ToggleArticleAsync(_selectedItem, _selectedItem.PublicationName ?? "RSS", _selectedItem.PublicationIconUrl, SavedArticleType.ReadLater);
+        }
+    }
+
+    private void RssPivot_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (RssPivot == null || FeedComboBoxContainer == null || RssSubtitleTextBlock == null) return;
+
+        int index = RssPivot.SelectedIndex;
+        if (index == 0)
+        {
+            FeedComboBoxContainer.Visibility = Visibility.Visible;
+            RssSubtitleTextBlock.Text = "Latest articles from your selected feed";
+        }
+        else if (index == 1)
+        {
+            FeedComboBoxContainer.Visibility = Visibility.Collapsed;
+            RssSubtitleTextBlock.Text = "Articles saved for reading later";
+            UpdateSavedLists();
+        }
+        else if (index == 2)
+        {
+            FeedComboBoxContainer.Visibility = Visibility.Collapsed;
+            RssSubtitleTextBlock.Text = "Your starred favorite articles";
+            UpdateSavedLists();
         }
     }
 }

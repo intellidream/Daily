@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:Daily_WinUI.ViewModels"
     mc:Ignorable="d"
     Background="Transparent">
 
@@ -21,6 +22,110 @@
             <GradientStop Color="#FF0B1121" Offset="1" />
         </LinearGradientBrush>
 
+        <Style x:Key="RssItemContainerStyle" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <ListViewItemPresenter
+                            ContentMargin="0"
+                            PointerOverBackground="Transparent"
+                            SelectedBackground="Transparent"
+                            PressedBackground="Transparent"
+                            SelectedPointerOverBackground="Transparent"
+                            SelectedPressedBackground="Transparent"
+                            FocusBorderBrush="Transparent"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="RssItemTemplate" x:DataType="vm:RssItemViewModel">
+            <Border Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    Style="{StaticResource GlassPanelStyle}" Translation="0,0,18"
+                    CornerRadius="18"
+                    Padding="20"
+                    Margin="0,0,0,16"
+                    HorizontalAlignment="Stretch">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Article Thumbnail -->
+                    <Border Width="200" Height="130" CornerRadius="10" Background="{ThemeResource AppGlassSubColorBrush}">
+                        <Image Source="{Binding ImageUrl}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="24,0,0,0" VerticalAlignment="Top">
+                        <TextBlock Text="{Binding Title}"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Foreground="{ThemeResource AppFgColorBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxLines="2"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,12" Spacing="8">
+                            <TextBlock Text="{Binding PublishDate}"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                            <TextBlock Text="•" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                            <TextBlock Text="{Binding Author}"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding Description}"
+                                   FontSize="15"
+                                   Foreground="{ThemeResource AppFgColorBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxLines="3"
+                                   TextTrimming="CharacterEllipsis"
+                                   LineHeight="22"/>
+                    </StackPanel>
+
+                    <!-- Quick Action Buttons -->
+                    <StackPanel Grid.Column="2" Orientation="Vertical" Spacing="12" VerticalAlignment="Center" Margin="20,0,0,0">
+                        <!-- Favorite Button -->
+                        <Button Click="FavoriteButton_Click"
+                                Width="38" Height="38" 
+                                CornerRadius="19"
+                                Background="{ThemeResource AppGlassSubColorBrush}"
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                BorderThickness="1"
+                                Padding="0"
+                                ToolTipService.ToolTip="Toggle Favorite">
+                            <FontIcon Glyph="{Binding FavoriteGlyph}" 
+                                      FontFamily="Segoe Fluent Icons" 
+                                      FontSize="16" 
+                                      Foreground="{Binding FavoriteBrush}"/>
+                        </Button>
+
+                        <!-- Read Later Button -->
+                        <Button Click="ReadLaterButton_Click"
+                                Width="38" Height="38" 
+                                CornerRadius="19"
+                                Background="{ThemeResource AppGlassSubColorBrush}"
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                BorderThickness="1"
+                                Padding="0"
+                                ToolTipService.ToolTip="Toggle Read Later">
+                            <FontIcon Glyph="{Binding ReadLaterGlyph}" 
+                                      FontFamily="Segoe Fluent Icons" 
+                                      FontSize="16" 
+                                      Foreground="{Binding ReadLaterBrush}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
     </Page.Resources>
 
     <Grid Background="Transparent">
@@ -46,10 +151,10 @@
                 </Border>
                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="News" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}"/>
-                    <TextBlock Text="Latest articles from your selected feed" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                    <TextBlock x:Name="RssSubtitleTextBlock" Text="Latest articles from your selected feed" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                 </StackPanel>
 
-                <Border Grid.Column="2" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="14" VerticalAlignment="Center">
+                <Border x:Name="FeedComboBoxContainer" Grid.Column="2" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="14" VerticalAlignment="Center">
                     <ComboBox x:Name="FeedComboBox"
                               Width="220" Height="40"
                               Background="Transparent"
@@ -61,94 +166,73 @@
                 </Border>
             </Grid>
 
-            <!-- Scrollable content: article list -->
+            <!-- Scrollable content: article lists within Pivot tabs -->
             <Grid Grid.Row="1" Margin="20,16,20,20">
-                <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-                    <ProgressRing IsActive="True" Width="56" Height="56"/>
-                    <TextBlock Text="Fetching latest news..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
-                </StackPanel>
+                <Pivot x:Name="RssPivot" SelectionChanged="RssPivot_SelectionChanged">
+                    <!-- Tab 1: Live Feed -->
+                    <PivotItem Header="Live Feed">
+                        <Grid>
+                            <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+                                <ProgressRing IsActive="True" Width="56" Height="56"/>
+                                <TextBlock Text="Fetching latest news..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
+                            </StackPanel>
 
-                <ListView x:Name="ArticlesListView"
-                          SelectionMode="None"
-                          ShowsScrollingPlaceholders="False"
-                          Visibility="Collapsed"
-                          IsItemClickEnabled="True"
-                          ItemClick="ArticlesListView_ItemClick"
-                          Padding="0,0,0,20">
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                            <Setter Property="Padding" Value="0"/>
-                            <Setter Property="Margin" Value="0"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ListViewItem">
-                                        <ListViewItemPresenter
-                                            ContentMargin="0"
-                                            PointerOverBackground="Transparent"
-                                            SelectedBackground="Transparent"
-                                            PressedBackground="Transparent"
-                                            SelectedPointerOverBackground="Transparent"
-                                            SelectedPressedBackground="Transparent"
-                                            FocusBorderBrush="Transparent"/>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ListView.ItemContainerStyle>
-                    <ListView.ItemTemplate>
-                        <DataTemplate>
-                            <Border Background="{ThemeResource AppGlassColorBrush}"
-                                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
-                                    BorderThickness="1"
-                                    Style="{StaticResource GlassPanelStyle}" Translation="0,0,18"
-                                    CornerRadius="18"
-                                    Padding="20"
-                                    Margin="0,0,0,16"
-                                    HorizontalAlignment="Stretch">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="200"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
+                            <ListView x:Name="ArticlesListView"
+                                      SelectionMode="None"
+                                      ShowsScrollingPlaceholders="False"
+                                      Visibility="Collapsed"
+                                      IsItemClickEnabled="True"
+                                      ItemClick="ArticlesListView_ItemClick"
+                                      Padding="0,0,0,20"
+                                      ItemContainerStyle="{StaticResource RssItemContainerStyle}"
+                                      ItemTemplate="{StaticResource RssItemTemplate}"/>
+                        </Grid>
+                    </PivotItem>
 
-                                    <!-- Article Thumbnail -->
-                                    <Border Width="200" Height="130" CornerRadius="10" Background="{ThemeResource AppGlassSubColorBrush}">
-                                        <Image Source="{Binding ImageUrl}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
+                    <!-- Tab 2: Read Later -->
+                    <PivotItem Header="Read Later">
+                        <Grid>
+                            <TextBlock x:Name="NoReadLaterTextBlock" 
+                                       Text="No articles saved for later." 
+                                       Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                       FontSize="16" 
+                                       HorizontalAlignment="Center" 
+                                       VerticalAlignment="Center" 
+                                       Visibility="Collapsed"/>
 
-                                    <StackPanel Grid.Column="1" Margin="24,0,0,0" VerticalAlignment="Top">
-                                        <TextBlock Text="{Binding Title}"
-                                                   FontSize="20"
-                                                   FontWeight="Bold"
-                                                   Foreground="{ThemeResource AppFgColorBrush}"
-                                                   TextWrapping="Wrap"
-                                                   MaxLines="2"
-                                                   TextTrimming="CharacterEllipsis"/>
+                            <ListView x:Name="ReadLaterListView"
+                                      SelectionMode="None"
+                                      ShowsScrollingPlaceholders="False"
+                                      IsItemClickEnabled="True"
+                                      ItemClick="ArticlesListView_ItemClick"
+                                      Padding="0,0,0,20"
+                                      ItemContainerStyle="{StaticResource RssItemContainerStyle}"
+                                      ItemTemplate="{StaticResource RssItemTemplate}"/>
+                        </Grid>
+                    </PivotItem>
 
-                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,12" Spacing="8">
-                                            <TextBlock Text="{Binding PublishDate}"
-                                                       FontSize="13"
-                                                       Foreground="{ThemeResource AppFgMutedColorBrush}"/>
-                                            <TextBlock Text="•" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
-                                            <TextBlock Text="{Binding Author}"
-                                                       FontSize="13"
-                                                       Foreground="{ThemeResource AppFgMutedColorBrush}"/>
-                                        </StackPanel>
+                    <!-- Tab 3: Favorites -->
+                    <PivotItem Header="Favorites">
+                        <Grid>
+                            <TextBlock x:Name="NoFavoritesTextBlock" 
+                                       Text="No favorite articles starred." 
+                                       Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                       FontSize="16" 
+                                       HorizontalAlignment="Center" 
+                                       VerticalAlignment="Center" 
+                                       Visibility="Collapsed"/>
 
-                                        <TextBlock Text="{Binding Description}"
-                                                   FontSize="15"
-                                                   Foreground="{ThemeResource AppFgColorBrush}"
-                                                   TextWrapping="Wrap"
-                                                   MaxLines="3"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   LineHeight="22"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
+                            <ListView x:Name="FavoritesListView"
+                                      SelectionMode="None"
+                                      ShowsScrollingPlaceholders="False"
+                                      IsItemClickEnabled="True"
+                                      ItemClick="ArticlesListView_ItemClick"
+                                      Padding="0,0,0,20"
+                                      ItemContainerStyle="{StaticResource RssItemContainerStyle}"
+                                      ItemTemplate="{StaticResource RssItemTemplate}"/>
+                        </Grid>
+                    </PivotItem>
+                </Pivot>
             </Grid>
         </Grid>
 
@@ -160,7 +244,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Fixed TopBar Row: back button -->
+            <!-- Fixed TopBar Row: back button and action buttons -->
             <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center">
                 <Button x:Name="BackButton" Click="BackButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="14" Padding="14,8" Height="40" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -168,6 +252,18 @@
                         <TextBlock Text="Back to List" FontSize="15" Foreground="{ThemeResource AppFgColorBrush}"/>
                     </StackPanel>
                 </Button>
+                
+                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+                    <!-- Reader Favorite Button -->
+                    <Button x:Name="ReaderFavoriteButton" Click="ReaderFavoriteButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="14" Width="40" Height="40" Padding="0" ToolTipService.ToolTip="Toggle Favorite">
+                        <FontIcon x:Name="ReaderFavoriteIcon" Glyph="&#xE734;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource AppFgColorBrush}"/>
+                    </Button>
+                    
+                    <!-- Reader Read Later Button -->
+                    <Button x:Name="ReaderReadLaterButton" Click="ReaderReadLaterButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="14" Width="40" Height="40" Padding="0" ToolTipService.ToolTip="Toggle Read Later">
+                        <FontIcon x:Name="ReaderReadLaterIcon" Glyph="&#xE8A4;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource AppFgColorBrush}"/>
+                    </Button>
+                </StackPanel>
             </Grid>
 
             <!-- Color Ribbon Separator - matches darkest tones from SVG gradients -->

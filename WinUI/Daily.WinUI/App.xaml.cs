@@ -184,6 +184,7 @@ public partial class App : Application
         services.AddSingleton<Daily.Services.IDatabaseService, Daily.Services.DatabaseService>();
         services.AddSingleton<Daily.Services.ISyncService, Daily.Services.SyncService>();
         services.AddSingleton<Daily.Services.IRssFeedService, Daily.Services.RssFeedService>();
+        services.AddSingleton<Daily.Services.IRssArticleService, Daily.Services.RssArticleService>();
         services.AddSingleton<Daily.Services.ISeederService, Daily.Services.SeederService>();
         services.AddSingleton<Daily.Services.ISettingsService, Daily.Services.SettingsService>();
         services.AddSingleton<Daily_WinUI.Services.WinUIAuthService>();
@@ -238,6 +239,10 @@ public partial class App : Application
         // Re-initialize feeds in memory to reflect the newly seeded database entries
         var rssService = Services.GetRequiredService<Daily.Services.IRssFeedService>();
         await rssService.InitializeCustomFeedsAsync();
+
+        // Initialize RSS articles service (for bookmarks and favorites)
+        var articleService = Services.GetRequiredService<Daily.Services.IRssArticleService>();
+        await articleService.InitializeAsync();
 
         // Initialize Habits and Health services (sets up Realtime subscriptions)
         var habitsService = Services.GetRequiredService<Daily.Services.IHabitsService>();
