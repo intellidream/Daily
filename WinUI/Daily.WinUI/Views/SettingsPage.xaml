@@ -57,9 +57,8 @@
                 <NavigationViewItem.Icon>
                     <ImageIcon>
                         <ImageIcon.Source>
-                            <SvgImageSource x:Name="DayOneIconSource"
-                                            UriSource="ms-appx:///Assets/appicon.theme-dark.svg"
-                                            RasterizePixelWidth="32" RasterizePixelHeight="32"/>
+                            <SvgImageSource UriSource="{ThemeResource AppIconSource}"
+                                            RasterizePixelWidth="64" RasterizePixelHeight="64"/>
                         </ImageIcon.Source>
                     </ImageIcon>
                 </NavigationViewItem.Icon>

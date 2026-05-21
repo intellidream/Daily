@@ -1,7 +1,4 @@
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Daily_WinUI.Views;
 
@@ -11,7 +8,6 @@ public sealed partial class AboutPage : Page
     {
         InitializeComponent();
         Loaded += AboutPage_Loaded;
-        ActualThemeChanged += AboutPage_ThemeChanged;
     }
 
     private void AboutPage_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
@@ -31,30 +27,5 @@ public sealed partial class AboutPage : Page
         }
 
         CopyrightText.Text = $"© {System.DateTime.Now.Year} Intellidream. All rights reserved.";
-
-        // Set theme-aware SVG sources
-        UpdateThemeSvgs();
-    }
-
-    private void AboutPage_ThemeChanged(FrameworkElement sender, object args)
-    {
-        UpdateThemeSvgs();
-    }
-
-    private void UpdateThemeSvgs()
-    {
-        var isDark = ActualTheme == ElementTheme.Dark;
-
-        // App icon
-        var appIconPath = isDark 
-            ? "ms-appx:///Assets/appicon.theme-dark.svg"
-            : "ms-appx:///Assets/appicon.theme-light.svg";
-        ((SvgImageSource)AppIconImage.Source).UriSource = new System.Uri(appIconPath);
-
-        // Intellidream company logo (theme-aware)
-        var companyIconPath = isDark
-            ? "ms-appx:///Assets/companyicon.theme-dark.svg"
-            : "ms-appx:///Assets/companyicon.theme-light.svg";
-        ((SvgImageSource)IntellIdreamImage.Source).UriSource = new System.Uri(companyIconPath);
     }
 }

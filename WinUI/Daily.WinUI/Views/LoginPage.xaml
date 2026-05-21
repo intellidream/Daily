@@ -31,7 +31,7 @@
             <!-- App Icon -->
             <Image Width="72" Height="72" HorizontalAlignment="Center" Margin="0,0,0,20">
                 <Image.Source>
-                    <SvgImageSource UriSource="ms-appx:///Assets/appicon.theme-dark.svg" RasterizePixelWidth="144" RasterizePixelHeight="144"/>
+                    <SvgImageSource UriSource="{ThemeResource AppIconSource}" RasterizePixelWidth="288" RasterizePixelHeight="288"/>
                 </Image.Source>
             </Image>
 

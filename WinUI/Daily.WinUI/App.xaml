@@ -11,9 +11,9 @@
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
-                    <x:String x:Key="AppIconSource">Assets/appicon.theme-dark.svg</x:String>
+                    <x:String x:Key="AppIconSource">ms-appx:///Assets/appicon.theme-dark.svg</x:String>
                     <x:String x:Key="AppBackgroundSource">Assets/appbackground.theme-dark.svg</x:String>
-                    <x:String x:Key="IntellIdreamIconSource">Assets/Intellidream.svg</x:String>
+                    <x:String x:Key="IntellIdreamIconSource">ms-appx:///Assets/companyicon.theme-dark.svg</x:String>
                     <Color x:Key="AppBgColor">#FF0B1121</Color>
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FFFFFFFF"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BBFFFFFF"/>
@@ -29,9 +29,9 @@
                     </LinearGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
-                    <x:String x:Key="AppIconSource">Assets/appicon.theme-light.svg</x:String>
+                    <x:String x:Key="AppIconSource">ms-appx:///Assets/appicon.theme-light.svg</x:String>
                     <x:String x:Key="AppBackgroundSource">Assets/appbackground.theme-light.svg</x:String>
-                    <x:String x:Key="IntellIdreamIconSource">Assets/Intellidream.svg</x:String>
+                    <x:String x:Key="IntellIdreamIconSource">ms-appx:///Assets/companyicon.theme-light.svg</x:String>
                     <Color x:Key="AppBgColor">#FFD4C9B0</Color>
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FF1A1A1A"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BB1A1A1A"/>

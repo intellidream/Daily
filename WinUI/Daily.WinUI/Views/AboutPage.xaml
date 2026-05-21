@@ -19,8 +19,8 @@
                         BorderThickness="1">
                     <Image x:Name="AppIconImage" Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Image.Source>
-                            <SvgImageSource UriSource="ms-appx:///Assets/appicon.theme-dark.svg"
-                                            RasterizePixelWidth="96" RasterizePixelHeight="96"/>
+                            <SvgImageSource UriSource="{ThemeResource AppIconSource}"
+                                            RasterizePixelWidth="192" RasterizePixelHeight="192"/>
                         </Image.Source>
                     </Image>
                 </Border>
@@ -94,7 +94,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,12,0,0" Opacity="0.45">
                 <Image x:Name="IntellIdreamImage" Width="16" Height="16" VerticalAlignment="Center">
                     <Image.Source>
-                        <SvgImageSource UriSource="ms-appx:///Assets/companyicon.theme-dark.svg"
+                        <SvgImageSource UriSource="{ThemeResource IntellIdreamIconSource}"
                                         RasterizePixelWidth="32" RasterizePixelHeight="32"/>
                     </Image.Source>
                 </Image>

@@ -41,9 +41,9 @@
                     Click="TitleBarRefresh_Click"
                     ToolTipService.ToolTip="Refresh dashboard">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Image Width="14" Height="14" VerticalAlignment="Center" IsHitTestVisible="False">
+                    <Image Width="16" Height="16" VerticalAlignment="Center" IsHitTestVisible="False">
                         <Image.Source>
-                            <SvgImageSource UriSource="{ThemeResource AppIconSource}" RasterizePixelWidth="28" RasterizePixelHeight="28"/>
+                            <SvgImageSource UriSource="{ThemeResource AppIconSource}" RasterizePixelWidth="64" RasterizePixelHeight="64"/>
                         </Image.Source>
                     </Image>
                     <TextBlock Text="DayOne" FontSize="12" VerticalAlignment="Center"/>
