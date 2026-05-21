@@ -29,7 +29,7 @@ public sealed partial class RssFeedDetailPage : Page
         Unloaded += RssFeedDetailPage_Unloaded;
         ActualThemeChanged += RssFeedDetailPage_ActualThemeChanged;
         
-        ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+        UpdateWebViewBackground();
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -84,6 +84,7 @@ public sealed partial class RssFeedDetailPage : Page
 
     private void RssFeedDetailPage_ActualThemeChanged(FrameworkElement sender, object args)
     {
+        UpdateWebViewBackground();
         if (_currentRenderedArticle != null && ReaderViewContainer.Visibility == Visibility.Visible)
         {
             string html = GenerateReaderHtml(_currentRenderedArticle);
@@ -160,7 +161,7 @@ public sealed partial class RssFeedDetailPage : Page
     private async void EnsureWebViewCoreInitialized()
     {
         await ReaderWebView.EnsureCoreWebView2Async();
-        ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+        UpdateWebViewBackground();
     }
 
     private async void FeedComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -195,6 +196,11 @@ public sealed partial class RssFeedDetailPage : Page
         ReaderWebView.Visibility = Visibility.Collapsed;
         ReaderWebView.Opacity = 1;
 
+        bool isDark = this.ActualTheme == ElementTheme.Dark;
+        string fallbackText = isDark ? "#E0E0E0" : "#1A1A1A";
+        string fallbackLink = isDark ? "#66B2FF" : "#0066CC";
+        string fallbackBg = isDark ? "#1A1423" : "#EDE5D9";
+
         // Step 1: Try the fast HttpClient + SmartReader path
         RssItem? fullArticle = null;
         bool needsWebViewFallback = false;
@@ -220,8 +226,7 @@ public sealed partial class RssFeedDetailPage : Page
             _currentRenderedArticle = fullArticle;
             string html = GenerateReaderHtml(fullArticle);
             await ReaderWebView.EnsureCoreWebView2Async();
-            // Set to fully transparent (alpha = 0) to let mica effect show through
-            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            UpdateWebViewBackground();
             SetupWebViewVirtualHost();
             ReaderWebView.NavigateToString(html);
             ReaderLoadingPanel.Visibility = Visibility.Collapsed;
@@ -240,6 +245,7 @@ public sealed partial class RssFeedDetailPage : Page
             ReaderWebView.Opacity = 0.0;
             
             await ReaderWebView.EnsureCoreWebView2Async();
+            UpdateWebViewBackground();
             SetupWebViewVirtualHost();
 
             // Safety: wait for the engine to fully attach
@@ -370,19 +376,20 @@ public sealed partial class RssFeedDetailPage : Page
                 else
                 {
                     // SmartReader couldn't parse it — show the raw page instead
-                    ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: transparent; }} a {{ color: #4DA6FF; }}</style></head><body><h2>Could not extract article text</h2><p>The content may be behind a paywall. <a href='{item.Link}'>Open in browser</a></p></body></html>");
+                    ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: {fallbackText}; background: {fallbackBg}; }} a {{ color: {fallbackLink}; }}</style></head><body><h2>Could not extract article text</h2><p>The content may be behind a paywall. <a href='{item.Link}'>Open in browser</a></p></body></html>");
                 }
             }
             else
             {
-                ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: transparent; }} a {{ color: #4DA6FF; }}</style></head><body><h2>Timed out loading article</h2><p>The page took too long to render. <a href='{item.Link}'>Open in browser</a></p></body></html>");
+                ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: {fallbackText}; background: {fallbackBg}; }} a {{ color: {fallbackLink}; }}</style></head><body><h2>Timed out loading article</h2><p>The page took too long to render. <a href='{item.Link}'>Open in browser</a></p></body></html>");
             }
         }
         catch (Exception fallbackEx)
         {
             System.Diagnostics.Debug.WriteLine($"WebView2 fallback failed: {fallbackEx.Message}");
             await ReaderWebView.EnsureCoreWebView2Async();
-            ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: #ccc; background: transparent; }}</style></head><body><h2>Error loading article</h2><p>{fallbackEx.Message}</p></body></html>");
+            UpdateWebViewBackground();
+            ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: {fallbackText}; background: {fallbackBg}; }}</style></head><body><h2>Error loading article</h2><p>{fallbackEx.Message}</p></body></html>");
         }
         finally
         {
@@ -429,7 +436,7 @@ public sealed partial class RssFeedDetailPage : Page
         // Extract gradient colors from SVG top area - these match the backgrounds
         // Dark theme: purple tone sampled from the dark gradient's top region
         // Light theme: warm tan gradient starting with #D9B08D
-        string bodyBackground = "transparent";
+        string bodyBackground = isDark ? "#1A1423" : "#EDE5D9";
 
         string featuredImageHtml = string.IsNullOrEmpty(article.ImageUrl) 
             ? "" 
@@ -539,5 +546,18 @@ public sealed partial class RssFeedDetailPage : Page
 </div>
 </body>
 </html>";
+    }
+
+    private void UpdateWebViewBackground()
+    {
+        bool isDark = this.ActualTheme == ElementTheme.Dark;
+        if (isDark)
+        {
+            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0x1A, 0x14, 0x23);
+        }
+        else
+        {
+            ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0xED, 0xE5, 0xD9);
+        }
     }
 }
