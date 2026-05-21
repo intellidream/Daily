@@ -106,24 +106,25 @@ public sealed partial class MainPage : Page
 
     public void ApplyThemeToggle()
     {
-        var root = this.XamlRoot?.Content as FrameworkElement;
-        if (root == null) return;
+        App.Current.MainWindow?.ToggleAppTheme();
+    }
 
-        bool goingLight = root.RequestedTheme == ElementTheme.Dark || root.RequestedTheme == ElementTheme.Default;
-        var newTheme = goingLight ? ElementTheme.Light : ElementTheme.Dark;
+    public void ApplyTheme(ElementTheme newTheme)
+    {
+        if (App.Current.MainWindow is MainWindow mw && mw.Content is FrameworkElement root)
+        {
+            root.RequestedTheme = newTheme;
+            mw.UpdateThemeIcon(isDark: newTheme == ElementTheme.Dark);
+        }
+        PropagateThemeToSubWindows(newTheme);
+    }
 
-        // Apply to main window
-        root.RequestedTheme = newTheme;
-
-        // Propagate to all open detail windows
+    public void PropagateThemeToSubWindows(ElementTheme newTheme)
+    {
         foreach (var win in _openWindows.Values)
             win.ApplyTheme(newTheme);
 
-        // Propagate to settings window if open
         _settingsWindow?.ApplyTheme(newTheme);
-
-        // Sync title bar theme button icon/text
-        App.Current.MainWindow?.UpdateThemeIcon(isDark: !goingLight);
     }
 
     private async void SignOut_Click(object sender, RoutedEventArgs e)
@@ -354,8 +355,13 @@ public sealed partial class MainPage : Page
         _openWindows[pageType] = window;
         window.NavigateTo(pageType, parameter);
         // Inherit current theme
-        var currentTheme = (this.XamlRoot?.Content as FrameworkElement)?.RequestedTheme ?? ElementTheme.Default;
-        if (currentTheme != ElementTheme.Default) window.ApplyTheme(currentTheme);
+        var root = this.XamlRoot?.Content as FrameworkElement;
+        var activeTheme = root?.RequestedTheme ?? ElementTheme.Default;
+        if (activeTheme == ElementTheme.Default)
+        {
+            activeTheme = root?.ActualTheme ?? ElementTheme.Light;
+        }
+        window.ApplyTheme(activeTheme);
         window.Activate();
     }
     [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -384,8 +390,13 @@ public sealed partial class MainPage : Page
         };
 
         // Inherit current theme
-        var currentTheme = (this.XamlRoot?.Content as FrameworkElement)?.RequestedTheme ?? ElementTheme.Default;
-        if (currentTheme != ElementTheme.Default) _settingsWindow.ApplyTheme(currentTheme);
+        var rootSettings = this.XamlRoot?.Content as FrameworkElement;
+        var activeThemeSettings = rootSettings?.RequestedTheme ?? ElementTheme.Default;
+        if (activeThemeSettings == ElementTheme.Default)
+        {
+            activeThemeSettings = rootSettings?.ActualTheme ?? ElementTheme.Light;
+        }
+        _settingsWindow.ApplyTheme(activeThemeSettings);
 
         _settingsWindow.Activate();
     }

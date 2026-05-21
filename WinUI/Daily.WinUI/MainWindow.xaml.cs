@@ -97,8 +97,7 @@ public sealed partial class MainWindow : Window
 
     internal void TitleBarTheme_Click(object sender, RoutedEventArgs e)
     {
-        if (RootFrame.Content is MainPage mainPage)
-            mainPage.ApplyThemeToggle();
+        ToggleAppTheme();
     }
 
     // ── Auth flyout handler (Sign In / Sign Out) ─────────────────────────────
@@ -140,6 +139,8 @@ public sealed partial class MainWindow : Window
                 RootFrame.Navigate(typeof(MainPage));
             else
                 RootFrame.Navigate(typeof(Views.LoginPage));
+
+            UpdateAppThemeFromSystem();
         });
     }
 
@@ -310,12 +311,69 @@ public sealed partial class MainWindow : Window
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     UpdateTrayIcon();
+                    UpdateAppThemeFromSystem();
                 });
             };
         }
         catch (Exception ex)
         {
             LogTray($"[TrayIcon] ERROR setting up theme watcher: {ex}");
+        }
+    }
+
+    public void UpdateAppThemeFromSystem()
+    {
+        try
+        {
+            bool isLightTheme = IsAppsUseLightTheme();
+            var targetTheme = isLightTheme ? ElementTheme.Light : ElementTheme.Dark;
+            LogTray($"[TrayIcon] Updating App Theme from System: {targetTheme}");
+            
+            if (this.Content is FrameworkElement root)
+            {
+                root.RequestedTheme = targetTheme;
+            }
+
+            UpdateThemeIcon(isDark: !isLightTheme);
+
+            if (RootFrame.Content is MainPage mainPage)
+            {
+                mainPage.PropagateThemeToSubWindows(targetTheme);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogTray($"[TrayIcon] ERROR updating App theme from system: {ex}");
+        }
+    }
+
+    public void ToggleAppTheme()
+    {
+        try
+        {
+            if (this.Content is FrameworkElement root)
+            {
+                var currentTheme = root.RequestedTheme;
+                if (currentTheme == ElementTheme.Default)
+                {
+                    currentTheme = root.ActualTheme;
+                }
+
+                var newTheme = currentTheme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+                LogTray($"[TrayIcon] Toggling App Theme manually to: {newTheme}");
+                root.RequestedTheme = newTheme;
+
+                UpdateThemeIcon(isDark: newTheme == ElementTheme.Dark);
+
+                if (RootFrame.Content is MainPage mainPage)
+                {
+                    mainPage.PropagateThemeToSubWindows(newTheme);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogTray($"[TrayIcon] ERROR toggling App theme: {ex}");
         }
     }
 
@@ -354,8 +412,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-
-
     private bool IsSystemUsesLightTheme()
     {
         try
@@ -367,6 +423,20 @@ public sealed partial class MainWindow : Window
         catch
         {
             return false;
+        }
+    }
+
+    private bool IsAppsUseLightTheme()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            var value = key?.GetValue("AppsUseLightTheme");
+            return value is int i && i == 1;
+        }
+        catch
+        {
+            return true;
         }
     }
 
