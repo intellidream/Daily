@@ -183,7 +183,7 @@ namespace Daily.Services
              goal.SyncedAt = null; // Mark dirty
 
              await _repository.SaveGoalAsync(goal);
-             _ = _syncService.PushAsync(); // Background
+             _ = _syncService.PushAsync(SyncScope.Habits); // Background
              OnHabitsUpdated?.Invoke();
         }
 
@@ -209,7 +209,7 @@ namespace Daily.Services
 
              await _repository.SaveLogAsync(log);
              InvalidateRpcCache();
-             _ = _syncService.PushAsync(); // Background
+             _ = _syncService.PushAsync(SyncScope.Habits); // Background
              OnHabitsUpdated?.Invoke();
         }
 
@@ -217,7 +217,7 @@ namespace Daily.Services
         {
             await _repository.DeleteLogAsync(logId);
             InvalidateRpcCache();
-            _ = _syncService.PushAsync(); // Background
+            _ = _syncService.PushAsync(SyncScope.Habits); // Background
             OnHabitsUpdated?.Invoke();
         }
 

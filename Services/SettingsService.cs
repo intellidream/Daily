@@ -130,7 +130,7 @@ namespace Daily.Services
                      Console.WriteLine("[SettingsService] No local settings for User. Checking for migration or Cloud pull...");
                      
                      // 3a. Try to Pull from Cloud first (Source of Truth)
-                     int pulled = await _syncService.PullAsync(); 
+                     int pulled = await _syncService.PullAsync(SyncScope.Preferences); 
                      
                      // Re-check local after pull
                      localTarget = await _databaseService.Connection.Table<LocalUserPreferences>()
@@ -168,7 +168,7 @@ namespace Daily.Services
                              // await _databaseService.Connection.DeleteAsync<LocalUserPreferences>(oldId);
 
                              // Trigger Push of migrated data
-                             Task.Run(async () => await _syncService.PushAsync());
+                             Task.Run(async () => await _syncService.PushAsync(SyncScope.Preferences));
                          }
                          else
                          {
@@ -320,7 +320,7 @@ namespace Daily.Services
                 // Trigger Background Sync
                 if (IsAuthenticated)
                 {
-                    Task.Run(async () => await _syncService.SyncAsync());
+                    Task.Run(async () => await _syncService.SyncAsync(SyncScope.Preferences));
                 }
             }
             catch (Exception ex)

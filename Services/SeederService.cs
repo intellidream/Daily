@@ -101,7 +101,7 @@ namespace Daily.Services
             
             // Trigger Consolidation
             Console.WriteLine("[Seeder] Triggering Consolidation...");
-            await _syncService.SyncAsync(); // This will consolidate old logs
+            await _syncService.SyncAsync(SyncScope.Habits); // This will consolidate old logs
         }
         
         private Guid GenerateGuid(string input)
@@ -167,7 +167,7 @@ namespace Daily.Services
             };
 
             await _databaseService.Connection.InsertAllAsync(defaultFeeds);
-            await _syncService.SyncAsync(); // Push to Supabase immediately
+            await _syncService.SyncAsync(SyncScope.RssSubscriptions); // Push to Supabase immediately
             Console.WriteLine("[Seeder] Successfully seeded default RSS Feeds.");
         }
     }

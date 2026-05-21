@@ -25,7 +25,17 @@ namespace Daily.Services
         public string LastSyncMessage { get; private set; } = "";
 
         private System.Threading.Timer? _syncTimer;
-        private readonly System.Threading.SemaphoreSlim _syncSemaphore = new(1, 1);
+
+        private class SyncRequest
+        {
+            public SyncAction Action { get; set; }
+            public SyncScope Scope { get; set; }
+        }
+
+        private readonly object _lock = new();
+        private bool _isProcessing = false;
+        private SyncRequest? _pendingRequest = null;
+        private readonly List<TaskCompletionSource<int>> _pendingTcs = new();
 
         private void LogSyncException(string context, Exception ex)
         {
@@ -36,43 +46,131 @@ namespace Daily.Services
             Console.WriteLine($"[SyncService] {context}: {ex.GetType().Name}: {ex.Message}");
         }
 
-        public async Task SyncAsync()
+        private Task<int> EnqueueRequestAsync(SyncAction action, SyncScope scope)
         {
-            if (!await _syncSemaphore.WaitAsync(0))
+            var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (_lock)
             {
-                Console.WriteLine("[SyncService] SyncAsync: Sync already in progress. Skipping.");
-                return;
+                if (!_isProcessing)
+                {
+                    _isProcessing = true;
+                    _ = Task.Run(() => ProcessLoopAsync(action, scope, tcs));
+                }
+                else
+                {
+                    if (_pendingRequest == null)
+                    {
+                        _pendingRequest = new SyncRequest { Action = action, Scope = scope };
+                    }
+                    else
+                    {
+                        _pendingRequest.Action |= action;
+                        _pendingRequest.Scope |= scope;
+                    }
+                    _pendingTcs.Add(tcs);
+                }
             }
-            try
+            return tcs.Task;
+        }
+
+        private async Task ProcessLoopAsync(SyncAction initialAction, SyncScope initialScope, TaskCompletionSource<int> initialTcs)
+        {
+            SyncAction currentAction = initialAction;
+            SyncScope currentScope = initialScope;
+            var currentTcsList = new List<TaskCompletionSource<int>> { initialTcs };
+
+            while (true)
             {
-                await SyncInternalAsync();
-            }
-            finally
-            {
-                _syncSemaphore.Release();
+                int result = 0;
+                Exception? error = null;
+                try
+                {
+                    result = await ExecuteInternalAsync(currentAction, currentScope);
+                }
+                catch (Exception ex)
+                {
+                    error = ex;
+                }
+
+                // Complete the TCSs of this run
+                foreach (var tcs in currentTcsList)
+                {
+                    if (error != null)
+                    {
+                        tcs.TrySetException(error);
+                    }
+                    else
+                    {
+                        tcs.TrySetResult(result);
+                    }
+                }
+
+                // Check for pending requests
+                lock (_lock)
+                {
+                    if (_pendingRequest == null)
+                    {
+                        _isProcessing = false;
+                        break;
+                    }
+
+                    currentAction = _pendingRequest.Action;
+                    currentScope = _pendingRequest.Scope;
+                    currentTcsList = new List<TaskCompletionSource<int>>(_pendingTcs);
+
+                    _pendingRequest = null;
+                    _pendingTcs.Clear();
+                }
             }
         }
 
-        private async Task SyncInternalAsync()
+        private async Task<int> ExecuteInternalAsync(SyncAction action, SyncScope scope)
         {
             LastSyncError = null;
             LastSyncMessage = "";
-            if (_supabase.Auth.CurrentSession == null) return;
+            if (_supabase.Auth.CurrentSession == null) return 0;
 
+            int totalItems = 0;
             try
             {
                 // 0. Sync Health (Native -> Cloud)
-                // This ensures Supabase has the latest before we do anything else
-                try { await _healthService.SyncNativeHealthDataAsync(); } 
-                catch (Exception hex) { Console.WriteLine($"[SyncService] Health Sync Warning: {hex.Message}"); }
+                if ((action & SyncAction.Push) != 0 && (scope & SyncScope.Habits) != 0)
+                {
+                    try { await _healthService.SyncNativeHealthDataAsync(); }
+                    catch (Exception hex) { LogSyncException("Health Sync Warning", hex); }
+                }
 
-                await PushInternalAsync();
-                await PullInternalAsync();
+                if ((action & SyncAction.Push) != 0)
+                {
+                    await PushInternalAsync(scope);
+                }
+
+                if ((action & SyncAction.Pull) != 0)
+                {
+                    totalItems = await PullInternalAsync(scope);
+                }
             }
             catch (Exception ex)
             {
-                LogSyncException("SyncAsync", ex);
+                LogSyncException("ExecuteInternalAsync", ex);
+                throw;
             }
+            return totalItems;
+        }
+
+        public Task SyncAsync(SyncScope scope = SyncScope.All)
+        {
+            return EnqueueRequestAsync(SyncAction.Sync, scope);
+        }
+
+        public Task PushAsync(SyncScope scope = SyncScope.All)
+        {
+            return EnqueueRequestAsync(SyncAction.Push, scope);
+        }
+
+        public async Task<int> PullAsync(SyncScope scope = SyncScope.All)
+        {
+            return await EnqueueRequestAsync(SyncAction.Pull, scope);
         }
 
         public void StartBackgroundSync()
@@ -95,7 +193,7 @@ namespace Daily.Services
         {
             try
             {
-                await SyncAsync();
+                await SyncAsync(SyncScope.All);
             }
             catch (Exception ex)
             {
@@ -103,174 +201,144 @@ namespace Daily.Services
             }
         }
 
-        public async Task PushAsync()
+        private async Task PushInternalAsync(SyncScope scope)
         {
-            if (!await _syncSemaphore.WaitAsync(0))
-            {
-                Console.WriteLine("[SyncService] PushAsync: Sync already in progress. Skipping.");
-                return;
-            }
-            try
-            {
-                await PushInternalAsync();
-            }
-            finally
-            {
-                _syncSemaphore.Release();
-            }
-        }
-
-        private async Task PushInternalAsync()
-        {
-            Console.WriteLine("[SyncService] PushAsync Started");
+            Console.WriteLine($"[SyncService] PushAsync Started with scope: {scope}");
             await _databaseService.InitializeAsync();
-             var userId = _supabase.Auth.CurrentUser?.Id;
+            var userId = _supabase.Auth.CurrentUser?.Id;
             if (userId == null) 
             {
                 Console.WriteLine("[SyncService] Push Aborted: No User");
                 return;
             }
 
-            // 1. Push Logs
-            var dirtyLogs = await _databaseService.Connection.Table<LocalHabitLog>()
-                                .Where(l => l.SyncedAt == null && l.UserId == userId)
-                                .ToListAsync();
-
-            Console.WriteLine($"[SyncService] Found {dirtyLogs.Count} dirty logs for User {userId}.");
-            
-            if (dirtyLogs.Any())
+            if ((scope & SyncScope.Habits) != 0)
             {
-                foreach(var d in dirtyLogs) Console.WriteLine($"   -> Dirty Log: {d.Id} ({d.HabitType} - {d.LoggedAt})");
+                // 1. Push Logs
+                var dirtyLogs = await _databaseService.Connection.Table<LocalHabitLog>()
+                                    .Where(l => l.SyncedAt == null && l.UserId == userId)
+                                    .ToListAsync();
 
-                try 
+                Console.WriteLine($"[SyncService] Found {dirtyLogs.Count} dirty logs for User {userId}.");
+                
+                if (dirtyLogs.Any())
                 {
-                    var remoteLogs = new List<HabitLog>();
-                    foreach(var d in dirtyLogs)
-                    {
-                        try { remoteLogs.Add(d.ToDomain()); }
-                        catch { Console.WriteLine($"[SyncService] SKIP Bad Log ID: {d.Id}"); }
-                    }
+                    foreach(var d in dirtyLogs) Console.WriteLine($"   -> Dirty Log: {d.Id} ({d.HabitType} - {d.LoggedAt})");
 
-                    if (remoteLogs.Any())
+                    try 
                     {
-                        Console.WriteLine($"[SyncService] Uploading {remoteLogs.Count} logs to Supabase...");
-                        
-                        // Supabase Bulk Insert/Upsert
-                        var result = await _supabase.From<HabitLog>().Upsert(remoteLogs);
-                        
-                        // Check result if possible (Make sure Supabase client returns the list)
-                        var insertedCount = result.Models.Count;
-                        Console.WriteLine($"[SyncService] Supabase returned {insertedCount} models.");
-
-                        if (insertedCount > 0 || remoteLogs.Count > 0) // Assume success if no exception, but ideally check insertedCount
+                        var remoteLogs = new List<HabitLog>();
+                        foreach(var d in dirtyLogs)
                         {
-                            // Mark local as synced
-                            foreach (var l in dirtyLogs)
+                            try { remoteLogs.Add(d.ToDomain()); }
+                            catch { Console.WriteLine($"[SyncService] SKIP Bad Log ID: {d.Id}"); }
+                        }
+
+                        if (remoteLogs.Any())
+                        {
+                            Console.WriteLine($"[SyncService] Uploading {remoteLogs.Count} logs to Supabase...");
+                            
+                            var result = await _supabase.From<HabitLog>().Upsert(remoteLogs);
+                            var insertedCount = result.Models.Count;
+                            Console.WriteLine($"[SyncService] Supabase returned {insertedCount} models.");
+
+                            if (insertedCount > 0 || remoteLogs.Count > 0)
                             {
-                                l.SyncedAt = DateTime.UtcNow;
-                                await _databaseService.Connection.UpdateAsync(l);
+                                foreach (var l in dirtyLogs)
+                                {
+                                    l.SyncedAt = DateTime.UtcNow;
+                                    await _databaseService.Connection.UpdateAsync(l);
+                                }
+                                Console.WriteLine("[SyncService] Push Logs Success. Marked local as synced.");
                             }
-                            Console.WriteLine("[SyncService] Push Logs Success. Marked local as synced.");
-                        }
-                        else
-                        {
-                             Console.WriteLine("[SyncService] WARNING: Supabase returned 0 models active. RLS might be blocking insert?");
+                            else
+                            {
+                                 Console.WriteLine("[SyncService] WARNING: Supabase returned 0 models active. RLS might be blocking insert?");
+                            }
                         }
                     }
-                }
-                catch(Exception ex)
-                {
-                     Console.WriteLine($"[SyncService] Push Logs FAILED EXCEPTION: {ex.Message}");
-                     Console.WriteLine($"[SyncService] Stack: {ex.StackTrace}");
-                }
-            }
-            else
-            {
-                // Debug: Why 0?
-                var total = await _databaseService.Connection.Table<LocalHabitLog>().CountAsync();
-                var userTotal = await _databaseService.Connection.Table<LocalHabitLog>().Where(l => l.UserId == userId).CountAsync();
-                Console.WriteLine($"[SyncService] DEBUG: Total Logs: {total}, User Logs: {userTotal}, Dirty: 0.");
-            }
-
-            // 2. Push Goals
-             var dirtyGoals = await _databaseService.Connection.Table<LocalHabitGoal>()
-                                .Where(g => g.SyncedAt == null && g.UserId == userId)
-                                .ToListAsync();
-
-            if (dirtyGoals.Any())
-            {
-                Console.WriteLine($"[SyncService] Pushing {dirtyGoals.Count} dirty goals...");
-                try 
-                {
-                    var remoteGoals = new List<HabitGoal>();
-                    foreach(var d in dirtyGoals)
+                    catch(Exception ex)
                     {
-                        try { remoteGoals.Add(d.ToDomain()); }
-                        catch { Console.WriteLine($"[SyncService] SKIP Bad Goal ID: {d.Id}"); }
-                    }
-                    
-                    if (remoteGoals.Any())
-                    {
-                        await _supabase.From<HabitGoal>().Upsert(remoteGoals);
-
-                        foreach (var g in dirtyGoals)
-                        {
-                            g.SyncedAt = DateTime.UtcNow;
-                            await _databaseService.Connection.UpdateAsync(g);
-                        }
-                         Console.WriteLine("[SyncService] Push Goals Success");
+                         Console.WriteLine($"[SyncService] Push Logs FAILED EXCEPTION: {ex.Message}");
+                         Console.WriteLine($"[SyncService] Stack: {ex.StackTrace}");
                     }
                 }
-                 catch(Exception ex)
+
+                // 2. Push Goals
+                var dirtyGoals = await _databaseService.Connection.Table<LocalHabitGoal>()
+                                    .Where(g => g.SyncedAt == null && g.UserId == userId)
+                                    .ToListAsync();
+
+                if (dirtyGoals.Any())
                 {
-                     Console.WriteLine($"[SyncService] Push Goals Failed: {ex.Message}");
+                    Console.WriteLine($"[SyncService] Pushing {dirtyGoals.Count} dirty goals...");
+                    try 
+                    {
+                        var remoteGoals = new List<HabitGoal>();
+                        foreach(var d in dirtyGoals)
+                        {
+                            try { remoteGoals.Add(d.ToDomain()); }
+                            catch { Console.WriteLine($"[SyncService] SKIP Bad Goal ID: {d.Id}"); }
+                        }
+                        
+                        if (remoteGoals.Any())
+                        {
+                            await _supabase.From<HabitGoal>().Upsert(remoteGoals);
+
+                            foreach (var g in dirtyGoals)
+                            {
+                                g.SyncedAt = DateTime.UtcNow;
+                                await _databaseService.Connection.UpdateAsync(g);
+                            }
+                             Console.WriteLine("[SyncService] Push Goals Success");
+                        }
+                    }
+                     catch(Exception ex)
+                    {
+                         Console.WriteLine($"[SyncService] Push Goals Failed: {ex.Message}");
+                    }
                 }
+
+                // 4. Consolidate & Push Summaries (New Protocol)
+                await ConsolidateHistoryAsync(userId); 
+                await PushSummariesAsync(userId);
+
+                // 6. Data Safety / Cost Management: Always check if we can prune old remote logs
+                await PruneRemoteLogsAsync(userId);
             }
 
-            // 3. Push Preferences
-            await PushPreferencesAsync(userId);
+            if ((scope & SyncScope.Preferences) != 0)
+            {
+                // 3. Push Preferences
+                await PushPreferencesAsync(userId);
+            }
             
-            // 4. Push Finances (Accounts & Transactions & Holdings)
-            await PushAccountsAsync(userId);
-            await PushTransactionsAsync(userId);
-            await PushHoldingsAsync(userId);
+            if ((scope & SyncScope.Finances) != 0)
+            {
+                // 4. Push Finances (Accounts & Transactions & Holdings)
+                await PushAccountsAsync(userId);
+                await PushTransactionsAsync(userId);
+                await PushHoldingsAsync(userId);
+            }
 
-            // 4. Consolidate & Push Summaries (New Protocol)
-            await ConsolidateHistoryAsync(userId); 
-            await PushSummariesAsync(userId);
-
-            // 5. Push Saved Articles (Read Later / Favorites)
-            await PushSavedArticlesAsync(userId);
+            if ((scope & SyncScope.SavedArticles) != 0)
+            {
+                // 5. Push Saved Articles (Read Later / Favorites)
+                await PushSavedArticlesAsync(userId);
+            }
             
-            // 6. Push RSS Subscriptions
-            await PushRssSubscriptionsAsync(userId);
-
-            // 6. Data Safety / Cost Management: Always check if we can prune old remote logs
-            await PruneRemoteLogsAsync(userId);
-        }
-
-        public async Task<int> PullAsync()
-        {
-            if (!await _syncSemaphore.WaitAsync(0))
+            if ((scope & SyncScope.RssSubscriptions) != 0)
             {
-                Console.WriteLine("[SyncService] PullAsync: Sync already in progress. Skipping.");
-                return 0;
-            }
-            try
-            {
-                return await PullInternalAsync();
-            }
-            finally
-            {
-                _syncSemaphore.Release();
+                // 6. Push RSS Subscriptions
+                await PushRssSubscriptionsAsync(userId);
             }
         }
 
-        private async Task<int> PullInternalAsync()
+        private async Task<int> PullInternalAsync(SyncScope scope)
         {
-            Console.WriteLine("[SyncService] PullAsync Started");
+            Console.WriteLine($"[SyncService] PullAsync Started with scope: {scope}");
             await _databaseService.InitializeAsync();
-             var userId = _supabase.Auth.CurrentUser?.Id;
+            var userId = _supabase.Auth.CurrentUser?.Id;
             if (userId == null) 
             {
                 Console.WriteLine("[SyncService] Pull Aborted: No User");
@@ -279,16 +347,81 @@ namespace Daily.Services
 
             int totalPulled = 0;
 
-            var lastPullStr = GetPreference("SyncService_LastPullTime", "");
-            DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+            if ((scope & SyncScope.Habits) != 0)
+            {
+                var key = "SyncService_LastPullTime_Habits";
+                var lastPullStr = GetPreference(key, "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
-            // 1. Pull Logs (Paginated to get all ~90 days of history ~2000 items)
+                int pulled = 0;
+                pulled += await PullLogsInternalAsync(userId, lastPull);
+                pulled += await PullGoalsInternalAsync(userId, lastPull);
+                pulled += await PullSummariesInternalAsync(userId, lastPull);
+
+                totalPulled += pulled;
+                SetPreference(key, DateTime.UtcNow.ToString("O"));
+            }
+
+            if ((scope & SyncScope.Preferences) != 0)
+            {
+                var key = "SyncService_LastPullTime_Preferences";
+                var lastPullStr = GetPreference(key, "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
+                int pulled = await PullPreferencesInternalAsync(userId, lastPull);
+                totalPulled += pulled;
+                SetPreference(key, DateTime.UtcNow.ToString("O"));
+            }
+
+            if ((scope & SyncScope.SavedArticles) != 0)
+            {
+                var key = "SyncService_LastPullTime_SavedArticles";
+                var lastPullStr = GetPreference(key, "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
+                int pulled = await PullSavedArticlesInternalAsync(userId, lastPull);
+                totalPulled += pulled;
+                SetPreference(key, DateTime.UtcNow.ToString("O"));
+            }
+
+            if ((scope & SyncScope.RssSubscriptions) != 0)
+            {
+                var key = "SyncService_LastPullTime_RssSubscriptions";
+                var lastPullStr = GetPreference(key, "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
+                int pulled = await PullRssSubscriptionsAsync(userId, lastPull);
+                totalPulled += pulled;
+                SetPreference(key, DateTime.UtcNow.ToString("O"));
+            }
+
+            if ((scope & SyncScope.Finances) != 0)
+            {
+                var key = "SyncService_LastPullTime_Finances";
+                var lastPullStr = GetPreference(key, "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
+                int pulled = 0;
+                pulled += await PullAccountsInternalAsync(userId, lastPull);
+                pulled += await PullTransactionsInternalAsync(userId, lastPull);
+                pulled += await PullHoldingsInternalAsync(userId, lastPull);
+
+                totalPulled += pulled;
+                SetPreference(key, DateTime.UtcNow.ToString("O"));
+            }
+
+            return totalPulled;
+        }
+
+        private async Task<int> PullLogsInternalAsync(string userId, DateTime lastPull)
+        {
             try {
                 Console.Error.WriteLine($"[SyncService] Pulling Logs for User: {userId}...");
                 
                 int rangeStart = 0;
                 int rangeEnd = 999;
                 bool hasMore = true;
+                int totalPulled = 0;
 
                 while(hasMore)
                 {
@@ -297,17 +430,14 @@ namespace Daily.Services
                     var query = _supabase.From<HabitLog>()
                         .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending);
                     
-                    // Always pull the last 14 days of logs to ensure we don't miss anything from iOS
-                    // Because older iOS versions don't set updated_at, making lastPull filter unreliable.
-                    // 14 days is very small (a few KB) and safe for performance.
                     var threshold = DateTime.UtcNow.AddDays(-14);
                     if (lastPull == DateTime.MinValue)
                     {
-                        threshold = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc); // Pull all history on first sync
+                        threshold = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
                     }
                     else if (lastPull < threshold)
                     {
-                        threshold = lastPull; // Pull everything since last sync if it's older than 14 days
+                        threshold = lastPull;
                     }
                     
                     query = query.Filter("created_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, threshold.ToString("O"));
@@ -320,14 +450,12 @@ namespace Daily.Services
                          Console.Error.WriteLine($"[SyncService] Pulled {count} logs (Batch).");
                          totalPulled += count;
 
-                         // Prepare data in memory first
                          var localBatch = response.Models.Select(m => {
                              var l = m.ToLocal();
                              l.SyncedAt = DateTime.UtcNow;
                              return l;
                          }).ToList();
 
-                         // Batch Insert (High Performance)
                          await _databaseService.Connection.RunInTransactionAsync(tran => 
                          {
                              foreach(var item in localBatch)
@@ -336,7 +464,6 @@ namespace Daily.Services
                              }
                          });
 
-                         // Prepare next batch
                          rangeStart += 1000;
                          rangeEnd += 1000;
                     }
@@ -347,19 +474,22 @@ namespace Daily.Services
                     }
                 }
                 Console.Error.WriteLine("[SyncService] Pull Logs Local Save Complete.");
+                return totalPulled;
             } 
-            catch(Exception e) { Console.Error.WriteLine("[SyncService] Pull Logs Error: " + e); }
+            catch(Exception e) { 
+                Console.Error.WriteLine("[SyncService] Pull Logs Error: " + e); 
+                return 0;
+            }
+        }
 
-            // 2. Pull Goals
+        private async Task<int> PullGoalsInternalAsync(string userId, DateTime lastPull)
+        {
             try {
                 Console.WriteLine($"[SyncService] Pulling Goals for User: {userId}...");
                 var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<HabitGoal>)_supabase.From<HabitGoal>();
-                // Always pull all goals since there are very few of them
-                // This ensures we catch any goals created by iOS without updated_at
                 var goalResponse = await query.Get();
 
                 Console.WriteLine($"[SyncService] Pulled {goalResponse.Models.Count} goals from Cloud.");
-                totalPulled += goalResponse.Models.Count;
 
                 foreach (var remote in goalResponse.Models)
                 {
@@ -367,34 +497,13 @@ namespace Daily.Services
                     local.SyncedAt = DateTime.UtcNow;
                     await _databaseService.Connection.InsertOrReplaceAsync(local);
                 }
-                 Console.WriteLine("[SyncService] Pull Goals Local Save Complete.");
+                Console.WriteLine("[SyncService] Pull Goals Local Save Complete.");
+                return goalResponse.Models.Count;
             }
-            catch(Exception e) { Console.WriteLine("[SyncService] Pull Goals Error: " + e); }
-
-            // 3. Pull Preferences
-            totalPulled += await PullPreferencesAsync(userId);
-            
-            // 5. Pull Saved Articles
-            totalPulled += await PullSavedArticlesAsync(userId);
-            
-            // 6. Pull RSS Subscriptions
-            totalPulled += await PullRssSubscriptionsAsync(userId, lastPull);
-            
-            // 4. Pull Finances
-            totalPulled += await PullAccountsAsync(userId);
-            totalPulled += await PullTransactionsAsync(userId);
-            totalPulled += await PullHoldingsAsync(userId);
-
-            // 4. Pull Summaries
-            totalPulled += await PullSummariesAsync(userId);
-
-            if (totalPulled >= 0)
-            {
-                // Using UtcNow as the marker for the NEXT sync
-                SetPreference("SyncService_LastPullTime", DateTime.UtcNow.ToString("O"));
+            catch(Exception e) { 
+                Console.WriteLine("[SyncService] Pull Goals Error: " + e); 
+                return 0;
             }
-
-            return totalPulled;
         }
 
         // Mappers
@@ -600,12 +709,10 @@ namespace Daily.Services
                 LastSyncMessage += "No changes to push. ";
             }
         }
-        private async Task<int> PullPreferencesAsync(string userId)
+        private async Task<int> PullPreferencesInternalAsync(string userId, DateTime lastPull)
         {
              try {
                 Console.WriteLine($"[SyncService] Pulling Preferences for User: {userId}...");
-                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
-                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
                 var query = _supabase.From<UserPreferences>()
                     .Where(x => x.Id == userId); // Valid for string ID
@@ -804,71 +911,68 @@ namespace Daily.Services
             }
         }
 
-        private async Task<int> PullSummariesAsync(string userId)
+        private async Task<int> PullSummariesInternalAsync(string userId, DateTime lastPull)
         {
              try 
              {
-                 // Pagination loop to fetch all summaries (likely > 1000)
-                 int rangeStart = 0;
-                 int rangeEnd = 999;
-                 int totalPulled = 0;
-                 bool hasMore = true;
+                  // Pagination loop to fetch all summaries (likely > 1000)
+                  int rangeStart = 0;
+                  int rangeEnd = 999;
+                  int totalPulled = 0;
+                  bool hasMore = true;
 
-                 while (hasMore)
-                 {
-                     Console.WriteLine($"[SyncService] Pulling Summaries range {rangeStart}-{rangeEnd}...");
-                     
-                     var lastPullStr = GetPreference("SyncService_LastPullTime", "");
-                     DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+                  while (hasMore)
+                  {
+                      Console.WriteLine($"[SyncService] Pulling Summaries range {rangeStart}-{rangeEnd}...");
 
-                     var userGuid = Guid.Parse(userId);
-                     var query = _supabase.From<DailySummary>()
-                        .Where(x => x.UserId == userGuid);
-                     
-                     if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                      var userGuid = Guid.Parse(userId);
+                      var query = _supabase.From<DailySummary>()
+                         .Where(x => x.UserId == userGuid);
+                      
+                      if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
 
-                     var response = await query.Range(rangeStart, rangeEnd).Get();
+                      var response = await query.Range(rangeStart, rangeEnd).Get();
 
-                     var count = response.Models.Count;
-                     if (count > 0)
-                     {
-                         Console.WriteLine($"[SyncService] Pulled {count} summaries (Batch).");
-                         
-                         var localBatch = response.Models.Select(m => {
-                             var l = m.ToLocal();
-                             l.SyncedAt = DateTime.UtcNow;
-                             return l;
-                         }).ToList();
+                      var count = response.Models.Count;
+                      if (count > 0)
+                      {
+                          Console.WriteLine($"[SyncService] Pulled {count} summaries (Batch).");
+                          
+                          var localBatch = response.Models.Select(m => {
+                              var l = m.ToLocal();
+                              l.SyncedAt = DateTime.UtcNow;
+                              return l;
+                          }).ToList();
 
-                         await _databaseService.Connection.RunInTransactionAsync(tran => 
-                         {
-                             foreach(var item in localBatch)
-                             {
-                                 tran.InsertOrReplace(item);
-                             }
-                         });
-                         totalPulled += count;
-                         
-                         // Prepare next batch
-                         rangeStart += 1000;
-                         rangeEnd += 1000;
-                     }
-                     
-                     if (count < 1000)
-                     {
-                         hasMore = false; // Less than full batch means we are done
-                     }
-                 }
-                 
-                 return totalPulled;
+                          await _databaseService.Connection.RunInTransactionAsync(tran => 
+                          {
+                              foreach(var item in localBatch)
+                              {
+                                  tran.InsertOrReplace(item);
+                              }
+                          });
+                          totalPulled += count;
+                          
+                          // Prepare next batch
+                          rangeStart += 1000;
+                          rangeEnd += 1000;
+                      }
+                      
+                      if (count < 1000)
+                      {
+                          hasMore = false; // Less than full batch means we are done
+                      }
+                  }
+                  
+                  return totalPulled;
              }
              catch(Exception ex)
              {
-                 Console.WriteLine($"[SyncService] Pull Summaries Error: {ex.Message}");
+                  Console.WriteLine($"[SyncService] Pull Summaries Error: {ex.Message}");
              }
 
              return 0;
-         }
+        }
 
         // ==========================================
         // Finance Sync Logic
@@ -898,13 +1002,10 @@ namespace Daily.Services
             }
         }
 
-        private async Task<int> PullAccountsAsync(string userId)
+        private async Task<int> PullAccountsInternalAsync(string userId, DateTime lastPull)
         {
             try 
             {
-                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
-                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
-
                 var query = _supabase.From<Account>().Where(a => a.UserId == Guid.Parse(userId));
                 if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
                 
@@ -975,31 +1076,10 @@ namespace Daily.Services
              }
         }
 
-        private async Task<int> PullTransactionsAsync(string userId)
+        private async Task<int> PullTransactionsInternalAsync(string userId, DateTime lastPull)
         {
-            // Pull transactions for all accounts belonging to user.
-            // Supabase: Join? Or fetching all transactions for user?
-            // Transaction has AccountId. User has Accounts.
-            // RLS usually handles: "Select * from transactions" returns only mine (via account ownership).
-            // If RLS is set up correctly (auth.uid() = account.user_id), we can just Select *.
-            // But we can't select * from transactions without filter? 
-            // Usually we filter by account_id.
-            
-            // Let's rely on embedded resource or fetch accounts then transactions.
-            // Simplest: Fetch Accounts (we have them), then fetch transactions for those accounts.
-            // Or use RLS. Let's try fetching all Transactions (assuming RLS restricts).
-            // NOTE: If RLS requires a join that PostgREST doesn't automaticlly allow without embedding...
-            // User provided schema: 
-            // create policy "Users can view their own transactions" on transactions for select using (
-            //   exists ( select 1 from accounts where accounts.id = transactions.account_id and accounts.user_id = auth.uid() )
-            // );
-            // So YES, RLS works. calling .Get() on Transactions should return all user transactions.
-            
             try 
             {
-                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
-                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
-
                 // Range logic for transactions if many?
                 var query = _supabase.From<Transaction>().Order("date", Supabase.Postgrest.Constants.Ordering.Descending);
                 if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
@@ -1059,13 +1139,10 @@ namespace Daily.Services
              }
         }
 
-        private async Task<int> PullHoldingsAsync(string userId)
+        private async Task<int> PullHoldingsInternalAsync(string userId, DateTime lastPull)
         {
             try 
             {
-                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
-                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
-
                 var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<Holding>)_supabase.From<Holding>(); // RLS handles userid via account join
                 if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
 
@@ -1190,13 +1267,11 @@ namespace Daily.Services
             }
         }
 
-        private async Task<int> PullSavedArticlesAsync(string userId)
+        private async Task<int> PullSavedArticlesInternalAsync(string userId, DateTime lastPull)
         {
             try
             {
                 Console.WriteLine($"[SyncService] Pulling Saved Articles for User: {userId}...");
-                var lastPullStr = GetPreference("SyncService_LastPullTime", "");
-                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
                 var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<SavedArticle>)_supabase.From<SavedArticle>();
                 if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));

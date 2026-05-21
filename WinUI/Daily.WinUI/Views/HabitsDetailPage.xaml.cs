@@ -341,7 +341,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     public async Task RefreshFromTitleBarAsync()
     {
-        await _syncService.SyncAsync();
+        await _syncService.SyncAsync(SyncScope.Habits);
         await LoadDataSafeAsync();
     }
 
