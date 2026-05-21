@@ -30,6 +30,19 @@ public sealed partial class DetailWindow : Window
         this.Closed += DetailWindow_Closed;
 
         UpdateSectionTitleBar("Detail");
+
+        if (this.Content is UIElement rootContent)
+        {
+            rootContent.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPointerPressed), true);
+        }
+    }
+
+    private void OnPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (this.Content is UIElement root)
+        {
+            Daily_WinUI.Helpers.NavigationHelper.HandleMouseNavigation(root, e);
+        }
     }
 
     /// <summary>

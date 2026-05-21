@@ -16,6 +16,7 @@ public sealed partial class RssFeedWidgetControl : UserControl
 {
     private readonly Daily.Services.IRssFeedService _rssService;
     private ObservableCollection<RssItem> _widgetArticles = new();
+    private bool _isSelectingProgrammatically;
 
     public event EventHandler<RssItem>? ArticleTapped;
     public event EventHandler? WidgetTapped;
@@ -32,15 +33,26 @@ public sealed partial class RssFeedWidgetControl : UserControl
 
     private async void RssFeedWidgetControl_Loaded(object sender, RoutedEventArgs e)
     {
-        FeedComboBox.ItemsSource = _rssService.Feeds;
+        _isSelectingProgrammatically = true;
+        try
+        {
+            FeedComboBox.ItemsSource = _rssService.Feeds;
+            if (_rssService.CurrentFeed != null)
+            {
+                var feed = _rssService.Feeds.FirstOrDefault(f => f.Url == _rssService.CurrentFeed.Url);
+                if (feed != null)
+                {
+                    FeedComboBox.SelectedItem = feed;
+                }
+            }
+        }
+        finally
+        {
+            _isSelectingProgrammatically = false;
+        }
         
         _rssService.OnFeedChanged += RssService_OnFeedChanged;
         _rssService.OnItemsUpdated += RssService_OnItemsUpdated;
-        
-        if (_rssService.CurrentFeed != null)
-        {
-            FeedComboBox.SelectedItem = _rssService.CurrentFeed;
-        }
         UpdateWidgetArticles();
         
         // Auto-load articles if a feed is selected but items haven't been fetched yet.
@@ -72,13 +84,30 @@ public sealed partial class RssFeedWidgetControl : UserControl
     {
         try
         {
-            if (FeedComboBox.ItemsSource != _rssService.Feeds)
+            _isSelectingProgrammatically = true;
+            try
             {
-                FeedComboBox.ItemsSource = _rssService.Feeds;
+                if (FeedComboBox.ItemsSource != _rssService.Feeds)
+                {
+                    FeedComboBox.ItemsSource = null;
+                    FeedComboBox.ItemsSource = _rssService.Feeds;
+                }
+                if (_rssService.CurrentFeed != null)
+                {
+                    var feed = _rssService.Feeds.FirstOrDefault(f => f.Url == _rssService.CurrentFeed.Url);
+                    if (FeedComboBox.SelectedItem != feed)
+                    {
+                        FeedComboBox.SelectedItem = feed;
+                    }
+                }
+                else
+                {
+                    FeedComboBox.SelectedItem = null;
+                }
             }
-            if (FeedComboBox.SelectedItem != _rssService.CurrentFeed)
+            finally
             {
-                FeedComboBox.SelectedItem = _rssService.CurrentFeed;
+                _isSelectingProgrammatically = false;
             }
 
             // Auto-load: InitializeAsync seeds feeds AFTER the widget is already loaded,
@@ -126,6 +155,8 @@ public sealed partial class RssFeedWidgetControl : UserControl
 
     private async void FeedComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_isSelectingProgrammatically) return;
+
         if (FeedComboBox.SelectedItem is FeedSource selectedFeed)
         {
             // Only trigger a new load if the feed actually changed (compare by Url to avoid object reference false positives)

@@ -21,6 +21,7 @@ public sealed partial class RssFeedDetailPage : Page
     private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _favoriteArticles = new();
     private RssItem? _selectedItem;
     private RssItem? _currentRenderedArticle;
+    private bool _isSelectingProgrammatically;
 
     public RssFeedDetailPage()
     {
@@ -59,23 +60,39 @@ public sealed partial class RssFeedDetailPage : Page
 
         if (FeedComboBox.ItemsSource == null)
         {
-            FeedComboBox.ItemsSource = _rssService.Feeds;
-            if (_selectedItem != null)
+            _isSelectingProgrammatically = true;
+            try
             {
-                // Pre-select the feed that matches the item, if possible
-                var feed = _rssService.Feeds.FirstOrDefault(f => f.Name == _selectedItem.PublicationName);
-                if (feed != null)
+                FeedComboBox.ItemsSource = _rssService.Feeds;
+                if (_selectedItem != null)
                 {
-                    FeedComboBox.SelectedItem = feed;
+                    // Pre-select the feed that matches the item, if possible
+                    var feed = _rssService.Feeds.FirstOrDefault(f => f.Name == _selectedItem.PublicationName);
+                    if (feed != null)
+                    {
+                        FeedComboBox.SelectedItem = feed;
+                    }
+                }
+                else if (_rssService.CurrentFeed != null)
+                {
+                    var feed = _rssService.Feeds.FirstOrDefault(f => f.Url == _rssService.CurrentFeed.Url);
+                    if (feed != null)
+                    {
+                        FeedComboBox.SelectedItem = feed;
+                    }
+                    else
+                    {
+                        FeedComboBox.SelectedItem = _rssService.CurrentFeed;
+                    }
+                }
+                else if (_rssService.Feeds.Any())
+                {
+                    FeedComboBox.SelectedIndex = 0;
                 }
             }
-            else if (_rssService.CurrentFeed != null)
+            finally
             {
-                FeedComboBox.SelectedItem = _rssService.CurrentFeed;
-            }
-            else if (_rssService.Feeds.Any())
-            {
-                FeedComboBox.SelectedIndex = 0;
+                _isSelectingProgrammatically = false;
             }
         }
         
@@ -105,13 +122,30 @@ public sealed partial class RssFeedDetailPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (FeedComboBox.ItemsSource != _rssService.Feeds)
+            _isSelectingProgrammatically = true;
+            try
             {
-                FeedComboBox.ItemsSource = _rssService.Feeds;
+                if (FeedComboBox.ItemsSource != _rssService.Feeds)
+                {
+                    FeedComboBox.ItemsSource = null;
+                    FeedComboBox.ItemsSource = _rssService.Feeds;
+                }
+                if (_rssService.CurrentFeed != null)
+                {
+                    var feed = _rssService.Feeds.FirstOrDefault(f => f.Url == _rssService.CurrentFeed.Url);
+                    if (FeedComboBox.SelectedItem != feed)
+                    {
+                        FeedComboBox.SelectedItem = feed;
+                    }
+                }
+                else
+                {
+                    FeedComboBox.SelectedItem = null;
+                }
             }
-            if (FeedComboBox.SelectedItem != _rssService.CurrentFeed)
+            finally
             {
-                FeedComboBox.SelectedItem = _rssService.CurrentFeed;
+                _isSelectingProgrammatically = false;
             }
         });
     }
@@ -177,9 +211,11 @@ public sealed partial class RssFeedDetailPage : Page
 
     private async void FeedComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_isSelectingProgrammatically) return;
+
         if (FeedComboBox.SelectedItem is FeedSource selectedFeed && _selectedItem == null)
         {
-            if (selectedFeed != _rssService.CurrentFeed)
+            if (_rssService.CurrentFeed == null || selectedFeed.Url != _rssService.CurrentFeed.Url)
             {
                 LoadingPanel.Visibility = Visibility.Visible;
                 ArticlesListView.Visibility = Visibility.Collapsed;
@@ -187,6 +223,25 @@ public sealed partial class RssFeedDetailPage : Page
                 await _rssService.LoadFeedAsync(selectedFeed);
             }
         }
+    }
+
+    internal bool TryGoBack()
+    {
+        if (ReaderViewContainer.Visibility == Visibility.Visible)
+        {
+            _selectedItem = null;
+            _currentRenderedArticle = null;
+            ReaderViewContainer.Visibility = Visibility.Collapsed;
+            ListViewContainer.Visibility = Visibility.Visible;
+            
+            // If we don't have articles loaded (e.g., navigated directly to an article from widget), load the selected feed
+            if (_articles.Count == 0 && FeedComboBox.SelectedItem is FeedSource feed)
+            {
+                _ = _rssService.LoadFeedAsync(feed);
+            }
+            return true;
+        }
+        return false;
     }
 
     private async void ArticlesListView_ItemClick(object sender, ItemClickEventArgs e)

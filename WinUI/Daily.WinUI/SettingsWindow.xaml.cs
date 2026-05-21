@@ -27,6 +27,19 @@ public sealed partial class SettingsWindow : Window
 
         RestorePosition();
         NavigateTo(typeof(Views.SettingsPage));
+
+        if (this.Content is UIElement rootContent)
+        {
+            rootContent.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPointerPressed), true);
+        }
+    }
+
+    private void OnPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (this.Content is UIElement root)
+        {
+            Daily_WinUI.Helpers.NavigationHelper.HandleMouseNavigation(root, e);
+        }
     }
 
     private void RestorePosition()
