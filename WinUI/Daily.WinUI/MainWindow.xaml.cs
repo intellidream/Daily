@@ -5,6 +5,9 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Daily_WinUI.Services;
 using Windows.Graphics;
 using System.Runtime.InteropServices;
+using System.IO;
+using System.Diagnostics;
+using H.NotifyIcon;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -15,6 +18,8 @@ public sealed partial class MainWindow : Window
 {
     private readonly AppSettings _settings;
     private DispatcherTimer? _dateTimer;
+    private Windows.UI.ViewManagement.UISettings? _uiSettings;
+    private bool _isExiting = false;
 
     public MainWindow()
     {
@@ -34,6 +39,10 @@ public sealed partial class MainWindow : Window
 
         AppWindow.Changed += AppWindow_Changed;
         Closed += MainWindow_Closed;
+        AppWindow.Closing += AppWindow_Closing;
+
+        InitializeTaskbarIcon();
+        SetupThemeWatcher();
     }
 
     // ── Title bar user state ──────────────────────────────────────────────────
@@ -86,7 +95,7 @@ public sealed partial class MainWindow : Window
             mainPage.TriggerRefresh();
     }
 
-    private void TitleBarTheme_Click(object sender, RoutedEventArgs e)
+    internal void TitleBarTheme_Click(object sender, RoutedEventArgs e)
     {
         if (RootFrame.Content is MainPage mainPage)
             mainPage.ApplyThemeToggle();
@@ -211,9 +220,191 @@ public sealed partial class MainWindow : Window
             RightPaddingColumn.Width = new GridLength(AppWindow.TitleBar.RightInset / scale);
     }
 
+    private void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_isExiting)
+        {
+            return;
+        }
+
+        var settings = SettingsService.Load();
+        if (settings.CloseToTray)
+        {
+            args.Cancel = true;
+            sender.Hide();
+        }
+    }
+
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         _dateTimer?.Stop();
         SettingsService.Save(_settings);
+        TrayIcon?.Dispose();
+    }
+
+    private void LogTray(string message)
+    {
+        string logLine = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}";
+        System.Diagnostics.Debug.WriteLine(message);
+        try
+        {
+            string path = System.IO.Path.Combine(System.AppContext.BaseDirectory, "tray_icon_debug.log");
+            System.IO.File.AppendAllText(path, logLine);
+        }
+        catch { }
+    }
+
+    private void InitializeTaskbarIcon()
+    {
+        LogTray("[TrayIcon] Initializing TaskbarIcon...");
+        try
+        {
+            if (TrayIcon != null)
+            {
+                TrayIcon.ContextMenuMode = H.NotifyIcon.ContextMenuMode.SecondWindow;
+                TrayIcon.MenuActivation = H.NotifyIcon.Core.PopupActivationMode.LeftOrRightClick;
+                TrayIcon.DoubleClickCommand = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] DoubleClickCommand invoked.");
+                    ShowAndActivate();
+                });
+                UpdateTrayIcon();
+                LogTray("[TrayIcon] TaskbarIcon properties set and initialized successfully.");
+            }
+            else
+            {
+                LogTray("[TrayIcon] ERROR: TrayIcon is null in InitializeTaskbarIcon.");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogTray($"[TrayIcon] ERROR initializing TaskbarIcon: {ex}");
+        }
+    }
+
+    private void TrayShow_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayShow_Click invoked.");
+        ShowAndActivate();
+    }
+
+    private void TrayExit_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayExit_Click invoked.");
+        ExitApp();
+    }
+
+    private void SetupThemeWatcher()
+    {
+        try
+        {
+            _uiSettings = new Windows.UI.ViewManagement.UISettings();
+            _uiSettings.ColorValuesChanged += (sender, args) =>
+            {
+                LogTray("[TrayIcon] System theme color values changed.");
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    UpdateTrayIcon();
+                });
+            };
+        }
+        catch (Exception ex)
+        {
+            LogTray($"[TrayIcon] ERROR setting up theme watcher: {ex}");
+        }
+    }
+
+    private void UpdateTrayIcon()
+    {
+        if (TrayIcon == null)
+        {
+            LogTray("[TrayIcon] UpdateTrayIcon called but TrayIcon is null.");
+            return;
+        }
+
+        bool isLightTheme = IsSystemUsesLightTheme();
+        string relativePath = isLightTheme 
+            ? "Assets/TrayIconLightTheme.ico" 
+            : "Assets/TrayIconDarkTheme.ico";
+        
+        try
+        {
+            string absolutePath = System.IO.Path.Combine(System.AppContext.BaseDirectory, relativePath);
+            LogTray($"[TrayIcon] Setting Icon using path: {absolutePath}");
+            if (System.IO.File.Exists(absolutePath))
+            {
+                var oldIcon = TrayIcon.Icon;
+                TrayIcon.Icon = new System.Drawing.Icon(absolutePath);
+                oldIcon?.Dispose();
+                LogTray("[TrayIcon] Successfully loaded and set system tray Icon using System.Drawing.Icon.");
+            }
+            else
+            {
+                LogTray($"[TrayIcon] WARNING: File does not exist at {absolutePath}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogTray($"[TrayIcon] Exception setting Icon: {ex}");
+        }
+    }
+
+
+
+    private bool IsSystemUsesLightTheme()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            var value = key?.GetValue("SystemUsesLightTheme");
+            return value is int i && i == 1;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    public void ShowAndActivate()
+    {
+        AppWindow.Show();
+        this.Activate();
+
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        if (hwnd != IntPtr.Zero)
+        {
+            ShowWindow(hwnd, 9); // SW_RESTORE
+            SetForegroundWindow(hwnd);
+        }
+    }
+
+    private void ExitApp()
+    {
+        _isExiting = true;
+        this.Close();
+    }
+
+    private class RelayCommand : System.Windows.Input.ICommand
+    {
+        private readonly Action _execute;
+
+        public RelayCommand(Action execute)
+        {
+            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+        }
+
+        public bool CanExecute(object? parameter) => true;
+
+        public void Execute(object? parameter) => _execute();
+
+        public event EventHandler? CanExecuteChanged;
     }
 }
+

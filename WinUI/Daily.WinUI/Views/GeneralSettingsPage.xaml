@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Daily_WinUI.Views.GeneralSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Background="Transparent"
+    mc:Ignorable="d">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,32">
+        <StackPanel MaxWidth="600" HorizontalAlignment="Left" Spacing="24">
+            
+            <TextBlock Text="Appearance" FontSize="26" FontWeight="SemiBold" CharacterSpacing="20" Margin="0,0,0,8"/>
+            
+            <!-- Divider -->
+            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+            <!-- Close to Tray card -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="Minimize to System Tray" FontWeight="SemiBold" FontSize="14" />
+                        <TextBlock Text="When closing the main window, keep the app running in the system tray." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                    </StackPanel>
+                    
+                    <ToggleSwitch Grid.Column="1" x:Name="CloseToTraySwitch" IsOn="False" Toggled="CloseToTraySwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                </Grid>
+            </Border>
+
+            <!-- Theme Settings card (Bonus convenience) -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="Application Theme" FontWeight="SemiBold" FontSize="14" />
+                        <TextBlock Text="Toggle between light and dark visual aesthetics." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                    </StackPanel>
+                    
+                    <Button Grid.Column="1" Content="Toggle Theme" Click="ToggleThemeButton_Click" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                </Grid>
+            </Border>
+            
+        </StackPanel>
+    </ScrollViewer>
+</Page>

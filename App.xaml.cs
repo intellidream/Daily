@@ -177,6 +177,8 @@ namespace Daily
                             var id = Win32Interop.GetWindowIdFromWindow(handle);
                             var appWindow = AppWindow.GetFromWindowId(id);
                             appWindow.Show();
+                            ShowWindow(handle, SW_RESTORE);
+                            SetForegroundWindow(handle);
                         }
                         #endif
                     });
@@ -461,6 +463,15 @@ namespace Daily
         #if WINDOWS
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        private const int SW_RESTORE = 9;
 
         private void ConfigureWindowsWindow(Window window)
         {

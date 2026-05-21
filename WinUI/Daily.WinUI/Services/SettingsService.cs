@@ -32,6 +32,7 @@ public sealed class AppSettings
     public int WindowWidth { get; set; }
     public int WindowHeight { get; set; }
     public bool HasWindowPosition { get; set; }
+    public bool CloseToTray { get; set; } = false;
     /// <summary>Saved position per detail page type name (e.g. "WeatherDetailPage").</summary>
     public Dictionary<string, DetailWindowPosition> DetailWindowPositions { get; set; } = new();
 }

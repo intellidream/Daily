@@ -21,12 +21,30 @@ namespace Daily.Platforms.Windows
                 menu.Add(showItem);
                 menu.Add(exitItem);
 
+                string absolutePath = System.IO.Path.Combine(System.AppContext.BaseDirectory, "appicon_windows.ico");
+
                 _trayIcon = new TaskbarIcon
                 {
-                    IconSource = "appicon_windows.ico",
                     ToolTipText = "Daily",
-                    LeftClickCommand = new Command(() => ClickHandler?.Invoke())
+                    LeftClickCommand = new Command(() => ClickHandler?.Invoke()),
+                    DoubleClickCommand = new Command(() => ClickHandler?.Invoke())
                 };
+
+                if (System.IO.File.Exists(absolutePath))
+                {
+                    try
+                    {
+                        _trayIcon.Icon = new System.Drawing.Icon(absolutePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[WindowsTrayService] Failed to load icon natively: {ex}");
+                    }
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[WindowsTrayService] Icon file not found at: {absolutePath}");
+                }
 
                 FlyoutBase.SetContextFlyout(_trayIcon, menu);
 

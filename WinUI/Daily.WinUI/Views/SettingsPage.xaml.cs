@@ -9,7 +9,7 @@ public sealed partial class SettingsPage : Page
     {
         { "DayOne",        typeof(AboutPage) },
         // Stub placeholders — replace with real pages when built
-        { "Appearance",    typeof(AboutPage) },
+        { "Appearance",    typeof(GeneralSettingsPage) },
         { "Notifications", typeof(AboutPage) },
         { "Account",       typeof(AboutPage) },
         { "Data",          typeof(AboutPage) },

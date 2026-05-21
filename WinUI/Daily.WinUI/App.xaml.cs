@@ -44,30 +44,29 @@ public partial class App : Application
                 uriToForward = proto?.Uri?.ToString();
             }
 
-            if (!string.IsNullOrEmpty(uriToForward))
+            string message = !string.IsNullOrEmpty(uriToForward) ? uriToForward : "show";
+            try
             {
-                try
-                {
-                    using var client = new System.IO.Pipes.NamedPipeClientStream(".", PipeName,
-                        System.IO.Pipes.PipeDirection.Out);
-                    client.Connect(2000); // 2 second timeout
-                    using var writer = new System.IO.StreamWriter(client);
-                    writer.WriteLine(uriToForward);
-                    writer.Flush();
-                }
-                catch { /* running instance not listening yet — give up gracefully */ }
+                using var client = new System.IO.Pipes.NamedPipeClientStream(".", PipeName,
+                    System.IO.Pipes.PipeDirection.Out);
+                client.Connect(2000); // 2 second timeout
+                using var writer = new System.IO.StreamWriter(client);
+                writer.WriteLine(message);
+                writer.Flush();
             }
-
-            // Bring the running window to front
-            var existing = System.Diagnostics.Process.GetProcessesByName(
-                System.IO.Path.GetFileNameWithoutExtension(System.Environment.ProcessPath ?? "Daily.WinUI"));
-            foreach (var p in existing)
+            catch
             {
-                if (p.Id != System.Diagnostics.Process.GetCurrentProcess().Id && p.MainWindowHandle != IntPtr.Zero)
+                // Bring the running window to front
+                var existing = System.Diagnostics.Process.GetProcessesByName(
+                    System.IO.Path.GetFileNameWithoutExtension(System.Environment.ProcessPath ?? "Daily.WinUI"));
+                foreach (var p in existing)
                 {
-                    ShowWindow(p.MainWindowHandle, 9); // SW_RESTORE
-                    SetForegroundWindow(p.MainWindowHandle);
-                    break;
+                    if (p.Id != System.Diagnostics.Process.GetCurrentProcess().Id && p.MainWindowHandle != IntPtr.Zero)
+                    {
+                        ShowWindow(p.MainWindowHandle, 9); // SW_RESTORE
+                        SetForegroundWindow(p.MainWindowHandle);
+                        break;
+                    }
                 }
             }
             return;
@@ -94,10 +93,25 @@ public partial class App : Application
                     server.WaitForConnection();
                     using var reader = new System.IO.StreamReader(server);
                     var line = reader.ReadLine();
-                    if (!string.IsNullOrEmpty(line) && Uri.TryCreate(line, UriKind.Absolute, out var uri))
+                    if (!string.IsNullOrEmpty(line))
                     {
-                        System.Diagnostics.Debug.WriteLine($"[Pipe] Received URI: {uri}");
-                        HandleProtocolUri(uri);
+                        if (line.Equals("show", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received show command");
+                            var app = App.Current;
+                            if (app?.MainWindow != null)
+                            {
+                                app.MainWindow.DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    app.MainWindow.ShowAndActivate();
+                                });
+                            }
+                        }
+                        else if (Uri.TryCreate(line, UriKind.Absolute, out var uri))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Pipe] Received URI: {uri}");
+                            HandleProtocolUri(uri);
+                        }
                     }
                 }
                 catch { /* pipe error — restart listener */ }
@@ -281,11 +295,13 @@ public partial class App : Application
         }
 
         // Bring main window to front
-        var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
-        if (handle != IntPtr.Zero)
+        var app = App.Current;
+        if (app?.MainWindow != null)
         {
-            ShowWindow(handle, 9);
-            SetForegroundWindow(handle);
+            app.MainWindow.DispatcherQueue.TryEnqueue(() =>
+            {
+                app.MainWindow.ShowAndActivate();
+            });
         }
     }
 
@@ -344,11 +360,13 @@ public partial class App : Application
                 }
 
                 // Bring window to front
-                var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
-                if (handle != IntPtr.Zero)
+                var app = App.Current;
+                if (app?.MainWindow != null)
                 {
-                    ShowWindow(handle, 9); // SW_RESTORE
-                    SetForegroundWindow(handle);
+                    app.MainWindow.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        app.MainWindow.ShowAndActivate();
+                    });
                 }
             }
         }
