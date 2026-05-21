@@ -9,6 +9,9 @@ namespace Daily.Services.Auth
         private const string SessionKey = "supabase.session";
         private readonly Daily.Services.DebugLogger? _logger;
         private readonly Daily.Services.IWatchConnectivityService? _watchConnectivityService;
+        
+        // In-memory cache to avoid recursive LoadSession→SaveSession deadlocks on iOS
+        private Session? _cachedSession;
 
         public MauiSessionPersistence(Daily.Services.DebugLogger? logger = null, Daily.Services.IWatchConnectivityService? watchConnectivityService = null)
         {
@@ -31,21 +34,21 @@ namespace Daily.Services.Auth
                 #endif
                 
                 // CRITICAL FIX: Preserve Provider Tokens if missing (Token Loss Prevention)
-                if (string.IsNullOrEmpty(session.ProviderToken))
+                // Use in-memory cache to avoid recursive LoadSession() call that double-blocks on iOS Keychain
+                if (string.IsNullOrEmpty(session.ProviderToken) && _cachedSession != null)
                 {
-                     var stored = LoadSession();
-                     if (stored != null)
-                     {
-                         if (!string.IsNullOrEmpty(stored.ProviderToken)) 
-                         {
-                             session.ProviderToken = stored.ProviderToken;
-                         }
-                         if (!string.IsNullOrEmpty(stored.ProviderRefreshToken))
-                         {
-                             session.ProviderRefreshToken = stored.ProviderRefreshToken;
-                         }
-                     }
+                    if (!string.IsNullOrEmpty(_cachedSession.ProviderToken)) 
+                    {
+                        session.ProviderToken = _cachedSession.ProviderToken;
+                    }
+                    if (!string.IsNullOrEmpty(_cachedSession.ProviderRefreshToken))
+                    {
+                        session.ProviderRefreshToken = _cachedSession.ProviderRefreshToken;
+                    }
                 }
+                
+                // Update cache
+                _cachedSession = session;
 
                 #if WINDOWS
                 Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] Serializing Session...");
@@ -62,8 +65,10 @@ namespace Daily.Services.Auth
                     Daily.WinUI.AuthDebug.Log($"[MauiSessionPersistence] Offloading SecureStorage to Task.Run to avoid UI Deadlock...");
                     #endif
                     
-                    // DEADLOCK FIX: Wrap in Task.Run to avoid capturing UI SynchronizationContext
-                    Task.Run(async () => await SecureStorage.SetAsync(SessionKey, json)).GetAwaiter().GetResult();
+                    // DEADLOCK FIX: Wrap in Task.Run + timeout to prevent permanent blocking on iOS
+                    Task.Run(async () => await SecureStorage.SetAsync(SessionKey, json))
+                        .WaitAsync(TimeSpan.FromSeconds(5))
+                        .GetAwaiter().GetResult();
                     
                     Log($"[MauiSessionPersistence] Session Saved via SecureStorage.");
                     #if WINDOWS
@@ -135,8 +140,10 @@ namespace Daily.Services.Auth
                 // Try SecureStorage First
                 try
                 {
-                    // DEADLOCK FIX: Wrap in Task.Run
-                    json = Task.Run(async () => await SecureStorage.GetAsync(SessionKey)).GetAwaiter().GetResult();
+                    // DEADLOCK FIX: Wrap in Task.Run + timeout
+                    json = Task.Run(async () => await SecureStorage.GetAsync(SessionKey))
+                        .WaitAsync(TimeSpan.FromSeconds(5))
+                        .GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
@@ -162,6 +169,9 @@ namespace Daily.Services.Auth
                     var session = JsonConvert.DeserializeObject<Session>(json);
                     if (session != null)
                     {
+                        // Update in-memory cache
+                        _cachedSession = session;
+                        
                         // IMPORTANT: Sync loaded session to Apple Watch proactively on app startup
                         _watchConnectivityService?.SendSupabaseSession(session.AccessToken ?? "", session.RefreshToken ?? "");
                     }

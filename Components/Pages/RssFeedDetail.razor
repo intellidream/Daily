@@ -353,7 +353,7 @@
             Application.Current.RequestedThemeChanged += OnThemeChanged;
         }
 
-        RssService.OnItemsUpdated += StateHasChanged;
+        RssService.OnItemsUpdated += AsyncStateHasChanged;
         RssService.OnFeedChanged += OnFeedChanged;
         ArticleService.OnItemsChanged += OnArticleItemsChanged;
         NavService.OnArticleLinkChanged += OnArticleLinkChanged;
@@ -391,7 +391,7 @@
         {
             Application.Current.RequestedThemeChanged -= OnThemeChanged;
         }
-        RssService.OnItemsUpdated -= StateHasChanged;
+        RssService.OnItemsUpdated -= AsyncStateHasChanged;
         RssService.OnFeedChanged -= OnFeedChanged;
         ArticleService.OnItemsChanged -= OnArticleItemsChanged;
         NavService.OnArticleLinkChanged -= OnArticleLinkChanged;
@@ -401,6 +401,8 @@
         _backButtonService.Unregister(OnBackNative);
     }
 
+    private void AsyncStateHasChanged() => InvokeAsync(StateHasChanged);
+
     private void OnArticleItemsChanged()
     {
         InvokeAsync(StateHasChanged);
@@ -408,8 +410,11 @@
     
     private void OnFeedChanged()
     {
-        _currentPage = 1;
-        StateHasChanged();
+        InvokeAsync(() =>
+        {
+            _currentPage = 1;
+            StateHasChanged();
+        });
     }
     
     private void OnPageChanged(int page)
@@ -420,30 +425,33 @@
     
     private void OnBrowserStateChanged(bool isOpen)
     {
-        StateHasChanged();
+        InvokeAsync(StateHasChanged);
     }
 
     private void OnReaderModeChanged(bool isEnabled)
     {
-        StateHasChanged();
+        InvokeAsync(StateHasChanged);
     }
 
     private async Task OnDetailRefresh()
     {
-        await RssService.ReloadCurrentFeedAsync();
+        await InvokeAsync(async () => await RssService.ReloadCurrentFeedAsync());
     }
 
     private void OnArticleLinkChanged()
     {
         // If the service says no article is open, but we have one open, close it.
         // This handles the "Back" button in the DetailPane header.
-        if (NavService.CurrentArticleLink == null && _selectedItem != null)
+        InvokeAsync(() =>
         {
-            _selectedItem = null;
-            _isArticleLoading = false;
-            _backButtonService.Unregister(OnBackNative);
-            StateHasChanged();
-        }
+            if (NavService.CurrentArticleLink == null && _selectedItem != null)
+            {
+                _selectedItem = null;
+                _isArticleLoading = false;
+                _backButtonService.Unregister(OnBackNative);
+                StateHasChanged();
+            }
+        });
     }
 
     private async Task OpenItem(RssItem item)

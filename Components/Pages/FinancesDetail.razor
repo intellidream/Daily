@@ -403,7 +403,7 @@
     
     private void OnViewTypeChanged()
     {
-        StateHasChanged();
+        InvokeAsync(StateHasChanged);
     }
     
     // Handle Market Switching
@@ -415,8 +415,11 @@
     
     private async Task RefreshData()
     {
-        await LoadData();
-        await InvokeAsync(StateHasChanged);
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        });
     }
     
     private async Task LoadData()

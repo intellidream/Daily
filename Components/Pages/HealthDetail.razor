@@ -578,8 +578,11 @@
     
     private void UpdateLog()
     {
-        _debugLog = SyncService.DebugLog;
-        InvokeAsync(StateHasChanged);
+        InvokeAsync(() =>
+        {
+            _debugLog = SyncService.DebugLog;
+            StateHasChanged();
+        });
     }
     
     private async Task ManualSync()

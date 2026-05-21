@@ -342,12 +342,15 @@
 
     private void OnViewTypeChanged()
     {
-        var newIndex = HabitsService.CurrentViewType == "water" ? 0 : 1;
-        if (_currentSlide != newIndex)
+        InvokeAsync(() =>
         {
-            _currentSlide = newIndex;
-            StateHasChanged();
-        }
+            var newIndex = HabitsService.CurrentViewType == "water" ? 0 : 1;
+            if (_currentSlide != newIndex)
+            {
+                _currentSlide = newIndex;
+                StateHasChanged();
+            }
+        });
     }
 
     private async Task AddSmoke()
@@ -363,14 +366,20 @@
         WindowManager.OpenDetail("Settings", "Settings"); 
     }
 
-    private async void RefreshDataVoid() => await RefreshDataAsync();
+    private void RefreshDataVoid()
+    {
+        _ = InvokeAsync(async () => await RefreshDataAsync());
+    }
 
     private async Task RefreshDataAsync()
     {
         try
         {
-            await LoadData();
-            await InvokeAsync(StateHasChanged);
+            await InvokeAsync(async () =>
+            {
+                await LoadData();
+                StateHasChanged();
+            });
         }
         catch (Exception ex)
         {

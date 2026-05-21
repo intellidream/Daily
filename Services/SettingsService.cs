@@ -1,6 +1,7 @@
 using Daily.Models;
 using Supabase.Postgrest;
 using Supabase.Realtime;
+using System.Threading;
 
 namespace Daily.Services
 {
@@ -12,6 +13,7 @@ namespace Daily.Services
         private Supabase.Realtime.RealtimeChannel? _preferencesChannel;
         private UserPreferences _currentSettings = new UserPreferences();
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
+        private CancellationTokenSource? _reconnectCts;
         
         public UserPreferences Settings => _currentSettings;
         public bool IsAuthenticated => _supabase.Auth.CurrentSession != null;
@@ -74,19 +76,28 @@ namespace Daily.Services
                      }
                  });
 
-                // Listen for Socket State Changes to Auto-Reconnect Channels
                 _supabase.Realtime.AddStateChangedHandler((sender, state) =>
                 {
                     Console.WriteLine($"[SettingsService] Realtime Socket State Changed: {state}");
                     if (state == Supabase.Realtime.Constants.SocketState.Open)
                     {
-                        Console.WriteLine("[SettingsService] Realtime Socket opened/reconnected. Triggering SetupRealtimeAsync...");
-                        Task.Run(async () => await SetupRealtimeAsync());
+                        Console.WriteLine("[SettingsService] Realtime Socket opened/reconnected. Triggering debounced SetupRealtimeAsync...");
+                        _reconnectCts?.Cancel();
+                        _reconnectCts = new CancellationTokenSource();
+                        var token = _reconnectCts.Token;
+                        Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await Task.Delay(1000, token);
+                                if (!token.IsCancellationRequested)
+                                    await SetupRealtimeAsync();
+                            }
+                            catch (TaskCanceledException) { }
+                            catch (Exception ex) { Console.WriteLine($"[SettingsService] Debounced reconnect error: {ex.Message}"); }
+                        });
                     }
                 });
-
-                // Start periodic watchdog to heal disconnected channels
-                StartWatchdog();
             }
             catch (Exception ex)
             {
@@ -192,31 +203,7 @@ namespace Daily.Services
             OnSettingsChanged?.Invoke();
         }
 
-        private void StartWatchdog()
-        {
-            Task.Run(async () =>
-            {
-                while (true)
-                {
-                    await Task.Delay(TimeSpan.FromMinutes(2));
-                    try
-                    {
-                        if (IsAuthenticated)
-                        {
-                            if (_preferencesChannel == null || !_preferencesChannel.IsJoined)
-                            {
-                                Console.WriteLine("[SettingsService] Watchdog detected preferences channel is null or not joined. Re-subscribing...");
-                                await SetupRealtimeAsync();
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SettingsService] Watchdog error: {ex.Message}");
-                    }
-                }
-            });
-        }
+
 
         private async Task SetupRealtimeAsync()
         {
@@ -233,6 +220,12 @@ namespace Daily.Services
             await _realtimeSemaphore.WaitAsync();
             try 
             {
+                var token = _supabase.Auth.CurrentSession?.AccessToken;
+                if (!string.IsNullOrEmpty(token))
+                {
+                    Console.WriteLine("[SettingsService] Propagating current session token to Realtime.");
+                    _supabase.Realtime.SetAuth(token);
+                }
                 if (_preferencesChannel != null && !_preferencesChannel.IsJoined)
                 {
                     Console.WriteLine("[SettingsService] Realtime preferences channel exists but is not joined. Removing to recreate...");
@@ -249,7 +242,7 @@ namespace Daily.Services
 
                 if (_preferencesChannel == null)
                 {
-                    _preferencesChannel = _supabase.Realtime.Channel("realtime", "public", "user_preferences");
+                    _preferencesChannel = _supabase.Realtime.Channel("realtime", "public", "user_preferences", null, null, new Dictionary<string, string>());
                     _preferencesChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnPreferencesReceived);
                     await _preferencesChannel.Subscribe();
                     Console.WriteLine("[SettingsService] Realtime subscribed to user_preferences");

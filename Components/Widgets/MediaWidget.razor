@@ -181,17 +181,20 @@
 
     private async Task OnRefresh()
     {
-        var token = AuthService.GetProviderToken();
-        if (!string.IsNullOrEmpty(token))
+        await InvokeAsync(async () =>
         {
-            _isAuthenticated = true;
-            await LoadVideos(token, append: false);
-        }
-        else
-        {
-            await CheckAuthAndLoad();
-        }
-        await InvokeAsync(StateHasChanged);
+            var token = AuthService.GetProviderToken();
+            if (!string.IsNullOrEmpty(token))
+            {
+                _isAuthenticated = true;
+                await LoadVideos(token, append: false);
+            }
+            else
+            {
+                await CheckAuthAndLoad();
+            }
+            StateHasChanged();
+        });
     }
 
     private async Task CheckAuthAndLoad()

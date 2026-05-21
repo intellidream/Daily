@@ -219,7 +219,7 @@
 
     private async Task OnRefreshRequested()
     {
-        await SystemMonitor.ForceRefreshAsync();
+        await InvokeAsync(async () => await SystemMonitor.ForceRefreshAsync());
     }
 
     private void FetchStats()

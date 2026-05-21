@@ -246,8 +246,11 @@
     
     private async Task RefreshData()
     {
-        await LoadData();
-        await InvokeAsync(StateHasChanged);
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        });
     }
     
     private async Task LoadData()

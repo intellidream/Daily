@@ -211,13 +211,13 @@
 
     private async Task HandleDetailRefresh()
     {
-        await LoadWeatherData(forceRefresh: true);
+        await InvokeAsync(async () => await LoadWeatherData(forceRefresh: true));
     }
 
-    private async void HandleUpdate()
+    private void HandleUpdate()
     {
         // When updated from another source, just fetch cached data (forceRefresh=false)
-        await LoadWeatherData(forceRefresh: false);
+        _ = InvokeAsync(async () => await LoadWeatherData(forceRefresh: false));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

@@ -293,7 +293,7 @@
 
     private async Task HandleRefresh()
     {
-        await LoadWeatherData(forceRefresh: true);
+        await InvokeAsync(async () => await LoadWeatherData(forceRefresh: true));
     }
 
     private async void HandleUpdate()

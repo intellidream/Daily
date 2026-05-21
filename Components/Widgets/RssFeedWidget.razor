@@ -401,7 +401,7 @@
 
     private async Task OnRefreshRequested()
     {
-        await RssService.ReloadCurrentFeedAsync();
+        await InvokeAsync(async () => await RssService.ReloadCurrentFeedAsync());
     }
 
     private void OpenItem(RssItem item)

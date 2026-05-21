@@ -406,8 +406,6 @@
         RssService.OnItemsUpdated += AsyncStateHasChanged; // Subscribe for item count updates (Async for safe thread dispatch)
         RssService.OnFeedChanged += OnFeedChangedHandler; // Subscribe for active feed changes
         WeatherService.OnLocationChanged += AsyncStateHasChanged; // Subscribe for weather location changes
-        WeatherService.OnLocationChanged += AsyncStateHasChanged; // Subscribe for weather location changes
-        SettingsService.OnSettingsChanged += AsyncStateHasChanged; // Subscribe for auth changes
         SettingsService.OnSettingsChanged += AsyncStateHasChanged; // Subscribe for auth changes
         HabitsService.OnViewTypeChanged += AsyncStateHasChanged; // Subscribe for habit view changes
         FinancesService.OnViewTypeChanged += AsyncStateHasChanged; // Subscribe for finances view changes
@@ -483,16 +481,15 @@
     public void Dispose()
     {
         NavService.OnViewChanged -= StateHasChanged;
-        NavService.OnArticleLinkChanged -= StateHasChanged;
+        NavService.OnArticleLinkChanged -= OnArticleLinkChanged;
         NavService.OnBrowserStateChanged -= OnBrowserStateChanged;
         NavService.OnReaderModeChanged -= OnReaderModeChanged;
         RssService.OnItemsUpdated -= AsyncStateHasChanged;
         RssService.OnFeedChanged -= OnFeedChangedHandler;
-        WeatherService.OnLocationChanged -= StateHasChanged;
-        WeatherService.OnLocationChanged -= StateHasChanged;
-        SettingsService.OnSettingsChanged -= StateHasChanged;
-        HabitsService.OnViewTypeChanged -= StateHasChanged;
-        FinancesService.OnViewTypeChanged -= StateHasChanged;
+        WeatherService.OnLocationChanged -= AsyncStateHasChanged;
+        SettingsService.OnSettingsChanged -= AsyncStateHasChanged;
+        HabitsService.OnViewTypeChanged -= AsyncStateHasChanged;
+        FinancesService.OnViewTypeChanged -= AsyncStateHasChanged;
         if (Application.Current != null)
         {
         }
@@ -512,19 +509,25 @@
 
     private void OnArticleLinkChanged()
     {
-        StateHasChanged();
-        _ = UpdateToolbarHeight();
+        InvokeAsync(() =>
+        {
+            StateHasChanged();
+            _ = UpdateToolbarHeight();
+        });
     }
     
     private void OnReaderModeChanged(bool isEnabled)
     {
-        StateHasChanged();
+        InvokeAsync(StateHasChanged);
     }
     
     private void OnBrowserStateChanged(bool isOpen)
     {
-        StateHasChanged();
-        _ = UpdateToolbarHeight();
+        InvokeAsync(() =>
+        {
+            StateHasChanged();
+            _ = UpdateToolbarHeight();
+        });
     }
 
     private async Task CopyToClipboard()

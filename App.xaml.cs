@@ -111,6 +111,8 @@ namespace Daily
                 await _habitsService.InitializeAsync();
                 await _healthService.InitializeAsync();
                 
+
+                
                 _syncService.StartBackgroundSync();
 
                 // Token Push Logic (Option B) - Keep watches alive without Token Rotation

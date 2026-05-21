@@ -189,7 +189,29 @@ namespace Daily
                     AutoConnectRealtime = true,
                     SessionHandler = new Daily.Services.Auth.MauiSessionPersistence(logger, watchConn)
                 };
-                return new Supabase.Client(supabaseUrl, supabaseKey, options);
+                var client = new Supabase.Client(supabaseUrl, supabaseKey, options);
+                
+                client.Auth.AddStateChangedListener((sender, state) =>
+                {
+                    logger.Log($"[Supabase Client Factory] Auth state changed: {state}");
+                    if (state == global::Supabase.Gotrue.Constants.AuthState.SignedIn || 
+                        state == global::Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
+                    {
+                        var session = client.Auth.CurrentSession;
+                        if (session != null && !string.IsNullOrEmpty(session.AccessToken))
+                        {
+                            logger.Log("[Supabase Client Factory] Propagating access token to Realtime client.");
+                            client.Realtime.SetAuth(session.AccessToken);
+                        }
+                    }
+                    else if (state == global::Supabase.Gotrue.Constants.AuthState.SignedOut)
+                    {
+                        logger.Log("[Supabase Client Factory] Clearing access token from Realtime client.");
+                        client.Realtime.SetAuth(null);
+                    }
+                });
+
+                return client;
             });
 
             return builder.Build();

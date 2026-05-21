@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Threading;
 using Supabase.Realtime;
 
 namespace Daily.Services
@@ -22,6 +23,7 @@ namespace Daily.Services
         private Supabase.Realtime.RealtimeChannel? _habitsLogsChannel;
         private Supabase.Realtime.RealtimeChannel? _habitsGoalsChannel;
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
+        private CancellationTokenSource? _reconnectCts;
 
         private string _currentViewType = "water"; // Default to "water"
         public string CurrentViewType
@@ -88,19 +90,28 @@ namespace Daily.Services
                     OnHabitsUpdated?.Invoke();
                 };
 
-                // Listen for Socket State Changes to Auto-Reconnect Channels
                 _supabase.Realtime.AddStateChangedHandler((sender, state) =>
                 {
                     Console.WriteLine($"[HabitsService] Realtime Socket State Changed: {state}");
                     if (state == Supabase.Realtime.Constants.SocketState.Open)
                     {
-                        Console.WriteLine("[HabitsService] Realtime Socket opened/reconnected. Triggering SetupRealtimeAsync...");
-                        Task.Run(async () => await SetupRealtimeAsync());
+                        Console.WriteLine("[HabitsService] Realtime Socket opened/reconnected. Triggering debounced SetupRealtimeAsync...");
+                        _reconnectCts?.Cancel();
+                        _reconnectCts = new CancellationTokenSource();
+                        var token = _reconnectCts.Token;
+                        Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await Task.Delay(1000, token);
+                                if (!token.IsCancellationRequested)
+                                    await SetupRealtimeAsync();
+                            }
+                            catch (TaskCanceledException) { }
+                            catch (Exception ex) { Console.WriteLine($"[HabitsService] Debounced reconnect error: {ex.Message}"); }
+                        });
                     }
                 });
-
-                // Start periodic watchdog to heal disconnected channels
-                StartWatchdog();
             }
             catch (Exception ex)
             {
@@ -280,32 +291,7 @@ namespace Daily.Services
              }
         }
 
-        private void StartWatchdog()
-        {
-            Task.Run(async () =>
-            {
-                while (true)
-                {
-                    await Task.Delay(TimeSpan.FromMinutes(2));
-                    try
-                    {
-                        if (IsAuthenticated)
-                        {
-                            if (_habitsLogsChannel == null || !_habitsLogsChannel.IsJoined ||
-                                _habitsGoalsChannel == null || !_habitsGoalsChannel.IsJoined)
-                            {
-                                Console.WriteLine("[HabitsService] Watchdog detected habits channels are null or not joined. Re-subscribing...");
-                                await SetupRealtimeAsync();
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[HabitsService] Watchdog error: {ex.Message}");
-                    }
-                }
-            });
-        }
+
 
         private async Task SetupRealtimeAsync()
         {
@@ -327,6 +313,12 @@ namespace Daily.Services
             await _realtimeSemaphore.WaitAsync();
             try 
             {
+                var token = _supabase.Auth.CurrentSession?.AccessToken;
+                if (!string.IsNullOrEmpty(token))
+                {
+                    Console.WriteLine("[HabitsService] Propagating current session token to Realtime.");
+                    _supabase.Realtime.SetAuth(token);
+                }
                 if (_habitsLogsChannel != null && !_habitsLogsChannel.IsJoined)
                 {
                     Console.WriteLine("[HabitsService] Realtime habits_logs channel exists but is not joined. Removing to recreate...");
@@ -357,7 +349,7 @@ namespace Daily.Services
 
                 if (_habitsLogsChannel == null)
                 {
-                    _habitsLogsChannel = _supabase.Realtime.Channel("realtime", "public", "habits_logs");
+                    _habitsLogsChannel = _supabase.Realtime.Channel("realtime", "public", "habits_logs", null, null, new Dictionary<string, string>());
                     _habitsLogsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHabitLogReceived);
                     await _habitsLogsChannel.Subscribe();
                     Console.WriteLine("[HabitsService] Realtime subscribed to habits_logs");
@@ -365,7 +357,7 @@ namespace Daily.Services
 
                 if (_habitsGoalsChannel == null)
                 {
-                    _habitsGoalsChannel = _supabase.Realtime.Channel("realtime", "public", "habits_goals");
+                    _habitsGoalsChannel = _supabase.Realtime.Channel("realtime", "public", "habits_goals", null, null, new Dictionary<string, string>());
                     _habitsGoalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHabitGoalReceived);
                     await _habitsGoalsChannel.Subscribe();
                     Console.WriteLine("[HabitsService] Realtime subscribed to habits_goals");

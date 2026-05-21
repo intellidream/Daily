@@ -136,9 +136,9 @@
         await RefreshSuggestion();
     }
 
-    private async void OnSuggestionChanged()
+    private void OnSuggestionChanged()
     {
-        await RefreshSuggestion();
+        _ = InvokeAsync(async () => await RefreshSuggestion());
     }
 
     private async Task RefreshSuggestion()

@@ -1,4 +1,4 @@
-﻿using Foundation;
+using Foundation;
 using UIKit;
 using Microsoft.Maui.ApplicationModel;
 
@@ -11,18 +11,20 @@ namespace Daily
 
         public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
         {
-            // Activate WCSession immediately on app launch so iOS registers the delegate before backgrounding
-            var app = CreateMauiApp();
+            // Let the base class create the single MauiApp instance
+            var result = base.FinishedLaunching(application, launchOptions);
+            
+            // Activate WCSession from the ACTUAL app's services (not a second MauiApp)
             try
             {
-                var watchService = app.Services.GetService(typeof(Daily.Services.IWatchConnectivityService));
+                var watchService = IPlatformApplication.Current?.Services?.GetService(typeof(Daily.Services.IWatchConnectivityService));
                 Console.WriteLine($"[AppDelegate] Early initialized WatchConnectivityService: {watchService != null}");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[AppDelegate] Error initializing WatchConnectivity early: {ex.Message}");
             }
-            return base.FinishedLaunching(application, launchOptions);
+            return result;
         }
 
         public override bool OpenUrl(UIApplication app, NSUrl url, NSDictionary options)

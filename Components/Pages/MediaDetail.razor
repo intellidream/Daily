@@ -280,29 +280,32 @@
 
     private async Task OnDetailRefresh()
     {
-        var token = AuthService.GetProviderToken();
-        bool isAuth = !string.IsNullOrEmpty(token);
+        await InvokeAsync(async () =>
+        {
+            var token = AuthService.GetProviderToken();
+            bool isAuth = !string.IsNullOrEmpty(token);
 
-        if (_isAuthenticated != isAuth)
-        {
-            _isAuthenticated = isAuth;
-        }
+            if (_isAuthenticated != isAuth)
+            {
+                _isAuthenticated = isAuth;
+            }
 
-        if (_isAuthenticated)
-        {
-            _videos = null; // Reload
-            _nextPageToken = null;
-            await InvokeAsync(StateHasChanged);
-            await LoadVideos(token!);
-        }
-        else
-        {
-            _videos = null;
-            _nextPageToken = null;
-            _selectedCategory = null;
-            if (NavService.IsBrowserOpen) NavService.SetBrowserState(false);
-            await InvokeAsync(StateHasChanged);
-        }
+            if (_isAuthenticated)
+            {
+                _videos = null; // Reload
+                _nextPageToken = null;
+                StateHasChanged();
+                await LoadVideos(token!);
+            }
+            else
+            {
+                _videos = null;
+                _nextPageToken = null;
+                _selectedCategory = null;
+                if (NavService.IsBrowserOpen) NavService.SetBrowserState(false);
+                StateHasChanged();
+            }
+        });
     }
 
     public void Dispose()

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Daily.Models.Health;
 using Microsoft.Extensions.Logging;
 using Supabase;
+using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Daily.Services;
 
@@ -26,6 +27,7 @@ namespace Daily.Services.Health
         private bool IsAuthenticated => _supabase.Auth.CurrentSession != null && _supabase.Auth.CurrentUser != null;
 
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
+        private CancellationTokenSource? _reconnectCts;
 
         public SupabaseHealthService(Supabase.Client supabase, INativeHealthStore nativeHealthStore, ILogger<SupabaseHealthService> logger, IServiceProvider serviceProvider, IRefreshService refreshService)
         {
@@ -57,19 +59,28 @@ namespace Daily.Services.Health
                     }
                 });
 
-                // Listen for Socket State Changes to Auto-Reconnect Channels
                 _supabase.Realtime.AddStateChangedHandler((sender, state) =>
                 {
                     Console.WriteLine($"[SupabaseHealthService] Realtime Socket State Changed: {state}");
                     if (state == Supabase.Realtime.Constants.SocketState.Open)
                     {
-                        Console.WriteLine("[SupabaseHealthService] Realtime Socket opened/reconnected. Triggering SetupRealtimeAsync...");
-                        Task.Run(async () => await SetupRealtimeAsync());
+                        Console.WriteLine("[SupabaseHealthService] Realtime Socket opened/reconnected. Triggering debounced SetupRealtimeAsync...");
+                        _reconnectCts?.Cancel();
+                        _reconnectCts = new CancellationTokenSource();
+                        var token = _reconnectCts.Token;
+                        Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await Task.Delay(1000, token);
+                                if (!token.IsCancellationRequested)
+                                    await SetupRealtimeAsync();
+                            }
+                            catch (TaskCanceledException) { }
+                            catch (Exception ex) { Console.WriteLine($"[SupabaseHealthService] Debounced reconnect error: {ex.Message}"); }
+                        });
                     }
                 });
-
-                // Start periodic watchdog to heal disconnected channels
-                StartWatchdog();
             }
             catch(Exception ex)
             {
@@ -77,31 +88,7 @@ namespace Daily.Services.Health
             }
         }
 
-        private void StartWatchdog()
-        {
-            Task.Run(async () =>
-            {
-                while (true)
-                {
-                    await Task.Delay(TimeSpan.FromMinutes(2));
-                    try
-                    {
-                        if (IsAuthenticated)
-                        {
-                            if (_vitalsChannel == null || !_vitalsChannel.IsJoined)
-                            {
-                                Console.WriteLine("[SupabaseHealthService] Watchdog detected vitals channel is null or not joined. Re-subscribing...");
-                                await SetupRealtimeAsync();
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SupabaseHealthService] Watchdog error: {ex.Message}");
-                    }
-                }
-            });
-        }
+
 
         public async Task InitializeAsync()
         {
@@ -131,6 +118,12 @@ namespace Daily.Services.Health
             await _realtimeSemaphore.WaitAsync();
             try
             {
+                var token = _supabase.Auth.CurrentSession?.AccessToken;
+                if (!string.IsNullOrEmpty(token))
+                {
+                    Console.WriteLine("[SupabaseHealthService] Propagating current session token to Realtime.");
+                    _supabase.Realtime.SetAuth(token);
+                }
                 if (_vitalsChannel != null && !_vitalsChannel.IsJoined)
                 {
                     Console.WriteLine("[SupabaseHealthService] Realtime vitals channel exists but is not joined. Removing to recreate...");
@@ -147,7 +140,7 @@ namespace Daily.Services.Health
 
                 if (_vitalsChannel == null)
                 {
-                    _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals");
+                    _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", null, null, new Dictionary<string, string>());
                     _vitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnVitalReceived);
                     await _vitalsChannel.Subscribe();
                     Console.WriteLine("[SupabaseHealthService] Realtime subscribed to vitals");

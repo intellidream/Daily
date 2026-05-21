@@ -436,11 +436,14 @@
 
     private async Task OnRefreshRequested()
     {
-        if (SettingsService.IsAuthenticated)
+        await InvokeAsync(async () =>
         {
-            await LoadPairedWatches();
-            await InvokeAsync(StateHasChanged);
-        }
+            if (SettingsService.IsAuthenticated)
+            {
+                await LoadPairedWatches();
+                StateHasChanged();
+            }
+        });
     }
 
     protected override async Task OnInitializedAsync()

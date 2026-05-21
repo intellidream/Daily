@@ -737,7 +737,7 @@
         _bulkDrinkType = _drinkTypes.FirstOrDefault();
         HabitsService.OnHabitsUpdated += RefreshDataVoid;
         HabitsService.OnViewTypeChanged += OnViewTypeChanged;
-        RefreshService.DetailRefreshRequested += RefreshDataAsync;
+        RefreshService.DetailRefreshRequested += HandleDetailRefresh;
         SettingsService.OnSettingsChanged += OnSettingsChanged;
         
         // Sync initial view type sync
@@ -750,7 +750,7 @@
     {
         HabitsService.OnHabitsUpdated -= RefreshDataVoid;
         HabitsService.OnViewTypeChanged -= OnViewTypeChanged;
-        RefreshService.DetailRefreshRequested -= RefreshDataAsync;
+        RefreshService.DetailRefreshRequested -= HandleDetailRefresh;
         SettingsService.OnSettingsChanged -= OnSettingsChanged;
     }
 
@@ -765,11 +765,22 @@
 
     private void OnViewTypeChanged()
     {
-        _viewType = HabitsService.CurrentViewType;
-        _ = RefreshDataAsync();
+        InvokeAsync(async () =>
+        {
+            _viewType = HabitsService.CurrentViewType;
+            await RefreshDataAsync();
+        });
     }
 
-    private async void RefreshDataVoid() => await RefreshDataAsync();
+    private void RefreshDataVoid()
+    {
+        _ = InvokeAsync(async () => await RefreshDataAsync());
+    }
+
+    private async Task HandleDetailRefresh()
+    {
+        await InvokeAsync(async () => await RefreshDataAsync());
+    }
 
     private async Task RefreshDataAsync()
     {
