@@ -25,6 +25,8 @@ namespace Daily.Services.Health
 
         private bool IsAuthenticated => _supabase.Auth.CurrentSession != null && _supabase.Auth.CurrentUser != null;
 
+        private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
+
         public SupabaseHealthService(Supabase.Client supabase, INativeHealthStore nativeHealthStore, ILogger<SupabaseHealthService> logger, IServiceProvider serviceProvider, IRefreshService refreshService)
         {
             try 
@@ -54,11 +56,51 @@ namespace Daily.Services.Health
                          });
                     }
                 });
+
+                // Listen for Socket State Changes to Auto-Reconnect Channels
+                _supabase.Realtime.AddStateChangedHandler((sender, state) =>
+                {
+                    Console.WriteLine($"[SupabaseHealthService] Realtime Socket State Changed: {state}");
+                    if (state == Supabase.Realtime.Constants.SocketState.Open)
+                    {
+                        Console.WriteLine("[SupabaseHealthService] Realtime Socket opened/reconnected. Triggering SetupRealtimeAsync...");
+                        Task.Run(async () => await SetupRealtimeAsync());
+                    }
+                });
+
+                // Start periodic watchdog to heal disconnected channels
+                StartWatchdog();
             }
             catch(Exception ex)
             {
                 Console.WriteLine($"[SupabaseHealthService] Constructor FAULT: {ex}");
             }
+        }
+
+        private void StartWatchdog()
+        {
+            Task.Run(async () =>
+            {
+                while (true)
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(2));
+                    try
+                    {
+                        if (IsAuthenticated)
+                        {
+                            if (_vitalsChannel == null || !_vitalsChannel.IsJoined)
+                            {
+                                Console.WriteLine("[SupabaseHealthService] Watchdog detected vitals channel is null or not joined. Re-subscribing...");
+                                await SetupRealtimeAsync();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SupabaseHealthService] Watchdog error: {ex.Message}");
+                    }
+                }
+            });
         }
 
         public async Task InitializeAsync()
@@ -86,8 +128,23 @@ namespace Daily.Services.Health
         {
             if (!IsAuthenticated) return;
 
+            await _realtimeSemaphore.WaitAsync();
             try
             {
+                if (_vitalsChannel != null && !_vitalsChannel.IsJoined)
+                {
+                    Console.WriteLine("[SupabaseHealthService] Realtime vitals channel exists but is not joined. Removing to recreate...");
+                    try
+                    {
+                        _supabase.Realtime.Remove(_vitalsChannel);
+                    }
+                    catch (Exception removeEx)
+                    {
+                        Console.WriteLine($"[SupabaseHealthService] Error removing channel: {removeEx.Message}");
+                    }
+                    _vitalsChannel = null;
+                }
+
                 if (_vitalsChannel == null)
                 {
                     _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals");
@@ -99,6 +156,10 @@ namespace Daily.Services.Health
             catch (Exception ex)
             {
                 Console.WriteLine($"[SupabaseHealthService] Realtime setup failed: {ex.Message}");
+            }
+            finally
+            {
+                _realtimeSemaphore.Release();
             }
         }
 

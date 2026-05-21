@@ -11,6 +11,7 @@ namespace Daily.Services
         private readonly ISyncService _syncService; // To trigger sync on save
         private Supabase.Realtime.RealtimeChannel? _preferencesChannel;
         private UserPreferences _currentSettings = new UserPreferences();
+        private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
         
         public UserPreferences Settings => _currentSettings;
         public bool IsAuthenticated => _supabase.Auth.CurrentSession != null;
@@ -34,42 +35,63 @@ namespace Daily.Services
 
         public SettingsService(Supabase.Client supabase, IDatabaseService databaseService, ISyncService syncService)
         {
-            _supabase = supabase;
-            _databaseService = databaseService;
-            _syncService = syncService;
-
-            // Subscribe to Background Sync Updates
-            _syncService.OnPreferencesPulled += () => 
+            try
             {
-                Console.WriteLine("[SettingsService] Preferences Pulled event received. Reloading...");
-                Task.Run(async () => 
-                {
-                    try { await ReloadFromDatabaseAsync(); }
-                    catch(Exception ex) { Console.WriteLine($"[SettingsService] Reload Failed: {ex}"); }
-                });
-            };
+                _supabase = supabase;
+                _databaseService = databaseService;
+                _syncService = syncService;
 
-            // Setup Auth Listener ONCE in Constructor
-             _supabase.Auth.AddStateChangedListener((sender, state) => 
-            {
-                Console.WriteLine($"[SettingsService] Auth State Changed: {state}");
-                if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || state == Supabase.Gotrue.Constants.AuthState.SignedOut)
+                // Subscribe to Background Sync Updates
+                _syncService.OnPreferencesPulled += () => 
                 {
-                     Console.WriteLine($"[SettingsService] Handling Auth Change ({state}). Reloading...");
-                     // Use robust fire-and-forget with extensive logging
-                     Task.Run(async () => 
+                    Console.WriteLine("[SettingsService] Preferences Pulled event received. Reloading...");
+                    Task.Run(async () => 
+                    {
+                        try { await ReloadFromDatabaseAsync(); }
+                        catch(Exception ex) { Console.WriteLine($"[SettingsService] Reload Failed: {ex}"); }
+                    });
+                };
+
+                // Setup Auth Listener ONCE in Constructor
+                 _supabase.Auth.AddStateChangedListener((sender, state) => 
+                 {
+                     Console.WriteLine($"[SettingsService] Auth State Changed: {state}");
+                     if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || state == Supabase.Gotrue.Constants.AuthState.SignedOut)
                      {
-                         try 
-                         {
-                             await InitializeAsync();
-                         }
-                         catch(Exception ex)
-                         {
-                             Console.WriteLine($"[SettingsService] CRITICAL: Post-Auth Reload Failed: {ex}");
-                         }
-                     });
-                }
-            });
+                          Console.WriteLine($"[SettingsService] Handling Auth Change ({state}). Reloading...");
+                          // Use robust fire-and-forget with extensive logging
+                          Task.Run(async () => 
+                          {
+                              try 
+                              {
+                                  await InitializeAsync();
+                              }
+                              catch(Exception ex)
+                              {
+                                  Console.WriteLine($"[SettingsService] CRITICAL: Post-Auth Reload Failed: {ex}");
+                              }
+                          });
+                     }
+                 });
+
+                // Listen for Socket State Changes to Auto-Reconnect Channels
+                _supabase.Realtime.AddStateChangedHandler((sender, state) =>
+                {
+                    Console.WriteLine($"[SettingsService] Realtime Socket State Changed: {state}");
+                    if (state == Supabase.Realtime.Constants.SocketState.Open)
+                    {
+                        Console.WriteLine("[SettingsService] Realtime Socket opened/reconnected. Triggering SetupRealtimeAsync...");
+                        Task.Run(async () => await SetupRealtimeAsync());
+                    }
+                });
+
+                // Start periodic watchdog to heal disconnected channels
+                StartWatchdog();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SettingsService] Constructor FAULT: {ex}");
+            }
         }
 
         public async Task InitializeAsync()
@@ -170,12 +192,61 @@ namespace Daily.Services
             OnSettingsChanged?.Invoke();
         }
 
+        private void StartWatchdog()
+        {
+            Task.Run(async () =>
+            {
+                while (true)
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(2));
+                    try
+                    {
+                        if (IsAuthenticated)
+                        {
+                            if (_preferencesChannel == null || !_preferencesChannel.IsJoined)
+                            {
+                                Console.WriteLine("[SettingsService] Watchdog detected preferences channel is null or not joined. Re-subscribing...");
+                                await SetupRealtimeAsync();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SettingsService] Watchdog error: {ex.Message}");
+                    }
+                }
+            });
+        }
+
         private async Task SetupRealtimeAsync()
         {
-            if (!IsAuthenticated) return;
+            if (!IsAuthenticated)
+            {
+                if (_preferencesChannel != null)
+                {
+                    try { _preferencesChannel.Unsubscribe(); } catch { }
+                    _preferencesChannel = null;
+                }
+                return;
+            }
             
+            await _realtimeSemaphore.WaitAsync();
             try 
             {
+                if (_preferencesChannel != null && !_preferencesChannel.IsJoined)
+                {
+                    Console.WriteLine("[SettingsService] Realtime preferences channel exists but is not joined. Removing to recreate...");
+                    try
+                    {
+                        _supabase.Realtime.Remove(_preferencesChannel);
+                    }
+                    catch (Exception removeEx)
+                    {
+                        Console.WriteLine($"[SettingsService] Error removing channel: {removeEx.Message}");
+                    }
+                    _preferencesChannel = null;
+                }
+
                 if (_preferencesChannel == null)
                 {
                     _preferencesChannel = _supabase.Realtime.Channel("realtime", "public", "user_preferences");
@@ -187,6 +258,10 @@ namespace Daily.Services
             catch (Exception ex) 
             {
                 Console.WriteLine($"[SettingsService] Realtime setup failed: {ex.Message}");
+            }
+            finally
+            {
+                _realtimeSemaphore.Release();
             }
         }
 

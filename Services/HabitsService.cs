@@ -21,6 +21,7 @@ namespace Daily.Services
 
         private Supabase.Realtime.RealtimeChannel? _habitsLogsChannel;
         private Supabase.Realtime.RealtimeChannel? _habitsGoalsChannel;
+        private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
 
         private string _currentViewType = "water"; // Default to "water"
         public string CurrentViewType
@@ -41,38 +42,70 @@ namespace Daily.Services
 
         public HabitsService(Supabase.Client supabase, ISettingsService settingsService, IRefreshService refreshService, IHabitsRepository repository, ISyncService syncService, ISeederService seederService, IRssFeedService rssFeedService)
         {
-            _supabase = supabase;
-            _settingsService = settingsService;
-            _refreshService = refreshService;
-            _repository = repository;
-            _syncService = syncService;
-            _seederService = seederService;
-            _rssFeedService = rssFeedService;
-
-            // Listen for Auth Changes to Trigger Migration
-            _supabase.Auth.AddStateChangedListener((sender, state) =>
+            try
             {
-               if (state == Supabase.Gotrue.Constants.AuthState.SignedIn)
-               {
-                   RunStartupMigration();
-               }
-            });
+                _supabase = supabase;
+                _settingsService = settingsService;
+                _refreshService = refreshService;
+                _repository = repository;
+                _syncService = syncService;
+                _seederService = seederService;
+                _rssFeedService = rssFeedService;
 
-            if (_supabase.Auth.CurrentSession != null)
-            {
-                RunStartupMigration();
-            }
-
-            // Listen for global refresh (triggered by Auth/Settings changes)
-            _refreshService.RefreshRequested += async () =>
-            {
-                // Trigger Full Sync on refresh/login if online
-                if (IsAuthenticated)
+                // Setup Auth Listener ONCE in Constructor
+                _supabase.Auth.AddStateChangedListener((sender, state) =>
                 {
-                    _ = _syncService.SyncAsync();
+                    Console.WriteLine($"[HabitsService] Auth State Changed: {state}");
+                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || state == Supabase.Gotrue.Constants.AuthState.SignedOut)
+                    {
+                        Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await InitializeAsync();
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"[HabitsService] Post-Auth Init Failed: {ex}");
+                            }
+                        });
+                    }
+                });
+
+                if (_supabase.Auth.CurrentSession != null)
+                {
+                    RunStartupMigration();
                 }
-                OnHabitsUpdated?.Invoke();
-            };
+
+                // Listen for global refresh (triggered by Auth/Settings changes)
+                _refreshService.RefreshRequested += async () =>
+                {
+                    // Trigger Full Sync on refresh/login if online
+                    if (IsAuthenticated)
+                    {
+                        _ = _syncService.SyncAsync();
+                    }
+                    OnHabitsUpdated?.Invoke();
+                };
+
+                // Listen for Socket State Changes to Auto-Reconnect Channels
+                _supabase.Realtime.AddStateChangedHandler((sender, state) =>
+                {
+                    Console.WriteLine($"[HabitsService] Realtime Socket State Changed: {state}");
+                    if (state == Supabase.Realtime.Constants.SocketState.Open)
+                    {
+                        Console.WriteLine("[HabitsService] Realtime Socket opened/reconnected. Triggering SetupRealtimeAsync...");
+                        Task.Run(async () => await SetupRealtimeAsync());
+                    }
+                });
+
+                // Start periodic watchdog to heal disconnected channels
+                StartWatchdog();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HabitsService] Constructor FAULT: {ex}");
+            }
         }
 
         private void RunStartupMigration()
@@ -247,12 +280,81 @@ namespace Daily.Services
              }
         }
 
+        private void StartWatchdog()
+        {
+            Task.Run(async () =>
+            {
+                while (true)
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(2));
+                    try
+                    {
+                        if (IsAuthenticated)
+                        {
+                            if (_habitsLogsChannel == null || !_habitsLogsChannel.IsJoined ||
+                                _habitsGoalsChannel == null || !_habitsGoalsChannel.IsJoined)
+                            {
+                                Console.WriteLine("[HabitsService] Watchdog detected habits channels are null or not joined. Re-subscribing...");
+                                await SetupRealtimeAsync();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[HabitsService] Watchdog error: {ex.Message}");
+                    }
+                }
+            });
+        }
+
         private async Task SetupRealtimeAsync()
         {
-            if (!IsAuthenticated) return;
+            if (!IsAuthenticated)
+            {
+                if (_habitsLogsChannel != null)
+                {
+                    try { _habitsLogsChannel.Unsubscribe(); } catch { }
+                    _habitsLogsChannel = null;
+                }
+                if (_habitsGoalsChannel != null)
+                {
+                    try { _habitsGoalsChannel.Unsubscribe(); } catch { }
+                    _habitsGoalsChannel = null;
+                }
+                return;
+            }
             
+            await _realtimeSemaphore.WaitAsync();
             try 
             {
+                if (_habitsLogsChannel != null && !_habitsLogsChannel.IsJoined)
+                {
+                    Console.WriteLine("[HabitsService] Realtime habits_logs channel exists but is not joined. Removing to recreate...");
+                    try
+                    {
+                        _supabase.Realtime.Remove(_habitsLogsChannel);
+                    }
+                    catch (Exception removeEx)
+                    {
+                        Console.WriteLine($"[HabitsService] Error removing habits_logs channel: {removeEx.Message}");
+                    }
+                    _habitsLogsChannel = null;
+                }
+
+                if (_habitsGoalsChannel != null && !_habitsGoalsChannel.IsJoined)
+                {
+                    Console.WriteLine("[HabitsService] Realtime habits_goals channel exists but is not joined. Removing to recreate...");
+                    try
+                    {
+                        _supabase.Realtime.Remove(_habitsGoalsChannel);
+                    }
+                    catch (Exception removeEx)
+                    {
+                        Console.WriteLine($"[HabitsService] Error removing habits_goals channel: {removeEx.Message}");
+                    }
+                    _habitsGoalsChannel = null;
+                }
+
                 if (_habitsLogsChannel == null)
                 {
                     _habitsLogsChannel = _supabase.Realtime.Channel("realtime", "public", "habits_logs");
@@ -272,6 +374,10 @@ namespace Daily.Services
             catch (Exception ex) 
             {
                 Console.WriteLine($"[HabitsService] Realtime setup failed: {ex.Message}");
+            }
+            finally
+            {
+                _realtimeSemaphore.Release();
             }
         }
 
