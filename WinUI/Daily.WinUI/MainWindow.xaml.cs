@@ -262,7 +262,12 @@ public sealed partial class MainWindow : Window
             if (TrayIcon != null)
             {
                 TrayIcon.ContextMenuMode = H.NotifyIcon.ContextMenuMode.SecondWindow;
-                TrayIcon.MenuActivation = H.NotifyIcon.Core.PopupActivationMode.LeftOrRightClick;
+                TrayIcon.MenuActivation = H.NotifyIcon.Core.PopupActivationMode.RightClick;
+                TrayIcon.LeftClickCommand = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] LeftClickCommand invoked.");
+                    ShowAndActivate();
+                });
                 TrayIcon.DoubleClickCommand = new RelayCommand(() =>
                 {
                     LogTray("[TrayIcon] DoubleClickCommand invoked.");

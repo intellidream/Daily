@@ -91,8 +91,10 @@ File:
 - `WinUI/Daily.WinUI/GenerateIcons.csx`
 
 Purpose:
-- Generates all WinUI manifest PNG assets and `AppIcon.ico` from a single source SVG:
-  - Source input: `WinUI/Daily.WinUI/Assets/NewIcon.svg`
+- Generates all WinUI manifest PNG assets, `AppIcon.ico`, and theme-specific multi-size system tray icons (`TrayIconDarkTheme.ico` and `TrayIconLightTheme.ico`) using high-quality vector sources:
+  - Application icon source: `WinUI/Daily.WinUI/Assets/NewIcon.svg`
+  - System tray dark-background source: `WinUI/Daily.WinUI/Assets/appicon.theme-dark.svg`
+  - System tray light-background source: `WinUI/Daily.WinUI/Assets/appicon.theme-light.svg`
 
 ### What the script generates
 
@@ -110,8 +112,10 @@ Purpose:
   - `Square44x44Logo.targetsize-32_altform-unplated.png`
   - `Square44x44Logo.targetsize-48_altform-lightunplated.png`
   - `Square44x44Logo.targetsize-256_altform-unplated.png`
-- Multi-size icon file:
-  - `AppIcon.ico` (16,20,24,32,48,256)
+- Multi-size icon files:
+  - `AppIcon.ico` (16,20,24,32,48,256) - Main application icon.
+  - `TrayIconDarkTheme.ico` (16,20,24,32,48,256) - Pure white icon variant for dark taskbars.
+  - `TrayIconLightTheme.ico` (16,20,24,32,48,256) - Dark/black icon variant for light taskbars.
 
 ### Rendering quality strategy used by the script
 
@@ -131,13 +135,11 @@ Notes:
 
 ### Recommended workflow when app icon changes
 
-1. Replace `Assets/NewIcon.svg` with the new master icon.
-2. Run `dotnet script GenerateIcons.csx`.
-3. Rebuild solution.
-4. Verify generated files exist in `Assets` and app build succeeds.
-5. In-app icon surfaces (titlebar/settings/about/login) still come from:
-   - `appicon.theme-dark.svg`
-   - `appicon.theme-light.svg`
+1. Replace `Assets/NewIcon.svg` (for the main app icon) and `Assets/appicon.theme-dark.svg` / `Assets/appicon.theme-light.svg` (for the theme-specific vector paths) with the new master vector assets.
+2. Run `dotnet script GenerateIcons.csx` to generate all manifest PNGs, `AppIcon.ico`, and `TrayIcon*.ico` files.
+3. Rebuild the solution.
+4. Verify generated files exist in `Assets` and the app build succeeds.
+5. In-app icon surfaces (titlebar/settings/about/login) and tray icons will now display the updated version.
 
 Important:
 - `GenerateIcons.csx` controls shell/manifest PNG+ICO assets.
@@ -160,6 +162,24 @@ Important:
 ## 8) Optional automation idea
 
 Add a small validation script that fails if either icon SVG contains `data:image/png;base64`.
+
+## 9) WinUI System Tray Icons (Theme Adaptation)
+
+### How it works:
+1. **Target files**:
+   - `Assets/TrayIconDarkTheme.ico` (multi-size: 16, 20, 24, 32, 48, 256) is a pure white icon visible on dark taskbar backgrounds.
+   - `Assets/TrayIconLightTheme.ico` (multi-size: 16, 20, 24, 32, 48, 256) is a black icon visible on light taskbar backgrounds.
+2. **Dynamic Adaptation Logic**:
+   - The app monitors the Windows Registry key `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize` under registry value `SystemUsesLightTheme` at runtime.
+   - When the app starts, or when system color settings change (monitored via `Windows.UI.ViewManagement.UISettings.ColorValuesChanged`), the app queries this registry value.
+   - If `SystemUsesLightTheme == 1` (meaning the taskbar background is light-colored), it switches the tray icon to `TrayIconLightTheme.ico` (black).
+   - If `SystemUsesLightTheme == 0` (meaning the taskbar background is dark-colored), it switches the tray icon to `TrayIconDarkTheme.ico` (white).
+3. **Execution Safety**:
+   - Updates are enqueued onto the UI thread via `DispatcherQueue.TryEnqueue` because UI properties (`TrayIcon.Icon`) must only be modified from the main UI thread.
+4. **Mouse Interaction Behavior**:
+   - **Left-Click**: Invokes `LeftClickCommand` which immediately restores and activates the main app window (`ShowAndActivate()`).
+   - **Right-Click**: Activates the `ContextFlyout` context menu (by setting `MenuActivation = PopupActivationMode.RightClick`).
+   - **Double-Click**: Also mapped to restore the window (`DoubleClickCommand`).
 
 ---
 

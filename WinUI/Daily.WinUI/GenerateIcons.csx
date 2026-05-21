@@ -156,4 +156,16 @@ var storeBmp = Render(svgPath, 50);
 Save(storeBmp, Path.Combine(assetsDir, "StoreLogo.png"));
 storeBmp.Dispose();
 
+// Tray Icons (Theme-specific)
+Console.WriteLine("Generating system tray icons...");
+var traySizes = new[] { 16, 20, 24, 32, 48, 256 };
+
+var darkTrayBmps = traySizes.Select(s => Render(Path.Combine(assetsDir, "appicon.theme-dark.svg"), s)).ToList();
+SaveIco(darkTrayBmps, Path.Combine(assetsDir, "TrayIconDarkTheme.ico"));
+foreach (var b in darkTrayBmps) b.Dispose();
+
+var lightTrayBmps = traySizes.Select(s => Render(Path.Combine(assetsDir, "appicon.theme-light.svg"), s)).ToList();
+SaveIco(lightTrayBmps, Path.Combine(assetsDir, "TrayIconLightTheme.ico"));
+foreach (var b in lightTrayBmps) b.Dispose();
+
 Console.WriteLine("Done!");
