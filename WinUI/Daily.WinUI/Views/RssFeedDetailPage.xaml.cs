@@ -17,6 +17,7 @@ public sealed partial class RssFeedDetailPage : Page
     private readonly Daily.Services.IRssFeedService _rssService;
     private ObservableCollection<RssItem> _articles = new();
     private RssItem? _selectedItem;
+    private RssItem? _currentRenderedArticle;
 
     public RssFeedDetailPage()
     {
@@ -26,6 +27,9 @@ public sealed partial class RssFeedDetailPage : Page
         ArticlesListView.ItemsSource = _articles;
         Loaded += RssFeedDetailPage_Loaded;
         Unloaded += RssFeedDetailPage_Unloaded;
+        ActualThemeChanged += RssFeedDetailPage_ActualThemeChanged;
+        
+        ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -75,6 +79,16 @@ public sealed partial class RssFeedDetailPage : Page
     {
         _rssService.OnFeedChanged -= RssService_OnFeedChanged;
         _rssService.OnItemsUpdated -= RssService_OnItemsUpdated;
+        ActualThemeChanged -= RssFeedDetailPage_ActualThemeChanged;
+    }
+
+    private void RssFeedDetailPage_ActualThemeChanged(FrameworkElement sender, object args)
+    {
+        if (_currentRenderedArticle != null && ReaderViewContainer.Visibility == Visibility.Visible)
+        {
+            string html = GenerateReaderHtml(_currentRenderedArticle);
+            ReaderWebView.NavigateToString(html);
+        }
     }
 
     private void RssService_OnFeedChanged()
@@ -146,6 +160,7 @@ public sealed partial class RssFeedDetailPage : Page
     private async void EnsureWebViewCoreInitialized()
     {
         await ReaderWebView.EnsureCoreWebView2Async();
+        ReaderWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
     }
 
     private async void FeedComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -173,6 +188,7 @@ public sealed partial class RssFeedDetailPage : Page
 
     private async Task OpenReaderViewAsync(RssItem item)
     {
+        _currentRenderedArticle = null;
         ListViewContainer.Visibility = Visibility.Collapsed;
         ReaderViewContainer.Visibility = Visibility.Visible;
         ReaderLoadingPanel.Visibility = Visibility.Visible;
@@ -201,6 +217,7 @@ public sealed partial class RssFeedDetailPage : Page
         // Step 2: If the fast path succeeded, render it
         if (!needsWebViewFallback && fullArticle != null)
         {
+            _currentRenderedArticle = fullArticle;
             string html = GenerateReaderHtml(fullArticle);
             await ReaderWebView.EnsureCoreWebView2Async();
             // Set to fully transparent (alpha = 0) to let mica effect show through
@@ -346,6 +363,7 @@ public sealed partial class RssFeedDetailPage : Page
                         PublicationIconUrl = item.PublicationIconUrl,
                         ImageUrl = item.ImageUrl
                     };
+                    _currentRenderedArticle = fallbackArticle;
                     string finalHtml = GenerateReaderHtml(fallbackArticle);
                     ReaderWebView.NavigateToString(finalHtml);
                 }
@@ -377,6 +395,7 @@ public sealed partial class RssFeedDetailPage : Page
     private void BackButton_Click(object sender, RoutedEventArgs e)
     {
         _selectedItem = null;
+        _currentRenderedArticle = null;
         ReaderViewContainer.Visibility = Visibility.Collapsed;
         ListViewContainer.Visibility = Visibility.Visible;
         
@@ -410,7 +429,7 @@ public sealed partial class RssFeedDetailPage : Page
         // Extract gradient colors from SVG top area - these match the backgrounds
         // Dark theme: purple tone sampled from the dark gradient's top region
         // Light theme: warm tan gradient starting with #D9B08D
-        string bodyBackground = isDark ? "rgba(52, 44, 66, 0.45)" : "rgba(217, 176, 141, 0.15)";
+        string bodyBackground = "transparent";
 
         string featuredImageHtml = string.IsNullOrEmpty(article.ImageUrl) 
             ? "" 
