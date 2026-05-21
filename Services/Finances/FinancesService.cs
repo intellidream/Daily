@@ -16,6 +16,8 @@ namespace Daily.Services.Finances
         private readonly IDatabaseService _databaseService;
 
         public event Action OnViewTypeChanged;
+        public event Action? OnQuotesUpdated;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _fetchingSymbols = new();
         private string _currentViewType = "World";
         public string CurrentViewType
         {
@@ -41,7 +43,7 @@ namespace Daily.Services.Finances
         public async Task<List<StockQuote>> GetStockQuotesAsync(List<string> symbols)
         {
             var results = new List<StockQuote>();
-            var symbolsToFetchFromYahoo = new List<string>();
+            var symbolsToFetch = new List<string>();
 
             if (symbols == null || !symbols.Any()) return results;
 
@@ -59,137 +61,154 @@ namespace Daily.Services.Finances
                 cachedSecurities = await _databaseService.Connection.Table<LocalSecurity>()
                                       .Where(s => symbols.Contains(s.Symbol))
                                       .ToListAsync();
-
-                foreach (var symbol in symbols)
-                {
-                    var cached = cachedSecurities.FirstOrDefault(s => string.Equals(s.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
-                    
-                    bool isFresh = false;
-                    bool isRich = false;
-
-                    if (cached != null)
-                    {
-                        cached.Type = MapMarketType(cached.Type, symbol);
-                        // Check Freshness (15 mins)
-                        if (cached.LastUpdatedAt.HasValue && cached.LastUpdatedAt.Value > DateTime.UtcNow.AddMinutes(-15))
-                        {
-                            isFresh = true;
-                        }
-
-                        // Check Richness (DayHigh/Volume)
-                        if (cached.DayHigh.HasValue && cached.Volume.HasValue)
-                        {
-                            isRich = true;
-                        }
-                        
-                        // Cache invalidations removed to prevent loops
-
-                        // Use cached if valid-ish (we can show stale data while fetching)
-                        results.Add(MapToQuote(cached));
-                    }
-
-                    // Decide if we need to fetch
-                    // RELAXED CACHE: If it's fresh, use it. Don't force re-fetch just for "richness" (Volume/DayHigh).
-                    // This prevents infinite loops with Finnhub which always returns "light" data.
-                    if (!isFresh || cached == null)
-                    {
-                         if (!symbolsToFetchFromYahoo.Contains(symbol)) symbolsToFetchFromYahoo.Add(symbol);
-                    }
-                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[FinancesService] SQLite Read Error: {ex.Message}");
-                symbolsToFetchFromYahoo = symbols.ToList();
             }
 
-            // 2. Fetch Stale/Missing/Rich data from Yahoo Service directly
-            if (symbolsToFetchFromYahoo.Any())
+            foreach (var symbol in symbols)
             {
-                try
+                var cached = cachedSecurities.FirstOrDefault(s => string.Equals(s.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
+                
+                bool isFresh = false;
+
+                if (cached != null)
                 {
-                    Console.WriteLine($"[FinancesService] Fetching from Yahoo Service: {string.Join(", ", symbolsToFetchFromYahoo)}");
-                    
-                    var yahooData = await _yahooService.GetMarketDataAsync(symbolsToFetchFromYahoo);
-                    
-                    var missingSymbols = symbolsToFetchFromYahoo.Where(s => yahooData == null || !yahooData.ContainsKey(s)).ToList();
-                    if (missingSymbols.Any())
+                    cached.Type = MapMarketType(cached.Type, symbol);
+                    // Check Freshness (15 mins)
+                    if (cached.LastUpdatedAt.HasValue && cached.LastUpdatedAt.Value > DateTime.UtcNow.AddMinutes(-15))
                     {
-                        yahooData ??= new Dictionary<string, StockQuote>();
-                        var tasks = missingSymbols.Select(async missing =>
-                        {
-                            try {
-                                var finnhubQuote = await _finnhubService.GetQuoteAsync(missing);
-                                if (finnhubQuote != null)
-                                {
-                                    lock (yahooData) { yahooData[missing] = finnhubQuote; }
-                                }
-                            } catch { }
-                        });
-                        await Task.WhenAll(tasks);
+                        isFresh = true;
                     }
 
-                    if (yahooData != null && yahooData.Any())
+                    // Use cached if valid-ish (we can show stale data while fetching)
+                    results.Add(MapToQuote(cached));
+                }
+                else
+                {
+                    // Return placeholder quote immediately
+                    results.Add(new StockQuote
                     {
-                        foreach (var kvp in yahooData)
+                        Symbol = symbol,
+                        CompanyName = symbol,
+                        CurrentPrice = 0,
+                        Change = 0,
+                        PercentChange = 0,
+                        MarketType = MapMarketType("", symbol),
+                        LogoUrl = GetLogoUrl(symbol, symbol, MapMarketType("", symbol))
+                    });
+                }
+
+                // Decide if we need to fetch
+                if (!isFresh || cached == null)
+                {
+                     // Check if not already being fetched
+                     if (!_fetchingSymbols.ContainsKey(symbol))
+                     {
+                         symbolsToFetch.Add(symbol);
+                     }
+                }
+            }
+
+            // 2. Fetch Stale/Missing data asynchronously in the background
+            if (symbolsToFetch.Any())
+            {
+                foreach (var sym in symbolsToFetch)
+                {
+                    _fetchingSymbols.TryAdd(sym, true);
+                }
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        Console.WriteLine($"[FinancesService] Background Fetching: {string.Join(", ", symbolsToFetch)}");
+                        
+                        var yahooData = await _yahooService.GetMarketDataAsync(symbolsToFetch);
+                        
+                        var missingSymbols = symbolsToFetch.Where(s => yahooData == null || !yahooData.ContainsKey(s)).ToList();
+                        if (missingSymbols.Any())
                         {
-                            var freshQuote = kvp.Value;
-                            var symbol = kvp.Key;
-
-                            // Fallback logic for Name/Logo
-                            var cached = cachedSecurities.FirstOrDefault(s => string.Equals(s.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
-                            var finalName = string.IsNullOrEmpty(freshQuote.CompanyName) || freshQuote.CompanyName == symbol ? (cached?.Name ?? symbol) : freshQuote.CompanyName;
-                            
-                            // Normalize Market Type here!
-                            freshQuote.MarketType = MapMarketType(freshQuote.MarketType, symbol);
-                            
-                            var finalLogoUrl = cached?.LogoUrl ?? GetLogoUrl(symbol, finalName, freshQuote.MarketType);
-
-                            freshQuote.CompanyName = finalName;
-                            freshQuote.LogoUrl = finalLogoUrl;
-
-                            // Remove stale entry if exists (case-insensitive)
-                            var existing = results.FirstOrDefault(r => string.Equals(r.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
-                            if (existing != null) results.Remove(existing);
-                            
-                            results.Add(freshQuote);
-
-                            // Update Local SQLite Cache
-                            try
+                            yahooData ??= new Dictionary<string, StockQuote>();
+                            var tasks = missingSymbols.Select(async missing =>
                             {
-                                var security = new LocalSecurity
-                                {
-                                    Symbol = freshQuote.Symbol,
-                                    Name = freshQuote.CompanyName, 
-                                    LatestPrice = freshQuote.CurrentPrice,
-                                    LastUpdatedAt = DateTime.UtcNow,
-                                    Type = MapMarketType(freshQuote.MarketType, symbol),
-                                    Change = freshQuote.Change,
-                                    PercentChange = freshQuote.PercentChange,
-                                    
-                                    // Rich Data
-                                    DayHigh = freshQuote.DayHigh,
-                                    DayLow = freshQuote.DayLow,
-                                    Volume = freshQuote.Volume,
-                                    MarketCap = freshQuote.MarketCap,
-                                    Currency = freshQuote.Currency,
-                                    Exchange = freshQuote.Exchange,
-                                    LogoUrl = freshQuote.LogoUrl
-                                };
+                                try {
+                                    var finnhubQuote = await _finnhubService.GetQuoteAsync(missing);
+                                    if (finnhubQuote != null)
+                                    {
+                                        lock (yahooData) { yahooData[missing] = finnhubQuote; }
+                                    }
+                                } catch { }
+                            });
+                            await Task.WhenAll(tasks);
+                        }
+
+                        if (yahooData != null && yahooData.Any())
+                        {
+                            foreach (var kvp in yahooData)
+                            {
+                                var freshQuote = kvp.Value;
+                                var symbol = kvp.Key;
+
+                                // Fallback logic for Name/Logo
+                                var cached = cachedSecurities.FirstOrDefault(s => string.Equals(s.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
+                                var finalName = string.IsNullOrEmpty(freshQuote.CompanyName) || freshQuote.CompanyName == symbol ? (cached?.Name ?? symbol) : freshQuote.CompanyName;
                                 
-                                await _databaseService.Connection.InsertOrReplaceAsync(security);
-                            }
-                            catch(Exception ex)
-                            {
-                                 Console.WriteLine($"[FinancesService] SQLite Write Error: {ex}");
+                                // Normalize Market Type here!
+                                freshQuote.MarketType = MapMarketType(freshQuote.MarketType, symbol);
+                                
+                                var finalLogoUrl = cached?.LogoUrl ?? GetLogoUrl(symbol, finalName, freshQuote.MarketType);
+
+                                freshQuote.CompanyName = finalName;
+                                freshQuote.LogoUrl = finalLogoUrl;
+
+                                // Update Local SQLite Cache
+                                try
+                                {
+                                    var security = new LocalSecurity
+                                    {
+                                        Symbol = freshQuote.Symbol,
+                                        Name = freshQuote.CompanyName, 
+                                        LatestPrice = freshQuote.CurrentPrice,
+                                        LastUpdatedAt = DateTime.UtcNow,
+                                        Type = MapMarketType(freshQuote.MarketType, symbol),
+                                        Change = freshQuote.Change,
+                                        PercentChange = freshQuote.PercentChange,
+                                        
+                                        // Rich Data
+                                        DayHigh = freshQuote.DayHigh,
+                                        DayLow = freshQuote.DayLow,
+                                        Volume = freshQuote.Volume,
+                                        MarketCap = freshQuote.MarketCap,
+                                        Currency = freshQuote.Currency,
+                                        Exchange = freshQuote.Exchange,
+                                        LogoUrl = freshQuote.LogoUrl
+                                    };
+                                    
+                                    await _databaseService.Connection.InsertOrReplaceAsync(security);
+                                }
+                                catch(Exception ex)
+                                {
+                                     Console.WriteLine($"[FinancesService] SQLite Write Error: {ex}");
+                                }
                             }
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[FinancesService] Yahoo Service Error: {ex}");
-                }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[FinancesService] Background Fetch Error: {ex}");
+                    }
+                    finally
+                    {
+                        foreach (var sym in symbolsToFetch)
+                        {
+                            _fetchingSymbols.TryRemove(sym, out _);
+                        }
+                        // Notify that quotes have been updated
+                        OnQuotesUpdated?.Invoke();
+                    }
+                });
             }
 
             return results;

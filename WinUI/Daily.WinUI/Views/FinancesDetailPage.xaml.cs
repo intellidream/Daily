@@ -78,11 +78,16 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             _financesService = App.Current.Services.GetRequiredService<IFinancesService>();
             _macroService = App.Current.Services.GetRequiredService<IMacroService>();
             _heatmapService = App.Current.Services.GetRequiredService<IHeatmapService>();
+            this.Unloaded += Page_Unloaded;
         }
     }
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
+        if (_financesService != null)
+        {
+            _financesService.OnQuotesUpdated += OnQuotesUpdated;
+        }
         await LoadDataAsync();
         
         // Auto-select tab based on FinancesService state
@@ -91,28 +96,42 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         else MainPivot.SelectedIndex = 0;
     }
 
-    private async Task LoadDataAsync()
+    private void Page_Unloaded(object sender, RoutedEventArgs e)
+    {
+        if (_financesService != null)
+        {
+            _financesService.OnQuotesUpdated -= OnQuotesUpdated;
+        }
+    }
+
+    private void OnQuotesUpdated()
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            await LoadDataAsync(showLoadingSpinner: false);
+        });
+    }
+
+    private async Task LoadDataAsync(bool showLoadingSpinner = true)
     {
         await _loadLock.WaitAsync();
         try
         {
-            IsWorldLoading = true;
-            IsStocksLoading = true;
-            IsMoneyLoading = true;
+            if (showLoadingSpinner)
+            {
+                IsWorldLoading = true;
+                IsStocksLoading = true;
+                IsMoneyLoading = true;
 
-            MacroIndicators.Clear();
-            HeatmapData.Clear();
-            Holdings.Clear();
-            Accounts.Clear();
+                MacroIndicators.Clear();
+                HeatmapData.Clear();
+                Holdings.Clear();
+                Accounts.Clear();
+            }
 
             // World
             var macros = await _macroService.GetMacroIndicatorsAsync();
-            MacroIndicators.Clear();
-            foreach (var m in macros) MacroIndicators.Add(m);
-
             var heatmap = await _heatmapService.GetGlobalHeatmapDataAsync();
-            HeatmapData.Clear();
-            foreach (var h in heatmap) HeatmapData.Add(h);
 
             // Stocks (All stocks in watchlist)
             var portfolio = await _financesService.GetHoldingsWithQuotesAsync();
@@ -130,6 +149,17 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             var allSymbols = _trackedSymbols.Concat(watchlistSymbols).Concat(_cryptoSymbols).Concat(_forexSymbols).Distinct().ToList();
             var allStocks = await _financesService.GetStockQuotesAsync(allSymbols);
 
+            // Money
+            var nw = await _financesService.GetNetWorthAsync();
+            var accounts = await _financesService.GetAccountsAsync();
+
+            // Synchronously update the UI lists/properties at the very end
+            MacroIndicators.Clear();
+            foreach (var m in macros) MacroIndicators.Add(m);
+
+            HeatmapData.Clear();
+            foreach (var h in heatmap) HeatmapData.Add(h);
+
             _allWatchlistStocks = allStocks;
             
             // Add portfolio stocks to all watchlist if not present
@@ -145,13 +175,10 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             if (CryptoBtn.IsChecked == true) currentFilter = "crypto";
             else if (ForexBtn.IsChecked == true) currentFilter = "forex";
             
-            await FilterWatchlistAsync(currentFilter);
+            await FilterWatchlistAsync(currentFilter, showLoadingSpinner);
 
-            // Money
-            var nw = await _financesService.GetNetWorthAsync();
             NetWorthDisplay = nw.ToString("C0");
 
-            var accounts = await _financesService.GetAccountsAsync();
             decimal cash = accounts.Sum(a => a.CurrentBalance);
             CashDisplay = cash.ToString("C0");
             
@@ -170,9 +197,12 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         }
         finally
         {
-            IsWorldLoading = false;
-            IsStocksLoading = false;
-            IsMoneyLoading = false;
+            if (showLoadingSpinner)
+            {
+                IsWorldLoading = false;
+                IsStocksLoading = false;
+                IsMoneyLoading = false;
+            }
             _loadLock.Release();
         }
     }
@@ -212,16 +242,22 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         }
     }
 
-    private async Task FilterWatchlistAsync(string marketType)
+    private async Task FilterWatchlistAsync(string marketType, bool showLoadingSpinner = true)
     {
-        IsStocksLoading = true;
+        if (showLoadingSpinner)
+        {
+            IsStocksLoading = true;
+        }
         await _watchlistLock.WaitAsync();
         try
         {
             WatchlistStocks.Clear();
             
-            // Brief delay to allow UI to render spinner
-            await Task.Delay(50);
+            if (showLoadingSpinner)
+            {
+                // Brief delay to allow UI to render spinner
+                await Task.Delay(50);
+            }
             
             var filtered = _allWatchlistStocks.Where(x => x.MarketType?.ToLower() == marketType).ToList();
 
@@ -233,7 +269,10 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         finally
         {
             _watchlistLock.Release();
-            IsStocksLoading = false;
+            if (showLoadingSpinner)
+            {
+                IsStocksLoading = false;
+            }
         }
     }
 }

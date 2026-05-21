@@ -116,6 +116,10 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         {
             _refreshService.RefreshRequested += OnRefreshRequested;
         }
+        if (_financesService != null)
+        {
+            _financesService.OnQuotesUpdated += OnQuotesUpdated;
+        }
         await LoadDataAsync();
         UpdateAdaptiveState(this.ActualWidth, this.ActualHeight);
     }
@@ -126,6 +130,18 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         {
             _refreshService.RefreshRequested -= OnRefreshRequested;
         }
+        if (_financesService != null)
+        {
+            _financesService.OnQuotesUpdated -= OnQuotesUpdated;
+        }
+    }
+
+    private void OnQuotesUpdated()
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            await LoadDataAsync(showLoadingSpinner: false);
+        });
     }
 
     private Task OnRefreshRequested()
@@ -167,44 +183,31 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         }
     }
 
-    public async Task LoadDataAsync()
+    public async Task LoadDataAsync(bool showLoadingSpinner = true)
     {
         await _loadLock.WaitAsync();
         try
         {
-            IsLoading = true;
-            MacroIndicators.Clear();
-            HeatmapData.Clear();
-            TopStocks.Clear();
-            ExtendedStocks.Clear();
-            Accounts.Clear();
+            if (showLoadingSpinner)
+            {
+                IsLoading = true;
+                MacroIndicators.Clear();
+                HeatmapData.Clear();
+                TopStocks.Clear();
+                ExtendedStocks.Clear();
+                Accounts.Clear();
+            }
 
             // 1. World Data
             var macros = await _macroService.GetMacroIndicatorsAsync();
-            MacroIndicators.Clear();
-            foreach (var m in macros.Take(4)) MacroIndicators.Add(m);
-
             var heatmap = await _heatmapService.GetGlobalHeatmapDataAsync();
-            HeatmapData.Clear();
-            foreach (var h in heatmap.Take(8)) HeatmapData.Add(h);
-            HasHeatmapData = HeatmapData.Any();
 
             // 2. Money Data
             var nw = await _financesService.GetNetWorthAsync();
-            NetWorthDisplay = nw.ToString("C0");
-
             var accounts = await _financesService.GetAccountsAsync();
-            decimal cash = accounts.Sum(a => a.CurrentBalance);
-            CashDisplay = cash.ToString("C0");
             
-            Accounts.Clear();
-            foreach (var a in accounts.Take(5)) Accounts.Add(a);
-            HasAccounts = Accounts.Any();
-
             // 3. Stocks Data
             var portfolio = await _financesService.GetHoldingsWithQuotesAsync();
-            decimal investments = portfolio.OfType<PortfolioItem>().Sum(p => p.TotalValue);
-            InvestmentsDisplay = investments.ToString("C0");
 
             var stocksToDisplay = portfolio;
             if (!stocksToDisplay.Any())
@@ -225,16 +228,34 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
                 }
             }
 
-            TopStocks.Clear();
-            ExtendedStocks.Clear();
-            
-            var top = stocksToDisplay.Take(4).ToList();
-            
             var _cryptoSymbols = new List<string> { "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "DOT-USD", "LINK-USD" };
             var cryptoDefaults = await _financesService.GetStockQuotesAsync(_cryptoSymbols);
             var extended = cryptoDefaults.Take(10).ToList();
 
-            foreach (var s in top) TopStocks.Add(s);
+            // Populate collections
+            MacroIndicators.Clear();
+            foreach (var m in macros.Take(4)) MacroIndicators.Add(m);
+
+            HeatmapData.Clear();
+            foreach (var h in heatmap.Take(8)) HeatmapData.Add(h);
+            HasHeatmapData = HeatmapData.Any();
+
+            NetWorthDisplay = nw.ToString("C0");
+
+            decimal cash = accounts.Sum(a => a.CurrentBalance);
+            CashDisplay = cash.ToString("C0");
+            
+            Accounts.Clear();
+            foreach (var a in accounts.Take(5)) Accounts.Add(a);
+            HasAccounts = Accounts.Any();
+
+            decimal investments = portfolio.OfType<PortfolioItem>().Sum(p => p.TotalValue);
+            InvestmentsDisplay = investments.ToString("C0");
+
+            TopStocks.Clear();
+            foreach (var s in stocksToDisplay.Take(4)) TopStocks.Add(s);
+
+            ExtendedStocks.Clear();
             foreach (var s in extended) ExtendedStocks.Add(s);
             HasStocks = TopStocks.Any();
         }
@@ -244,7 +265,10 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         }
         finally
         {
-            IsLoading = false;
+            if (showLoadingSpinner)
+            {
+                IsLoading = false;
+            }
             _loadLock.Release();
         }
     }

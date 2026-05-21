@@ -25,6 +25,7 @@ namespace Daily.Services
         public string LastSyncMessage { get; private set; } = "";
 
         private System.Threading.Timer? _syncTimer;
+        private readonly System.Threading.SemaphoreSlim _syncSemaphore = new(1, 1);
 
         private void LogSyncException(string context, Exception ex)
         {
@@ -37,6 +38,23 @@ namespace Daily.Services
 
         public async Task SyncAsync()
         {
+            if (!await _syncSemaphore.WaitAsync(0))
+            {
+                Console.WriteLine("[SyncService] SyncAsync: Sync already in progress. Skipping.");
+                return;
+            }
+            try
+            {
+                await SyncInternalAsync();
+            }
+            finally
+            {
+                _syncSemaphore.Release();
+            }
+        }
+
+        private async Task SyncInternalAsync()
+        {
             LastSyncError = null;
             LastSyncMessage = "";
             if (_supabase.Auth.CurrentSession == null) return;
@@ -48,8 +66,8 @@ namespace Daily.Services
                 try { await _healthService.SyncNativeHealthDataAsync(); } 
                 catch (Exception hex) { Console.WriteLine($"[SyncService] Health Sync Warning: {hex.Message}"); }
 
-                await PushAsync();
-                await PullAsync();
+                await PushInternalAsync();
+                await PullInternalAsync();
             }
             catch (Exception ex)
             {
@@ -86,6 +104,23 @@ namespace Daily.Services
         }
 
         public async Task PushAsync()
+        {
+            if (!await _syncSemaphore.WaitAsync(0))
+            {
+                Console.WriteLine("[SyncService] PushAsync: Sync already in progress. Skipping.");
+                return;
+            }
+            try
+            {
+                await PushInternalAsync();
+            }
+            finally
+            {
+                _syncSemaphore.Release();
+            }
+        }
+
+        private async Task PushInternalAsync()
         {
             Console.WriteLine("[SyncService] PushAsync Started");
             await _databaseService.InitializeAsync();
@@ -215,6 +250,23 @@ namespace Daily.Services
         }
 
         public async Task<int> PullAsync()
+        {
+            if (!await _syncSemaphore.WaitAsync(0))
+            {
+                Console.WriteLine("[SyncService] PullAsync: Sync already in progress. Skipping.");
+                return 0;
+            }
+            try
+            {
+                return await PullInternalAsync();
+            }
+            finally
+            {
+                _syncSemaphore.Release();
+            }
+        }
+
+        private async Task<int> PullInternalAsync()
         {
             Console.WriteLine("[SyncService] PullAsync Started");
             await _databaseService.InitializeAsync();

@@ -229,6 +229,7 @@
     protected override async Task OnInitializedAsync()
     {
         RefreshService.RefreshRequested += RefreshData;
+        FinancesService.OnQuotesUpdated += OnQuotesUpdated;
         await LoadData();
     }
     
@@ -253,10 +254,21 @@
         });
     }
     
-    private async Task LoadData()
+    private void OnQuotesUpdated()
     {
-        _loading = true;
-        await InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(async () =>
+        {
+            await LoadData(showLoadingSpinner: false);
+        });
+    }
+
+    private async Task LoadData(bool showLoadingSpinner = true)
+    {
+        if (showLoadingSpinner)
+        {
+            _loading = true;
+            await InvokeAsync(StateHasChanged);
+        }
         
         try 
         {
@@ -285,7 +297,10 @@
             Console.WriteLine($"Error loading finance data: {ex}");
         }
         
-        _loading = false;
+        if (showLoadingSpinner)
+        {
+            _loading = false;
+        }
         await InvokeAsync(StateHasChanged);
     }
 
@@ -302,5 +317,6 @@
     public void Dispose()
     {
         RefreshService.RefreshRequested -= RefreshData;
+        FinancesService.OnQuotesUpdated -= OnQuotesUpdated;
     }
 }

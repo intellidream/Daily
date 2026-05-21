@@ -9,6 +9,7 @@ namespace Daily.Services.Finances
     {
         string CurrentViewType { get; set; }
         event Action OnViewTypeChanged;
+        event Action OnQuotesUpdated;
         
         Task<List<StockQuote>> GetStockQuotesAsync(List<string> symbols);
         Task<MoneyData> GetMoneyDataAsync();
