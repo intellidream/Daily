@@ -7,6 +7,7 @@ namespace Daily.Services
     {
         public event Func<Task> RefreshRequested;
         public event Func<Task> DetailRefreshRequested;
+        public event Func<Task> HealthRefreshRequested;
 
         public async Task TriggerRefreshAsync()
         {
@@ -38,6 +39,39 @@ namespace Daily.Services
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[RefreshService] Aggregate Refresh Error: {ex}");
+                }
+            }
+        }
+
+        public async Task TriggerHealthRefreshAsync()
+        {
+            if (HealthRefreshRequested != null)
+            {
+                var delegates = HealthRefreshRequested.GetInvocationList();
+                var tasks = new System.Collections.Generic.List<Task>(delegates.Length);
+                foreach (Func<Task> d in delegates)
+                {
+                    try
+                    {
+                        tasks.Add(d());
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Health refresh delegate error: {ex}");
+                    }
+                }
+                try
+                {
+                    // Enforce 15s Timeout to prevent "Infinite Spinner"
+                    await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(15));
+                }
+                catch (TimeoutException)
+                {
+                    Console.WriteLine("[RefreshService] TriggerHealthRefreshAsync TIMED OUT > 15s. Unblocking UI.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[RefreshService] Aggregate HealthRefresh Error: {ex}");
                 }
             }
         }

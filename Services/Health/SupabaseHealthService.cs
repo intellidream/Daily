@@ -291,7 +291,7 @@ namespace Daily.Services.Health
                 _lastDeltaPullTime = DateTime.UtcNow;
                 
                 // Trigger UI refresh
-                await _refreshService.TriggerRefreshAsync();
+                await _refreshService.TriggerHealthRefreshAsync();
             }
             catch (Exception ex)
             {

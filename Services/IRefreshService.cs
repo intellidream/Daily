@@ -7,7 +7,9 @@ namespace Daily.Services
     {
         event Func<Task> RefreshRequested;
         event Func<Task> DetailRefreshRequested;
+        event Func<Task> HealthRefreshRequested;
         Task TriggerRefreshAsync();
         Task TriggerDetailRefreshAsync();
+        Task TriggerHealthRefreshAsync();
     }
 }

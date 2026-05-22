@@ -35,6 +35,7 @@ namespace Daily_WinUI.Views
             if (_refreshService != null)
             {
                 _refreshService.RefreshRequested += OnRefreshRequested;
+                _refreshService.HealthRefreshRequested += OnRefreshRequested;
             }
             await LoadDataAsync();
         }
@@ -44,6 +45,7 @@ namespace Daily_WinUI.Views
             if (_refreshService != null)
             {
                 _refreshService.RefreshRequested -= OnRefreshRequested;
+                _refreshService.HealthRefreshRequested -= OnRefreshRequested;
             }
         }
 

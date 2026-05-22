@@ -568,6 +568,7 @@
     protected override async Task OnInitializedAsync()
     {
         RefreshService.RefreshRequested += LoadDataInternal;
+        RefreshService.HealthRefreshRequested += LoadDataInternal;
         
         // Initial Log Load
         _debugLog = SyncService.DebugLog;
@@ -834,6 +835,7 @@
     public void Dispose()
     {
         RefreshService.RefreshRequested -= LoadDataInternal;
+        RefreshService.HealthRefreshRequested -= LoadDataInternal;
         SyncService.OnDebugLogUpdated -= UpdateLog;
     }
 }
