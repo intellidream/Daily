@@ -55,12 +55,7 @@
 
             <NavigationViewItem x:Name="NavAbout" Tag="DayOne" Content="DayOne">
                 <NavigationViewItem.Icon>
-                    <ImageIcon>
-                        <ImageIcon.Source>
-                            <SvgImageSource UriSource="{ThemeResource AppIconSource}"
-                                            RasterizePixelWidth="64" RasterizePixelHeight="64"/>
-                        </ImageIcon.Source>
-                    </ImageIcon>
+                    <FontIcon Glyph="&#xE783;" FontFamily="Segoe Fluent Icons"/>
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
 

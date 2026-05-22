@@ -19,7 +19,7 @@
                         BorderThickness="1">
                     <Image x:Name="AppIconImage" Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Image.Source>
-                            <SvgImageSource UriSource="{ThemeResource AppIconSource}"
+                            <SvgImageSource UriSource="ms-appx:///Assets/GemIcon.svg"
                                             RasterizePixelWidth="192" RasterizePixelHeight="192"/>
                         </Image.Source>
                     </Image>
