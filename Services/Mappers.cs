@@ -289,6 +289,11 @@ namespace Daily.Services
 
         // --- VitalMetric ---
 
+        public static DateTime NormalizeToUtcMidnight(this DateTime dt)
+        {
+            return DateTime.SpecifyKind(dt.Date, DateTimeKind.Utc);
+        }
+
         public static Daily.Models.Health.VitalMetric ToDomain(this LocalVitalMetric local)
         {
             return new Daily.Models.Health.VitalMetric
@@ -298,7 +303,7 @@ namespace Daily.Services
                 TypeString = local.TypeString,
                 Value = local.Value,
                 Unit = local.Unit,
-                Date = SafeUtc(local.Date),
+                Date = local.Date.NormalizeToUtcMidnight(),
                 SourceDevice = local.SourceDevice,
                 CreatedAt = SafeUtc(local.CreatedAt),
                 UpdatedAt = SafeUtc(local.UpdatedAt),
@@ -308,7 +313,8 @@ namespace Daily.Services
 
         public static LocalVitalMetric ToLocal(this Daily.Models.Health.VitalMetric domain)
         {
-            var dateStr = domain.Date.SafeUtc().ToString("yyyy-MM-dd");
+            var normalizedDate = domain.Date.NormalizeToUtcMidnight();
+            var dateStr = normalizedDate.ToString("yyyy-MM-dd");
             var deterministicId = GenerateGuid($"{domain.UserId.ToString().ToLowerInvariant()}_{domain.TypeString}_{dateStr}").ToString().ToLowerInvariant();
             return new LocalVitalMetric
             {
@@ -317,7 +323,7 @@ namespace Daily.Services
                 TypeString = domain.TypeString,
                 Value = domain.Value,
                 Unit = domain.Unit,
-                Date = domain.Date.SafeUtc(),
+                Date = normalizedDate,
                 SourceDevice = domain.SourceDevice,
                 CreatedAt = domain.CreatedAt.SafeUtc(),
                 UpdatedAt = domain.UpdatedAt.SafeUtc(),

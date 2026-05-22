@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Daily.Models.Health;
 using Daily.Services.Health;
+using Daily.Services;
 using Foundation;
 using HealthKit;
 
@@ -106,8 +107,8 @@ namespace Daily.Platforms.iOS.Services.Health
 
             var metrics = new List<VitalMetric>();
             
-            // Calculate Start/End for the specific Date (Midnight to Midnight)
-            DateTime start = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+            // Calculate Start/End for the specific Date (Midnight to Midnight in local time)
+            DateTime start = DateTime.SpecifyKind(date.Date, DateTimeKind.Local);
             DateTime end = start.AddDays(1);
 
             var nsStart = (NSDate)start;
@@ -131,7 +132,7 @@ namespace Daily.Platforms.iOS.Services.Health
                             Type = VitalType.Steps,
                             Value = Math.Round(totalSteps),
                             Unit = "count",
-                            Date = start, // Midnight
+                            Date = start.NormalizeToUtcMidnight(), // Midnight
                             SourceDevice = "iOS"
                         });
                     }
@@ -152,7 +153,7 @@ namespace Daily.Platforms.iOS.Services.Health
                             Type = VitalType.HeartRate,
                             Value = Math.Round(avgHr),
                             Unit = "bpm",
-                            Date = start, // Midnight
+                            Date = start.NormalizeToUtcMidnight(), // Midnight
                             SourceDevice = "iOS"
                         });
                     }
@@ -172,7 +173,7 @@ namespace Daily.Platforms.iOS.Services.Health
                             Type = VitalType.RestingHeartRate,
                             Value = Math.Round(avgRhr),
                             Unit = "bpm",
-                            Date = start, // Midnight
+                            Date = start.NormalizeToUtcMidnight(), // Midnight
                             SourceDevice = "iOS"
                         });
                      }
@@ -238,7 +239,7 @@ namespace Daily.Platforms.iOS.Services.Health
                               Type = VitalType.SleepDuration,
                               Value = Math.Round(finalSleep, 1), 
                               Unit = "min",
-                              Date = start,
+                              Date = start.NormalizeToUtcMidnight(),
                               SourceDevice = "iOS"
                           });
                      }
@@ -621,7 +622,7 @@ namespace Daily.Platforms.iOS.Services.Health
                 Type = type,
                 Value = value,
                 Unit = unit,
-                Date = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc),
+                Date = date.NormalizeToUtcMidnight(),
                 SourceDevice = "iOS"
             };
         }
