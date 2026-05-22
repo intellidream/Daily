@@ -75,10 +75,11 @@ namespace Daily.Platforms.Android
 
             try
             {
+                date = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
                 var zoneId = Java.Time.ZoneId.SystemDefault();
                 // Manual Instant Conversion (Proven in V41)
-                var startDateTime = date.Date;
-                var endDateTime = date.Date.AddDays(1);
+                var startDateTime = date;
+                var endDateTime = date.AddDays(1);
                 var startInstant = Java.Time.Instant.OfEpochSecond(new DateTimeOffset(startDateTime).ToUnixTimeSeconds());
                 var endInstant = Java.Time.Instant.OfEpochSecond(new DateTimeOffset(endDateTime).ToUnixTimeSeconds());
 

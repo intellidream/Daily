@@ -107,7 +107,7 @@ namespace Daily.Platforms.iOS.Services.Health
             var metrics = new List<VitalMetric>();
             
             // Calculate Start/End for the specific Date (Midnight to Midnight)
-            DateTime start = date.Date;
+            DateTime start = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
             DateTime end = start.AddDays(1);
 
             var nsStart = (NSDate)start;
@@ -621,7 +621,7 @@ namespace Daily.Platforms.iOS.Services.Health
                 Type = type,
                 Value = value,
                 Unit = unit,
-                Date = date,
+                Date = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc),
                 SourceDevice = "iOS"
             };
         }

@@ -30,6 +30,7 @@ namespace Daily.Services.Health
         private CancellationTokenSource? _syncDebounceCts;
         private readonly object _debounceLock = new();
         private DateTime _lastDeltaPullTime = DateTime.MinValue;
+        private static bool _migrationRun = false;
 
         public SupabaseHealthService(
             Supabase.Client supabase, 
@@ -101,6 +102,13 @@ namespace Daily.Services.Health
         {
             if (IsAuthenticated)
             {
+                await _databaseService.InitializeAsync();
+                if (!_migrationRun)
+                {
+                    await MigrateAndDeduplicateVitalsAsync();
+                    _migrationRun = true;
+                }
+
                 await SetupRealtimeAsync();
                 CheckCacheStalenessAndPullAsync();
             }
@@ -116,6 +124,63 @@ namespace Daily.Services.Health
                     catch { }
                     _vitalsChannel = null;
                 }
+            }
+        }
+
+        private async Task MigrateAndDeduplicateVitalsAsync()
+        {
+            try
+            {
+                Console.WriteLine("[SupabaseHealthService] Running vitals migration and deduplication...");
+                var allVitals = await _databaseService.Connection.Table<LocalVitalMetric>().ToListAsync();
+                if (allVitals == null || !allVitals.Any())
+                {
+                    Console.WriteLine("[SupabaseHealthService] No local vitals to migrate.");
+                    return;
+                }
+
+                var migratedList = new List<LocalVitalMetric>();
+                var grouped = allVitals.GroupBy(v => new { v.UserId, v.TypeString, Date = v.Date.Date });
+
+                foreach (var group in grouped)
+                {
+                    // Pick the latest record by UpdatedAt
+                    var latest = group.OrderByDescending(v => v.UpdatedAt).First();
+                    
+                    // Generate the deterministic ID
+                    var dateStr = latest.Date.SafeUtc().ToString("yyyy-MM-dd");
+                    var expectedId = Mappers.GenerateGuid($"{latest.UserId.ToLowerInvariant()}_{latest.TypeString}_{dateStr}").ToString().ToLowerInvariant();
+                    
+                    latest.Id = expectedId;
+                    
+                    // Standardize other fields to UTC
+                    latest.Date = latest.Date.Date.SafeUtc();
+                    latest.CreatedAt = latest.CreatedAt.SafeUtc();
+                    latest.UpdatedAt = latest.UpdatedAt.SafeUtc();
+                    if (latest.SyncedAt.HasValue)
+                    {
+                        latest.SyncedAt = latest.SyncedAt.Value.SafeUtc();
+                    }
+
+                    migratedList.Add(latest);
+                }
+
+                // Delete everything and insert the clean, migrated list inside a transaction
+                await _databaseService.Connection.RunInTransactionAsync(tran =>
+                {
+                    tran.DeleteAll<LocalVitalMetric>();
+                    foreach (var local in migratedList)
+                    {
+                        tran.Insert(local);
+                    }
+                }).ConfigureAwait(false);
+
+                Console.WriteLine($"[SupabaseHealthService] Vitals migration completed. Deduplicated from {allVitals.Count} to {migratedList.Count} records.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SupabaseHealthService] Error during vitals migration: {ex.Message}");
+                _logger.LogError(ex, "Failed to run vitals migration and deduplication");
             }
         }
 
@@ -256,10 +321,11 @@ namespace Daily.Services.Health
                 List<VitalMetric> remoteRecords;
                 if (latestLocal != null)
                 {
-                    var lastLocalUpdate = latestLocal.UpdatedAt;
-                    Console.WriteLine($"[SupabaseHealthService] Pulling vitals deltas since {lastLocalUpdate:O}");
+                    var lastLocalUpdate = DateTime.SpecifyKind(latestLocal.UpdatedAt, DateTimeKind.Utc).AddMinutes(-5);
+                    Console.WriteLine($"[SupabaseHealthService] Pulling vitals deltas for user {userIdStr} since {lastLocalUpdate:O} (with 5m skew buffer)");
                     var result = await _supabase.From<VitalMetric>()
-                                              .Where(v => v.UpdatedAt > lastLocalUpdate)
+                                              .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
+                                              .Filter("updated_at", Supabase.Postgrest.Constants.Operator.GreaterThan, lastLocalUpdate.ToString("O"))
                                               .Get();
                     remoteRecords = result.Models;
                 }
@@ -267,22 +333,93 @@ namespace Daily.Services.Health
                 {
                     // Fallback to fetch the last 30 days of data
                     var dateThreshold = DateTime.UtcNow.AddDays(-30);
-                    Console.WriteLine($"[SupabaseHealthService] Cache empty. Pulling last 30 days of vitals since {dateThreshold:O}");
+                    Console.WriteLine($"[SupabaseHealthService] Cache empty. Pulling last 30 days of vitals for user {userIdStr} since {dateThreshold:O}");
                     var result = await _supabase.From<VitalMetric>()
-                                              .Where(v => v.Date >= dateThreshold)
+                                              .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
+                                              .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, dateThreshold.ToString("O"))
                                               .Get();
                     remoteRecords = result.Models;
                 }
 
                 if (remoteRecords != null && remoteRecords.Any())
                 {
-                    Console.WriteLine($"[SupabaseHealthService] Syncing {remoteRecords.Count} retrieved vitals to local SQLite.");
-                    var localRecords = remoteRecords.Select(r => r.ToLocal()).ToList();
+                    Console.WriteLine($"[SupabaseHealthService] Syncing {remoteRecords.Count} retrieved vitals to local SQLite (merging & grouping).");
                     
+                    // Group remote records by Type and Date.Date to find the best remote record for each day/type
+                    var groupedRemotes = remoteRecords
+                        .GroupBy(r => new { r.TypeString, Date = r.Date.SafeUtc().Date })
+                        .ToList();
+
+                    // Load all existing local vitals for the user to perform in-memory merging
+                    var allLocalVitals = await _databaseService.Connection.Table<LocalVitalMetric>()
+                                              .Where(v => v.UserId == userIdStr)
+                                              .ToListAsync();
+                    var localLookup = allLocalVitals.ToDictionary(
+                        v => $"{v.TypeString}_{v.Date.SafeUtc().Date:yyyy-MM-dd}", 
+                        v => v
+                    );
+
+                    var localsToSave = new List<LocalVitalMetric>();
+
+                    foreach (var group in groupedRemotes)
+                    {
+                        var key = $"{group.Key.TypeString}_{group.Key.Date:yyyy-MM-dd}";
+                        
+                        // Determine the best remote record in this group
+                        VitalMetric bestRemote;
+                        if (IsCumulative(group.Key.TypeString))
+                        {
+                            bestRemote = group.OrderByDescending(r => r.Value).First();
+                        }
+                        else
+                        {
+                            bestRemote = group.OrderByDescending(r => r.UpdatedAt).First();
+                        }
+
+                        var localRepresentation = bestRemote.ToLocal();
+
+                        if (localLookup.TryGetValue(key, out var existingLocal))
+                        {
+                            // Merge logic: ensure cumulative metrics never decrease, and newer updates win for non-cumulative
+                            if (IsCumulative(group.Key.TypeString))
+                            {
+                                if (existingLocal.Value > localRepresentation.Value)
+                                {
+                                    // Keep the existing local value if it is higher
+                                    localRepresentation.Value = existingLocal.Value;
+                                    localRepresentation.SourceDevice = existingLocal.SourceDevice;
+                                    localRepresentation.Unit = existingLocal.Unit;
+                                }
+                                // Update UpdatedAt to the latest of both
+                                if (existingLocal.UpdatedAt > localRepresentation.UpdatedAt)
+                                {
+                                    localRepresentation.UpdatedAt = existingLocal.UpdatedAt;
+                                }
+                            }
+                            else
+                            {
+                                // For non-cumulative, check UpdatedAt
+                                if (existingLocal.UpdatedAt > localRepresentation.UpdatedAt)
+                                {
+                                    // Keep existing local
+                                    localRepresentation.Value = existingLocal.Value;
+                                    localRepresentation.SourceDevice = existingLocal.SourceDevice;
+                                    localRepresentation.Unit = existingLocal.Unit;
+                                    localRepresentation.UpdatedAt = existingLocal.UpdatedAt;
+                                }
+                            }
+                        }
+
+                        localsToSave.Add(localRepresentation);
+                    }
+
                     await _databaseService.Connection.RunInTransactionAsync(tran =>
                     {
-                        foreach (var local in localRecords)
+                        foreach (var local in localsToSave)
                         {
+                            // Delete any duplicate vitals matching user, type, and date but having a different ID
+                            tran.Execute("DELETE FROM vitals WHERE UserId = ? AND TypeString = ? AND Date = ? AND Id != ?", 
+                                         local.UserId, local.TypeString, local.Date, local.Id);
                             tran.InsertOrReplace(local);
                         }
                     }).ConfigureAwait(false);
@@ -365,10 +502,11 @@ namespace Daily.Services.Health
 
                 await _databaseService.InitializeAsync();
 
-                var latestLocal = await _databaseService.Connection.Table<LocalVitalMetric>()
+                var localRecords = await _databaseService.Connection.Table<LocalVitalMetric>()
                                       .Where(v => v.UserId == userIdStr && v.TypeString == typeString)
                                       .OrderByDescending(v => v.Date)
-                                      .FirstOrDefaultAsync();
+                                      .ToListAsync();
+                var latestLocal = localRecords.OrderByDescending(v => v.Date).ThenByDescending(v => v.UpdatedAt).FirstOrDefault();
 
                 CheckCacheStalenessAndPullAsync();
 
@@ -408,7 +546,7 @@ namespace Daily.Services.Health
                 {
                     var latestMetrics = localRecords
                         .GroupBy(m => m.TypeString)
-                        .Select(g => g.OrderByDescending(x => x.Date).First().ToDomain())
+                        .Select(g => g.OrderByDescending(x => x.Date).ThenByDescending(x => x.UpdatedAt).First().ToDomain())
                         .ToList();
 
                     var sync = _serviceProvider.GetService<ISyncService>();
@@ -516,9 +654,15 @@ namespace Daily.Services.Health
                         local.UpdatedAt = DateTime.UtcNow;
                         local.SyncedAt = DateTime.Now; // Local device time
 
-                        var remote = existingMetrics.FirstOrDefault(e => e.Date == local.Date && e.TypeString == local.TypeString);
-                        if (remote != null)
+                        var remoteGroup = existingMetrics.Where(e => e.Date.SafeUtc().Date == local.Date.SafeUtc().Date && e.TypeString == local.TypeString).ToList();
+                        if (remoteGroup.Any())
                         {
+                            // Find the best remote record for comparison
+                            VitalMetric remote = IsCumulative(local.TypeString) 
+                                ? remoteGroup.OrderByDescending(r => r.Value).First()
+                                : remoteGroup.OrderByDescending(r => r.UpdatedAt).First();
+
+                            local.Id = remote.Id;
                             if (IsCumulative(local.TypeString))
                             {
                                 if (remote.Value > local.Value)
@@ -547,6 +691,8 @@ namespace Daily.Services.Health
                     {
                         foreach (var local in localVitals)
                         {
+                            tran.Execute("DELETE FROM vitals WHERE UserId = ? AND TypeString = ? AND Date = ? AND Id != ?", 
+                                         local.UserId, local.TypeString, local.Date, local.Id);
                             tran.InsertOrReplace(local);
                         }
                     }).ConfigureAwait(false);

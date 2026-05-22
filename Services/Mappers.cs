@@ -179,14 +179,14 @@ namespace Daily.Services
         }
 
         // --- Date Parsing Helpers for SQLite-net-pcl (Kind preservation drift) ---
-        private static DateTime SafeUtc(DateTime dt)
+        public static DateTime SafeUtc(this DateTime dt)
         {
             return dt.Kind == DateTimeKind.Unspecified 
                 ? DateTime.SpecifyKind(dt, DateTimeKind.Utc) 
                 : dt.ToUniversalTime();
         }
 
-        private static DateTime? SafeUtc(DateTime? dt)
+        public static DateTime? SafeUtc(this DateTime? dt)
         {
             if (!dt.HasValue) return null;
             return dt.Value.Kind == DateTimeKind.Unspecified 
@@ -196,7 +196,7 @@ namespace Daily.Services
 
         // --- Helpers ---
 
-        private static Guid GenerateGuid(string input)
+        public static Guid GenerateGuid(string input)
         {
             using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
             {
@@ -308,18 +308,20 @@ namespace Daily.Services
 
         public static LocalVitalMetric ToLocal(this Daily.Models.Health.VitalMetric domain)
         {
+            var dateStr = domain.Date.SafeUtc().ToString("yyyy-MM-dd");
+            var deterministicId = GenerateGuid($"{domain.UserId.ToString().ToLowerInvariant()}_{domain.TypeString}_{dateStr}").ToString().ToLowerInvariant();
             return new LocalVitalMetric
             {
-                Id = domain.Id.ToString().ToLowerInvariant(),
+                Id = deterministicId,
                 UserId = domain.UserId.ToString().ToLowerInvariant(),
                 TypeString = domain.TypeString,
                 Value = domain.Value,
                 Unit = domain.Unit,
-                Date = domain.Date.ToUniversalTime(),
+                Date = domain.Date.SafeUtc(),
                 SourceDevice = domain.SourceDevice,
-                CreatedAt = domain.CreatedAt.ToUniversalTime(),
-                UpdatedAt = domain.UpdatedAt.ToUniversalTime(),
-                SyncedAt = domain.SyncedAt?.ToUniversalTime()
+                CreatedAt = domain.CreatedAt.SafeUtc(),
+                UpdatedAt = domain.UpdatedAt.SafeUtc(),
+                SyncedAt = domain.SyncedAt?.SafeUtc()
             };
         }
     }
