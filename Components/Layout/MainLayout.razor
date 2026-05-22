@@ -1,4 +1,4 @@
-﻿@using Daily.Services
+@using Daily.Services
 @inject IRefreshService RefreshService
 @implements IDisposable
 @inherits LayoutComponentBase
@@ -221,7 +221,7 @@
                          Console.WriteLine("[MainLayout] calling SyncNativeHealthDataAsync now...");
                          await HealthService.SyncNativeHealthDataAsync();
                          Console.WriteLine("[MainLayout] Health Sync Return. Triggering UI Refresh to show new data...");
-                         await RefreshService.TriggerRefreshAsync();
+                         await RefreshService.TriggerHealthRefreshAsync();
                      } 
                      catch(Exception ex) 
                      { 

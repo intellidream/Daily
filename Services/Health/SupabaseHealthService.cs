@@ -191,7 +191,7 @@ namespace Daily.Services.Health
                 bool isMatch = false;
                 if (user != null && Guid.TryParse(user.Id, out var uid))
                 {
-                    isMatch = remoteVital.UserId == uid;
+                    isMatch = remoteVital.UserId == uid || remoteVital.UserId == Guid.Empty;
                 }
 
                 if (isMatch)
@@ -551,6 +551,7 @@ namespace Daily.Services.Health
                         }
                     }).ConfigureAwait(false);
                     log($"[Sync] Saved {localVitals.Count} metrics locally in SQLite.");
+                    await _refreshService.TriggerHealthRefreshAsync();
                 }
                 catch (Supabase.Postgrest.Exceptions.PostgrestException pex)
                 {
