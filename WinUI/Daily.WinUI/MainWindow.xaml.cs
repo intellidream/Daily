@@ -36,10 +36,25 @@ public sealed partial class MainWindow : Window
 
         StartDateClock();
 
-        _minBootTimeTask = System.Threading.Tasks.Task.Delay(1200);
-        LoadingStoryboard.Begin();
+        RootFrame.Navigated += RootFrame_Navigated;
 
-        _ = NavigateAfterHydrationAsync();
+        var persistence = new Daily_WinUI.Services.WinUISessionPersistence();
+        bool hasSession = persistence.LoadSession() != null;
+
+        if (hasSession)
+        {
+            LoadingOverlay.Visibility = Visibility.Visible;
+            _minBootTimeTask = System.Threading.Tasks.Task.Delay(1200);
+            LoadingStoryboard.Begin();
+            _ = NavigateAfterHydrationAsync();
+        }
+        else
+        {
+            LoadingOverlay.Visibility = Visibility.Collapsed;
+            RootFrame.Opacity = 1.0;
+            _minBootTimeTask = System.Threading.Tasks.Task.CompletedTask;
+            RootFrame.Navigate(typeof(Views.LoginPage));
+        }
 
         AppWindow.Changed += AppWindow_Changed;
         Closed += MainWindow_Closed;
@@ -153,13 +168,47 @@ public sealed partial class MainWindow : Window
     public System.Threading.Tasks.Task FadeOutLoadingOverlayAsync()
     {
         var tcs = new System.Threading.Tasks.TaskCompletionSource();
+        bool shouldShowTitleBar = RootFrame.Content is MainPage;
+
         FadeOutStoryboard.Completed += (s, e) =>
         {
             LoadingOverlay.Visibility = Visibility.Collapsed;
             LoadingStoryboard.Stop();
-            AppTitleBar.IsHitTestVisible = true;
+            if (shouldShowTitleBar)
+            {
+                AppTitleBar.Opacity = 1.0;
+                AppTitleBar.IsHitTestVisible = true;
+            }
+            else
+            {
+                AppTitleBar.Opacity = 0.0;
+                AppTitleBar.IsHitTestVisible = false;
+            }
             tcs.SetResult();
         };
+
+        if (shouldShowTitleBar)
+        {
+            var titleBarAnimation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+            {
+                From = 0.0,
+                To = 1.0,
+                Duration = new Duration(TimeSpan.FromSeconds(0.7)),
+                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut }
+            };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(titleBarAnimation, AppTitleBar);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(titleBarAnimation, "Opacity");
+
+            var tempStoryboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+            tempStoryboard.Children.Add(titleBarAnimation);
+            tempStoryboard.Begin();
+        }
+        else
+        {
+            AppTitleBar.Opacity = 0.0;
+            AppTitleBar.IsHitTestVisible = false;
+        }
+
         FadeOutStoryboard.Begin();
         return tcs.Task;
     }
@@ -185,6 +234,23 @@ public sealed partial class MainWindow : Window
                 await FadeOutLoadingOverlayAsync();
             }
         });
+    }
+
+    private void RootFrame_Navigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        if (e.SourcePageType == typeof(MainPage))
+        {
+            if (LoadingOverlay.Visibility != Visibility.Visible)
+            {
+                AppTitleBar.Opacity = 1.0;
+                AppTitleBar.IsHitTestVisible = true;
+            }
+        }
+        else if (e.SourcePageType == typeof(Views.LoginPage))
+        {
+            AppTitleBar.Opacity = 0.0;
+            AppTitleBar.IsHitTestVisible = false;
+        }
     }
 
     // ── Window management ─────────────────────────────────────────────────────

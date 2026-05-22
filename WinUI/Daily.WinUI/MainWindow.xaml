@@ -193,15 +193,7 @@
                     </DoubleAnimation.EasingFunction>
                 </DoubleAnimation>
 
-                <!-- Fade in the AppTitleBar -->
-                <DoubleAnimation Storyboard.TargetName="AppTitleBar"
-                                 Storyboard.TargetProperty="Opacity"
-                                 From="0.0" To="1.0"
-                                 Duration="0:0:0.7">
-                    <DoubleAnimation.EasingFunction>
-                        <CubicEase EasingMode="EaseOut" />
-                    </DoubleAnimation.EasingFunction>
-                </DoubleAnimation>
+
 
                 <!-- Fade in the RootFrame -->
                 <DoubleAnimation Storyboard.TargetName="RootFrame"
@@ -321,7 +313,7 @@
         <Frame x:Name="RootFrame" Grid.Row="1" Opacity="0.0" />
 
         <!-- Full-screen Loading Overlay -->
-        <Grid x:Name="LoadingOverlay" Background="{ThemeResource LoadingOverlayBgBrush}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Grid.RowSpan="2" Canvas.ZIndex="9999" Visibility="Visible" RenderTransformOrigin="0.5,0.5">
+        <Grid x:Name="LoadingOverlay" Background="{ThemeResource LoadingOverlayBgBrush}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Grid.RowSpan="2" Canvas.ZIndex="9999" Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
             <Grid.RenderTransform>
                 <ScaleTransform x:Name="OverlayScale" ScaleX="1.0" ScaleY="1.0" />
             </Grid.RenderTransform>

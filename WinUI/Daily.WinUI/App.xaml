@@ -37,6 +37,13 @@
                         <GradientStop Color="#1500E5FF" Offset="0.5" />
                         <GradientStop Color="Transparent" Offset="1" />
                     </RadialGradientBrush>
+                    <RadialGradientBrush x:Key="LoginBackgroundBrush" Center="0.5,0.5" RadiusX="1.0" RadiusY="1.0">
+                        <GradientStop Color="#4D030609" Offset="0" />
+                        <GradientStop Color="#8C050F1A" Offset="0.6" />
+                        <GradientStop Color="#B3030609" Offset="1.0" />
+                    </RadialGradientBrush>
+                    <Color x:Key="LoginGlowColor">#FF4A9EFF</Color>
+                    <SolidColorBrush x:Key="AppErrorBrush" Color="#FFFF6B6B"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <x:String x:Key="AppIconSource">ms-appx:///Assets/appicon.theme-light.svg</x:String>
@@ -65,6 +72,13 @@
                         <GradientStop Color="#15FFA800" Offset="0.5" />
                         <GradientStop Color="Transparent" Offset="1" />
                     </RadialGradientBrush>
+                    <RadialGradientBrush x:Key="LoginBackgroundBrush" Center="0.5,0.5" RadiusX="1.0" RadiusY="1.0">
+                        <GradientStop Color="#40FFF8F5" Offset="0" />
+                        <GradientStop Color="#A0DFD5BC" Offset="0.6" />
+                        <GradientStop Color="#D0D4C9B0" Offset="1.0" />
+                    </RadialGradientBrush>
+                    <Color x:Key="LoginGlowColor">#FFFFA800</Color>
+                    <SolidColorBrush x:Key="AppErrorBrush" Color="#D32F2F"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <FontFamily x:Key="TablerIconsFont">ms-appx:///Assets/Fonts/tabler-icons.ttf#tabler-icons</FontFamily>

@@ -25,6 +25,7 @@ public sealed partial class LoginPage : Page
 
         try
         {
+            await App.Current.InitializationTask;
             StatusText.Text = "Waiting for Google sign-in...";
             var success = await _authService.SignInWithGoogleAsync();
 
@@ -58,12 +59,27 @@ public sealed partial class LoginPage : Page
         }
     }
 
-    private void SkipButton_Click(object sender, RoutedEventArgs e)
+    private async void SkipButton_Click(object sender, RoutedEventArgs e)
     {
-        // Navigate directly to the dashboard without signing in
-        if (Frame != null)
+        GoogleSignInButton.IsEnabled = false;
+        SkipButton.IsEnabled = false;
+
+        try
         {
-            Frame.Navigate(typeof(MainPage));
+            await App.Current.InitializationTask;
+
+            // Navigate directly to the dashboard without signing in
+            if (Frame != null)
+            {
+                Frame.Navigate(typeof(MainPage));
+            }
+        }
+        catch (System.Exception ex)
+        {
+            ErrorText.Text = $"Initialization failed: {ex.Message}";
+            ErrorText.Visibility = Visibility.Visible;
+            GoogleSignInButton.IsEnabled = true;
+            SkipButton.IsEnabled = true;
         }
     }
 }
