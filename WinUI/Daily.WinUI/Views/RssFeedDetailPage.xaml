@@ -167,73 +167,71 @@
             </Grid>
 
             <!-- Scrollable content: article lists within Pivot tabs -->
-            <Grid Grid.Row="1" Margin="20,16,20,20">
-                <Pivot x:Name="RssPivot" SelectionChanged="RssPivot_SelectionChanged">
-                    <!-- Tab 1: Live Feed -->
-                    <PivotItem Header="Live Feed">
-                        <Grid>
-                            <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-                                <ProgressRing IsActive="True" Width="56" Height="56"/>
-                                <TextBlock Text="Fetching latest news..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
-                            </StackPanel>
+            <Pivot Grid.Row="1" x:Name="RssPivot" Margin="20,0,0,0" SelectionChanged="RssPivot_SelectionChanged">
+                <!-- Tab 1: Live Feed -->
+                <PivotItem Header="Live Feed">
+                    <Grid>
+                        <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+                            <ProgressRing IsActive="True" Width="56" Height="56"/>
+                            <TextBlock Text="Fetching latest news..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
+                        </StackPanel>
 
-                            <ListView x:Name="ArticlesListView"
-                                      SelectionMode="None"
-                                      ShowsScrollingPlaceholders="False"
-                                      Visibility="Collapsed"
-                                      IsItemClickEnabled="True"
-                                      ItemClick="ArticlesListView_ItemClick"
-                                      Padding="0,0,0,20"
-                                      ItemContainerStyle="{StaticResource RssItemContainerStyle}"
-                                      ItemTemplate="{StaticResource RssItemTemplate}"/>
-                        </Grid>
-                    </PivotItem>
+                        <ListView x:Name="ArticlesListView"
+                                  SelectionMode="None"
+                                  ShowsScrollingPlaceholders="False"
+                                  Visibility="Collapsed"
+                                  IsItemClickEnabled="True"
+                                  ItemClick="ArticlesListView_ItemClick"
+                                  Padding="0,16,20,20"
+                                  ItemContainerStyle="{StaticResource RssItemContainerStyle}"
+                                  ItemTemplate="{StaticResource RssItemTemplate}"/>
+                    </Grid>
+                </PivotItem>
 
-                    <!-- Tab 2: Read Later -->
-                    <PivotItem Header="Read Later">
-                        <Grid>
-                            <TextBlock x:Name="NoReadLaterTextBlock" 
-                                       Text="No articles saved for later." 
-                                       Foreground="{ThemeResource AppFgMutedColorBrush}" 
-                                       FontSize="16" 
-                                       HorizontalAlignment="Center" 
-                                       VerticalAlignment="Center" 
-                                       Visibility="Collapsed"/>
+                <!-- Tab 2: Read Later -->
+                <PivotItem Header="Read Later">
+                    <Grid>
+                        <TextBlock x:Name="NoReadLaterTextBlock" 
+                                   Text="No articles saved for later." 
+                                   Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                   FontSize="16" 
+                                   HorizontalAlignment="Center" 
+                                   VerticalAlignment="Center" 
+                                   Visibility="Collapsed"/>
 
-                            <ListView x:Name="ReadLaterListView"
-                                      SelectionMode="None"
-                                      ShowsScrollingPlaceholders="False"
-                                      IsItemClickEnabled="True"
-                                      ItemClick="ArticlesListView_ItemClick"
-                                      Padding="0,0,0,20"
-                                      ItemContainerStyle="{StaticResource RssItemContainerStyle}"
-                                      ItemTemplate="{StaticResource RssItemTemplate}"/>
-                        </Grid>
-                    </PivotItem>
+                        <ListView x:Name="ReadLaterListView"
+                                  SelectionMode="None"
+                                  ShowsScrollingPlaceholders="False"
+                                  IsItemClickEnabled="True"
+                                  ItemClick="ArticlesListView_ItemClick"
+                                  Padding="0,16,20,20"
+                                  ItemContainerStyle="{StaticResource RssItemContainerStyle}"
+                                  ItemTemplate="{StaticResource RssItemTemplate}"/>
+                    </Grid>
+                </PivotItem>
 
-                    <!-- Tab 3: Favorites -->
-                    <PivotItem Header="Favorites">
-                        <Grid>
-                            <TextBlock x:Name="NoFavoritesTextBlock" 
-                                       Text="No favorite articles starred." 
-                                       Foreground="{ThemeResource AppFgMutedColorBrush}" 
-                                       FontSize="16" 
-                                       HorizontalAlignment="Center" 
-                                       VerticalAlignment="Center" 
-                                       Visibility="Collapsed"/>
+                <!-- Tab 3: Favorites -->
+                <PivotItem Header="Favorites">
+                    <Grid>
+                        <TextBlock x:Name="NoFavoritesTextBlock" 
+                                   Text="No favorite articles starred." 
+                                   Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                   FontSize="16" 
+                                   HorizontalAlignment="Center" 
+                                   VerticalAlignment="Center" 
+                                   Visibility="Collapsed"/>
 
-                            <ListView x:Name="FavoritesListView"
-                                      SelectionMode="None"
-                                      ShowsScrollingPlaceholders="False"
-                                      IsItemClickEnabled="True"
-                                      ItemClick="ArticlesListView_ItemClick"
-                                      Padding="0,0,0,20"
-                                      ItemContainerStyle="{StaticResource RssItemContainerStyle}"
-                                      ItemTemplate="{StaticResource RssItemTemplate}"/>
-                        </Grid>
-                    </PivotItem>
-                </Pivot>
-            </Grid>
+                        <ListView x:Name="FavoritesListView"
+                                  SelectionMode="None"
+                                  ShowsScrollingPlaceholders="False"
+                                  IsItemClickEnabled="True"
+                                  ItemClick="ArticlesListView_ItemClick"
+                                  Padding="0,16,20,20"
+                                  ItemContainerStyle="{StaticResource RssItemContainerStyle}"
+                                  ItemTemplate="{StaticResource RssItemTemplate}"/>
+                    </Grid>
+                </PivotItem>
+            </Pivot>
         </Grid>
 
         <!-- State 2: Reader View -->
