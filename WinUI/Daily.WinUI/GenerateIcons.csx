@@ -98,27 +98,20 @@ void SaveIco(IEnumerable<Bitmap> bitmaps, string path)
 // ── Generate ──────────────────────────────────────────────────────────────────
 Console.WriteLine("Generating app icons...");
 
-// Generate appicon.theme-dark.svg and appicon.theme-light.svg from GemIcon.svg
-Console.WriteLine("Generating theme-specific SVG files...");
-var gemIconText = File.ReadAllText(svgPath);
-
-// Create dark theme version (colored, with brighter purple #A799CC for dark background contrast)
-var darkSvgText = gemIconText.Replace("fill:rgb(112,94,142);", "fill:rgb(167,153,204);");
-File.WriteAllText(Path.Combine(assetsDir, "appicon.theme-dark.svg"), darkSvgText);
-Console.WriteLine("  saved appicon.theme-dark.svg");
-
-// Create light theme version (colored, with original brand colors)
-File.WriteAllText(Path.Combine(assetsDir, "appicon.theme-light.svg"), gemIconText);
-Console.WriteLine("  saved appicon.theme-light.svg");
+// Use user-provided theme-specific SVG files
+Console.WriteLine("Using user-provided theme-specific SVG files...");
 
 // Manifest PNG assets — dark-theme icon (yellowish on navy) for all sizes
 var specs = new (string file, int size)[]
 {
     ("Square44x44Logo.png",                              44),   // base (manifest reference)
     ("Square44x44Logo.scale-100.png",                    44),
+    ("Square44x44Logo.scale-200.png",                    88),
     ("Square44x44Logo.targetsize-24_altform-unplated.png", 24),
+    ("Square44x44Logo.targetsize-48_altform-unplated.png", 48),
     ("Square44x44Logo.targetsize-48_altform-lightunplated.png", 48),
     ("Square150x150Logo.scale-100.png",                 150),
+    ("Square150x150Logo.scale-200.png",                 300),
     ("Wide310x150Logo.scale-200.png",                   310),   // width; will square-crop below
     ("SplashScreen.scale-200.png",                      620),
     ("StoreLogo.png",                                    50),
@@ -181,21 +174,11 @@ storeBmp.Dispose();
 Console.WriteLine("Generating system tray icons...");
 var traySizes = new[] { 16, 20, 24, 32, 48, 256 };
 
-var darkTrayReplacements = new Dictionary<string, string>
-{
-    { "fill:rgb(112,94,142);", "fill:white;" },
-    { "fill:rgb(226,156,18);", "fill:white;" }
-};
-var darkTrayBmps = traySizes.Select(s => Render(svgPath, s, darkTrayReplacements)).ToList();
+var darkTrayBmps = traySizes.Select(s => Render(Path.Combine(assetsDir, "appicon.theme-dark.svg"), s)).ToList();
 SaveIco(darkTrayBmps, Path.Combine(assetsDir, "TrayIconDarkTheme.ico"));
 foreach (var b in darkTrayBmps) b.Dispose();
 
-var lightTrayReplacements = new Dictionary<string, string>
-{
-    { "fill:rgb(112,94,142);", "fill:black;" },
-    { "fill:rgb(226,156,18);", "fill:black;" }
-};
-var lightTrayBmps = traySizes.Select(s => Render(svgPath, s, lightTrayReplacements)).ToList();
+var lightTrayBmps = traySizes.Select(s => Render(Path.Combine(assetsDir, "appicon.theme-light.svg"), s)).ToList();
 SaveIco(lightTrayBmps, Path.Combine(assetsDir, "TrayIconLightTheme.ico"));
 foreach (var b in lightTrayBmps) b.Dispose();
 
