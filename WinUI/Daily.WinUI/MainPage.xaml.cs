@@ -113,12 +113,20 @@ public sealed partial class MainPage : Page
             // 5. Ensure minimum boot time has elapsed
             await mainWindow.WaitForMinBootTimeAsync();
 
-            // 6. Fade out the window-level loading overlay
-            await mainWindow.FadeOutLoadingOverlayAsync();
-        }
+            // 6. Start the fade out of the window-level loading overlay concurrently with widgets entrance
+            var fadeOutTask = mainWindow.FadeOutLoadingOverlayAsync();
 
-        // 7. Trigger local widgets entrance animation
-        FadeInContentStoryboard.Begin();
+            // 7. Trigger local widgets entrance animation concurrently
+            FadeInContentStoryboard.Begin();
+
+            // 8. Wait for the fade out to finish before collapsing the loading overlay entirely
+            await fadeOutTask;
+        }
+        else
+        {
+            // 7. Trigger local widgets entrance animation
+            FadeInContentStoryboard.Begin();
+        }
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
