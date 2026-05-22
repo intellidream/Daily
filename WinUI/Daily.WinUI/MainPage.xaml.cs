@@ -71,28 +71,21 @@ public sealed partial class MainPage : Page
         ContentGrid.Opacity = 0.0;
         ContentScale.ScaleX = 0.94;
         ContentScale.ScaleY = 0.94;
-        OverlayScale.ScaleX = 1.0;
-        OverlayScale.ScaleY = 1.0;
 
-        // 1. Show the loading overlay and start the animation
-        LoadingOverlay.Opacity = 1.0;
-        LoadingOverlay.Visibility = Visibility.Visible;
-        LoadingStoryboard.Begin();
+        var mainWindow = App.Current.MainWindow as MainWindow;
+        bool isInitialBoot = mainWindow != null && mainWindow.IsLoadingOverlayVisible;
 
-        // Start timing the minimum duration (snappy 1.2s delay for eagerness)
-        var minTimeTask = System.Threading.Tasks.Task.Delay(1200);
-
-        // 2. Track loads
+        // 1. Track loads
         lock (_lock)
         {
             _isTrackingLoads = true;
             _loadingTasks.Clear();
         }
 
-        // 3. Load widgets configuration and bind
+        // 2. Load widgets configuration and bind
         await LoadWidgetsAsync();
 
-        // 4. Yield/delay to let widgets instantiate, trigger Loaded, and register their loading tasks
+        // 3. Yield/delay to let widgets instantiate, trigger Loaded, and register their loading tasks
         await System.Threading.Tasks.Task.Delay(200);
         
         List<System.Threading.Tasks.Task> tasksToAwait;
@@ -102,7 +95,7 @@ public sealed partial class MainPage : Page
             tasksToAwait = _loadingTasks.ToList();
         }
 
-        // 5. Wait for all registered widget data loads to finish
+        // 4. Wait for all registered widget data loads to finish
         if (tasksToAwait.Count > 0)
         {
             try
@@ -115,24 +108,17 @@ public sealed partial class MainPage : Page
             }
         }
 
-        // 6. Ensure minimum 1.2 seconds loading time has elapsed
-        await minTimeTask;
-
-        // 7. Fade out loading overlay
-        await FadeOutLoadingOverlayAsync();
-    }
-
-    private System.Threading.Tasks.Task FadeOutLoadingOverlayAsync()
-    {
-        var tcs = new System.Threading.Tasks.TaskCompletionSource();
-        FadeOutStoryboard.Completed += (s, e) =>
+        if (isInitialBoot && mainWindow != null)
         {
-            LoadingOverlay.Visibility = Visibility.Collapsed;
-            LoadingStoryboard.Stop();
-            tcs.SetResult();
-        };
-        FadeOutStoryboard.Begin();
-        return tcs.Task;
+            // 5. Ensure minimum boot time has elapsed
+            await mainWindow.WaitForMinBootTimeAsync();
+
+            // 6. Fade out the window-level loading overlay
+            await mainWindow.FadeOutLoadingOverlayAsync();
+        }
+
+        // 7. Trigger local widgets entrance animation
+        FadeInContentStoryboard.Begin();
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)

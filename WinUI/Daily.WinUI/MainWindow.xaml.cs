@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
     private DispatcherTimer? _dateTimer;
     private Windows.UI.ViewManagement.UISettings? _uiSettings;
     private bool _isExiting = false;
+    private readonly System.Threading.Tasks.Task _minBootTimeTask;
 
     public MainWindow()
     {
@@ -34,6 +35,9 @@ public sealed partial class MainWindow : Window
         ConfigureStartupWindow();
 
         StartDateClock();
+
+        _minBootTimeTask = System.Threading.Tasks.Task.Delay(1200);
+        LoadingStoryboard.Begin();
 
         _ = NavigateAfterHydrationAsync();
 
@@ -139,6 +143,27 @@ public sealed partial class MainWindow : Window
 
     // ── Navigation after auth hydration ──────────────────────────────────────
 
+    public bool IsLoadingOverlayVisible => LoadingOverlay.Visibility == Visibility.Visible;
+
+    public async System.Threading.Tasks.Task WaitForMinBootTimeAsync()
+    {
+        await _minBootTimeTask;
+    }
+
+    public System.Threading.Tasks.Task FadeOutLoadingOverlayAsync()
+    {
+        var tcs = new System.Threading.Tasks.TaskCompletionSource();
+        FadeOutStoryboard.Completed += (s, e) =>
+        {
+            LoadingOverlay.Visibility = Visibility.Collapsed;
+            LoadingStoryboard.Stop();
+            AppTitleBar.IsHitTestVisible = true;
+            tcs.SetResult();
+        };
+        FadeOutStoryboard.Begin();
+        return tcs.Task;
+    }
+
     private async Task NavigateAfterHydrationAsync()
     {
         await App.Current.InitializationTask;
@@ -146,14 +171,19 @@ public sealed partial class MainWindow : Window
         var authService = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
             .GetRequiredService<WinUIAuthService>(App.Current.Services);
 
-        DispatcherQueue.TryEnqueue(() =>
+        DispatcherQueue.TryEnqueue(async () =>
         {
-            if (authService.IsAuthenticated)
-                RootFrame.Navigate(typeof(MainPage));
-            else
-                RootFrame.Navigate(typeof(Views.LoginPage));
-
             UpdateAppThemeFromSystem();
+
+            if (authService.IsAuthenticated)
+            {
+                RootFrame.Navigate(typeof(MainPage));
+            }
+            else
+            {
+                RootFrame.Navigate(typeof(Views.LoginPage));
+                await FadeOutLoadingOverlayAsync();
+            }
         });
     }
 
