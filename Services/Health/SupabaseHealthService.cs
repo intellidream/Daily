@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Daily.Models;
 using Daily.Models.Health;
 using Microsoft.Extensions.Logging;
 using Supabase;
@@ -18,18 +19,25 @@ namespace Daily.Services.Health
         private readonly ILogger<SupabaseHealthService> _logger;
         private readonly IServiceProvider _serviceProvider; // Lazy Resolution
         private readonly IRefreshService _refreshService;
+        private readonly IDatabaseService _databaseService;
         private Supabase.Realtime.RealtimeChannel? _vitalsChannel;
-
-        // Simple memory cache to avoid excessive DB calls during session
-        private  List<VitalMetric> _cache = new();
-        private DateTime _lastCacheUpdate = DateTime.MinValue;
 
         private bool IsAuthenticated => _supabase.Auth.CurrentSession != null && _supabase.Auth.CurrentUser != null;
 
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
+        private readonly System.Threading.SemaphoreSlim _syncSemaphore = new(1, 1);
         private CancellationTokenSource? _reconnectCts;
+        private CancellationTokenSource? _syncDebounceCts;
+        private readonly object _debounceLock = new();
+        private DateTime _lastDeltaPullTime = DateTime.MinValue;
 
-        public SupabaseHealthService(Supabase.Client supabase, INativeHealthStore nativeHealthStore, ILogger<SupabaseHealthService> logger, IServiceProvider serviceProvider, IRefreshService refreshService)
+        public SupabaseHealthService(
+            Supabase.Client supabase, 
+            INativeHealthStore nativeHealthStore, 
+            ILogger<SupabaseHealthService> logger, 
+            IServiceProvider serviceProvider, 
+            IRefreshService refreshService,
+            IDatabaseService databaseService)
         {
             try 
             {
@@ -38,6 +46,7 @@ namespace Daily.Services.Health
                 _logger = logger;
                 _serviceProvider = serviceProvider;
                 _refreshService = refreshService;
+                _databaseService = databaseService;
 
                 // Setup Auth Listener ONCE in Constructor
                 _supabase.Auth.AddStateChangedListener((sender, state) => 
@@ -88,13 +97,12 @@ namespace Daily.Services.Health
             }
         }
 
-
-
         public async Task InitializeAsync()
         {
             if (IsAuthenticated)
             {
                 await SetupRealtimeAsync();
+                CheckCacheStalenessAndPullAsync();
             }
             else
             {
@@ -140,10 +148,18 @@ namespace Daily.Services.Health
 
                 if (_vitalsChannel == null)
                 {
-                    _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", null, null, new Dictionary<string, string>());
+                    var userId = _supabase.Auth.CurrentUser?.Id ?? _supabase.Auth.CurrentSession?.User?.Id;
+                    if (!string.IsNullOrEmpty(userId))
+                    {
+                        _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
+                    }
+                    else
+                    {
+                        _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", null, null, new Dictionary<string, string>());
+                    }
                     _vitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnVitalReceived);
                     await _vitalsChannel.Subscribe();
-                    Console.WriteLine("[SupabaseHealthService] Realtime subscribed to vitals");
+                    Console.WriteLine($"[SupabaseHealthService] Realtime subscribed to vitals. Filtered user: {userId}");
                 }
             }
             catch (Exception ex)
@@ -180,12 +196,29 @@ namespace Daily.Services.Health
 
                 if (isMatch)
                 {
-                    Console.WriteLine($"[SupabaseHealthService] Realtime: Match found. Invalidating cache and triggering refresh.");
-                    _cache.Clear();
-                    _lastCacheUpdate = DateTime.MinValue;
-                    
-                    // Trigger UI refresh
-                    _ = _refreshService.TriggerRefreshAsync();
+                    Console.WriteLine($"[SupabaseHealthService] Realtime: Match found. Debouncing delta pull.");
+                    lock (_debounceLock)
+                    {
+                        _syncDebounceCts?.Cancel();
+                        _syncDebounceCts = new CancellationTokenSource();
+                    }
+                    var token = _syncDebounceCts.Token;
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await Task.Delay(2000, token);
+                            if (!token.IsCancellationRequested)
+                            {
+                                await PullDeltasAsync();
+                            }
+                        }
+                        catch (TaskCanceledException) { }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[SupabaseHealthService] Debounced sync error: {ex.Message}");
+                        }
+                    }, token);
                 }
                 else
                 {
@@ -198,31 +231,122 @@ namespace Daily.Services.Health
             }
         }
 
+        public async Task PullDeltasAsync()
+        {
+            if (!IsAuthenticated) return;
+
+            await _syncSemaphore.WaitAsync();
+            try
+            {
+                var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                if (user == null || !Guid.TryParse(user.Id, out var uid))
+                {
+                    return;
+                }
+                var userIdStr = uid.ToString().ToLowerInvariant();
+
+                await _databaseService.InitializeAsync();
+
+                // Find latest Local Vital Metric update time
+                var latestLocal = await _databaseService.Connection.Table<LocalVitalMetric>()
+                                      .Where(v => v.UserId == userIdStr)
+                                      .OrderByDescending(v => v.UpdatedAt)
+                                      .FirstOrDefaultAsync();
+
+                List<VitalMetric> remoteRecords;
+                if (latestLocal != null)
+                {
+                    var lastLocalUpdate = latestLocal.UpdatedAt;
+                    Console.WriteLine($"[SupabaseHealthService] Pulling vitals deltas since {lastLocalUpdate:O}");
+                    var result = await _supabase.From<VitalMetric>()
+                                              .Where(v => v.UpdatedAt > lastLocalUpdate)
+                                              .Get();
+                    remoteRecords = result.Models;
+                }
+                else
+                {
+                    // Fallback to fetch the last 30 days of data
+                    var dateThreshold = DateTime.UtcNow.AddDays(-30);
+                    Console.WriteLine($"[SupabaseHealthService] Cache empty. Pulling last 30 days of vitals since {dateThreshold:O}");
+                    var result = await _supabase.From<VitalMetric>()
+                                              .Where(v => v.Date >= dateThreshold)
+                                              .Get();
+                    remoteRecords = result.Models;
+                }
+
+                if (remoteRecords != null && remoteRecords.Any())
+                {
+                    Console.WriteLine($"[SupabaseHealthService] Syncing {remoteRecords.Count} retrieved vitals to local SQLite.");
+                    var localRecords = remoteRecords.Select(r => r.ToLocal()).ToList();
+                    
+                    await _databaseService.Connection.RunInTransactionAsync(tran =>
+                    {
+                        foreach (var local in localRecords)
+                        {
+                            tran.InsertOrReplace(local);
+                        }
+                    }).ConfigureAwait(false);
+                }
+
+                _lastDeltaPullTime = DateTime.UtcNow;
+                
+                // Trigger UI refresh
+                await _refreshService.TriggerRefreshAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to pull vitals deltas");
+                Console.WriteLine($"[SupabaseHealthService] PullDeltasAsync Error: {ex.Message}");
+            }
+            finally
+            {
+                _syncSemaphore.Release();
+            }
+        }
+
+        private void CheckCacheStalenessAndPullAsync()
+        {
+            if ((DateTime.UtcNow - _lastDeltaPullTime).TotalMinutes >= 15)
+            {
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        await PullDeltasAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SupabaseHealthService] Background delta pull failed: {ex.Message}");
+                    }
+                });
+            }
+        }
+
         public async Task<List<VitalMetric>> GetVitalsAsync(DateTime start, DateTime end)
         {
             try
             {
-                // Retrieve from Supabase
-                // Note: In a real scenario, we'd add offline database sync here (SQLite).
-                // For now, we fetch directly from cloud.
-                
-                // TODO: Optimize RPC or specific query
-                var result = await _supabase.From<VitalMetric>()
-                                          .Where(v => v.Date >= start && v.Date <= end)
-                                          .Order("date", Supabase.Postgrest.Constants.Ordering.Descending)
-                                          .Get();
-                
-                var metrics = result.Models;
-                
-                // Update Cache (Merge)
-                _cache = metrics;
-                _lastCacheUpdate = DateTime.UtcNow;
+                var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                if (user == null || !Guid.TryParse(user.Id, out var uid))
+                {
+                    return new List<VitalMetric>();
+                }
+                var userIdStr = uid.ToString().ToLowerInvariant();
 
-                return metrics;
+                await _databaseService.InitializeAsync();
+
+                var localVitals = await _databaseService.Connection.Table<LocalVitalMetric>()
+                                      .Where(v => v.UserId == userIdStr && v.Date >= start && v.Date <= end)
+                                      .OrderByDescending(v => v.Date)
+                                      .ToListAsync();
+
+                CheckCacheStalenessAndPullAsync();
+
+                return localVitals.Select(v => v.ToDomain()).ToList();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to fetch vitals from Supabase");
+                _logger.LogError(ex, "Failed to fetch vitals from local SQLite cache");
                 return new List<VitalMetric>();
             }
         }
@@ -231,87 +355,72 @@ namespace Daily.Services.Health
         {
             try
             {
-                var typeString = type.ToString();
-                
-                // Attempt Cache first
-                var cached = _cache.FirstOrDefault(x => x.TypeString == typeString);
-                if (cached != null && (DateTime.UtcNow - _lastCacheUpdate).TotalMinutes < 5)
+                var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                if (user == null || !Guid.TryParse(user.Id, out var uid))
                 {
-                    return cached;
+                    return null;
                 }
+                var userIdStr = uid.ToString().ToLowerInvariant();
+                var typeString = type.ToString();
 
-                var result = await _supabase.From<VitalMetric>()
-                                          .Where(v => v.TypeString == typeString)
-                                          .Order("date", Supabase.Postgrest.Constants.Ordering.Descending)
-                                          .Limit(1)
-                                          .Get();
+                await _databaseService.InitializeAsync();
 
-                return result.Model;
+                var latestLocal = await _databaseService.Connection.Table<LocalVitalMetric>()
+                                      .Where(v => v.UserId == userIdStr && v.TypeString == typeString)
+                                      .OrderByDescending(v => v.Date)
+                                      .FirstOrDefaultAsync();
+
+                CheckCacheStalenessAndPullAsync();
+
+                return latestLocal?.ToDomain();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Failed to fetch latest {type}");
+                _logger.LogError(ex, $"Failed to fetch latest {type} from local SQLite cache");
                 return null;
             }
         }
 
         public async Task<List<VitalMetric>> FetchMetricsAsync(DateTime date)
         {
-            // V49 LOGIC: UNIFIED READ
-            // User Request: "read from Supabase" on Mobile too, to match Desktop behavior.
-            // Native Sync is handled separately by SyncService.SyncNativeHealthDataAsync().
-            
-            /* 
-            // 1. Try Native Store (Mobile) - DISABLED for V49 to enforce Cloud Truth
-            if (_nativeHealthStore != null && _nativeHealthStore.IsSupported)
+            try
             {
-                var hasPermission = await _nativeHealthStore.RequestPermissionsAsync();
-                if (hasPermission)
+                var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                if (user == null || !Guid.TryParse(user.Id, out var uid))
                 {
-                     return await _nativeHealthStore.FetchMetricsAsync(date);
+                    return new List<VitalMetric>();
                 }
-                else
-                {
-                     _logger.LogWarning("FetchMetricsAsync: Permissions not granted.");
-                     return new List<VitalMetric>();
-                }
-            }
-            */
-            
-            // 2. Fallback: Read from Supabase (Desktop)
-            // "On Mac and Windows just read them"
-            try 
-            {
-                // Lazy Resolve SyncService for Diagnostics
-                var sync = _serviceProvider.GetService<ISyncService>();
-                
-                // Date Logic: Robust Range Query (Widen to 30 days for Desktop "Latest Available")
-                // User Request: "read the last one available"
-                var start = date.Date.AddDays(-30); 
+                var userIdStr = uid.ToString().ToLowerInvariant();
+
+                await _databaseService.InitializeAsync();
+
+                var start = date.Date.AddDays(-30);
                 var end = date.Date.AddDays(2);
-                
-                var result = await _supabase.From<VitalMetric>()
-                                      .Where(v => v.Date >= start && v.Date < end)
-                                      .Order("date", Supabase.Postgrest.Constants.Ordering.Descending)
-                                      .Get();
-                
-                if (result.Models.Count > 0)
+
+                var localRecords = await _databaseService.Connection.Table<LocalVitalMetric>()
+                                      .Where(v => v.UserId == userIdStr && v.Date >= start && v.Date < end)
+                                      .OrderByDescending(v => v.Date)
+                                      .ToListAsync();
+
+                CheckCacheStalenessAndPullAsync();
+
+                if (localRecords.Any())
                 {
-                    // Group by Type and take the Latest one
-                    var latestMetrics = result.Models
+                    var latestMetrics = localRecords
                         .GroupBy(m => m.TypeString)
-                        .Select(g => g.OrderByDescending(x => x.Date).First())
+                        .Select(g => g.OrderByDescending(x => x.Date).First().ToDomain())
                         .ToList();
 
-                    sync?.Log($"[Read] Found {latestMetrics.Count} recent metrics (Window: -30 days).");
+                    var sync = _serviceProvider.GetService<ISyncService>();
+                    sync?.Log($"[Read] Found {latestMetrics.Count} recent metrics from local DB (Window: -30 days).");
                     return latestMetrics;
                 }
-                
+
                 return new List<VitalMetric>();
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                var msg = $"Failed to read metrics from Supabase: {ex.Message}";
+                var msg = $"Failed to read metrics from local SQLite cache: {ex.Message}";
                 Console.WriteLine(msg);
                 _logger.LogError(ex, msg);
                 return new List<VitalMetric>();
@@ -320,190 +429,183 @@ namespace Daily.Services.Health
 
         public async Task SyncNativeHealthDataAsync()
         {
+            try 
+            {
+                var sync = _serviceProvider.GetService<ISyncService>();
+                Action<string> log = (msg) => 
+                {
+                    Console.WriteLine($"[SupabaseHealthService] {msg}");
+                    sync?.Log($"[Health] {msg}");
+                };
+
+                log("SyncNativeHealthDataAsync STARTED");
+
+                if (!_nativeHealthStore.IsSupported)
+                {
+                    log("Native Health Store not supported (Skipping Upload). Reading handled by Widget.");
+                    return;
+                }
+
+                log("Requesting Permissions...");
+                var hasPermission = await _nativeHealthStore.RequestPermissionsAsync();
+                if (!hasPermission)
+                {
+                    log("Permissions Denied.");
+                    return;
+                }
+
+                log($"Fetching metrics for Today ({DateTime.Today:d}) AND Yesterday...");
+                
+                var metricsToday = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today);
+                var metricsYesterday = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today.AddDays(-1));
+                
+                int countToday = metricsToday?.Count ?? 0;
+                int countYesterday = metricsYesterday?.Count ?? 0;
+                
+                log($"[Fetch] Today: {countToday} items, Yesterday: {countYesterday} items.");
+                
+                if (countToday > 0)
+                {
+                    var types = string.Join(", ", metricsToday.Select(x => x.TypeString).Distinct());
+                    log($"[Fetch] Today's Types: {types}");
+                }
+
+                var metrics = new List<VitalMetric>();
+                if (metricsToday != null) metrics.AddRange(metricsToday);
+                if (metricsYesterday != null) metrics.AddRange(metricsYesterday);
+                
+                if (!metrics.Any())
+                {
+                    log("No health metrics found locally (Today or Yesterday). Aborting Upload.");
+                    return;
+                }
+
+                var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                
+                if (user == null) 
+                {
+                     log("ABORT: User is NULL.");
+                     return;
+                }
+
+                if (!Guid.TryParse(user.Id, out var uid))
+                {
+                    log("ABORT: Invalid User ID.");
+                    return;
+                }
+
                 try 
                 {
-                    var sync = _serviceProvider.GetService<ISyncService>();
-                    Action<string> log = (msg) => 
-                    {
-                        Console.WriteLine($"[SupabaseHealthService] {msg}");
-                        sync?.Log($"[Health] {msg}");
-                    };
+                    var minDate = metrics.Min(m => m.Date);
+                    var maxDate = metrics.Max(m => m.Date);
 
-                    log("SyncNativeHealthDataAsync STARTED");
+                    var minDateStr = minDate.ToString("O");
+                    var maxDateStr = maxDate.ToString("O");
 
-                    if (!_nativeHealthStore.IsSupported)
-                    {
-                        log("Native Health Store not supported (Skipping Upload). Reading handled by Widget.");
-                        return;
-                    }
-
-                    log("Requesting Permissions...");
-                    var hasPermission = await _nativeHealthStore.RequestPermissionsAsync();
-                    if (!hasPermission)
-                    {
-                        log("Permissions Denied.");
-                        return;
-                    }
-
-                    // V48 LOGIC: Sync Today AND Yesterday (Backfill)
-                    log($"Fetching metrics for Today ({DateTime.Today:d}) AND Yesterday...");
+                    var existingResult = await _supabase.From<VitalMetric>()
+                                              .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid.ToString())
+                                              .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, minDateStr)
+                                              .Filter("date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, maxDateStr)
+                                              .Get();
                     
-                    var metricsToday = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today);
-                    var metricsYesterday = await _nativeHealthStore.FetchMetricsAsync(DateTime.Today.AddDays(-1));
+                    var existingMetrics = existingResult.Models;
                     
-                    int countToday = metricsToday?.Count ?? 0;
-                    int countYesterday = metricsYesterday?.Count ?? 0;
-                    
-                    log($"[Fetch] Today: {countToday} items, Yesterday: {countYesterday} items.");
-                    
-                    if (countToday > 0)
+                    foreach (var local in metrics)
                     {
-                        var types = string.Join(", ", metricsToday.Select(x => x.TypeString).Distinct());
-                        log($"[Fetch] Today's Types: {types}");
-                    }
+                        local.UserId = uid;
+                        local.UpdatedAt = DateTime.UtcNow;
+                        local.SyncedAt = DateTime.Now; // Local device time
 
-                    var metrics = new List<VitalMetric>();
-                    if (metricsToday != null) metrics.AddRange(metricsToday);
-                    if (metricsYesterday != null) metrics.AddRange(metricsYesterday);
-                    
-                    if (!metrics.Any())
-                    {
-                        log("No health metrics found locally (Today or Yesterday). Aborting Upload.");
-                        return;
-                    }
-
-                    var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
-                    
-                    if (user == null) 
-                    {
-                         log("ABORT: User is NULL.");
-                         return;
-                    }
-
-                    if (!Guid.TryParse(user.Id, out var uid))
-                    {
-                        log("ABORT: Invalid User ID.");
-                        return;
-                    }
-
-                    // 2a. Fetch EXISTING records for the date range (Today/Yesterday) to Merge
-                    // This prevents overwriting high values (e.g. 5000 steps from Android) with low values (e.g. 200 steps from iOS)
-                    try 
-                    {
-                        var minDate = metrics.Min(m => m.Date);
-                        var maxDate = metrics.Max(m => m.Date);
-
-
-                        var minDateStr = minDate.ToString("O");
-                        var maxDateStr = maxDate.ToString("O");
-
-                        var existingResult = await _supabase.From<VitalMetric>()
-                                                  .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid.ToString())
-                                                  .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, minDateStr)
-                                                  .Filter("date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, maxDateStr)
-                                                  .Get();
-                        
-                        var existingMetrics = existingResult.Models;
-
-                        // MERGE LOGIC: Smart Strategy
-                        // - Cumulative (Steps, Calories): Max Wins (prevents partial sync overwrites)
-                        // - Spot (Weight, HR): Last Write Wins (implicit via Upsert, unless we skip)
-                        
-                        foreach (var local in metrics)
+                        var remote = existingMetrics.FirstOrDefault(e => e.Date == local.Date && e.TypeString == local.TypeString);
+                        if (remote != null)
                         {
-                            local.UserId = uid;
-                            local.UpdatedAt = DateTime.UtcNow;
-                            local.SyncedAt = DateTime.Now; // Local device time
-
-                            var remote = existingMetrics.FirstOrDefault(e => e.Date == local.Date && e.TypeString == local.TypeString);
-                            if (remote != null)
+                            if (IsCumulative(local.TypeString))
                             {
-                                if (IsCumulative(local.TypeString))
+                                if (remote.Value > local.Value)
                                 {
-                                    // MAX WINS for Cumulative
-                                    if (remote.Value > local.Value)
-                                    {
-                                        log($"[Sync] Keeping Remote (Cumulative) {local.TypeString}: {remote.Value} (Local: {local.Value})");
-                                        local.Value = remote.Value;
-                                        local.SourceDevice = remote.SourceDevice;
-                                        local.Unit = remote.Unit;
-                                    }
-                                }
-                                else
-                                {
-                                    // SPOT METRICS (Weight, HR, etc.)
-                                    // Default: Last Write Wins (Local overwrites Remote). 
-                                    // However, check if Remote is significantly "newer" to avoid race conditions? 
-                                    // For simplicity and user expectation: The device performing the sync is authoritative for Spot metrics 
-                                    // UNLESS the remote value is identical (optimization).
-                                    
-                                    // Warning: If Android has Weight 80kg and iOS has Weight 85kg (old), and iOS syncs, it overwrites Android.
-                                    // Ideally we compare 'CreatedAt' or 'Source Timestamp', but we lack granular source timestamps in this simple model.
-                                    // We will stick to "Local Wins" for Spot, as user requested "Max Wins" check.
+                                    log($"[Sync] Keeping Remote (Cumulative) {local.TypeString}: {remote.Value} (Local: {local.Value})");
+                                    local.Value = remote.Value;
+                                    local.SourceDevice = remote.SourceDevice;
+                                    local.Unit = remote.Unit;
                                 }
                             }
                         }
+                    }
 
-                        // Upsert with OnConflict strategy (vitals_user_date_type_key)
-                        var upsertOptions = new Supabase.Postgrest.QueryOptions
+                    var upsertOptions = new Supabase.Postgrest.QueryOptions
+                    {
+                        Upsert = true,
+                        OnConflict = "user_id, date, type" 
+                    };
+
+                    var response = await _supabase.From<VitalMetric>().Upsert(metrics, upsertOptions);
+                    log($"[Sync] Upserted {response.Models.Count} merged records successfully.");
+
+                    // Save upserted/synced records to local SQLite
+                    var localVitals = metrics.Select(m => m.ToLocal()).ToList();
+                    await _databaseService.Connection.RunInTransactionAsync(tran =>
+                    {
+                        foreach (var local in localVitals)
                         {
-                            Upsert = true,
-                            OnConflict = "user_id, date, type" 
-                        };
-
-                        var response = await _supabase.From<VitalMetric>().Upsert(metrics, upsertOptions);
-                        log($"[Sync] Upserted {response.Models.Count} merged records successfully.");
-                    }
-                    catch (Supabase.Postgrest.Exceptions.PostgrestException pex)
-                    {
-                         log($"Postgrest Error: {pex.Message}");
-                         throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        log($"Sync Preparation/Execution Failed: {ex.Message}");
-                        throw;
-                    }
+                            tran.InsertOrReplace(local);
+                        }
+                    }).ConfigureAwait(false);
+                    log($"[Sync] Saved {localVitals.Count} metrics locally in SQLite.");
+                }
+                catch (Supabase.Postgrest.Exceptions.PostgrestException pex)
+                {
+                     log($"Postgrest Error: {pex.Message}");
+                     throw;
                 }
                 catch (Exception ex)
                 {
-                    // Re-resolve if needed, but 'log' delegate captures 'sync'
-                    // If sync failed to resolve, we just Console.WriteLine.
-                    var msg = $"Fatal Health Sync Error: {ex.Message}";
-                    Console.WriteLine(msg);
-                    _logger.LogError(ex, msg);
-                    
-                     var sync = _serviceProvider.GetService<ISyncService>();
-                     sync?.Log($"[Health] {msg}");
+                    log($"Sync Preparation/Execution Failed: {ex.Message}");
+                    throw;
                 }
+            }
+            catch (Exception ex)
+            {
+                var msg = $"Fatal Health Sync Error: {ex.Message}";
+                Console.WriteLine(msg);
+                _logger.LogError(ex, msg);
+                
+                 var sync = _serviceProvider.GetService<ISyncService>();
+                 sync?.Log($"[Health] {msg}");
+            }
         }
 
         public async Task<List<VitalMetric>> GetHistoryAsync(VitalType type, int days = 7)
         {
             try
             {
+                var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                if (user == null || !Guid.TryParse(user.Id, out var uid))
+                {
+                    return new List<VitalMetric>();
+                }
+                var userIdStr = uid.ToString().ToLowerInvariant();
                 var typeString = type.ToString();
+
                 var start = DateTime.UtcNow.Date.AddDays(-days);
                 var end = DateTime.UtcNow.Date.AddDays(1);
 
-                var startStr = start.ToString("yyyy-MM-dd");
-                var endStr = end.ToString("yyyy-MM-dd");
+                await _databaseService.InitializeAsync();
 
-                Console.WriteLine($"[Health History] Querying {typeString} from {startStr} to {endStr}");
+                Console.WriteLine($"[Health History] Querying {typeString} from {start:O} to {end:O} locally");
 
-                var result = await _supabase.From<VitalMetric>()
-                    .Filter("type", Supabase.Postgrest.Constants.Operator.Equals, typeString)
-                    .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
-                    .Filter("date", Supabase.Postgrest.Constants.Operator.LessThan, endStr)
-                    .Order("date", Supabase.Postgrest.Constants.Ordering.Ascending)
-                    .Get();
+                var localHistory = await _databaseService.Connection.Table<LocalVitalMetric>()
+                                      .Where(v => v.UserId == userIdStr && v.TypeString == typeString && v.Date >= start && v.Date < end)
+                                      .OrderBy(v => v.Date)
+                                      .ToListAsync();
 
-                Console.WriteLine($"[Health History] Got {result.Models.Count} records for {typeString}");
-                return result.Models;
+                CheckCacheStalenessAndPullAsync();
+
+                Console.WriteLine($"[Health History] Got {localHistory.Count} records for {typeString} from local DB");
+                return localHistory.Select(v => v.ToDomain()).ToList();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Failed to fetch history for {type}");
+                _logger.LogError(ex, $"Failed to fetch history for {type} from local SQLite cache");
                 Console.WriteLine($"[Health History] ERROR for {type}: {ex.Message}");
                 return new List<VitalMetric>();
             }
@@ -525,12 +627,11 @@ namespace Daily.Services.Health
                     VitalType.Fat => true,
                     VitalType.Protein => true,
                     VitalType.Caffeine => true,
-                    VitalType.SleepDuration => true, // Usually we want the longest recorded sleep session if multiple devices track? Or Max.
-                    _ => false // Weight, HR, BP, BodyFat, Speed, etc. are SPOT measurements.
+                    VitalType.SleepDuration => true, 
+                    _ => false 
                 };
             }
             return false;
         }
     }
 }
-

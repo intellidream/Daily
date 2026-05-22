@@ -10,10 +10,7 @@ namespace Daily.Services
         private readonly Supabase.Client _supabase;
         private readonly IDatabaseService _databaseService;
         private readonly ISyncService _syncService; // To trigger sync on save
-        private Supabase.Realtime.RealtimeChannel? _preferencesChannel;
         private UserPreferences _currentSettings = new UserPreferences();
-        private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
-        private CancellationTokenSource? _reconnectCts;
         
         public UserPreferences Settings => _currentSettings;
         public bool IsAuthenticated => _supabase.Auth.CurrentSession != null;
@@ -75,29 +72,6 @@ namespace Daily.Services
                           });
                      }
                  });
-
-                _supabase.Realtime.AddStateChangedHandler((sender, state) =>
-                {
-                    Console.WriteLine($"[SettingsService] Realtime Socket State Changed: {state}");
-                    if (state == Supabase.Realtime.Constants.SocketState.Open)
-                    {
-                        Console.WriteLine("[SettingsService] Realtime Socket opened/reconnected. Triggering debounced SetupRealtimeAsync...");
-                        _reconnectCts?.Cancel();
-                        _reconnectCts = new CancellationTokenSource();
-                        var token = _reconnectCts.Token;
-                        Task.Run(async () =>
-                        {
-                            try
-                            {
-                                await Task.Delay(1000, token);
-                                if (!token.IsCancellationRequested)
-                                    await SetupRealtimeAsync();
-                            }
-                            catch (TaskCanceledException) { }
-                            catch (Exception ex) { Console.WriteLine($"[SettingsService] Debounced reconnect error: {ex.Message}"); }
-                        });
-                    }
-                });
             }
             catch (Exception ex)
             {
@@ -196,96 +170,12 @@ namespace Daily.Services
                  _currentSettings = new UserPreferences { Id = userId };
              }
 
-            // Start Realtime
-            await SetupRealtimeAsync();
-
-            // Notify UI
-            OnSettingsChanged?.Invoke();
+             // Notify UI
+             OnSettingsChanged?.Invoke();
         }
 
 
 
-        private async Task SetupRealtimeAsync()
-        {
-            if (!IsAuthenticated)
-            {
-                if (_preferencesChannel != null)
-                {
-                    try { _preferencesChannel.Unsubscribe(); } catch { }
-                    _preferencesChannel = null;
-                }
-                return;
-            }
-            
-            await _realtimeSemaphore.WaitAsync();
-            try 
-            {
-                var token = _supabase.Auth.CurrentSession?.AccessToken;
-                if (!string.IsNullOrEmpty(token))
-                {
-                    Console.WriteLine("[SettingsService] Propagating current session token to Realtime.");
-                    _supabase.Realtime.SetAuth(token);
-                }
-                if (_preferencesChannel != null && !_preferencesChannel.IsJoined)
-                {
-                    Console.WriteLine("[SettingsService] Realtime preferences channel exists but is not joined. Removing to recreate...");
-                    try
-                    {
-                        _supabase.Realtime.Remove(_preferencesChannel);
-                    }
-                    catch (Exception removeEx)
-                    {
-                        Console.WriteLine($"[SettingsService] Error removing channel: {removeEx.Message}");
-                    }
-                    _preferencesChannel = null;
-                }
-
-                if (_preferencesChannel == null)
-                {
-                    _preferencesChannel = _supabase.Realtime.Channel("realtime", "public", "user_preferences", null, null, new Dictionary<string, string>());
-                    _preferencesChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnPreferencesReceived);
-                    await _preferencesChannel.Subscribe();
-                    Console.WriteLine("[SettingsService] Realtime subscribed to user_preferences");
-                }
-            } 
-            catch (Exception ex) 
-            {
-                Console.WriteLine($"[SettingsService] Realtime setup failed: {ex.Message}");
-            }
-            finally
-            {
-                _realtimeSemaphore.Release();
-            }
-        }
-
-        private void OnPreferencesReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
-        {
-            try 
-            {
-                var remotePref = e.Model<UserPreferences>();
-                
-                if (remotePref != null && remotePref.Id == CurrentUserId)
-                {
-                    // Structurally prevent self-overwrite / stale cache overwrite
-                    if (_currentSettings != null && remotePref.UpdatedAt <= _currentSettings.UpdatedAt)
-                    {
-                        Console.WriteLine($"[SettingsService] Realtime: Ignored stale/self broadcast. Remote: {remotePref.UpdatedAt}, Local: {_currentSettings.UpdatedAt}");
-                        return;
-                    }
-
-                    var localPrefs = ToLocal(remotePref);
-                    localPrefs.SyncedAt = DateTime.UtcNow; // Prevent push loop
-                    
-                    _databaseService.Connection.InsertOrReplaceAsync(localPrefs).ContinueWith(_ => 
-                    {
-                        _currentSettings = remotePref;
-                        Console.WriteLine($"[SettingsService] Realtime: Synced incoming user preferences");
-                        OnSettingsChanged?.Invoke();
-                    });
-                }
-            } 
-            catch(Exception ex) { Console.WriteLine($"[SettingsService] Realtime Preferences Error: {ex}"); }
-        }
 
         public async Task SaveSettingsAsync()
         {

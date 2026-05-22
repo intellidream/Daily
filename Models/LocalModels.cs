@@ -207,4 +207,30 @@ namespace Daily.Models
         public DateTime? SyncedAt { get; set; } // Null = Dirty
         public bool IsDeleted { get; set; }
     }
+
+    [Table("vitals")]
+    public class LocalVitalMetric
+    {
+        [PrimaryKey]
+        public string Id { get; set; } // UUID as string
+
+        [Indexed]
+        public string UserId { get; set; } // UUID as string
+
+        [Indexed]
+        public string TypeString { get; set; }
+
+        public double Value { get; set; }
+        public string Unit { get; set; }
+
+        [Indexed]
+        public DateTime Date { get; set; }
+
+        public string SourceDevice { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+
+        [Indexed]
+        public DateTime? SyncedAt { get; set; }
+    }
 }

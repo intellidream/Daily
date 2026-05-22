@@ -64,6 +64,9 @@ namespace Daily.Services
                 await _connection.CreateTableAsync<LocalSavedArticle>().ConfigureAwait(false);
                 await _connection.CreateTableAsync<LocalRssSubscription>().ConfigureAwait(false);
                 
+                // Health (Vitals)
+                await _connection.CreateTableAsync<LocalVitalMetric>().ConfigureAwait(false);
+                
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
                 await AddColumnIfNotExists("user_preferences", "UpdatedAt", "varchar").ConfigureAwait(false);
                 

@@ -286,5 +286,41 @@ namespace Daily.Services
                 SyncedAt = domain.SyncedAt?.ToUniversalTime()
             };
         }
+
+        // --- VitalMetric ---
+
+        public static Daily.Models.Health.VitalMetric ToDomain(this LocalVitalMetric local)
+        {
+            return new Daily.Models.Health.VitalMetric
+            {
+                Id = Guid.Parse(local.Id),
+                UserId = Guid.Parse(local.UserId),
+                TypeString = local.TypeString,
+                Value = local.Value,
+                Unit = local.Unit,
+                Date = SafeUtc(local.Date),
+                SourceDevice = local.SourceDevice,
+                CreatedAt = SafeUtc(local.CreatedAt),
+                UpdatedAt = SafeUtc(local.UpdatedAt),
+                SyncedAt = SafeUtc(local.SyncedAt)
+            };
+        }
+
+        public static LocalVitalMetric ToLocal(this Daily.Models.Health.VitalMetric domain)
+        {
+            return new LocalVitalMetric
+            {
+                Id = domain.Id.ToString().ToLowerInvariant(),
+                UserId = domain.UserId.ToString().ToLowerInvariant(),
+                TypeString = domain.TypeString,
+                Value = domain.Value,
+                Unit = domain.Unit,
+                Date = domain.Date.ToUniversalTime(),
+                SourceDevice = domain.SourceDevice,
+                CreatedAt = domain.CreatedAt.ToUniversalTime(),
+                UpdatedAt = domain.UpdatedAt.ToUniversalTime(),
+                SyncedAt = domain.SyncedAt?.ToUniversalTime()
+            };
+        }
     }
 }

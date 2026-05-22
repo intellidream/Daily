@@ -76,8 +76,8 @@ namespace Daily.Services.Finances
                 if (cached != null)
                 {
                     cached.Type = MapMarketType(cached.Type, symbol);
-                    // Check Freshness (15 mins)
-                    if (cached.LastUpdatedAt.HasValue && cached.LastUpdatedAt.Value > DateTime.UtcNow.AddMinutes(-15))
+                    // Check Freshness (1 hour)
+                    if (cached.LastUpdatedAt.HasValue && cached.LastUpdatedAt.Value > DateTime.UtcNow.AddHours(-1))
                     {
                         isFresh = true;
                     }
@@ -142,6 +142,42 @@ namespace Daily.Services.Finances
                                 } catch { }
                             });
                             await Task.WhenAll(tasks);
+                        }
+
+                        // Store failed/unresolved symbols as placeholders to prevent infinite request loops
+                        var unresolvedSymbols = symbolsToFetch.Where(s => yahooData == null || !yahooData.ContainsKey(s)).ToList();
+                        if (unresolvedSymbols.Any())
+                        {
+                            Console.WriteLine($"[FinancesService] Saving placeholder entries for unresolved symbols: {string.Join(", ", unresolvedSymbols)}");
+                            foreach (var symbol in unresolvedSymbols)
+                            {
+                                try
+                                {
+                                    var existing = cachedSecurities.FirstOrDefault(s => string.Equals(s.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
+                                    var security = new LocalSecurity
+                                    {
+                                        Symbol = symbol,
+                                        Name = existing?.Name ?? symbol,
+                                        LatestPrice = existing?.LatestPrice ?? 0,
+                                        LastUpdatedAt = DateTime.UtcNow,
+                                        Type = MapMarketType(existing?.Type ?? "", symbol),
+                                        Change = existing?.Change ?? 0,
+                                        PercentChange = existing?.PercentChange ?? 0,
+                                        DayHigh = existing?.DayHigh ?? 0,
+                                        DayLow = existing?.DayLow ?? 0,
+                                        Volume = existing?.Volume ?? 0,
+                                        MarketCap = existing?.MarketCap ?? 0,
+                                        Currency = existing?.Currency,
+                                        Exchange = existing?.Exchange,
+                                        LogoUrl = existing?.LogoUrl ?? GetLogoUrl(symbol, symbol, MapMarketType("", symbol))
+                                    };
+                                    await _databaseService.Connection.InsertOrReplaceAsync(security);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"[FinancesService] SQLite Write Placeholder Error for {symbol}: {ex}");
+                                }
+                            }
                         }
 
                         if (yahooData != null && yahooData.Any())
@@ -341,7 +377,7 @@ namespace Daily.Services.Finances
                 if (cached.Any())
                 {
                     var oldest = cached.Min(w => w.LastUpdatedAt ?? DateTime.MinValue);
-                    if (oldest > DateTime.UtcNow.AddMinutes(-15))
+                    if (oldest > DateTime.UtcNow.AddHours(-1))
                     {
                         Console.WriteLine($"[FinancesService] Serving {cached.Count} cached watchlist symbols");
                         return cached.Select(w => w.Symbol).ToList();
