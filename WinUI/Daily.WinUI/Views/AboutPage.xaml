@@ -79,6 +79,36 @@
             </StackPanel>
 
             <!-- Divider -->
+            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,0,0,24"/>
+
+            <!-- Attributions section -->
+            <TextBlock Text="Attributions" FontSize="12" Opacity="0.5" Margin="0,0,0,12"
+                       FontWeight="SemiBold" CharacterSpacing="60"/>
+
+            <StackPanel Spacing="12" Margin="0,0,0,32">
+                <!-- SVGBackgrounds card -->
+                <Border CornerRadius="12" Padding="16,12"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Grid.Column="0" Glyph="&#xE8B9;" FontFamily="Segoe Fluent Icons" FontSize="18"
+                                  Foreground="{ThemeResource SystemControlHighlightAccentBrush}" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <HyperlinkButton NavigateUri="https://www.svgbackgrounds.com" Padding="0" HorizontalAlignment="Left">
+                                <TextBlock Text="Backgrounds by SVGBackgrounds.com" FontSize="13" FontWeight="Medium"/>
+                            </HyperlinkButton>
+                            <TextBlock Text="Used for application background vector graphics." FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <!-- Divider -->
             <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,0,0,20"/>
 
             <!-- Links row -->
