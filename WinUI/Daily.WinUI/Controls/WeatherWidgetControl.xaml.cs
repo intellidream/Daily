@@ -23,7 +23,9 @@ public sealed partial class WeatherWidgetControl : UserControl
 
     private async void WeatherWidgetControl_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        await RefreshWeatherAsync();
+        var task = RefreshWeatherAsync();
+        MainPage.Current?.RegisterLoadingTask(task);
+        await task;
     }
 
     /// <summary>Called by the dashboard refresh button to reload data in-place.</summary>

@@ -25,7 +25,7 @@ namespace Daily.Platforms.Windows
 
                 _trayIcon = new TaskbarIcon
                 {
-                    ToolTipText = "Daily",
+                    ToolTipText = "DayOne",
                     LeftClickCommand = new Command(() => ClickHandler?.Invoke()),
                     DoubleClickCommand = new Command(() => ClickHandler?.Invoke())
                 };

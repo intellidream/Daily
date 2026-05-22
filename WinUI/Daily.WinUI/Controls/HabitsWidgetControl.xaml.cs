@@ -466,7 +466,9 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
     {
         _habitsService.OnHabitsUpdated += HabitsService_OnHabitsUpdated;
         UpdateVisualState();
-        await LoadDataAsync();
+        var task = LoadDataAsync();
+        MainPage.Current?.RegisterLoadingTask(task);
+        await task;
     }
 
     private void HabitsWidgetControl_Unloaded(object sender, RoutedEventArgs e)

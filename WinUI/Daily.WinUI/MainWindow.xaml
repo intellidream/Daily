@@ -120,7 +120,7 @@
         <Frame x:Name="RootFrame" Grid.Row="1" />
 
         <!-- System Tray Icon -->
-        <tb:TaskbarIcon x:Name="TrayIcon">
+        <tb:TaskbarIcon x:Name="TrayIcon" ToolTipText="DayOne">
             <tb:TaskbarIcon.ContextFlyout>
                 <MenuFlyout>
                     <MenuFlyoutItem Text="Show" Click="TrayShow_Click">

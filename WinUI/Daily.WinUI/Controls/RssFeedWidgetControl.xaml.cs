@@ -62,7 +62,9 @@ public sealed partial class RssFeedWidgetControl : UserControl
         {
             LoadingPanel.Visibility = Visibility.Visible;
             ArticlesListView.Visibility = Visibility.Collapsed;
-            await _rssService.LoadFeedAsync(_rssService.CurrentFeed);
+            var task = _rssService.LoadFeedAsync(_rssService.CurrentFeed);
+            MainPage.Current?.RegisterLoadingTask(task);
+            await task;
         }
     }
 
@@ -116,7 +118,9 @@ public sealed partial class RssFeedWidgetControl : UserControl
             {
                 LoadingPanel.Visibility = Visibility.Visible;
                 ArticlesListView.Visibility = Visibility.Collapsed;
-                await _rssService.LoadFeedAsync(_rssService.CurrentFeed);
+                var task = _rssService.LoadFeedAsync(_rssService.CurrentFeed);
+                MainPage.Current?.RegisterLoadingTask(task);
+                await task;
             }
         }
         catch (Exception ex)

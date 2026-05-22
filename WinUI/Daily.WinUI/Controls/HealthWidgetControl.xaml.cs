@@ -34,7 +34,9 @@ namespace Daily_WinUI.Controls
                 _refreshService.RefreshRequested += OnRefreshRequested;
                 _refreshService.HealthRefreshRequested += OnRefreshRequested;
             }
-            await LoadDataAsync();
+            var task = LoadDataAsync();
+            MainPage.Current?.RegisterLoadingTask(task);
+            await task;
         }
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)

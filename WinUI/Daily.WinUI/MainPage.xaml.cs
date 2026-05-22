@@ -12,23 +12,43 @@ namespace Daily_WinUI;
 
 public sealed partial class MainPage : Page
 {
+    public static MainPage? Current { get; private set; }
+
     private readonly Dictionary<System.Type, DetailWindow> _openWindows = new();
     private SettingsWindow? _settingsWindow;
     private readonly WinUIAuthService _authService;
     private readonly WinUIWidgetService _widgetService;
     private System.Collections.ObjectModel.ObservableCollection<Daily.Models.WidgetModel> _widgets;
 
+    private readonly List<System.Threading.Tasks.Task> _loadingTasks = new();
+    private readonly object _lock = new object();
+    private bool _isTrackingLoads = false;
+
     public MainPage()
     {
         InitializeComponent();
+        Current = this;
         _authService = App.Current.Services.GetRequiredService<WinUIAuthService>();
         _widgetService = App.Current.Services.GetRequiredService<WinUIWidgetService>();
         Loaded += MainPage_Loaded;
-        Unloaded += (_, _) => WeatherBannerService.WeatherConditionChanged -= OnWeatherConditionChanged;
+        Unloaded += (_, _) => 
+        {
+            WeatherBannerService.WeatherConditionChanged -= OnWeatherConditionChanged;
+            if (Current == this) Current = null;
+        };
         WeatherBannerService.WeatherConditionChanged += OnWeatherConditionChanged;
         // Replay last known condition if weather already loaded before this page
         if (WeatherBannerService.LastIconCode is { } code)
             OnWeatherConditionChanged(code);
+    }
+
+    public void RegisterLoadingTask(System.Threading.Tasks.Task task)
+    {
+        lock (_lock)
+        {
+            if (!_isTrackingLoads) return;
+            _loadingTasks.Add(task);
+        }
     }
 
     private void OnWeatherConditionChanged(string iconCode)
@@ -42,7 +62,77 @@ public sealed partial class MainPage : Page
     private async void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
         UpdateUserUI();
+        await RunLoadingSequenceAsync();
+    }
+
+    private async System.Threading.Tasks.Task RunLoadingSequenceAsync()
+    {
+        // Initialize transition targets to starting state
+        ContentGrid.Opacity = 0.0;
+        ContentScale.ScaleX = 0.94;
+        ContentScale.ScaleY = 0.94;
+        OverlayScale.ScaleX = 1.0;
+        OverlayScale.ScaleY = 1.0;
+
+        // 1. Show the loading overlay and start the animation
+        LoadingOverlay.Opacity = 1.0;
+        LoadingOverlay.Visibility = Visibility.Visible;
+        LoadingStoryboard.Begin();
+
+        // Start timing the minimum duration (snappy 1.2s delay for eagerness)
+        var minTimeTask = System.Threading.Tasks.Task.Delay(1200);
+
+        // 2. Track loads
+        lock (_lock)
+        {
+            _isTrackingLoads = true;
+            _loadingTasks.Clear();
+        }
+
+        // 3. Load widgets configuration and bind
         await LoadWidgetsAsync();
+
+        // 4. Yield/delay to let widgets instantiate, trigger Loaded, and register their loading tasks
+        await System.Threading.Tasks.Task.Delay(200);
+        
+        List<System.Threading.Tasks.Task> tasksToAwait;
+        lock (_lock)
+        {
+            _isTrackingLoads = false;
+            tasksToAwait = _loadingTasks.ToList();
+        }
+
+        // 5. Wait for all registered widget data loads to finish
+        if (tasksToAwait.Count > 0)
+        {
+            try
+            {
+                await System.Threading.Tasks.Task.WhenAll(tasksToAwait);
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainPage] Error loading widgets: {ex}");
+            }
+        }
+
+        // 6. Ensure minimum 1.2 seconds loading time has elapsed
+        await minTimeTask;
+
+        // 7. Fade out loading overlay
+        await FadeOutLoadingOverlayAsync();
+    }
+
+    private System.Threading.Tasks.Task FadeOutLoadingOverlayAsync()
+    {
+        var tcs = new System.Threading.Tasks.TaskCompletionSource();
+        FadeOutStoryboard.Completed += (s, e) =>
+        {
+            LoadingOverlay.Visibility = Visibility.Collapsed;
+            LoadingStoryboard.Stop();
+            tcs.SetResult();
+        };
+        FadeOutStoryboard.Begin();
+        return tcs.Task;
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)

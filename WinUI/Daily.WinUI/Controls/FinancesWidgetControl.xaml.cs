@@ -120,7 +120,9 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         {
             _financesService.OnQuotesUpdated += OnQuotesUpdated;
         }
-        await LoadDataAsync();
+        var task = LoadDataAsync();
+        MainPage.Current?.RegisterLoadingTask(task);
+        await task;
         UpdateAdaptiveState(this.ActualWidth, this.ActualHeight);
     }
 

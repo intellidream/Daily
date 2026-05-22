@@ -27,6 +27,16 @@
                         <GradientStop Color="#FF0D1A35" Offset="0.65"/>
                         <GradientStop Color="#FF132B4A" Offset="1"/>
                     </LinearGradientBrush>
+                    <RadialGradientBrush x:Key="LoadingOverlayBgBrush" Center="0.5,0.5" RadiusX="0.75" RadiusY="0.75">
+                        <GradientStop Color="#00030609" Offset="0" />
+                        <GradientStop Color="#60030609" Offset="0.65" />
+                        <GradientStop Color="#C0030609" Offset="1.0" />
+                    </RadialGradientBrush>
+                    <RadialGradientBrush x:Key="LoadingGlowBrush">
+                        <GradientStop Color="#80FFFFFF" Offset="0" />
+                        <GradientStop Color="#1500E5FF" Offset="0.5" />
+                        <GradientStop Color="Transparent" Offset="1" />
+                    </RadialGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <x:String x:Key="AppIconSource">ms-appx:///Assets/appicon.theme-light.svg</x:String>
@@ -45,6 +55,16 @@
                         <GradientStop Color="#FFEDE8DC" Offset="0.65"/>
                         <GradientStop Color="#FFF8F5EF" Offset="1"/>
                     </LinearGradientBrush>
+                    <RadialGradientBrush x:Key="LoadingOverlayBgBrush" Center="0.5,0.5" RadiusX="0.75" RadiusY="0.75">
+                        <GradientStop Color="#00F8F5EF" Offset="0" />
+                        <GradientStop Color="#60D4C9B0" Offset="0.65" />
+                        <GradientStop Color="#C0D4C9B0" Offset="1.0" />
+                    </RadialGradientBrush>
+                    <RadialGradientBrush x:Key="LoadingGlowBrush">
+                        <GradientStop Color="#80FFFFFF" Offset="0" />
+                        <GradientStop Color="#15FFA800" Offset="0.5" />
+                        <GradientStop Color="Transparent" Offset="1" />
+                    </RadialGradientBrush>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <FontFamily x:Key="TablerIconsFont">ms-appx:///Assets/Fonts/tabler-icons.ttf#tabler-icons</FontFamily>
