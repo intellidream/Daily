@@ -84,7 +84,11 @@ namespace Daily.Services.Health
                             {
                                 await Task.Delay(1000, token);
                                 if (!token.IsCancellationRequested)
+                                {
                                     await SetupRealtimeAsync();
+                                    Console.WriteLine("[SupabaseHealthService] Reconnected. Triggering background health catch-up pull...");
+                                    _ = PullDeltasAsync();
+                                }
                             }
                             catch (TaskCanceledException) { }
                             catch (Exception ex) { Console.WriteLine($"[SupabaseHealthService] Debounced reconnect error: {ex.Message}"); }

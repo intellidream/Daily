@@ -115,6 +115,29 @@ namespace Daily
                 
                 _syncService.StartBackgroundSync();
 
+#if !WINUI_NATIVE
+                Microsoft.Maui.Networking.Connectivity.Current.ConnectivityChanged += (sender, e) =>
+                {
+                    if (e.NetworkAccess == Microsoft.Maui.Networking.NetworkAccess.Internet)
+                    {
+                        _logger.Log("[App] Internet connectivity restored. Connecting Realtime and syncing...");
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await _supabase.Realtime.ConnectAsync();
+                                await _syncService.PullAsync(SyncScope.All);
+                                await _healthService.PullDeltasAsync();
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Log($"[App] Reconnect/sync on connectivity change failed: {ex.Message}");
+                            }
+                        });
+                    }
+                };
+#endif
+
                 // Token Push Logic (Option B) - Keep watches alive without Token Rotation
                 _supabase.Auth.AddStateChangedListener(async (sender, state) =>
                 {
@@ -559,5 +582,42 @@ namespace Daily
 
         
         public WindowManagerService? GetWindowManager() => _windowManagerService;
+
+        protected override void OnSleep()
+        {
+            _logger.Log("[App] App is sleeping. Disconnecting Realtime socket cleanly...");
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    _supabase.Realtime.Disconnect();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Log($"[App] Disconnect during OnSleep failed: {ex.Message}");
+                }
+            });
+        }
+
+        protected override void OnResume()
+        {
+            _logger.Log("[App] App resumed. Reconnecting Realtime socket...");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(500); // Allow OS networks to settle
+                    await _supabase.Realtime.ConnectAsync();
+                    
+                    // Trigger a background sync pull on resume
+                    await _syncService.PullAsync(SyncScope.All);
+                    await _healthService.PullDeltasAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Log($"[App] Reconnect/sync during OnResume failed: {ex.Message}");
+                }
+            });
+        }
     }
 }

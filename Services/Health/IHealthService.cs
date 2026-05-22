@@ -38,5 +38,10 @@ namespace Daily.Services.Health
         /// Initializes the service, e.g., registers realtime subscriptions.
         /// </summary>
         Task InitializeAsync();
+
+        /// <summary>
+        /// Pulls delta records from Supabase since the latest local record to catch up.
+        /// </summary>
+        Task PullDeltasAsync();
     }
 }

@@ -105,7 +105,11 @@ namespace Daily.Services
                             {
                                 await Task.Delay(1000, token);
                                 if (!token.IsCancellationRequested)
+                                {
                                     await SetupRealtimeAsync();
+                                    Console.WriteLine("[HabitsService] Reconnected. Triggering background habits catch-up pull...");
+                                    _ = _syncService.PullAsync(SyncScope.Habits);
+                                }
                             }
                             catch (TaskCanceledException) { }
                             catch (Exception ex) { Console.WriteLine($"[HabitsService] Debounced reconnect error: {ex.Message}"); }

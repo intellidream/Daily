@@ -36,5 +36,10 @@ namespace Daily_WinUI.Services
         {
             return Task.CompletedTask;
         }
+
+        public Task PullDeltasAsync()
+        {
+            return Task.CompletedTask;
+        }
     }
 }
