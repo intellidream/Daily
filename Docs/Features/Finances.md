@@ -86,7 +86,7 @@ Finances data utilizes separate SQLite local structures and Supabase remote data
 
 | Characteristic | WinUI Implementation | MAUI / Blazor Hybrid Implementation |
 | :--- | :--- | :--- |
-| **UI Technology** | Native XAML Controls (`FinancesWidgetControl.xaml` & `FinancesDetailPage.xaml`) | Blazor Hybrid Razor components (`FinancesWidget.razor` & `FinancesDetail.razor`) |
+| **UI Technology** | Native XAML Controls (`FinancesWidgetControl.xaml` & `FinancesDetailPage.xaml`) with standardized `FontSize="20"` header icons for dashboard weight consistency | Blazor Hybrid Razor components (`FinancesWidget.razor` & `FinancesDetail.razor`) |
 | **Data Binding** | `ObservableCollection<LocalAccount>` and XAML DataTemplates | Blazor model list bindings with standard C# loops (`@foreach`) |
 | **World Map Control** | Custom map layout using WinUI XAML shapes (`WorldMapControl.xaml`) | Simplified statistics indicators or Blazor visual maps |
 | **Ledger Management** | Master-Detail Grid displays using WinUI stack panels | MudBlazor tables (`MudTable`) with inline row templates |

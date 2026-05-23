@@ -78,3 +78,33 @@ To optimize performance and reduce local processing overhead, the application mi
 * Rather than downloading the entire `habits_logs` dataset to compute multi-month consistency heatmaps or financial savings, the WinUI app leverages optimized Postgres functions (e.g., `get_smokes_financials` and `get_consistency`).
 * **Accurate Elapsed Time tracking**: Calculations dynamically calculate the duration (like "Days Since Quit") server-side using Postgres `CURRENT_DATE - p_since_date::date` instead of simply counting the distinct number of logged days. This ensures that financial totals (Money Saved, Cigarettes Avoided) accurately reflect real-world time elapsed regardless of the user's daily logging frequency.
 * **Client-Side Caching**: The results of these RPC calls are aggressively cached in-memory on the client to prevent excessive network requests when repeatedly navigating between widget details.
+
+---
+
+## 7. Windows Shell Customization, Docking & Shell State Settings
+
+We implemented a custom, premium windows layout control system to support flexible desktop workspaces.
+
+### 7.1 Adaptive Title Bar & Avatar State
+* **Narrow Sizing Collapse (`AppTitleBar_SizeChanged`)**: When the window is resized below `640` logical pixels, space in the custom title bar becomes extremely constrained. The system hooks into `SizeChanged` and collapses the `TitleBarDateText` (the calendar date) and `TitleBarUserEmailText` (the username string next to the avatar), leaving only the account picture visible. They automatically restore to visible when the window is widened.
+* **Auth State Profile Hydration**: On launch, authentication session hydration runs asynchronously in the background. To prevent a timing race where the avatar fails to load because the session wasn't active when the page loaded, the `MainPage` registers an auth state changed listener to re-trigger `UpdateUserUI` on the UI thread when hydration completes.
+* **Robust Image Resolvers**: Accounts authenticated via Google OAuth store their profile pictures under the JSON property `picture`, while standard Supabase accounts use `avatar_url`. The `WinUIAuthService` parses both keys in the user metadata to ensure the avatar loads correctly.
+
+### 7.2 DPI-Aware Docking & DWM Border Compensations
+* **Multi-Mode Docking Dropdown**: A dropdown button (`TitleBarDockButton` with Glyph `\uE952`) was added to the title bar, allowing the user to select between:
+  1. **Float Center (Default)**: Horizontal centering at the bottom of the active screen (`1380×790` scaled pixels).
+  2. **Dock Left / Right**: Fixed sidebar mode (`480` scaled pixels) stretching to fill the vertical display height.
+* **DWM Extended Frame Bounds Compensation**: Windows 10/11 windows have invisible resize borders (typically 7–8 physical pixels on the left, right, and bottom). Directly passing screen coordinates to `AppWindow.MoveAndResize` causes docked windows to offset slightly off-screen (on the right) and overlap the taskbar (at the bottom). We resolved this by querying the window's true visible region using the Win32 API `DwmGetWindowAttribute` with the `DWMWA_EXTENDED_FRAME_BOUNDS` attribute. The system calculates these margins dynamically:
+  - `outerX = targetX - margins.left`
+  - `outerY = targetY - margins.top`
+  - `outerWidth = targetWidth + margins.left + margins.right`
+  - `outerHeight = targetHeight + margins.top + margins.bottom`
+* **Clamp Enforcement Bypass**: To prevent the OS/SDK window manager from overriding the docking size and pushing the window bounds back over the taskbar, we reduced the minimum window size enforcement in `AppWindow_Changed` from `500` to `400` logical pixels.
+
+### 7.3 Settings Service Caching & Tray Persistence
+* **Overwritten State Bug**: Previously, separate window/page instances (e.g. `MainWindow`, `SettingsWindow`, `GeneralSettingsPage`) created their own instances of `AppSettings` on startup. If a user updated a setting in `GeneralSettingsPage` (like turning on "Close to tray"), it was saved to the JSON file. However, when the user subsequently closed `MainWindow`, the `MainWindow`'s local settings instance (which was instantiated at startup and still had the old `false` value) wrote to disk, overwriting the user's change.
+* **Singleton State Caching**: We resolved this by implementing a thread-safe, in-memory caching singleton in `SettingsService.cs`. All pages and dialogs load and reference the exact same settings instance. Any changes reflect globally in real-time, preventing state overwrites on window closing.
+
+### 7.4 Standardized Widget Headers
+* **Visual Weight Uniformity**: The dashboard widgets utilize native vector `FontIcon` elements. To ensure equal visual weight, header icons were standardized across widgets (Vitals, News, Habits, Finances) to a uniform `FontSize="20"`, correcting the visually smaller footprint of the Finances and Habits glyphs.
+

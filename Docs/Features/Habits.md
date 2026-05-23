@@ -75,7 +75,7 @@ The SQLite database stores logs locally and synchronizes them with Supabase when
 
 | Characteristic | WinUI Implementation | MAUI / Blazor Hybrid Implementation |
 | :--- | :--- | :--- |
-| **UI Technology** | Native XAML Controls (`HabitsWidgetControl.xaml` & `HabitsDetailPage.xaml`) | Blazor Hybrid Razor components (`HabitsWidget.razor` & `HabitsDetail.razor`) |
+| **UI Technology** | Native XAML Controls (`HabitsWidgetControl.xaml` & `HabitsDetailPage.xaml`) with standardized `FontSize="20"` header icons for dashboard weight consistency | Blazor Hybrid Razor components (`HabitsWidget.razor` & `HabitsDetail.razor`) |
 | **Progress Graphic** | Custom drawing class `WaterLevelControl.cs` using Composition/Path geometries | MudBlazor progress gauges, circular progress bars, and CSS transitions |
 | **Logs Detail** | ListView lists with swipe-to-delete or command button deletes | MudBlazor list items with interactive inline click events |
 | **Database Access** | Interacts with the shared `HabitsRepository` via dependency injection | Accesses the same shared SQLite and Supabase backend services |
