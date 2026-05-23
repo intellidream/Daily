@@ -7,6 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:Daily_WinUI.ViewModels"
     mc:Ignorable="d"
+    SizeChanged="Page_SizeChanged"
     Background="Transparent">
 
     <Page.Resources>
@@ -209,71 +210,61 @@
     <Grid Background="Transparent">
         <!-- State 1: List View -->
         <Grid x:Name="ListViewContainer" Visibility="Visible">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <!-- Fixed TopBar Row: icon + title + selector -->
-            <Grid Grid.Row="0" Padding="20,16,20,8" VerticalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <Border Width="44" Height="44" CornerRadius="22" Background="{ThemeResource AppGlassColorBrush}" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE736;" FontFamily="Segoe Fluent Icons" FontSize="22" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
-                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="News" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}"/>
-                    <TextBlock x:Name="RssSubtitleTextBlock" Text="Latest articles from your selected feed" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
-                </StackPanel>
-
-                <!-- Spin-Wheel Selection Control -->
-                <StackPanel x:Name="FeedSelectorContainer" Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-                    <!-- Cycle Left Button -->
-                    <Button x:Name="CycleLeftButton" 
-                            Click="CycleLeftButton_Click"
-                            Background="Transparent" BorderThickness="0"
-                            Width="32" Height="36" Padding="0"
-                            ToolTipService.ToolTip="Previous Feed">
-                        <FontIcon Glyph="&#xE76B;" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}"/>
-                    </Button>
-
-                    <!-- Center Feed Selector Button -->
-                    <Button x:Name="FeedSelectorButton"
-                            Background="{ThemeResource AppGlassColorBrush}" 
-                            BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
-                            BorderThickness="1" 
-                            CornerRadius="16"
-                            Height="36" Padding="12,0"
-                            ToolTipService.ToolTip="Select Feed">
-                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
-                            <Border Width="18" Height="18" CornerRadius="9" Background="White" Padding="1" VerticalAlignment="Center">
-                                <Image x:Name="SelectedFeedIcon" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock x:Name="SelectedFeedText" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                        
-                        <Button.Flyout>
-                            <MenuFlyout x:Name="FeedMenuFlyout" Placement="Bottom"/>
-                        </Button.Flyout>
-                    </Button>
-
-                    <!-- Cycle Right Button -->
-                    <Button x:Name="CycleRightButton" 
-                            Click="CycleRightButton_Click"
-                            Background="Transparent" BorderThickness="0"
-                            Width="32" Height="36" Padding="0"
-                            ToolTipService.ToolTip="Next Feed">
-                        <FontIcon Glyph="&#xE76C;" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}"/>
-                    </Button>
-                </StackPanel>
-            </Grid>
+            <!-- Centered Header Subtitle / Description -->
+            <TextBlock x:Name="RssSubtitleTextBlock" 
+                       Text="Latest articles from your selected feed" 
+                       FontSize="13" 
+                       Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                       Opacity="0.6"
+                       HorizontalAlignment="Center" 
+                       VerticalAlignment="Top" 
+                       Margin="0,14,0,0"
+                       IsHitTestVisible="False"/>
 
             <!-- Scrollable content: article lists within Pivot tabs -->
-            <Pivot Grid.Row="1" x:Name="RssPivot" Margin="20,0,0,0" SelectionChanged="RssPivot_SelectionChanged">
+            <Pivot x:Name="RssPivot" Margin="20,0,0,0" SelectionChanged="RssPivot_SelectionChanged">
+                <Pivot.RightHeader>
+                    <!-- Spin-Wheel Selection Control -->
+                    <StackPanel x:Name="FeedSelectorContainer" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,20,0">
+                        <!-- Cycle Left Button -->
+                        <Button x:Name="CycleLeftButton" 
+                                Click="CycleLeftButton_Click"
+                                Background="Transparent" BorderThickness="0"
+                                Width="32" Height="36" Padding="0"
+                                ToolTipService.ToolTip="Previous Feed">
+                            <FontIcon Glyph="&#xE76B;" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}"/>
+                        </Button>
+
+                        <!-- Center Feed Selector Button -->
+                        <Button x:Name="FeedSelectorButton"
+                                Background="{ThemeResource AppGlassColorBrush}" 
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                BorderThickness="1" 
+                                CornerRadius="16"
+                                Height="36" Padding="12,0"
+                                ToolTipService.ToolTip="Select Feed">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <Border Width="18" Height="18" CornerRadius="9" Background="White" Padding="1" VerticalAlignment="Center">
+                                    <Image x:Name="SelectedFeedIcon" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock x:Name="SelectedFeedText" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            
+                            <Button.Flyout>
+                                <MenuFlyout x:Name="FeedMenuFlyout" Placement="Bottom"/>
+                            </Button.Flyout>
+                        </Button>
+
+                        <!-- Cycle Right Button -->
+                        <Button x:Name="CycleRightButton" 
+                                Click="CycleRightButton_Click"
+                                Background="Transparent" BorderThickness="0"
+                                Width="32" Height="36" Padding="0"
+                                ToolTipService.ToolTip="Next Feed">
+                            <FontIcon Glyph="&#xE76C;" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}"/>
+                        </Button>
+                    </StackPanel>
+                </Pivot.RightHeader>
                 <!-- Tab 1: Live Feed -->
                 <PivotItem Header="Live Feed">
                     <Grid>

@@ -21,6 +21,7 @@ public sealed partial class RssFeedDetailPage : Page
     private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _favoriteArticles = new();
     private RssItem? _selectedItem;
     private RssItem? _currentRenderedArticle;
+    private bool _isHeaderIconsMode;
 
     public RssFeedDetailPage()
     {
@@ -818,5 +819,69 @@ public sealed partial class RssFeedDetailPage : Page
             System.Diagnostics.Debug.WriteLine($"[RssFeedDetailPage] Error loading icon: {ex.Message}");
             SelectedFeedIcon.Source = null;
         }
+    }
+
+    private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        double width = e.NewSize.Width;
+
+        // Hide description text sooner to avoid collision
+        if (RssSubtitleTextBlock != null)
+        {
+            RssSubtitleTextBlock.Visibility = width < 880 ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        // Switch Pivot headers to icons later
+        UpdatePivotHeaders(width < 580);
+    }
+
+    private void UpdatePivotHeaders(bool isSmall)
+    {
+        if (RssPivot == null || _isHeaderIconsMode == isSmall) return;
+        _isHeaderIconsMode = isSmall;
+
+        if (RssPivot.Items.Count >= 3)
+        {
+            var item1 = RssPivot.Items[0] as PivotItem;
+            var item2 = RssPivot.Items[1] as PivotItem;
+            var item3 = RssPivot.Items[2] as PivotItem;
+
+            if (item1 != null && item2 != null && item3 != null)
+            {
+                if (isSmall)
+                {
+                    item1.Header = CreateHeaderIcon("\uE736"); // Live Feed icon
+                    item2.Header = CreateHeaderIcon("\uE8A4"); // Read Later icon
+                    item3.Header = CreateHeaderIcon("\uE734"); // Favorites icon
+                }
+                else
+                {
+                    item1.Header = "Live Feed";
+                    item2.Header = "Read Later";
+                    item3.Header = "Favorites";
+                }
+            }
+        }
+    }
+
+    private object CreateHeaderIcon(string glyph)
+    {
+        var fontIcon = new FontIcon
+        {
+            Glyph = glyph,
+            FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"),
+            FontSize = 16
+        };
+        
+        string toolTipText = glyph switch
+        {
+            "\uE736" => "Live Feed",
+            "\uE8A4" => "Read Later",
+            "\uE734" => "Favorites",
+            _ => ""
+        };
+
+        ToolTipService.SetToolTip(fontIcon, toolTipText);
+        return fontIcon;
     }
 }

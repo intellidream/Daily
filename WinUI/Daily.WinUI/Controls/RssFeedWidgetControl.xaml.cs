@@ -15,7 +15,10 @@ namespace Daily_WinUI.Controls;
 public sealed partial class RssFeedWidgetControl : UserControl
 {
     private readonly Daily.Services.IRssFeedService _rssService;
+    private readonly Daily.Services.IRssArticleService _articleService;
     private ObservableCollection<RssItem> _widgetArticles = new();
+    private ObservableCollection<RssItem> _readLaterArticles = new();
+    private ObservableCollection<RssItem> _favoriteArticles = new();
 
     public event EventHandler<RssItem>? ArticleTapped;
     public event EventHandler? WidgetTapped;
@@ -24,10 +27,13 @@ public sealed partial class RssFeedWidgetControl : UserControl
     {
         InitializeComponent();
         _rssService = App.Current.Services.GetRequiredService<Daily.Services.IRssFeedService>();
+        _articleService = App.Current.Services.GetRequiredService<Daily.Services.IRssArticleService>();
         
         Loaded += RssFeedWidgetControl_Loaded;
         Unloaded += RssFeedWidgetControl_Unloaded;
         ArticlesListView.ItemsSource = _widgetArticles;
+        ReadLaterListView.ItemsSource = _readLaterArticles;
+        FavoritesListView.ItemsSource = _favoriteArticles;
     }
 
     private async void RssFeedWidgetControl_Loaded(object sender, RoutedEventArgs e)
@@ -37,11 +43,13 @@ public sealed partial class RssFeedWidgetControl : UserControl
         
         _rssService.OnFeedChanged += RssService_OnFeedChanged;
         _rssService.OnItemsUpdated += RssService_OnItemsUpdated;
+        _articleService.OnItemsChanged += ArticleService_OnItemsChanged;
+        
         UpdateWidgetArticles();
+        UpdateReadLaterArticles();
+        UpdateFavoriteArticles();
         
         // Auto-load articles if a feed is selected but items haven't been fetched yet.
-        // InitializeCustomFeedsAsync sets CurrentFeed but never calls LoadFeedAsync,
-        // and SelectionChanged skips because the feed is already the current one.
         if (_rssService.CurrentFeed != null && !_rssService.Items.Any() && !_rssService.IsLoading)
         {
             LoadingPanel.Visibility = Visibility.Visible;
@@ -56,6 +64,7 @@ public sealed partial class RssFeedWidgetControl : UserControl
     {
         _rssService.OnFeedChanged -= RssService_OnFeedChanged;
         _rssService.OnItemsUpdated -= RssService_OnItemsUpdated;
+        _articleService.OnItemsChanged -= ArticleService_OnItemsChanged;
     }
 
     private async void RssService_OnFeedChanged()
@@ -73,8 +82,6 @@ public sealed partial class RssFeedWidgetControl : UserControl
             PopulateFeedMenu();
             UpdateSelectedFeedUI(_rssService.CurrentFeed);
 
-            // Auto-load: InitializeAsync seeds feeds AFTER the widget is already loaded,
-            // so this is the first moment we know CurrentFeed is set. Load articles now.
             if (_rssService.CurrentFeed != null && !_rssService.Items.Any() && !_rssService.IsLoading)
             {
                 LoadingPanel.Visibility = Visibility.Visible;
@@ -98,6 +105,15 @@ public sealed partial class RssFeedWidgetControl : UserControl
         });
     }
 
+    private void ArticleService_OnItemsChanged()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            UpdateReadLaterArticles();
+            UpdateFavoriteArticles();
+        });
+    }
+
     private void UpdateWidgetArticles()
     {
         _widgetArticles.Clear();
@@ -116,6 +132,41 @@ public sealed partial class RssFeedWidgetControl : UserControl
             LoadingPanel.Visibility = Visibility.Collapsed;
             ArticlesListView.Visibility = Visibility.Visible;
         }
+    }
+
+    private void UpdateReadLaterArticles()
+    {
+        _readLaterArticles.Clear();
+        foreach (var saved in _articleService.ReadLaterItems.Take(5))
+        {
+            _readLaterArticles.Add(MapToRssItem(saved));
+        }
+        NoReadLaterTextBlock.Visibility = _readLaterArticles.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateFavoriteArticles()
+    {
+        _favoriteArticles.Clear();
+        foreach (var saved in _articleService.FavoriteItems.Take(5))
+        {
+            _favoriteArticles.Add(MapToRssItem(saved));
+        }
+        NoFavoritesTextBlock.Visibility = _favoriteArticles.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private RssItem MapToRssItem(LocalSavedArticle saved)
+    {
+        return new RssItem
+        {
+            Title = saved.Title,
+            Link = saved.ArticleUrl,
+            PublishDate = saved.ArticleDate,
+            ImageUrl = saved.ImageUrl,
+            Description = saved.Description,
+            Author = saved.Author,
+            PublicationName = saved.PublicationName,
+            PublicationIconUrl = saved.PublicationIconUrl
+        };
     }
 
     private void PopulateFeedMenu()
@@ -232,18 +283,58 @@ public sealed partial class RssFeedWidgetControl : UserControl
         }
     }
 
+    private void WidgetPivot_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (WidgetPivot == null || FeedSelectorContainer == null) return;
+
+        int index = WidgetPivot.SelectedIndex;
+        if (index == 0)
+        {
+            FeedSelectorContainer.Visibility = Visibility.Visible;
+            UpdateWidgetArticles();
+        }
+        else if (index == 1)
+        {
+            FeedSelectorContainer.Visibility = Visibility.Collapsed;
+            UpdateReadLaterArticles();
+        }
+        else if (index == 2)
+        {
+            FeedSelectorContainer.Visibility = Visibility.Collapsed;
+            UpdateFavoriteArticles();
+        }
+    }
+
     /// <summary>Called by the dashboard refresh button to reload the current feed in-place.</summary>
     public async Task RefreshAsync()
     {
-        if (_rssService.CurrentFeed != null)
+        if (WidgetPivot.SelectedIndex == 0 && _rssService.CurrentFeed != null)
             await _rssService.LoadFeedAsync(_rssService.CurrentFeed);
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_rssService.CurrentFeed != null)
+        if (WidgetPivot.SelectedIndex == 0 && _rssService.CurrentFeed != null)
         {
             await _rssService.LoadFeedAsync(_rssService.CurrentFeed);
+        }
+    }
+
+    private void WidgetPivot_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        // Intercept tapped events originating from the Pivot's header/tabs area or controls,
+        // and prevent them from bubbling up to the MainPage widget border, which would trigger
+        // opening the detail window.
+        DependencyObject current = e.OriginalSource as DependencyObject;
+        while (current != null && current != WidgetPivot)
+        {
+            string typeName = current.GetType().Name;
+            if (typeName.Contains("PivotHeader") || typeName.Contains("PivotHeaderItem"))
+            {
+                e.Handled = true;
+                return;
+            }
+            current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
         }
     }
 
