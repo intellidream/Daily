@@ -404,12 +404,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-
-                    <!-- Left Fade Overlay (blends into the window top background color) -->
-                    <Border x:Name="LeftFadeOverlay" Width="32" HorizontalAlignment="Left" IsHitTestVisible="False" Opacity="0" Background="{ThemeResource LeftFadeOverlayBrush}"/>
-
-                    <!-- Right Fade Overlay (blends into the window top background color) -->
-                    <Border x:Name="RightFadeOverlay" Width="32" HorizontalAlignment="Right" IsHitTestVisible="False" Opacity="0" Background="{ThemeResource RightFadeOverlayBrush}"/>
                 </Grid>
                 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">

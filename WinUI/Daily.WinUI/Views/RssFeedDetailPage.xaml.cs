@@ -79,6 +79,7 @@ public sealed partial class RssFeedDetailPage : Page
         
         UpdateArticles();
         EnsureWebViewCoreInitialized();
+        RecommendationsScrollViewer.LayoutUpdated += RecommendationsScrollViewer_LayoutUpdated;
     }
 
     private void RssFeedDetailPage_Unloaded(object sender, RoutedEventArgs e)
@@ -87,6 +88,7 @@ public sealed partial class RssFeedDetailPage : Page
         _rssService.OnItemsUpdated -= RssService_OnItemsUpdated;
         _articleService.OnItemsChanged -= ArticleService_OnItemsChanged;
         ActualThemeChanged -= RssFeedDetailPage_ActualThemeChanged;
+        RecommendationsScrollViewer.LayoutUpdated -= RecommendationsScrollViewer_LayoutUpdated;
     }
 
     private void RssFeedDetailPage_ActualThemeChanged(FrameworkElement sender, object args)
@@ -969,29 +971,81 @@ public sealed partial class RssFeedDetailPage : Page
         }
     }
 
-    private void RecommendationsScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+    private void RecommendationsScrollViewer_LayoutUpdated(object? sender, object e)
     {
-        UpdateFadeOverlaysVisibility();
+        UpdateButtonsOpacity();
     }
 
-    private void UpdateFadeOverlaysVisibility()
+    private void RecommendationsScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (RecommendationsScrollViewer == null || LeftFadeOverlay == null || RightFadeOverlay == null) return;
+        UpdateButtonsOpacity();
+    }
 
-        double offset = RecommendationsScrollViewer.HorizontalOffset;
-        double maxOffset = RecommendationsScrollViewer.ScrollableWidth;
+    private void UpdateButtonsOpacity()
+    {
+        if (RecommendationsScrollViewer == null || RecommendationsItemsControl == null) return;
 
-        // Smooth transition over 10px of scroll
-        LeftFadeOverlay.Opacity = Math.Clamp(offset / 10.0, 0.0, 1.0);
+        double viewportWidth = RecommendationsScrollViewer.ActualWidth;
+        if (viewportWidth <= 0) return;
 
-        if (maxOffset > 0)
+        double fadeZone = 36.0; // width of the fade zone at each end
+
+        for (int i = 0; i < RecommendationsItemsControl.Items.Count; i++)
         {
-            double remaining = maxOffset - offset;
-            RightFadeOverlay.Opacity = Math.Clamp(remaining / 10.0, 0.0, 1.0);
-        }
-        else
-        {
-            RightFadeOverlay.Opacity = 0.0;
+            var container = RecommendationsItemsControl.ContainerFromIndex(i) as FrameworkElement;
+            if (container == null) continue;
+
+            double width = container.ActualWidth;
+            if (width <= 0) continue;
+
+            try
+            {
+                var transform = container.TransformToVisual(RecommendationsScrollViewer);
+                var position = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                double left = position.X;
+                double right = left + width;
+
+                double opacity = 1.0;
+
+                // Fade at the left edge
+                if (left < fadeZone)
+                {
+                    double minLeft = -width;
+                    if (left <= minLeft)
+                    {
+                        opacity = 0.0;
+                    }
+                    else
+                    {
+                        opacity = Math.Clamp((left - minLeft) / (fadeZone - minLeft), 0.0, 1.0);
+                    }
+                }
+
+                // Fade at the right edge
+                if (right > viewportWidth - fadeZone)
+                {
+                    double maxRight = viewportWidth + width;
+                    if (right >= maxRight)
+                    {
+                        opacity = 0.0;
+                    }
+                    else
+                    {
+                        double rightOpacity = Math.Clamp((maxRight - right) / (maxRight - (viewportWidth - fadeZone)), 0.0, 1.0);
+                        opacity = Math.Min(opacity, rightOpacity);
+                    }
+                }
+
+                // Optimization: only set opacity if the change is significant (prevents layout loops or redraw overhead)
+                if (Math.Abs(container.Opacity - opacity) > 0.01)
+                {
+                    container.Opacity = opacity;
+                }
+            }
+            catch (Exception)
+            {
+                // In case transform fails during rapid UI updates
+            }
         }
     }
 
@@ -1002,9 +1056,9 @@ public sealed partial class RssFeedDetailPage : Page
         var recommendations = GetSmartRecommendations(currentItem, 20);
         RecommendationsItemsControl.ItemsSource = recommendations;
 
-        // Update overlay opacities immediately after populating
+        // Update button opacities immediately after populating
         RecommendationsScrollViewer.UpdateLayout();
-        UpdateFadeOverlaysVisibility();
+        UpdateButtonsOpacity();
     }
 
     private async void RecommendationButton_Click(object sender, RoutedEventArgs e)

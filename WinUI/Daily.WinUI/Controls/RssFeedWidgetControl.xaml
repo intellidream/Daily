@@ -130,6 +130,7 @@
                     <!-- Refresh Button -->
                     <Button Margin="6,0,0,0"
                             Background="Transparent" BorderThickness="0"
+                            Width="28" Height="32" Padding="0"
                             Click="RefreshButton_Click"
                             ToolTipService.ToolTip="Refresh Feed"
                             VerticalAlignment="Center">
