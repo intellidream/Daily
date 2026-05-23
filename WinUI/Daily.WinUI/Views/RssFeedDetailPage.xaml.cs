@@ -229,6 +229,10 @@ public sealed partial class RssFeedDetailPage : Page
         // Step 2: If the fast path succeeded, render it
         if (!needsWebViewFallback && fullArticle != null)
         {
+            // Preserve correct publication name/icon from the clicked item
+            fullArticle.PublicationName = item.PublicationName;
+            fullArticle.PublicationIconUrl = item.PublicationIconUrl;
+
             _currentRenderedArticle = fullArticle;
             string html = GenerateReaderHtml(fullArticle);
             await ReaderWebView.EnsureCoreWebView2Async();

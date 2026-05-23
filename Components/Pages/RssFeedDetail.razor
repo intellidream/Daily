@@ -493,6 +493,11 @@
             if (fullArticle != null && !string.IsNullOrEmpty(fullArticle.Content))
             {
                  Console.WriteLine($"[RssFeedDetail] Success. Content length: {fullArticle.Content.Length}");
+                 
+                 // Preserve correct publication name/icon from the selected item
+                 fullArticle.PublicationName = _selectedItem.PublicationName;
+                 fullArticle.PublicationIconUrl = _selectedItem.PublicationIconUrl;
+
                  _selectedItem = fullArticle;
                  _isReaderViewChanged = true;
                  Snackbar.Add("Full article loaded", Severity.Success);

@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DayOne Live Docs</title>
+    <meta name="description" content="Local documentation hub and specifications reader for the DayOne system.">
+    
+    <!-- Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- Tabler Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    
+    <!-- Prism Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    
+    <style>
+        /* CSS variables for DayOne Design System */
+        :root {
+            /* Light Theme Styles */
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-sidebar: #f1f5f9;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --accent-light: rgba(37, 99, 235, 0.1);
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(226, 232, 240, 0.8);
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+            --sidebar-width: 290px;
+            --toc-width: 240px;
+            
+            /* Alert Colors Light */
+            --alert-note-bg: #eff6ff;
+            --alert-note-border: #3b82f6;
+            --alert-tip-bg: #f0fdf4;
+            --alert-tip-border: #22c55e;
+            --alert-important-bg: #faf5ff;
+            --alert-important-border: #a855f7;
+            --alert-warning-bg: #fffbeb;
+            --alert-warning-border: #f59e0b;
+            --alert-caution-bg: #fef2f2;
+            --alert-caution-border: #ef4444;
+        }
+
+        [data-theme="dark"] {
+            /* Dark Theme Styles */
+            --bg-primary: #0b0f19;
+            --bg-secondary: #111827;
+            --bg-sidebar: #0f172a;
+            --accent: #3b82f6;
+            --accent-hover: #60a5fa;
+            --accent-light: rgba(59, 130, 246, 0.15);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #1e293b;
+            --glass-bg: rgba(17, 24, 39, 0.7);
+            --glass-border: rgba(30, 41, 59, 0.8);
+            --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+            
+            /* Alert Colors Dark */
+            --alert-note-bg: rgba(59, 130, 246, 0.1);
+            --alert-note-border: #3b82f6;
+            --alert-tip-bg: rgba(34, 197, 94, 0.1);
+            --alert-tip-border: #22c55e;
+            --alert-important-bg: rgba(168, 85, 247, 0.1);
+            --alert-important-border: #a855f7;
+            --alert-warning-bg: rgba(245, 158, 11, 0.1);
+            --alert-warning-border: #f59e0b;
+            --alert-caution-bg: rgba(239, 68, 68, 0.1);
+            --alert-caution-border: #ef4444;
+        }
+
+        /* Core Layout reset */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            display: flex;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            z-index: 100;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-logo {
+            width: 32px;
+            height: 32px;
+            filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+        }
+
+        .sidebar-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .search-container {
+            padding: 16px 20px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 12px 10px 38px;
+            font-size: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-light);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 32px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 18px;
+            pointer-events: none;
+        }
+
+        .menu {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+        }
+
+        .menu-section {
+            margin-bottom: 24px;
+        }
+
+        .menu-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            padding-left: 8px;
+            letter-spacing: 0.8px;
+        }
+
+        .menu-list {
+            list-style: none;
+        }
+
+        .menu-item {
+            margin-bottom: 4px;
+        }
+
+        .menu-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            font-size: 14px;
+            text-decoration: none;
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .menu-link:hover {
+            background-color: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .menu-link.active {
+            background-color: var(--accent-light);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .menu-link i {
+            font-size: 16px;
+        }
+
+        /* Main Workspace Container */
+        .main-container {
+            margin-left: var(--sidebar-width);
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            width: calc(100% - var(--sidebar-width));
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .navbar {
+            height: 64px;
+            background-color: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            position: sticky;
+            top: 0;
+            z-index: 90;
+        }
+
+        .breadcrumbs {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-muted);
+            gap: 6px;
+        }
+
+        .breadcrumbs a {
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .breadcrumbs a:hover {
+            color: var(--accent);
+        }
+
+        .nav-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            background-color: var(--bg-secondary);
+        }
+
+        .nav-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--text-secondary);
+        }
+
+        /* Content Section Grid layout */
+        .workspace {
+            flex-grow: 1;
+            display: flex;
+            padding: 40px 32px;
+            gap: 32px;
+            max-width: 1300px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .document-pane {
+            flex-grow: 1;
+            min-width: 0; /* Prevents overflow */
+        }
+
+        .glass-card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 48px;
+            box-shadow: var(--card-shadow);
+        }
+
+        /* Table of Contents sidebar */
+        .toc-pane {
+            width: var(--toc-width);
+            flex-shrink: 0;
+            position: sticky;
+            top: 96px;
+            height: calc(100vh - 120px);
+            overflow-y: auto;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 1;
+        }
+
+        .toc-header {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        .toc-list {
+            list-style: none;
+            padding-left: 0;
+            border-left: 2px solid var(--border-color);
+        }
+
+        .toc-item {
+            margin-bottom: 8px;
+        }
+
+        .toc-link {
+            display: block;
+            padding: 4px 0 4px 16px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            margin-left: -2px;
+            border-left: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .toc-link:hover {
+            color: var(--accent);
+        }
+
+        .toc-link.active {
+            color: var(--accent);
+            border-left-color: var(--accent);
+            font-weight: 500;
+        }
+
+        /* Markdown rendering rules */
+        .markdown-body {
+            line-height: 1.7;
+            font-size: 16px;
+            color: var(--text-secondary);
+        }
+
+        .markdown-body h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 36px;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 24px;
+            letter-spacing: -1px;
+            line-height: 1.2;
+        }
+
+        .markdown-body h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-top: 40px;
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .markdown-body h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 19px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-top: 28px;
+            margin-bottom: 12px;
+        }
+
+        .markdown-body p {
+            margin-bottom: 16px;
+        }
+
+        .markdown-body ul, .markdown-body ol {
+            margin-bottom: 16px;
+            padding-left: 24px;
+        }
+
+        .markdown-body li {
+            margin-bottom: 6px;
+        }
+
+        .markdown-body a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .markdown-body a:hover {
+            text-decoration: underline;
+        }
+
+        .markdown-body code {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: var(--bg-primary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 14px;
+            color: var(--accent);
+        }
+
+        .markdown-body pre {
+            margin: 24px 0;
+            padding: 18px;
+            background-color: #1e1e2e !important; /* Forces dark code background */
+            border-radius: 12px;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .markdown-body pre code {
+            padding: 0;
+            background: none;
+            color: #cdd6f4;
+            font-size: 13.5px;
+        }
+
+        .markdown-body blockquote {
+            border-left: 4px solid var(--accent);
+            padding-left: 18px;
+            margin: 20px 0;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+            font-size: 14px;
+        }
+
+        .markdown-body th, .markdown-body td {
+            border: 1px solid var(--border-color);
+            padding: 12px 14px;
+            text-align: left;
+        }
+
+        .markdown-body th {
+            background-color: var(--bg-primary);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .markdown-body hr {
+            height: 1px;
+            background-color: var(--border-color);
+            border: none;
+            margin: 32px 0;
+        }
+
+        .markdown-body img {
+            max-width: 100%;
+            border-radius: 12px;
+            margin: 24px 0;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--card-shadow);
+        }
+
+        /* Beautiful Alert Boxes styling */
+        .alert-box {
+            padding: 16px 20px;
+            border-left: 4px solid;
+            border-radius: 0 12px 12px 0;
+            margin: 20px 0;
+            display: flex;
+            gap: 14px;
+            font-size: 14.5px;
+        }
+
+        .alert-icon {
+            font-size: 20px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .alert-content {
+            flex-grow: 1;
+        }
+
+        .alert-content p:last-child {
+            margin-bottom: 0;
+        }
+
+        .alert-note {
+            background-color: var(--alert-note-bg);
+            border-left-color: var(--alert-note-border);
+            color: var(--text-primary);
+        }
+        .alert-note .alert-icon { color: var(--alert-note-border); }
+
+        .alert-tip {
+            background-color: var(--alert-tip-bg);
+            border-left-color: var(--alert-tip-border);
+            color: var(--text-primary);
+        }
+        .alert-tip .alert-icon { color: var(--alert-tip-border); }
+
+        .alert-important {
+            background-color: var(--alert-important-bg);
+            border-left-color: var(--alert-important-border);
+            color: var(--text-primary);
+        }
+        .alert-important .alert-icon { color: var(--alert-important-border); }
+
+        .alert-warning {
+            background-color: var(--alert-warning-bg);
+            border-left-color: var(--alert-warning-border);
+            color: var(--text-primary);
+        }
+        .alert-warning .alert-icon { color: var(--alert-warning-border); }
+
+        .alert-caution {
+            background-color: var(--alert-caution-bg);
+            border-left-color: var(--alert-caution-border);
+            color: var(--text-primary);
+        }
+        .alert-caution .alert-icon { color: var(--alert-caution-border); }
+
+        /* Loader Animation */
+        .skeleton {
+            background: linear-gradient(90deg, var(--bg-primary) 25%, var(--border-color) 50%, var(--bg-primary) 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 4px;
+        }
+
+        .skeleton-title {
+            height: 36px;
+            width: 60%;
+            margin-bottom: 30px;
+        }
+
+        .skeleton-line {
+            height: 16px;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+
+        .skeleton-line.short {
+            width: 80%;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Mermaid Graph Styling */
+        .mermaid {
+            background: var(--bg-secondary) !important;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Responsive styling */
+        @media (max-width: 1024px) {
+            .toc-pane {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .main-container {
+                margin-left: 0;
+                width: 100%;
+            }
+            .workspace {
+                padding: 24px 16px;
+            }
+            .glass-card {
+                padding: 24px;
+            }
+            .navbar {
+                padding: 0 16px;
+            }
+            .menu-toggle {
+                display: block !important;
+            }
+        }
+
+        .menu-toggle {
+            display: none;
+        }
+
+        /* Collapsible layout rules */
+        #sidebarToggle, #tocToggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @media (max-width: 1024px) {
+            #tocToggle {
+                display: none !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+            #sidebarToggle {
+                display: none !important;
+            }
+            .menu-toggle {
+                display: inline-flex !important;
+            }
+        }
+
+        /* Collapsible States on Desktop */
+        @media (min-width: 769px) {
+            body.sidebar-collapsed .sidebar {
+                transform: translateX(-100%);
+            }
+            body.sidebar-collapsed .main-container {
+                margin-left: 0;
+                width: 100%;
+            }
+        }
+
+        /* Collapsible ToC States */
+        body.toc-collapsed .toc-pane {
+            width: 0 !important;
+            opacity: 0;
+            padding: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        body.toc-collapsed .workspace {
+            gap: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR NAVIGATION HUB -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <svg class="sidebar-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Gem Icon Illustration -->
+                <path d="M50 5L90 35L75 85L25 85L10 35L50 5Z" fill="url(#gem-grad)" />
+                <path d="M50 5L50 85" stroke="white" stroke-width="2" opacity="0.3" />
+                <path d="M10 35L90 35" stroke="white" stroke-width="2" opacity="0.3" />
+                <path d="M50 5L75 85" stroke="white" stroke-dasharray="2" stroke-width="1.5" opacity="0.4" />
+                <path d="M50 5L25 85" stroke="white" stroke-dasharray="2" stroke-width="1.5" opacity="0.4" />
+                <defs>
+                    <linearGradient id="gem-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#3b82f6" />
+                        <stop offset="50%" stop-color="#8b5cf6" />
+                        <stop offset="100%" stop-color="#ec4899" />
+                    </linearGradient>
+                </defs>
+            </svg>
+            <h1 class="sidebar-title">DayOne Live Docs</h1>
+        </div>
+        
+        <!-- Live Filter Search -->
+        <div class="search-container">
+            <i class="ti ti-search search-icon"></i>
+            <input type="text" id="searchInput" class="search-input" placeholder="Search files...">
+        </div>
+        
+        <!-- Menu Navigation Items -->
+        <div class="menu" id="menu">
+            <!-- Dynamic menu loaded by JS -->
+        </div>
+    </nav>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="main-container">
+        
+        <!-- HEADER TOOLBAR -->
+        <header class="navbar">
+            <div class="breadcrumbs">
+                <button class="nav-btn menu-toggle" id="menuToggle" style="margin-right: 8px;">
+                    <i class="ti ti-menu-2"></i>
+                </button>
+                <span>Docs</span>
+                <i class="ti ti-chevron-right"></i>
+                <span id="breadcrumb-section">Features</span>
+                <i class="ti ti-chevron-right"></i>
+                <span id="breadcrumb-file" style="font-weight: 500; color: var(--text-primary);">News.md</span>
+            </div>
+            
+            <div class="nav-controls">
+                <button class="nav-btn" id="sidebarToggle" title="Toggle Sidebar">
+                    <i class="ti ti-layout-sidebar-left-collapse" id="sidebarToggleIcon"></i>
+                </button>
+                <button class="nav-btn" id="tocToggle" title="Toggle Table of Contents">
+                    <i class="ti ti-list-details" id="tocToggleIcon"></i>
+                </button>
+                <a id="rawLink" class="nav-btn" target="_blank" title="Open Raw File">
+                    <i class="ti ti-file-text"></i>
+                </a>
+                <button class="nav-btn" id="themeToggle" title="Toggle Light/Dark Theme">
+                    <i class="ti ti-moon" id="themeIcon"></i>
+                </button>
+            </div>
+        </header>
+        
+        <!-- WORKSPACE GRID -->
+        <main class="workspace">
+            
+            <!-- Document Reader Panel -->
+            <section class="document-pane">
+                <article class="glass-card markdown-body" id="content">
+                    <!-- Skeleton Loader initially -->
+                    <div class="skeleton skeleton-title"></div>
+                    <div class="skeleton skeleton-line"></div>
+                    <div class="skeleton skeleton-line"></div>
+                    <div class="skeleton skeleton-line short"></div>
+                </article>
+            </section>
+            
+            <!-- Dynamic Table of Contents -->
+            <aside class="toc-pane">
+                <h4 class="toc-header">Table of Contents</h4>
+                <ul class="toc-list" id="tocList">
+                    <!-- Loaded dynamically from document headers -->
+                </ul>
+            </aside>
+            
+        </main>
+    </div>
+
+    <!-- Marked Markdown Parser library -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- Prism Syntax Highlighter core and support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    
+    <!-- Mermaid diagrams runtime -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+    <script>
+        // Configure Marked options
+        marked.setOptions({
+            gfm: true,
+            breaks: true,
+            headerIds: true,
+            mangle: false
+        });
+
+        // Initialize Mermaid
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose'
+        });
+
+        // Complete doc index listing
+        const docIndex = [
+            {
+                title: "Core Architecture",
+                items: [
+                    { name: "Data Architecture", path: "Data_Architecture_2026.md" },
+                    { name: "WinUI Architecture", path: "WinUI_Architecture_2026.md" },
+                    { name: "MAUI Architecture", path: "MAUI_Architecture_2026.md" },
+                    { name: "Supabase Backend", path: "Supabase_Architecture_2026.md" },
+                    { name: "Data Strategy", path: "DataStrategy.md" }
+                ]
+            },
+            {
+                title: "Feature Guides",
+                items: [
+                    { name: "News Reader", path: "Features/News.md" },
+                    { name: "Weather & Location", path: "Features/Weather.md" },
+                    { name: "Habits Tracker", path: "Features/Habits.md" },
+                    { name: "Health & Vitals", path: "Features/Health.md" },
+                    { name: "Finances Ledger", path: "Features/Finances.md" }
+                ]
+            },
+            {
+                title: "Protocols & Specifications",
+                items: [
+                    { name: "Push First Mechanism", path: "PushFirstMechanism.md" },
+                    { name: "Bubbles Water Provider", path: "BubblesWaterProvider.md" },
+                    { name: "Smart Button Implementation", path: "SmartButtonImplementation.md" },
+                    { name: "Watch Pairings RLS Fix", path: "watch_pairings_rls_fix.sql" },
+                    { name: "Watch Pairings Schema", path: "watch_pairings_schema.sql" },
+                    { name: "Supabase WatchOS Architecture", path: "supabase_watchos_architecture.md" },
+                    { name: "Vitals Setup SQL", path: "setup_vitals.sql" },
+                    { name: "Pairings Cleanup Protocol", path: "Pairings_Cleanup.md" },
+                    { name: "Smart Reader View Fix", path: "SmartReaderViewFix.md" },
+                    { name: "Testing Reality Check", path: "Testing_RealityCheck.md" },
+                    { name: "Deployment Protocol", path: "Deployment_Protocol.md" },
+                    { name: "WearOS Development Guide", path: "WearOSDev.md" },
+                    { name: "WearOS Dev (March 2026)", path: "WearOSDev_20260307.md" },
+                    { name: "Huawei Health Dev Guide", path: "HuaweiDev.md" },
+                    { name: "Icon Rendering Playbook", path: "Icon-Rendering-Playbook.md" },
+                    { name: "Implementation Details", path: "ImplementationDetails.md" },
+                    { name: "WinUI Habits Modernization Plan", path: "plan-winui-habits-ui-modernization.md" }
+                ]
+            }
+        ];
+
+        const contentEl = document.getElementById('content');
+        const tocListEl = document.getElementById('tocList');
+        const searchInput = document.getElementById('searchInput');
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const menuToggle = document.getElementById('menuToggle');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebarToggleIcon = document.getElementById('sidebarToggleIcon');
+        const tocToggle = document.getElementById('tocToggle');
+        const tocToggleIcon = document.getElementById('tocToggleIcon');
+
+        // Collapsible layout state
+        let sidebarCollapsed = localStorage.getItem('docs-sidebar-collapsed') === 'true';
+        let tocCollapsed = localStorage.getItem('docs-toc-collapsed') === 'true';
+
+        // Apply initial layout states
+        if (sidebarCollapsed) {
+            document.body.classList.add('sidebar-collapsed');
+            updateSidebarToggleUI();
+        }
+        if (tocCollapsed) {
+            document.body.classList.add('toc-collapsed');
+            updateTocToggleUI();
+        }
+
+        // Sidebar toggle handler
+        sidebarToggle.addEventListener('click', () => {
+            sidebarCollapsed = !sidebarCollapsed;
+            document.body.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+            localStorage.setItem('docs-sidebar-collapsed', sidebarCollapsed);
+            updateSidebarToggleUI();
+        });
+
+        // ToC toggle handler
+        tocToggle.addEventListener('click', () => {
+            tocCollapsed = !tocCollapsed;
+            document.body.classList.toggle('toc-collapsed', tocCollapsed);
+            localStorage.setItem('docs-toc-collapsed', tocCollapsed);
+            updateTocToggleUI();
+        });
+
+        function updateSidebarToggleUI() {
+            if (sidebarCollapsed) {
+                sidebarToggleIcon.className = 'ti ti-layout-sidebar-left-expand';
+                sidebarToggle.title = 'Expand Sidebar';
+            } else {
+                sidebarToggleIcon.className = 'ti ti-layout-sidebar-left-collapse';
+                sidebarToggle.title = 'Collapse Sidebar';
+            }
+        }
+
+        function updateTocToggleUI() {
+            if (tocCollapsed) {
+                tocToggleIcon.className = 'ti ti-list';
+                tocToggle.title = 'Expand Table of Contents';
+            } else {
+                tocToggleIcon.className = 'ti ti-list-details';
+                tocToggle.title = 'Collapse Table of Contents';
+            }
+        }
+
+        // Theme management
+        let currentTheme = localStorage.getItem('docs-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        updateThemeUI();
+
+        themeToggle.addEventListener('click', () => {
+            currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            localStorage.setItem('docs-theme', currentTheme);
+            updateThemeUI();
+            
+            // Re-render mermaid graphs if active with theme-aware styles
+            const currentHash = window.location.hash.slice(1);
+            if (currentHash) loadDocument(currentHash);
+        });
+
+        function updateThemeUI() {
+            if (currentTheme === 'dark') {
+                themeIcon.className = 'ti ti-sun';
+                themeIcon.style.color = '#f59e0b';
+            } else {
+                themeIcon.className = 'ti ti-moon';
+                themeIcon.style.color = '#64748b';
+            }
+        }
+
+        // Mobile sidebar trigger
+        menuToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
+                sidebar.classList.remove('open');
+            }
+        });
+
+        // Initialize Navigation Menu
+        function initMenu() {
+            const menuEl = document.getElementById('menu');
+            menuEl.innerHTML = '';
+
+            docIndex.forEach((section, sIndex) => {
+                const sectionEl = document.createElement('div');
+                sectionEl.className = 'menu-section';
+                sectionEl.dataset.section = section.title;
+
+                const sectionTitle = document.createElement('div');
+                sectionTitle.className = 'menu-section-title';
+                sectionTitle.innerText = section.title;
+                sectionEl.appendChild(sectionTitle);
+
+                const listEl = document.createElement('ul');
+                listEl.className = 'menu-list';
+
+                section.items.forEach(item => {
+                    const itemEl = document.createElement('li');
+                    itemEl.className = 'menu-item';
+
+                    const linkEl = document.createElement('a');
+                    linkEl.className = 'menu-link';
+                    linkEl.dataset.path = item.path;
+                    linkEl.href = `#${item.path}`;
+                    
+                    let iconClass = 'ti-file-description';
+                    if (item.path.endsWith('.sql')) iconClass = 'ti-database';
+                    if (item.path.includes('Architecture')) iconClass = 'ti-hierarchy-2';
+                    if (item.path.includes('Features/')) iconClass = 'ti-apps';
+
+                    linkEl.innerHTML = `<i class="ti ${iconClass}"></i><span>${item.name}</span>`;
+                    itemEl.appendChild(linkEl);
+                    listEl.appendChild(itemEl);
+                });
+
+                sectionEl.appendChild(listEl);
+                menuEl.appendChild(sectionEl);
+            });
+        }
+
+        // Live Filter Search Logic
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            const sections = document.querySelectorAll('.menu-section');
+
+            sections.forEach(section => {
+                const items = section.querySelectorAll('.menu-item');
+                let hasVisibleItems = false;
+
+                items.forEach(item => {
+                    const text = item.querySelector('span').innerText.toLowerCase();
+                    const path = item.querySelector('a').dataset.path.toLowerCase();
+                    if (text.includes(query) || path.includes(query)) {
+                        item.style.display = 'block';
+                        hasVisibleItems = true;
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+
+                // Hide empty sections
+                section.style.display = hasVisibleItems ? 'block' : 'none';
+            });
+        });
+
+        // Load & Parse document content
+        async function loadDocument(path) {
+            contentEl.innerHTML = `
+                <div class="skeleton skeleton-title"></div>
+                <div class="skeleton skeleton-line"></div>
+                <div class="skeleton skeleton-line"></div>
+                <div class="skeleton skeleton-line short"></div>
+            `;
+            
+            try {
+                // Fetch local markdown or SQL file with cache busting to prevent stale renders
+                const response = await fetch(path, { cache: 'no-cache' });
+                if (!response.ok) throw new Error(`Status: ${response.status}`);
+                let markdown = await response.text();
+
+                // Format SQL files inside code blocks before parsing
+                if (path.endsWith('.sql')) {
+                    markdown = '# ' + path.split('/').pop() + '\n\n```sql\n' + markdown + '\n```';
+                }
+
+                // Parse Markdown to HTML
+                let htmlContent = marked.parse(markdown);
+
+                // Translate GitHub-style alerts into customized styled cards
+                htmlContent = htmlContent.replace(/<blockquote>\s*<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]([\s\S]*?)<\/p>\s*<\/blockquote>/gi, (match, type, content) => {
+                    const lowercaseType = type.toLowerCase();
+                    let icon = 'info-circle';
+                    if (lowercaseType === 'tip') icon = 'bulb';
+                    if (lowercaseType === 'important') icon = 'alert-circle';
+                    if (lowercaseType === 'warning') icon = 'alert-triangle';
+                    if (lowercaseType === 'caution') icon = 'circle-x';
+                    return `<div class="alert-box alert-${lowercaseType}">
+                        <div class="alert-icon"><i class="ti ti-${icon}"></i></div>
+                        <div class="alert-content">${content.trim()}</div>
+                    </div>`;
+                });
+
+                // Set raw file download link
+                document.getElementById('rawLink').href = path;
+
+                // Update content panel
+                contentEl.innerHTML = htmlContent;
+
+                // Render Mermaid graphs dynamically
+                await renderMermaidDiagrams();
+
+                // Highlight code blocks
+                Prism.highlightAllUnder(contentEl);
+
+                // Build Table of Contents
+                buildTOC();
+
+                // Update active link styling
+                document.querySelectorAll('.menu-link').forEach(link => {
+                    if (link.dataset.path === path) {
+                        link.classList.add('active');
+                        // Update breadcrumbs
+                        const sectionTitle = link.closest('.menu-section').dataset.section;
+                        document.getElementById('breadcrumb-section').innerText = sectionTitle;
+                        document.getElementById('breadcrumb-file').innerText = link.querySelector('span').innerText;
+                    } else {
+                        link.classList.remove('active');
+                    }
+                });
+
+            } catch (err) {
+                contentEl.innerHTML = `
+                    <div style="text-align: center; padding: 40px 0; color: var(--alert-caution-border);">
+                        <i class="ti ti-alert-triangle" style="font-size: 48px; margin-bottom: 16px; display: block;"></i>
+                        <h2>Failed to Load Documentation</h2>
+                        <p style="margin-top: 8px; color: var(--text-secondary);">
+                            Make sure you are serving this folder via <strong>Live Server</strong> (HTTP protocol) or another web server.
+                        </p>
+                        <p style="margin-top: 4px; font-size: 13px; font-family: monospace; color: var(--text-muted);">
+                            Error details: ${err.message}
+                        </p>
+                    </div>
+                `;
+                tocListEl.innerHTML = '';
+            }
+        }
+
+        // Render Mermaid blocks
+        async function renderMermaidDiagrams() {
+            const mermaidBlocks = contentEl.querySelectorAll('.language-mermaid');
+            for (let i = 0; i < mermaidBlocks.length; i++) {
+                const block = mermaidBlocks[i];
+                const code = block.textContent;
+                const pre = block.parentElement;
+                
+                const diagramContainer = document.createElement('div');
+                diagramContainer.className = 'mermaid';
+                diagramContainer.id = `mermaid-diag-${i}`;
+                diagramContainer.textContent = code;
+                
+                pre.parentNode.replaceChild(diagramContainer, pre);
+            }
+            
+            try {
+                // Update theme properties for mermaid inside dark mode
+                const mTheme = currentTheme === 'dark' ? 'dark' : 'default';
+                mermaid.initialize({ theme: mTheme });
+                await mermaid.run();
+            } catch (e) {
+                console.error("Mermaid drawing error: ", e);
+            }
+        }
+
+        // Build dynamically populated Table of Contents list
+        function buildTOC() {
+            tocListEl.innerHTML = '';
+            const headings = contentEl.querySelectorAll('h2, h3');
+            
+            if (headings.length === 0) {
+                tocListEl.innerHTML = '<li style="font-size: 13px; color: var(--text-muted); padding-left: 16px;">No headers found</li>';
+                return;
+            }
+
+            headings.forEach((heading, index) => {
+                // Ensure heading has an ID for anchoring
+                const id = heading.id || `heading-anch-${index}`;
+                heading.id = id;
+
+                const itemEl = document.createElement('li');
+                itemEl.className = 'toc-item';
+
+                const linkEl = document.createElement('a');
+                linkEl.className = 'toc-link';
+                linkEl.href = `#${window.location.hash.slice(1)}#${id}`;
+                linkEl.innerText = heading.innerText;
+                
+                // Indent h3 headers slightly
+                if (heading.tagName.toLowerCase() === 'h3') {
+                    linkEl.style.paddingLeft = '28px';
+                    linkEl.style.fontSize = '12.5px';
+                }
+
+                // Scroll smoothly to anchor on click
+                linkEl.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    heading.scrollIntoView({ behavior: 'smooth' });
+                    document.querySelectorAll('.toc-link').forEach(l => l.classList.remove('active'));
+                    linkEl.classList.add('active');
+                });
+
+                itemEl.appendChild(linkEl);
+                tocListEl.appendChild(itemEl);
+            });
+        }
+
+        // Hash Routing management
+        window.addEventListener('hashchange', () => {
+            const rawHash = window.location.hash.slice(1);
+            if (rawHash) {
+                // Split target file and anchor ID (e.g. #Features/News.md#heading-id)
+                const parts = rawHash.split('#');
+                const filePath = parts[0];
+                const anchorId = parts[1];
+                
+                const activeLink = document.querySelector(`.menu-link.active`);
+                if (!activeLink || activeLink.dataset.path !== filePath) {
+                    loadDocument(filePath).then(() => {
+                        if (anchorId) {
+                            const anchor = document.getElementById(anchorId);
+                            if (anchor) anchor.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    });
+                } else if (anchorId) {
+                    const anchor = document.getElementById(anchorId);
+                    if (anchor) anchor.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        });
+
+        // Initialize App
+        initMenu();
+
+        // Load initial document based on hash or default to first core architecture doc
+        const initialHash = window.location.hash.slice(1);
+        if (initialHash) {
+            loadDocument(initialHash.split('#')[0]);
+        } else {
+            // Default load
+            const defaultDoc = docIndex[0].items[0].path;
+            window.location.hash = `#${defaultDoc}`;
+        }
+    </script>
+</body>
+</html>
