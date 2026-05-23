@@ -218,14 +218,14 @@
                        Opacity="0.6"
                        HorizontalAlignment="Center" 
                        VerticalAlignment="Top" 
-                       Margin="0,14,0,0"
+                       Margin="0,22,0,0"
                        IsHitTestVisible="False"/>
 
             <!-- Scrollable content: article lists within Pivot tabs -->
             <Pivot x:Name="RssPivot" Margin="20,0,0,0" SelectionChanged="RssPivot_SelectionChanged">
                 <Pivot.RightHeader>
                     <!-- Spin-Wheel Selection Control -->
-                    <StackPanel x:Name="FeedSelectorContainer" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,20,0">
+                    <StackPanel x:Name="FeedSelectorContainer" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,12,20,12">
                         <!-- Cycle Left Button -->
                         <Button x:Name="CycleLeftButton" 
                                 Click="CycleLeftButton_Click"
@@ -334,29 +334,29 @@
         <!-- State 2: Reader View -->
         <Grid x:Name="ReaderViewContainer" Visibility="Collapsed" Background="Transparent">
             <Grid.RowDefinitions>
-                <RowDefinition Height="110"/>
+                <RowDefinition Height="60"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
             <!-- Fixed TopBar Row: back button and action buttons -->
             <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center">
-                <Button x:Name="BackButton" Click="BackButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="14" Padding="14,8" Height="40" HorizontalAlignment="Left">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE72B;" FontSize="16" Foreground="{ThemeResource AppFgColorBrush}"/>
-                        <TextBlock Text="Back to List" FontSize="15" Foreground="{ThemeResource AppFgColorBrush}"/>
+                <Button x:Name="BackButton" Click="BackButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Padding="14,0" Height="36" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE72B;" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
+                        <TextBlock Text="Back to List" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
                 
                 <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
                     <!-- Reader Favorite Button -->
-                    <Button x:Name="ReaderFavoriteButton" Click="ReaderFavoriteButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="14" Width="40" Height="40" Padding="0" ToolTipService.ToolTip="Toggle Favorite">
-                        <FontIcon x:Name="ReaderFavoriteIcon" Glyph="&#xE734;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource AppFgColorBrush}"/>
+                    <Button x:Name="ReaderFavoriteButton" Click="ReaderFavoriteButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="Toggle Favorite">
+                        <FontIcon x:Name="ReaderFavoriteIcon" Glyph="&#xE734;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
                     </Button>
                     
                     <!-- Reader Read Later Button -->
-                    <Button x:Name="ReaderReadLaterButton" Click="ReaderReadLaterButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="14" Width="40" Height="40" Padding="0" ToolTipService.ToolTip="Toggle Read Later">
-                        <FontIcon x:Name="ReaderReadLaterIcon" Glyph="&#xE8A4;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource AppFgColorBrush}"/>
+                    <Button x:Name="ReaderReadLaterButton" Click="ReaderReadLaterButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="Toggle Read Later">
+                        <FontIcon x:Name="ReaderReadLaterIcon" Glyph="&#xE8A4;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
                     </Button>
                 </StackPanel>
             </Grid>
