@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Supabase.Gotrue;
+using Supabase.Gotrue.Interfaces;
 using static Supabase.Gotrue.Constants;
 using Daily.Configuration;
 
@@ -23,9 +24,29 @@ public class WinUIAuthService
     public bool IsAuthenticated => _supabase.Auth.CurrentSession != null;
     public string? CurrentUserEmail => _supabase.Auth.CurrentSession?.User?.Email;
     public string? CurrentUserId => _supabase.Auth.CurrentSession?.User?.Id;
-    public string? CurrentUserAvatarUrl => _supabase.Auth.CurrentSession?.User?.UserMetadata?.ContainsKey("avatar_url") == true
-        ? _supabase.Auth.CurrentSession.User.UserMetadata["avatar_url"]?.ToString()
-        : null;
+    public string? CurrentUserAvatarUrl
+    {
+        get
+        {
+            var metadata = _supabase.Auth.CurrentSession?.User?.UserMetadata;
+            if (metadata != null)
+            {
+                if (metadata.TryGetValue("avatar_url", out var avatar) && avatar != null) return avatar.ToString();
+                if (metadata.TryGetValue("picture", out var picture) && picture != null) return picture.ToString();
+            }
+            return null;
+        }
+    }
+
+    public void AddStateChangedListener(IGotrueClient<User, Session>.AuthEventHandler handler)
+    {
+        _supabase.Auth.AddStateChangedListener(handler);
+    }
+
+    public void RemoveStateChangedListener(IGotrueClient<User, Session>.AuthEventHandler handler)
+    {
+        _supabase.Auth.RemoveStateChangedListener(handler);
+    }
 
     public WinUIAuthService(Supabase.Client supabase)
     {

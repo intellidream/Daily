@@ -87,7 +87,16 @@ public sealed partial class MainWindow : Window
             TitleBarUserAvatar.DisplayName = isAuthenticated ? (displayName ?? "U") : "?";
             TitleBarUserAvatar.ProfilePicture = null;
             if (isAuthenticated && !string.IsNullOrEmpty(avatarUrl))
-                TitleBarUserAvatar.ProfilePicture = new BitmapImage(new System.Uri(avatarUrl));
+            {
+                try
+                {
+                    TitleBarUserAvatar.ProfilePicture = new BitmapImage(new System.Uri(avatarUrl));
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MainWindow] Failed to load avatar image: {ex.Message}");
+                }
+            }
 
             TitleBarAuthItem.Text = isAuthenticated ? "Sign Out" : "Sign In";
             TitleBarAuthIcon.Glyph = isAuthenticated ? "\uF3B1" : "\uE77B"; // sign-out : person

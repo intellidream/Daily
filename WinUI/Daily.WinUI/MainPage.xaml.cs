@@ -19,6 +19,7 @@ public sealed partial class MainPage : Page
     private readonly WinUIAuthService _authService;
     private readonly WinUIWidgetService _widgetService;
     private System.Collections.ObjectModel.ObservableCollection<Daily.Models.WidgetModel> _widgets;
+    private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _authStateChangedHandler;
 
     private readonly List<System.Threading.Tasks.Task> _loadingTasks = new();
     private readonly object _lock = new object();
@@ -34,12 +35,27 @@ public sealed partial class MainPage : Page
         Unloaded += (_, _) => 
         {
             WeatherBannerService.WeatherConditionChanged -= OnWeatherConditionChanged;
+            if (_authStateChangedHandler != null)
+            {
+                _authService.RemoveStateChangedListener(_authStateChangedHandler);
+                _authStateChangedHandler = null;
+            }
             if (Current == this) Current = null;
         };
         WeatherBannerService.WeatherConditionChanged += OnWeatherConditionChanged;
         // Replay last known condition if weather already loaded before this page
         if (WeatherBannerService.LastIconCode is { } code)
             OnWeatherConditionChanged(code);
+
+        // Listen for Auth changes so we update profile picture when session hydration completes
+        _authStateChangedHandler = (sender, state) =>
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                UpdateUserUI();
+            });
+        };
+        _authService.AddStateChangedListener(_authStateChangedHandler);
     }
 
     public void RegisterLoadingTask(System.Threading.Tasks.Task task)
@@ -177,9 +193,7 @@ public sealed partial class MainPage : Page
         var isAuth      = _authService.IsAuthenticated;
 
         // Push state to the OS title bar controls hosted in MainWindow
-        if (XamlRoot?.Content is FrameworkElement root &&
-            root.XamlRoot != null &&
-            App.Current.MainWindow is MainWindow mw)
+        if (App.Current.MainWindow is MainWindow mw)
         {
             mw.UpdateTitleBarUser(email ?? string.Empty, displayName, avatarUrl, isAuth);
         }
