@@ -136,6 +136,12 @@ public sealed partial class MainWindow : Window
             mainPage.TriggerRefresh();
     }
 
+    private void TitleBarBriefing_Click(object sender, RoutedEventArgs e)
+    {
+        if (RootFrame.Content is MainPage mainPage)
+            mainPage.ShowSmartBriefing();
+    }
+
     internal void TitleBarTheme_Click(object sender, RoutedEventArgs e)
     {
         ToggleAppTheme();

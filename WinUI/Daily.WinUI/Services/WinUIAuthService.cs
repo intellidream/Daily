@@ -38,6 +38,21 @@ public class WinUIAuthService
         }
     }
 
+    public string? CurrentUserDisplayName
+    {
+        get
+        {
+            var metadata = _supabase.Auth.CurrentSession?.User?.UserMetadata;
+            if (metadata != null)
+            {
+                if (metadata.TryGetValue("full_name", out var fullName) && fullName != null) return fullName.ToString();
+                if (metadata.TryGetValue("name", out var name) && name != null) return name.ToString();
+            }
+            var email = CurrentUserEmail;
+            return email?.Split('@').FirstOrDefault();
+        }
+    }
+
     public void AddStateChangedListener(IGotrueClient<User, Session>.AuthEventHandler handler)
     {
         _supabase.Auth.AddStateChangedListener(handler);

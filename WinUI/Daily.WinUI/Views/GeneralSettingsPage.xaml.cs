@@ -21,11 +21,21 @@ public sealed partial class GeneralSettingsPage : Page
         CloseToTraySwitch.Toggled -= CloseToTraySwitch_Toggled;
         CloseToTraySwitch.IsOn = _settings.CloseToTray;
         CloseToTraySwitch.Toggled += CloseToTraySwitch_Toggled;
+
+        SmartBriefingSwitch.Toggled -= SmartBriefingSwitch_Toggled;
+        SmartBriefingSwitch.IsOn = _settings.EnableSmartBriefing;
+        SmartBriefingSwitch.Toggled += SmartBriefingSwitch_Toggled;
     }
 
     private void CloseToTraySwitch_Toggled(object sender, RoutedEventArgs e)
     {
         _settings.CloseToTray = CloseToTraySwitch.IsOn;
+        SettingsService.Save(_settings);
+    }
+
+    private void SmartBriefingSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        _settings.EnableSmartBriefing = SmartBriefingSwitch.IsOn;
         SettingsService.Save(_settings);
     }
 

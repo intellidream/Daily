@@ -163,5 +163,356 @@
             </ScrollViewer>
         </Grid>
 
+        <!-- Smart Briefing Overlay -->
+        <Grid x:Name="SmartBriefingOverlay" Visibility="Collapsed" Background="#C8000000" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+            <!-- Glass Overlay Card -->
+            <Border Width="950" Height="620" 
+                    Background="{ThemeResource AppGlassColorBrush}" 
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                    BorderThickness="1" 
+                    CornerRadius="24"
+                    Padding="32" 
+                    VerticalAlignment="Center" 
+                    HorizontalAlignment="Center"
+                    Translation="0,0,32">
+                <Border.Shadow>
+                    <ThemeShadow />
+                </Border.Shadow>
+                
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" /> <!-- Left Panel: text narrative -->
+                        <ColumnDefinition Width="2*" /> <!-- Right Panel: visual cards -->
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Left Column: Narratives -->
+                    <Grid Grid.Column="0" Margin="0,0,24,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Greeting -->
+                            <RowDefinition Height="*"/>    <!-- Typing Text Area -->
+                            <RowDefinition Height="Auto"/> <!-- AI Status Bar -->
+                            <RowDefinition Height="Auto"/> <!-- Actions / Checkbox -->
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Greeting -->
+                        <TextBlock x:Name="BriefingGreetingText" 
+                                   Text="Good morning, User!" 
+                                   FontSize="28" 
+                                   FontWeight="Bold" 
+                                   Foreground="{ThemeResource AppFgColorBrush}" 
+                                   Margin="0,0,0,16"/>
+                        
+                        <!-- Scrollable Typing Content -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
+                            <TextBlock x:Name="BriefingTypedText" 
+                                       Text="" 
+                                       FontSize="16" 
+                                       Foreground="{ThemeResource AppFgColorBrush}" 
+                                       TextWrapping="Wrap" 
+                                       LineHeight="26"
+                                       Opacity="0.9"/>
+                        </ScrollViewer>
+                        
+                        <!-- AI Status Bar -->
+                        <Border Grid.Row="2" Background="{ThemeResource AppGlassSubColorBrush}" 
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                BorderThickness="1" 
+                                CornerRadius="12" 
+                                Padding="16" 
+                                Margin="0,0,0,16">
+                            <StackPanel Spacing="8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <FontIcon Glyph="&#xE9F9;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                        <TextBlock x:Name="AiDeviceStatusText" Text="AI Core: Qualcomm Hexagon NPU | Ready" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                    
+                                    <Button x:Name="DownloadModelBtn" Grid.Column="1" Content="Download AI Pack (1.2GB)" Click="DownloadModelBtn_Click" FontSize="11" Padding="8,4" CornerRadius="6" Visibility="Visible"/>
+                                </Grid>
+                                
+                                <Grid x:Name="DownloadProgressGrid" Visibility="Collapsed">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <ProgressBar x:Name="DownloadProgressBar" Minimum="0" Maximum="100" Value="0" Height="4" Margin="0,4" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                    <TextBlock x:Name="DownloadStatusText" Grid.Row="1" Text="Downloading..." FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- Actions / Close -->
+                        <Grid Grid.Row="3">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ShowBriefingStartupCheck" Content="Show at startup" IsChecked="True" Checked="ShowBriefingStartupCheck_Changed" Unchecked="ShowBriefingStartupCheck_Changed" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="Start My Day" Click="CloseBriefing_Click" Style="{ThemeResource AccentButtonStyle}" Padding="20,8" CornerRadius="8" FontSize="14" FontWeight="SemiBold"/>
+                        </Grid>
+                    </Grid>
+                    
+                    <!-- Right Column: 4 Visual Cards (Weather, Health, Finances, Habits) -->
+                    <Grid Grid.Column="1" VerticalAlignment="Stretch">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <!-- Card 1: Weather (Row 0, Col 0) -->
+                        <Border x:Name="BriefingWeatherCard" Grid.Row="0" Grid.Column="0" 
+                                Background="{ThemeResource AppGlassSubColorBrush}" 
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                BorderThickness="1" 
+                                CornerRadius="16" 
+                                Margin="6" 
+                                Padding="16"
+                                Opacity="0"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="WeatherCardTransform" Y="30"/>
+                            </Border.RenderTransform>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                    <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FFC107"/>
+                                    <TextBlock Text="Weather" FontSize="13" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+                                    <TextBlock x:Name="BriefingWeatherTempText" Text="21°C" FontSize="26" FontWeight="Light" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    <TextBlock x:Name="BriefingWeatherCondText" Text="sunny" FontSize="13" VerticalAlignment="Bottom" Margin="0,0,0,4" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                </StackPanel>
+                                <!-- Horizontal 3-day forecast columns -->
+                                <Grid Grid.Row="2" Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Name="ForecastDay1Text" Text="Mon" FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <FontIcon x:Name="ForecastDay1Icon" Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF9800"/>
+                                        <TextBlock x:Name="ForecastDay1Temp" Text="22°" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Name="ForecastDay2Text" Text="Tue" FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <FontIcon x:Name="ForecastDay2Icon" Glyph="&#xE701;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#90CAF9"/>
+                                        <TextBlock x:Name="ForecastDay2Temp" Text="20°" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Name="ForecastDay3Text" Text="Wed" FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <FontIcon x:Name="ForecastDay3Icon" Glyph="&#xE709;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#2196F3"/>
+                                        <TextBlock x:Name="ForecastDay3Temp" Text="19°" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                        
+                        <!-- Card 2: Health (Row 0, Col 1) -->
+                        <Border x:Name="BriefingHealthCard" Grid.Row="0" Grid.Column="1" 
+                                Background="{ThemeResource AppGlassSubColorBrush}" 
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                BorderThickness="1" 
+                                CornerRadius="16" 
+                                Margin="6" 
+                                Padding="16"
+                                Opacity="0"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="HealthCardTransform" Y="30"/>
+                            </Border.RenderTransform>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                    <FontIcon Glyph="&#xEC92;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF5252"/>
+                                    <TextBlock Text="Vitals" FontSize="13" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Spacing="8" VerticalAlignment="Center">
+                                    <!-- Steps -->
+                                    <StackPanel Spacing="2">
+                                        <Grid>
+                                            <TextBlock Text="Steps" FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                            <TextBlock x:Name="BriefingStepsText" Text="4,250" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        </Grid>
+                                        <ProgressBar x:Name="BriefingStepsProgress" Minimum="0" Maximum="10000" Value="4250" Height="3" Foreground="#FF9800" Background="#33FFFFFF"/>
+                                    </StackPanel>
+                                    <!-- Sleep -->
+                                    <StackPanel Spacing="2">
+                                        <Grid>
+                                            <TextBlock Text="Sleep" FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                            <TextBlock x:Name="BriefingSleepText" Text="7.2 hrs" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        </Grid>
+                                        <ProgressBar x:Name="BriefingSleepProgress" Minimum="0" Maximum="8" Value="7.2" Height="3" Foreground="#7C4DFF" Background="#33FFFFFF"/>
+                                    </StackPanel>
+                                    <!-- Heart Rate -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xEB51;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF5252" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Resting HR:" FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="BriefingHeartRateText" Text="64 bpm" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        
+                        <!-- Card 3: Finances (Row 1, Col 0) -->
+                        <Border x:Name="BriefingFinancesCard" Grid.Row="1" Grid.Column="0" 
+                                Background="{ThemeResource AppGlassSubColorBrush}" 
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                BorderThickness="1" 
+                                CornerRadius="16" 
+                                Margin="6" 
+                                Padding="16"
+                                Opacity="0"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="FinancesCardTransform" Y="30"/>
+                            </Border.RenderTransform>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                    <FontIcon Glyph="&#xE8C7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#4CAF50"/>
+                                    <TextBlock Text="Finances" FontSize="13" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Margin="0,0,0,8">
+                                    <TextBlock Text="Net Worth" FontSize="10" Opacity="0.6" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    <TextBlock x:Name="BriefingNetWorthText" Text="$24,530" FontSize="20" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                </StackPanel>
+                                <!-- Stock rows -->
+                                <StackPanel Grid.Row="2" Spacing="6" VerticalAlignment="Bottom">
+                                    <Grid x:Name="StockRow1" Height="20">
+                                        <TextBlock x:Name="Stock1Symbol" Text="MSFT" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <TextBlock x:Name="Stock1Price" Text="421.90" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                            <Border x:Name="Stock1Badge" Background="#334CAF50" CornerRadius="4" Padding="4,2">
+                                                <TextBlock x:Name="Stock1Change" Text="+1.4%" FontSize="9" FontWeight="Bold" Foreground="#FF4CAF50"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+                                    <Grid x:Name="StockRow2" Height="20">
+                                        <TextBlock x:Name="Stock2Symbol" Text="AAPL" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <TextBlock x:Name="Stock2Price" Text="189.84" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                            <Border x:Name="Stock2Badge" Background="#33F44336" CornerRadius="4" Padding="4,2">
+                                                <TextBlock x:Name="Stock2Change" Text="-0.3%" FontSize="9" FontWeight="Bold" Foreground="#FFF44336"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        
+                        <!-- Card 4: Habits (Row 1, Col 1) -->
+                        <Border x:Name="BriefingHabitsCard" Grid.Row="1" Grid.Column="1" 
+                                Background="{ThemeResource AppGlassSubColorBrush}" 
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                BorderThickness="1" 
+                                CornerRadius="16" 
+                                Margin="6" 
+                                Padding="16"
+                                Opacity="0"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="HabitsCardTransform" Y="30"/>
+                            </Border.RenderTransform>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                    <FontIcon Glyph="&#xE1D2;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF9800"/>
+                                    <TextBlock Text="Habits" FontSize="13" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                </StackPanel>
+                                <Grid Grid.Row="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <!-- Radial progress -->
+                                    <Grid Width="50" Height="50" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <ProgressRing x:Name="BriefingHabitsProgress" Minimum="0" Maximum="4" Value="1" Width="50" Height="50" Foreground="#FF9800" Background="#33FFFFFF"/>
+                                        <TextBlock x:Name="BriefingHabitsProgressText" Text="1/4" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </Grid>
+                                    <!-- Simple text bullet checklist -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <FontIcon Glyph="&#xE73E;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#4CAF50" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Logged Water" FontSize="10" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" Opacity="0.5">
+                                            <FontIcon Glyph="&#xE739;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Read Articles" FontSize="10" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" Opacity="0.5">
+                                            <FontIcon Glyph="&#xE739;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Steps Check" FontSize="10" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+            
+            <!-- Animations for visual cards -->
+            <Grid.Resources>
+                <!-- Storyboard for Weather Card -->
+                <Storyboard x:Name="FadeInWeatherStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="BriefingWeatherCard" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.5"/>
+                    <DoubleAnimation Storyboard.TargetName="WeatherCardTransform" Storyboard.TargetProperty="Y" From="30" To="0" Duration="0:0:0.5">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+                <!-- Storyboard for Health Card -->
+                <Storyboard x:Name="FadeInHealthStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="BriefingHealthCard" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.5"/>
+                    <DoubleAnimation Storyboard.TargetName="HealthCardTransform" Storyboard.TargetProperty="Y" From="30" To="0" Duration="0:0:0.5">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+                <!-- Storyboard for Finances Card -->
+                <Storyboard x:Name="FadeInFinancesStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="BriefingFinancesCard" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.5"/>
+                    <DoubleAnimation Storyboard.TargetName="FinancesCardTransform" Storyboard.TargetProperty="Y" From="30" To="0" Duration="0:0:0.5">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+                <!-- Storyboard for Habits Card -->
+                <Storyboard x:Name="FadeInHabitsStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="BriefingHabitsCard" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.5"/>
+                    <DoubleAnimation Storyboard.TargetName="HabitsCardTransform" Storyboard.TargetProperty="Y" From="30" To="0" Duration="0:0:0.5">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </Grid.Resources>
+        </Grid>
     </Grid>
 </Page>

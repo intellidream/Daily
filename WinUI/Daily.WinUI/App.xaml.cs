@@ -189,6 +189,7 @@ public partial class App : Application
         services.AddSingleton<Daily.Services.ISettingsService, Daily.Services.SettingsService>();
         services.AddSingleton<Daily_WinUI.Services.WinUIAuthService>();
         services.AddSingleton<Daily_WinUI.Services.WinUIWidgetService>();
+        services.AddSingleton<Daily_WinUI.Services.SmartBriefingService>();
         services.AddSingleton<Daily.Services.IHabitsRepository, Daily.Services.HabitsRepository>();
         services.AddSingleton<Daily.Services.IHabitsService, Daily.Services.HabitsService>();
         services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();

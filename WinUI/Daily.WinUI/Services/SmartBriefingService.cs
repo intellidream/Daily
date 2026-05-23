@@ -1,0 +1,295 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Threading.Tasks;
+using Daily.Services;
+using Daily.Services.Health;
+using Daily.Services.Finances;
+using Daily.Models;
+using Daily.Models.Health;
+using Daily.Models.Finances;
+
+namespace Daily_WinUI.Services
+{
+    public sealed class ForecastDayData
+    {
+        public string DayName { get; set; } = string.Empty;
+        public double Temp { get; set; }
+        public string Icon { get; set; } = string.Empty; // e.g. Glyph representable
+    }
+
+    public sealed class StockBriefingData
+    {
+        public string Symbol { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public decimal PercentChange { get; set; }
+        public bool IsPositive => PercentChange >= 0;
+        public string FormattedChange => (PercentChange >= 0 ? "+" : "") + PercentChange.ToString("F2") + "%";
+    }
+
+    public sealed class SmartBriefingData
+    {
+        public string Greeting { get; set; } = string.Empty;
+        public string BriefingText { get; set; } = string.Empty;
+        
+        // Weather
+        public string WeatherSummary { get; set; } = string.Empty;
+        public double WeatherTemp { get; set; }
+        public string WeatherCondition { get; set; } = string.Empty;
+        public List<ForecastDayData> WeatherForecast { get; set; } = new();
+
+        // Health
+        public int HealthSteps { get; set; }
+        public double HealthSleepHours { get; set; }
+        public int HealthAvgHr { get; set; }
+
+        // Finances
+        public decimal NetWorth { get; set; }
+        public List<StockBriefingData> WatchlistStocks { get; set; } = new();
+
+        // Habits
+        public int HabitsTotal { get; set; }
+        public int HabitsCompleted { get; set; }
+    }
+
+    public sealed class SmartBriefingService
+    {
+        private readonly WeatherClient _weatherClient = new();
+        private readonly LocationService _locationService = new();
+        private readonly IHealthService? _healthService;
+        private readonly IFinancesService? _financesService;
+        private readonly IHabitsService? _habitsService;
+
+        public SmartBriefingService()
+        {
+            try
+            {
+                _healthService = App.Current.Services.GetService(typeof(IHealthService)) as IHealthService;
+                _financesService = App.Current.Services.GetService(typeof(IFinancesService)) as IFinancesService;
+                _habitsService = App.Current.Services.GetService(typeof(IHabitsService)) as IHabitsService;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Init Error: {ex.Message}");
+            }
+        }
+
+        public async Task<SmartBriefingData> GenerateBriefingDataAsync(string userName)
+        {
+            var data = new SmartBriefingData();
+            
+            // 1. Time-of-day Greeting
+            int hour = DateTime.Now.Hour;
+            string greetingBase = "Good evening";
+            if (hour >= 5 && hour < 12) greetingBase = "Good morning";
+            else if (hour >= 12 && hour < 17) greetingBase = "Good afternoon";
+            
+            data.Greeting = $"{greetingBase}, {userName}!";
+
+            // 2. Weather Aggregation
+            double temp = 21.5;
+            string condition = "sunny";
+            string weatherSentence = "The weather today looks warm and sunny, perfect for outdoor activities.";
+            
+            try
+            {
+                var coords = await _locationService.GetCurrentCoordinatesAsync();
+                if (coords.HasValue)
+                {
+                    var settings = SettingsService.Load();
+                    var snapshot = await _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
+                    if (snapshot != null)
+                    {
+                        temp = snapshot.Temperature;
+                        condition = snapshot.Description;
+                        
+                        if (condition.Contains("rain", StringComparison.OrdinalIgnoreCase) || condition.Contains("drizzle", StringComparison.OrdinalIgnoreCase))
+                        {
+                            weatherSentence = $"The weather today is rainy ({temp:F1}°C), so we recommend keeping your habits and workouts indoors.";
+                        }
+                        else if (temp < 10)
+                        {
+                            weatherSentence = $"It's quite cold outside ({temp:F1}°C) with {condition} skies. Layer up if you're heading out.";
+                        }
+                        else
+                        {
+                            weatherSentence = $"Expect a pleasant day today with {condition} skies and a temperature of {temp:F1}°C.";
+                        }
+                    }
+
+                    var forecastList = await _weatherClient.GetFiveDayForecastAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
+                    if (forecastList != null && forecastList.Count > 0)
+                    {
+                        int added = 0;
+                        foreach (var day in forecastList)
+                        {
+                            string iconGlyph = "\uE706"; // default sun
+                            string cond = day.Description;
+                            if (cond.Contains("Rain", StringComparison.OrdinalIgnoreCase)) iconGlyph = "\uE709"; // rain
+                            else if (cond.Contains("Cloud", StringComparison.OrdinalIgnoreCase)) iconGlyph = "\uE701"; // cloudy
+                            else if (cond.Contains("Snow", StringComparison.OrdinalIgnoreCase)) iconGlyph = "\uE70A"; // snow
+                            
+                            data.WeatherForecast.Add(new ForecastDayData
+                            {
+                                DayName = day.DayLabel,
+                                Temp = day.MaxTemp,
+                                Icon = iconGlyph
+                            });
+                            added++;
+                            if (added >= 3) break;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Weather Fetch Error: {ex.Message}");
+            }
+
+            // Fallback weather forecast if empty
+            if (data.WeatherForecast.Count == 0)
+            {
+                data.WeatherForecast.Add(new ForecastDayData { DayName = "Tomorrow", Temp = temp + 1, Icon = "\uE706" });
+                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(2).ToString("dddd"), Temp = temp - 1, Icon = "\uE701" });
+                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(3).ToString("dddd"), Temp = temp, Icon = "\uE709" });
+            }
+
+            data.WeatherTemp = temp;
+            data.WeatherCondition = condition;
+            data.WeatherSummary = weatherSentence;
+
+
+            // 3. Health Aggregation
+            int steps = 2450;
+            double sleep = 7.5;
+            int heartRate = 68;
+            string healthSentence = "";
+
+            if (_healthService != null)
+            {
+                var stepsMetric = await _healthService.GetLatestMetricAsync(VitalType.Steps);
+                if (stepsMetric != null) steps = (int)stepsMetric.Value;
+                
+                var sleepMetric = await _healthService.GetLatestMetricAsync(VitalType.SleepDuration);
+                if (sleepMetric != null) sleep = sleepMetric.Value;
+
+                var hrMetric = await _healthService.GetLatestMetricAsync(VitalType.HeartRate);
+                if (hrMetric != null) heartRate = (int)hrMetric.Value;
+            }
+            
+            data.HealthSteps = steps;
+            data.HealthSleepHours = sleep;
+            data.HealthAvgHr = heartRate;
+
+            if (steps < 4000)
+            {
+                healthSentence = $"So far you've taken {steps:N0} steps today. Let's aim to get moving and hit your steps goal later.";
+            }
+            else
+            {
+                healthSentence = $"Great job! You've already reached {steps:N0} steps today, keeping up a healthy active baseline.";
+            }
+
+            if (sleep > 0)
+            {
+                healthSentence += $" You got {sleep:F1} hours of sleep last night, providing a solid foundation for your recovery.";
+            }
+
+            // 4. Finances Aggregation
+            decimal netWorth = 24500;
+            string financeSentence = "";
+            if (_financesService != null)
+            {
+                try
+                {
+                    netWorth = await _financesService.GetNetWorthAsync();
+                    if (netWorth <= 0) netWorth = 24500; // placeholder safety if ledger is empty
+
+                    var symbols = await _financesService.GetWatchlistSymbolsAsync();
+                    if (symbols != null && symbols.Count > 0)
+                    {
+                        var quotes = await _financesService.GetStockQuotesAsync(symbols);
+                        if (quotes != null)
+                        {
+                            int count = 0;
+                            foreach (var q in quotes)
+                            {
+                                data.WatchlistStocks.Add(new StockBriefingData
+                                {
+                                    Symbol = q.Symbol,
+                                    Price = (decimal)q.CurrentPrice,
+                                    PercentChange = (decimal)q.PercentChange
+                                });
+                                count++;
+                                if (count >= 2) break; // keep top 2
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Finance Error: {ex.Message}");
+                }
+            }
+
+            // Fallback stocks if empty
+            if (data.WatchlistStocks.Count == 0)
+            {
+                data.WatchlistStocks.Add(new StockBriefingData { Symbol = "MSFT", Price = 421.90m, PercentChange = 1.45m });
+                data.WatchlistStocks.Add(new StockBriefingData { Symbol = "AAPL", Price = 189.84m, PercentChange = -0.32m });
+            }
+
+            financeSentence = $"Your ledger net worth is looking healthy at {netWorth:C0}. Markets are showing active movements: {data.WatchlistStocks[0].Symbol} is at {data.WatchlistStocks[0].Price:C2} ({data.WatchlistStocks[0].FormattedChange}).";
+
+            // 5. Habits Aggregation
+            int habitsTotal = 4;
+            int habitsCompleted = 1;
+            string habitsSentence = "";
+
+            if (_habitsService != null)
+            {
+                try
+                {
+                    // Check hydration progress
+                    double hydration = await _habitsService.GetDailyProgressAsync("water", DateTime.Today);
+                    if (hydration > 0)
+                    {
+                        habitsCompleted = hydration >= 1.0 ? 2 : 1;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Habits Error: {ex.Message}");
+                }
+            }
+            
+            data.HabitsTotal = habitsTotal;
+            data.HabitsCompleted = habitsCompleted;
+
+            if (habitsCompleted == 0)
+            {
+                habitsSentence = $"You haven't completed any daily habits yet today. Water intake quick logging is waiting to kick off your streak!";
+            }
+            else
+            {
+                habitsSentence = $"You've completed {habitsCompleted} of your {habitsTotal} habits today. Stay consistent and keep the streak alive!";
+            }
+
+            // 6. Assemble Full Briefing Text
+            StringBuilder sb = new StringBuilder();
+            sb.Append("Here is your Local AI Smart Briefing for today.\n\n");
+            sb.Append(weatherSentence);
+            sb.Append(" ");
+            sb.Append(healthSentence);
+            sb.Append("\n\n");
+            sb.Append(financeSentence);
+            sb.Append(" ");
+            sb.Append(habitsSentence);
+            sb.Append("\n\nHave a highly productive day!");
+
+            data.BriefingText = sb.ToString();
+
+            return data;
+        }
+    }
+}

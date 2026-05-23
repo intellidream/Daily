@@ -278,6 +278,16 @@
                     <FontIcon Glyph="&#xE713;" FontFamily="Segoe Fluent Icons" FontSize="13"/>
                 </Button>
 
+                <!-- Smart Briefing -->
+                <Button x:Name="TitleBarBriefingButton"
+                        Background="Transparent" BorderThickness="0"
+                        CornerRadius="0" Padding="10,0"
+                        VerticalAlignment="Stretch"
+                        Click="TitleBarBriefing_Click"
+                        ToolTipService.ToolTip="Smart Briefing">
+                    <FontIcon Glyph="&#xE82F;" FontFamily="Segoe Fluent Icons" FontSize="13"/>
+                </Button>
+
                 <!-- User account -->
                 <Button x:Name="TitleBarAccountButton"
                         Background="Transparent" BorderThickness="0"
