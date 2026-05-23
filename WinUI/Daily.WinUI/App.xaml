@@ -15,6 +15,7 @@
                     <x:String x:Key="AppBackgroundSource">Assets/appbackground.theme-dark.svg</x:String>
                     <x:String x:Key="IntellIdreamIconSource">ms-appx:///Assets/companyicon.theme-dark.svg</x:String>
                     <Color x:Key="AppBgColor">#FF0B1121</Color>
+                    <Color x:Key="AppTopBgColor">#FF030609</Color>
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FFFFFFFF"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BBFFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#20FFFFFF"/>
@@ -44,12 +45,25 @@
                     </RadialGradientBrush>
                     <Color x:Key="LoginGlowColor">#FF4A9EFF</Color>
                     <SolidColorBrush x:Key="AppErrorBrush" Color="#FFFF6B6B"/>
+                    <LinearGradientBrush x:Key="LeftFadeOverlayBrush" StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#FF030609" Offset="0.0" />
+                        <GradientStop Color="#C0030609" Offset="0.3" />
+                        <GradientStop Color="#60030609" Offset="0.65" />
+                        <GradientStop Color="#00030609" Offset="1.0" />
+                    </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="RightFadeOverlayBrush" StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#00030609" Offset="0.0" />
+                        <GradientStop Color="#60030609" Offset="0.35" />
+                        <GradientStop Color="#C0030609" Offset="0.7" />
+                        <GradientStop Color="#FF030609" Offset="1.0" />
+                    </LinearGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <x:String x:Key="AppIconSource">ms-appx:///Assets/appicon.theme-light.svg</x:String>
                     <x:String x:Key="AppBackgroundSource">Assets/appbackground.theme-light.svg</x:String>
                     <x:String x:Key="IntellIdreamIconSource">ms-appx:///Assets/companyicon.theme-light.svg</x:String>
                     <Color x:Key="AppBgColor">#FFD4C9B0</Color>
+                    <Color x:Key="AppTopBgColor">#FFD4C9B0</Color>
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FF1A1A1A"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BB1A1A1A"/>
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#25000000"/>
@@ -79,6 +93,18 @@
                     </RadialGradientBrush>
                     <Color x:Key="LoginGlowColor">#FFFFA800</Color>
                     <SolidColorBrush x:Key="AppErrorBrush" Color="#D32F2F"/>
+                    <LinearGradientBrush x:Key="LeftFadeOverlayBrush" StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#FFD4C9B0" Offset="0.0" />
+                        <GradientStop Color="#C0D4C9B0" Offset="0.3" />
+                        <GradientStop Color="#60D4C9B0" Offset="0.65" />
+                        <GradientStop Color="#00D4C9B0" Offset="1.0" />
+                    </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="RightFadeOverlayBrush" StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#00D4C9B0" Offset="0.0" />
+                        <GradientStop Color="#60D4C9B0" Offset="0.35" />
+                        <GradientStop Color="#C0D4C9B0" Offset="0.7" />
+                        <GradientStop Color="#FFD4C9B0" Offset="1.0" />
+                    </LinearGradientBrush>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <FontFamily x:Key="TablerIconsFont">ms-appx:///Assets/Fonts/tabler-icons.ttf#tabler-icons</FontFamily>

@@ -6,11 +6,14 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:Daily_WinUI.ViewModels"
+    xmlns:models="using:Daily.Models"
+    xmlns:converters="using:Daily_WinUI.Converters"
     mc:Ignorable="d"
     SizeChanged="Page_SizeChanged"
     Background="Transparent">
 
     <Page.Resources>
+        <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
         <!-- Dark navy background matching MainPage -->
         <LinearGradientBrush x:Key="RssPageBgBrush" StartPoint="0,0" EndPoint="0,1">
             <GradientStop Color="#FF0B1121" Offset="0" />
@@ -341,14 +344,75 @@
 
             <!-- Fixed TopBar Row: back button and action buttons -->
             <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center">
-                <Button x:Name="BackButton" Click="BackButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Padding="14,0" Height="36" HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="BackButton" Grid.Column="0" Click="BackButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Padding="14,0" Height="36" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE72B;" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
                         <TextBlock Text="Back to List" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
                 
-                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+                <!-- Horizontal scrollable smart recommendations -->
+                <Grid Grid.Column="1" Margin="16,0" VerticalAlignment="Center" Height="36">
+                    <ScrollViewer x:Name="RecommendationsScrollViewer" 
+                                  HorizontalScrollBarVisibility="Hidden" 
+                                  VerticalScrollBarVisibility="Disabled"
+                                  HorizontalScrollMode="Enabled" 
+                                  VerticalScrollMode="Disabled"
+                                  ViewChanged="RecommendationsScrollViewer_ViewChanged">
+                        <ItemsControl x:Name="RecommendationsItemsControl" Padding="12,0,12,0">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:RssItem">
+                                    <Button Click="RecommendationButton_Click"
+                                            Background="{ThemeResource AppGlassColorBrush}"
+                                            BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="16"
+                                            Height="32"
+                                            Padding="10,0,10,0"
+                                            VerticalAlignment="Center"
+                                            Margin="0,0,8,0"
+                                            ToolTipService.ToolTip="{x:Bind Title}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <!-- Publication Icon circular badge -->
+                                            <Border Width="14" Height="14" CornerRadius="7" Background="White" Padding="0.5" VerticalAlignment="Center"
+                                                    Visibility="{x:Bind PublicationIconUrl, Converter={StaticResource StringToVisibilityConverter}}">
+                                                <Image Source="{x:Bind PublicationIconUrl}" Width="12" Height="12" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            
+                                            <!-- Title text -->
+                                            <TextBlock Text="{x:Bind Title}"
+                                                       FontSize="12"
+                                                       FontWeight="Medium"
+                                                       MaxWidth="140"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Left Fade Overlay (blends into the window top background color) -->
+                    <Border x:Name="LeftFadeOverlay" Width="32" HorizontalAlignment="Left" IsHitTestVisible="False" Opacity="0" Background="{ThemeResource LeftFadeOverlayBrush}"/>
+
+                    <!-- Right Fade Overlay (blends into the window top background color) -->
+                    <Border x:Name="RightFadeOverlay" Width="32" HorizontalAlignment="Right" IsHitTestVisible="False" Opacity="0" Background="{ThemeResource RightFadeOverlayBrush}"/>
+                </Grid>
+                
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
                     <!-- Reader Favorite Button -->
                     <Button x:Name="ReaderFavoriteButton" Click="ReaderFavoriteButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="Toggle Favorite">
                         <FontIcon x:Name="ReaderFavoriteIcon" Glyph="&#xE734;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>

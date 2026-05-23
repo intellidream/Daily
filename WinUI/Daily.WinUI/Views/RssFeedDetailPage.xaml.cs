@@ -7,8 +7,11 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using Daily.Models;
 using Daily_WinUI.Services;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Daily_WinUI.Views;
 
@@ -59,6 +62,7 @@ public sealed partial class RssFeedDetailPage : Page
         _articleService.OnItemsChanged += ArticleService_OnItemsChanged;
 
         PopulateFeedMenu();
+        PreFetchAllFeedsInBackground();
         if (_selectedItem != null)
         {
             var feed = _rssService.Feeds?.FirstOrDefault(f => f.Name == _selectedItem.PublicationName);
@@ -189,6 +193,7 @@ public sealed partial class RssFeedDetailPage : Page
         _currentRenderedArticle = null;
         _selectedItem = item;
         UpdateReaderToolbarStates();
+        PopulateRecommendations(item);
         ListViewContainer.Visibility = Visibility.Collapsed;
         ReaderViewContainer.Visibility = Visibility.Visible;
         ReaderLoadingPanel.Visibility = Visibility.Visible;
@@ -883,5 +888,345 @@ public sealed partial class RssFeedDetailPage : Page
 
         ToolTipService.SetToolTip(fontIcon, toolTipText);
         return fontIcon;
+    }
+
+    private static readonly Dictionary<string, List<RssItem>> _allFeedsCache = new();
+    private static bool _isPreFetchingAllFeeds = false;
+
+    private async void PreFetchAllFeedsInBackground()
+    {
+        if (_isPreFetchingAllFeeds || _rssService.Feeds == null) return;
+        _isPreFetchingAllFeeds = true;
+
+        var httpClient = new System.Net.Http.HttpClient();
+        httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+        foreach (var feed in _rssService.Feeds)
+        {
+            // Skip the current feed since it is already loaded or loading in the main page
+            if (_rssService.CurrentFeed != null && feed.Url == _rssService.CurrentFeed.Url)
+                continue;
+
+            if (_allFeedsCache.ContainsKey(feed.Url))
+                continue;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var xml = await httpClient.GetStringAsync(feed.Url);
+                    var doc = System.Xml.Linq.XDocument.Parse(xml);
+                    System.Xml.Linq.XNamespace dc = "http://purl.org/dc/elements/1.1/";
+                    
+                    var items = doc.Descendants().Where(e => e.Name.LocalName == "item" || e.Name.LocalName == "entry").Select(item =>
+                    {
+                        var title = item.Elements().FirstOrDefault(e => e.Name.LocalName == "title")?.Value ?? "No Title";
+                        var linkEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "link");
+                        var link = linkEl?.Attribute("href")?.Value;
+                        if (string.IsNullOrEmpty(link)) link = linkEl?.Value ?? "";
+
+                        var description = item.Elements().FirstOrDefault(e => e.Name.LocalName == "description" || e.Name.LocalName == "summary")?.Value;
+                        var pubDateStr = item.Elements().FirstOrDefault(e => e.Name.LocalName == "pubDate" || e.Name.LocalName == "published" || e.Name.LocalName == "updated" || e.Name == dc + "date")?.Value;
+                        
+                        DateTime pubDate = DateTime.Now;
+                        if (DateTime.TryParse(pubDateStr, out var parsedDate)) pubDate = parsedDate;
+
+                        string? imageUrl = null;
+                        var enclosure = item.Elements().FirstOrDefault(e => e.Name.LocalName == "enclosure" || (e.Name.LocalName == "link" && e.Attribute("rel")?.Value == "enclosure"));
+                        if (enclosure != null)
+                        {
+                            imageUrl = enclosure.Attribute("url")?.Value ?? enclosure.Attribute("href")?.Value;
+                        }
+
+                        return new RssItem
+                        {
+                            Title = title,
+                            Link = link,
+                            PublishDate = pubDate,
+                            ImageUrl = imageUrl,
+                            Description = description,
+                            PublicationName = feed.Name,
+                            PublicationIconUrl = feed.IconUrl
+                        };
+                    }).ToList();
+
+                    lock (_allFeedsCache)
+                    {
+                        _allFeedsCache[feed.Url] = items;
+                    }
+
+                    // Refresh recommendations once loaded
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_selectedItem != null) PopulateRecommendations(_selectedItem);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Reader] Background pre-fetch failed for {feed.Name}: {ex.Message}");
+                }
+            });
+        }
+    }
+
+    private void RecommendationsScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+    {
+        UpdateFadeOverlaysVisibility();
+    }
+
+    private void UpdateFadeOverlaysVisibility()
+    {
+        if (RecommendationsScrollViewer == null || LeftFadeOverlay == null || RightFadeOverlay == null) return;
+
+        double offset = RecommendationsScrollViewer.HorizontalOffset;
+        double maxOffset = RecommendationsScrollViewer.ScrollableWidth;
+
+        // Smooth transition over 10px of scroll
+        LeftFadeOverlay.Opacity = Math.Clamp(offset / 10.0, 0.0, 1.0);
+
+        if (maxOffset > 0)
+        {
+            double remaining = maxOffset - offset;
+            RightFadeOverlay.Opacity = Math.Clamp(remaining / 10.0, 0.0, 1.0);
+        }
+        else
+        {
+            RightFadeOverlay.Opacity = 0.0;
+        }
+    }
+
+    private void PopulateRecommendations(RssItem currentItem)
+    {
+        if (RecommendationsItemsControl == null) return;
+        
+        var recommendations = GetSmartRecommendations(currentItem, 20);
+        RecommendationsItemsControl.ItemsSource = recommendations;
+
+        // Update overlay opacities immediately after populating
+        RecommendationsScrollViewer.UpdateLayout();
+        UpdateFadeOverlaysVisibility();
+    }
+
+    private async void RecommendationButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is RssItem item)
+        {
+            try
+            {
+                await OpenReaderViewAsync(item);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Reader] Failed to load recommendation: {ex.Message}");
+            }
+        }
+    }
+
+    private List<RssItem> GetSmartRecommendations(RssItem currentItem, int count = 20)
+    {
+        var recommendations = new List<RssItem>();
+        if (currentItem == null) return recommendations;
+
+        // 1. Clean and tokenize Title
+        var titleWords = currentItem.Title
+            .Split(new[] { ' ', ',', '.', ';', ':', '-', '—', '?', '!', '"', '\'', '(', ')' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w.ToLowerInvariant())
+            .Where(w => w.Length > 4)
+            .ToList();
+
+        // 2. Clean and tokenize Description (HTML-stripped)
+        var cleanDescription = System.Text.RegularExpressions.Regex.Replace(currentItem.Description ?? "", "<.*?>", string.Empty);
+        var descWords = cleanDescription
+            .Split(new[] { ' ', ',', '.', ';', ':', '-', '—', '?', '!', '"', '\'', '(', ')' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w.ToLowerInvariant())
+            .Where(w => w.Length > 4)
+            .ToList();
+
+        // Stop words set
+        var stopWords = new HashSet<string>
+        {
+            "about", "above", "after", "again", "against", "along", "around", "before", "behind", "below", "beneath", 
+            "between", "beyond", "during", "under", "within", "without", "should", "would", "could", "their", "there", 
+            "these", "those", "first", "second", "three", "years", "before", "being", "other", "people", "which", "where",
+            "about", "first", "since", "while", "where", "after", "before", "still", "often", "their", "there", "these",
+            "those", "world", "local", "markets", "tech", "today", "yesterday", "tomorrow", "daily", "news", "articles",
+            "report", "latest", "update", "updates", "reporting", "source", "views", "breaking", "exclusive", "inside"
+        };
+
+        // Filter out stop words
+        var titleKeywords = titleWords.Where(w => !stopWords.Contains(w)).ToList();
+        var descKeywords = descWords.Where(w => !stopWords.Contains(w)).ToList();
+
+        // Count frequencies of words in title and description to find the most important keywords
+        var wordFreq = new Dictionary<string, double>();
+        foreach (var w in titleKeywords)
+        {
+            wordFreq[w] = wordFreq.GetValueOrDefault(w, 0) + 5.0; // Higher weight for title words
+        }
+        foreach (var w in descKeywords)
+        {
+            wordFreq[w] = wordFreq.GetValueOrDefault(w, 0) + 1.0;
+        }
+
+        // Keep the top 15 most important keywords
+        var topKeywords = wordFreq.OrderByDescending(kvp => kvp.Value)
+            .Take(15)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        // Find current feed source and category
+        var currentFeedSource = _rssService.Feeds?.FirstOrDefault(f => f.Name == currentItem.PublicationName);
+        var currentCategory = currentFeedSource?.Category;
+
+        // Assemble candidates list
+        var candidates = new List<RssItem>();
+
+        if (_rssService.Items != null)
+        {
+            candidates.AddRange(_rssService.Items);
+        }
+
+        lock (_allFeedsCache)
+        {
+            foreach (var cachedItems in _allFeedsCache.Values)
+            {
+                candidates.AddRange(cachedItems);
+            }
+        }
+
+        if (_articleService.ReadLaterItems != null)
+        {
+            candidates.AddRange(_articleService.ReadLaterItems.Select(saved => new RssItem
+            {
+                Title = saved.Title,
+                Link = saved.ArticleUrl,
+                PublishDate = saved.ArticleDate,
+                ImageUrl = saved.ImageUrl,
+                Description = saved.Description,
+                Author = saved.Author,
+                PublicationName = saved.PublicationName,
+                PublicationIconUrl = saved.PublicationIconUrl
+            }));
+        }
+
+        if (_articleService.FavoriteItems != null)
+        {
+            candidates.AddRange(_articleService.FavoriteItems.Select(saved => new RssItem
+            {
+                Title = saved.Title,
+                Link = saved.ArticleUrl,
+                PublishDate = saved.ArticleDate,
+                ImageUrl = saved.ImageUrl,
+                Description = saved.Description,
+                Author = saved.Author,
+                PublicationName = saved.PublicationName,
+                PublicationIconUrl = saved.PublicationIconUrl
+            }));
+        }
+
+        // Remove duplicates and the current item
+        var uniqueCandidates = candidates
+            .Where(c => c.Link != currentItem.Link && !string.Equals(c.Title, currentItem.Title, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(c => c.Link)
+            .Select(g => g.First())
+            .ToList();
+
+        var scoredCandidates = uniqueCandidates.Select(c =>
+        {
+            double score = 0;
+
+            // 1. Keyword overlap scoring
+            if (topKeywords.Count > 0)
+            {
+                var titleLower = c.Title.ToLowerInvariant();
+                var descLower = System.Text.RegularExpressions.Regex.Replace(c.Description ?? "", "<.*?>", string.Empty).ToLowerInvariant();
+
+                foreach (var kw in topKeywords)
+                {
+                    if (titleLower.Contains(kw)) score += 10.0;
+                    if (descLower.Contains(kw)) score += 2.0;
+                }
+            }
+
+            // 2. Category matching bonus
+            if (currentCategory != null && _rssService.Feeds != null)
+            {
+                var candidateFeedSource = _rssService.Feeds.FirstOrDefault(f => f.Name == c.PublicationName);
+                if (candidateFeedSource != null && candidateFeedSource.Category == currentCategory.Value)
+                {
+                    score += 20.0; // Significant bonus for same-category feeds (e.g. both are tech or politics)
+                }
+            }
+
+            return new { Item = c, Score = score };
+        })
+        .ToList();
+
+        // Separate matching and fallback candidates
+        var matchingCandidates = scoredCandidates
+            .Where(sc => sc.Score > 0)
+            .OrderByDescending(sc => sc.Score)
+            .ThenByDescending(sc => sc.Item.PublishDate)
+            .Select(sc => sc.Item)
+            .ToList();
+
+        var fallbackCandidates = scoredCandidates
+            .Where(sc => sc.Score == 0)
+            .OrderByDescending(sc => sc.Item.PublishDate)
+            .Select(sc => sc.Item)
+            .ToList();
+
+        // Round-robin selection helper
+        List<RssItem> selected = new List<RssItem>();
+
+        // 1. Round-robin select matching articles
+        if (matchingCandidates.Count > 0)
+        {
+            var matchingGroups = matchingCandidates
+                .GroupBy(c => c.PublicationName ?? "Unknown")
+                .ToDictionary(g => g.Key, g => new Queue<RssItem>(g));
+
+            bool addedAnyInRound = true;
+            while (selected.Count < count && addedAnyInRound)
+            {
+                addedAnyInRound = false;
+                foreach (var key in matchingGroups.Keys.ToList())
+                {
+                    if (selected.Count >= count) break;
+                    var queue = matchingGroups[key];
+                    if (queue.Count > 0)
+                    {
+                        selected.Add(queue.Dequeue());
+                        addedAnyInRound = true;
+                    }
+                }
+            }
+        }
+
+        // 2. Round-robin select fallback articles if count not reached
+        if (selected.Count < count && fallbackCandidates.Count > 0)
+        {
+            var fallbackGroups = fallbackCandidates
+                .GroupBy(c => c.PublicationName ?? "Unknown")
+                .ToDictionary(g => g.Key, g => new Queue<RssItem>(g));
+
+            bool addedAnyInRound = true;
+            while (selected.Count < count && addedAnyInRound)
+            {
+                addedAnyInRound = false;
+                foreach (var key in fallbackGroups.Keys.ToList())
+                {
+                    if (selected.Count >= count) break;
+                    var queue = fallbackGroups[key];
+                    if (queue.Count > 0)
+                    {
+                        selected.Add(queue.Dequeue());
+                        addedAnyInRound = true;
+                    }
+                }
+            }
+        }
+
+        return selected;
     }
 }
