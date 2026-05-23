@@ -16,7 +16,6 @@ public sealed partial class RssFeedWidgetControl : UserControl
 {
     private readonly Daily.Services.IRssFeedService _rssService;
     private ObservableCollection<RssItem> _widgetArticles = new();
-    private bool _isSelectingProgrammatically;
 
     public event EventHandler<RssItem>? ArticleTapped;
     public event EventHandler? WidgetTapped;
@@ -33,23 +32,8 @@ public sealed partial class RssFeedWidgetControl : UserControl
 
     private async void RssFeedWidgetControl_Loaded(object sender, RoutedEventArgs e)
     {
-        _isSelectingProgrammatically = true;
-        try
-        {
-            FeedComboBox.ItemsSource = _rssService.Feeds;
-            if (_rssService.CurrentFeed != null)
-            {
-                var feed = _rssService.Feeds.FirstOrDefault(f => f.Url == _rssService.CurrentFeed.Url);
-                if (feed != null)
-                {
-                    FeedComboBox.SelectedItem = feed;
-                }
-            }
-        }
-        finally
-        {
-            _isSelectingProgrammatically = false;
-        }
+        PopulateFeedMenu();
+        UpdateSelectedFeedUI(_rssService.CurrentFeed);
         
         _rssService.OnFeedChanged += RssService_OnFeedChanged;
         _rssService.OnItemsUpdated += RssService_OnItemsUpdated;
@@ -86,31 +70,8 @@ public sealed partial class RssFeedWidgetControl : UserControl
     {
         try
         {
-            _isSelectingProgrammatically = true;
-            try
-            {
-                if (FeedComboBox.ItemsSource != _rssService.Feeds)
-                {
-                    FeedComboBox.ItemsSource = null;
-                    FeedComboBox.ItemsSource = _rssService.Feeds;
-                }
-                if (_rssService.CurrentFeed != null)
-                {
-                    var feed = _rssService.Feeds.FirstOrDefault(f => f.Url == _rssService.CurrentFeed.Url);
-                    if (FeedComboBox.SelectedItem != feed)
-                    {
-                        FeedComboBox.SelectedItem = feed;
-                    }
-                }
-                else
-                {
-                    FeedComboBox.SelectedItem = null;
-                }
-            }
-            finally
-            {
-                _isSelectingProgrammatically = false;
-            }
+            PopulateFeedMenu();
+            UpdateSelectedFeedUI(_rssService.CurrentFeed);
 
             // Auto-load: InitializeAsync seeds feeds AFTER the widget is already loaded,
             // so this is the first moment we know CurrentFeed is set. Load articles now.
@@ -157,20 +118,109 @@ public sealed partial class RssFeedWidgetControl : UserControl
         }
     }
 
-    private async void FeedComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void PopulateFeedMenu()
     {
-        if (_isSelectingProgrammatically) return;
+        FeedMenuFlyout.Items.Clear();
+        if (_rssService.Feeds == null) return;
 
-        if (FeedComboBox.SelectedItem is FeedSource selectedFeed)
+        foreach (var feed in _rssService.Feeds)
         {
-            // Only trigger a new load if the feed actually changed (compare by Url to avoid object reference false positives)
-            if (_rssService.CurrentFeed == null || selectedFeed.Url != _rssService.CurrentFeed.Url)
+            var menuItem = new MenuFlyoutItem
             {
-                LoadingPanel.Visibility = Visibility.Visible;
-                ArticlesListView.Visibility = Visibility.Collapsed;
-                _rssService.SelectFeed(selectedFeed);
-                await _rssService.LoadFeedAsync(selectedFeed);
+                Text = feed.Name,
+                DataContext = feed
+            };
+
+            try
+            {
+                var icon = new ImageIcon
+                {
+                    Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(feed.IconUrl))
+                };
+                menuItem.Icon = icon;
             }
+            catch { }
+
+            menuItem.Click += FeedMenuItem_Click;
+            FeedMenuFlyout.Items.Add(menuItem);
+        }
+    }
+
+    private async void FeedMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem menuItem && menuItem.DataContext is FeedSource selectedFeed)
+        {
+            await SelectFeedAsync(selectedFeed);
+        }
+    }
+
+    private async void CycleLeftButton_Click(object sender, RoutedEventArgs e)
+    {
+        var feeds = _rssService.Feeds;
+        if (feeds == null || feeds.Count == 0) return;
+
+        int currentIndex = 0;
+        if (_rssService.CurrentFeed != null)
+        {
+            currentIndex = feeds.FindIndex(f => f.Url == _rssService.CurrentFeed.Url);
+            if (currentIndex < 0) currentIndex = 0;
+        }
+
+        int prevIndex = (currentIndex - 1 + feeds.Count) % feeds.Count;
+        var prevFeed = feeds[prevIndex];
+        await SelectFeedAsync(prevFeed);
+    }
+
+    private async void CycleRightButton_Click(object sender, RoutedEventArgs e)
+    {
+        var feeds = _rssService.Feeds;
+        if (feeds == null || feeds.Count == 0) return;
+
+        int currentIndex = 0;
+        if (_rssService.CurrentFeed != null)
+        {
+            currentIndex = feeds.FindIndex(f => f.Url == _rssService.CurrentFeed.Url);
+            if (currentIndex < 0) currentIndex = 0;
+        }
+
+        int nextIndex = (currentIndex + 1) % feeds.Count;
+        var nextFeed = feeds[nextIndex];
+        await SelectFeedAsync(nextFeed);
+    }
+
+    private async Task SelectFeedAsync(FeedSource feed)
+    {
+        if (feed == null) return;
+
+        UpdateSelectedFeedUI(feed);
+
+        if (_rssService.CurrentFeed == null || feed.Url != _rssService.CurrentFeed.Url)
+        {
+            LoadingPanel.Visibility = Visibility.Visible;
+            ArticlesListView.Visibility = Visibility.Collapsed;
+            _rssService.SelectFeed(feed);
+            await _rssService.LoadFeedAsync(feed);
+        }
+    }
+
+    private void UpdateSelectedFeedUI(FeedSource? feed)
+    {
+        if (feed == null)
+        {
+            SelectedFeedText.Text = "Select Feed";
+            SelectedFeedIcon.Source = null;
+            return;
+        }
+
+        SelectedFeedText.Text = feed.Name;
+        try
+        {
+            SelectedFeedIcon.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(feed.IconUrl));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[RssFeedWidgetControl] Error loading icon: {ex.Message}");
+            SelectedFeedIcon.Source = null;
         }
     }
 

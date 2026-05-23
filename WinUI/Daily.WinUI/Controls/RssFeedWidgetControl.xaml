@@ -9,13 +9,81 @@
     d:DesignHeight="300" d:DesignWidth="400">
 
     <Grid>
+        <Grid.Resources>
+            <Style x:Key="SourceItemContainerStyle" TargetType="ListViewItem">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Margin" Value="0,0,8,0"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListViewItem">
+                            <Grid Background="Transparent">
+                                <!-- Base Glass Pill -->
+                                <Border x:Name="Pill" 
+                                        Background="{ThemeResource AppGlassColorBrush}" 
+                                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                        BorderThickness="1" 
+                                        CornerRadius="14" 
+                                        Padding="10,5"
+                                        Margin="1"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="PillScale" ScaleX="1.0" ScaleY="1.0"/>
+                                    </Border.RenderTransform>
+                                    <ContentPresenter x:Name="ContentPresenter"
+                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                      Content="{TemplateBinding Content}"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal"/>
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="Pill.Background" Value="#30FFFFFF"/>
+                                                <Setter Target="Pill.BorderBrush" Value="#60FFFFFF"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="PillScale.ScaleX" Value="0.95"/>
+                                                <Setter Target="PillScale.ScaleY" Value="0.95"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="SelectionStates">
+                                        <VisualState x:Name="Unselected"/>
+                                        <VisualState x:Name="Selected">
+                                            <VisualState.Setters>
+                                                <Setter Target="Pill.Background" Value="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                <Setter Target="Pill.BorderBrush" Value="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                <Setter Target="Pill.Translation" Value="0,0,4"/>
+                                                <Setter Target="ContentPresenter.Foreground" Value="White"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="SelectedUnfocused">
+                                            <VisualState.Setters>
+                                                <Setter Target="Pill.Background" Value="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                <Setter Target="Pill.BorderBrush" Value="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                <Setter Target="ContentPresenter.Foreground" Value="White"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </Grid.Resources>
+        
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Grid Grid.Row="0" Margin="16,16,16,12">
+        <Grid Grid.Row="0" Margin="16,16,16,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -26,20 +94,54 @@
             <FontIcon Glyph="&#xE736;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center"/>
             <TextBlock Grid.Column="1" Text="News" FontSize="16" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
             
-            <!-- Feed Selector -->
-            <ComboBox Grid.Column="2" x:Name="FeedComboBox" 
-                      Width="160" Height="36" 
-                      DisplayMemberPath="Name"
-                      SelectionChanged="FeedComboBox_SelectionChanged"
-                      Background="Transparent"
-                      BorderThickness="0"/>
+            <!-- Spin-Wheel Selection Control -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                <!-- Cycle Left Button -->
+                <Button x:Name="CycleLeftButton" 
+                        Click="CycleLeftButton_Click"
+                        Background="Transparent" BorderThickness="0"
+                        Width="28" Height="32" Padding="0"
+                        ToolTipService.ToolTip="Previous Feed">
+                    <FontIcon Glyph="&#xE76B;" FontSize="11"/>
+                </Button>
+
+                <!-- Center Feed Selector Button -->
+                <Button x:Name="FeedSelectorButton"
+                        Background="{ThemeResource AppGlassColorBrush}" 
+                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                        BorderThickness="1" 
+                        CornerRadius="14"
+                        Height="32" Padding="10,0"
+                        ToolTipService.ToolTip="Select Feed">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Border Width="16" Height="16" CornerRadius="8" Background="White" Padding="0.5" VerticalAlignment="Center">
+                            <Image x:Name="SelectedFeedIcon" Width="14" Height="14" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock x:Name="SelectedFeedText" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" MaxWidth="120" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    
+                    <Button.Flyout>
+                        <MenuFlyout x:Name="FeedMenuFlyout" Placement="Bottom"/>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Cycle Right Button -->
+                <Button x:Name="CycleRightButton" 
+                        Click="CycleRightButton_Click"
+                        Background="Transparent" BorderThickness="0"
+                        Width="28" Height="32" Padding="0"
+                        ToolTipService.ToolTip="Next Feed">
+                    <FontIcon Glyph="&#xE76C;" FontSize="11"/>
+                </Button>
+            </StackPanel>
 
             <!-- Refresh Button -->
             <Button Grid.Column="3" 
                     Margin="8,0,0,0"
                     Background="Transparent" BorderThickness="0"
                     Click="RefreshButton_Click"
-                    ToolTipService.ToolTip="Refresh Feed">
+                    ToolTipService.ToolTip="Refresh Feed"
+                    VerticalAlignment="Center">
                 <FontIcon Glyph="&#xE72C;" FontSize="14"/>
             </Button>
         </Grid>
@@ -109,11 +211,25 @@
                                                TextWrapping="Wrap" 
                                                MaxLines="2" 
                                                TextTrimming="CharacterEllipsis"/>
-                                    <!-- Meta Info -->
-                                    <TextBlock Text="{Binding PublishDate}" 
-                                               FontSize="12" 
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
-                                               Margin="0,6,0,0"/>
+                                    <!-- Meta Info (Publication Logo + Name + Date) -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0" VerticalAlignment="Center">
+                                        <Border Width="16" Height="16" CornerRadius="8" Background="White" Padding="1" VerticalAlignment="Center">
+                                            <Image Source="{Binding PublicationIconUrl}" Width="14" Height="14" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <TextBlock Text="{Binding PublicationName}" 
+                                                   FontSize="12" 
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                                                   FontWeight="Medium"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="•" 
+                                                   FontSize="12" 
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding PublishDate}" 
+                                                   FontSize="12" 
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Grid>
                         </Border>
