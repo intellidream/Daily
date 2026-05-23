@@ -302,6 +302,34 @@
                     </Button.Flyout>
                 </Button>
 
+                <!-- Window Docking & Layout Options -->
+                <Button x:Name="TitleBarDockButton"
+                        Background="Transparent" BorderThickness="0"
+                        CornerRadius="0" Padding="10,0"
+                        VerticalAlignment="Stretch"
+                        ToolTipService.ToolTip="Window layout options">
+                    <FontIcon Glyph="&#xE952;" FontFamily="Segoe Fluent Icons" FontSize="12"/>
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Text="Float Center (Default)" Click="DockNormal_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE73F;" FontFamily="Segoe Fluent Icons"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Dock Left" Click="DockLeft_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE90C;" FontFamily="Segoe Fluent Icons"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Dock Right" Click="DockRight_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE90D;" FontFamily="Segoe Fluent Icons"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+
             </StackPanel>
         </Grid>
 

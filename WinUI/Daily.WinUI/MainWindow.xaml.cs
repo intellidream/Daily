@@ -337,6 +337,74 @@ public sealed partial class MainWindow : Window
         // Keep the spacer column wide enough to clear the system buttons
         if (RightPaddingColumn != null)
             RightPaddingColumn.Width = new GridLength(AppWindow.TitleBar.RightInset / scale);
+
+        // Adjust title bar elements dynamically when resized below 640 logical pixels
+        double width = e.NewSize.Width;
+        if (width < 640)
+        {
+            if (TitleBarDateText != null)
+                TitleBarDateText.Visibility = Visibility.Collapsed;
+            if (TitleBarUserEmailText != null)
+                TitleBarUserEmailText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            if (TitleBarDateText != null)
+                TitleBarDateText.Visibility = Visibility.Visible;
+            if (TitleBarUserEmailText != null)
+                TitleBarUserEmailText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void DockNormal_Click(object sender, RoutedEventArgs e)
+    {
+        var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+        var workArea = displayArea.WorkArea;
+
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        double scale = GetDpiForWindow(hwnd) / 96.0;
+
+        int width = Math.Min((int)(1380 * scale), workArea.Width);
+        int height = Math.Min((int)(790 * scale), workArea.Height);
+
+        int x = workArea.X + (workArea.Width - width) / 2;
+        int y = workArea.Y + workArea.Height - height;
+
+        AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
+    }
+
+    private void DockLeft_Click(object sender, RoutedEventArgs e)
+    {
+        var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+        var workArea = displayArea.WorkArea;
+
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        double scale = GetDpiForWindow(hwnd) / 96.0;
+
+        int width = Math.Min((int)(480 * scale), workArea.Width);
+        int height = workArea.Height;
+
+        int x = workArea.X;
+        int y = workArea.Y;
+
+        AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
+    }
+
+    private void DockRight_Click(object sender, RoutedEventArgs e)
+    {
+        var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+        var workArea = displayArea.WorkArea;
+
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        double scale = GetDpiForWindow(hwnd) / 96.0;
+
+        int width = Math.Min((int)(480 * scale), workArea.Width);
+        int height = workArea.Height;
+
+        int x = workArea.X + workArea.Width - width;
+        int y = workArea.Y;
+
+        AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
     }
 
     private void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
