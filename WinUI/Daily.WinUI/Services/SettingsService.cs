@@ -59,27 +59,45 @@ public static class SettingsService
 
     private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
+    private static AppSettings? _cachedSettings;
+    private static readonly object _lock = new();
+
     public static AppSettings Load()
     {
-        try
+        lock (_lock)
         {
-            if (File.Exists(_path))
+            if (_cachedSettings != null)
             {
-                var json = File.ReadAllText(_path);
-                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                return _cachedSettings;
             }
+
+            try
+            {
+                if (File.Exists(_path))
+                {
+                    var json = File.ReadAllText(_path);
+                    _cachedSettings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                    return _cachedSettings;
+                }
+            }
+            catch { }
+
+            _cachedSettings = new AppSettings();
+            return _cachedSettings;
         }
-        catch { }
-        return new AppSettings();
     }
 
     public static void Save(AppSettings settings)
     {
-        try
+        lock (_lock)
         {
-            Directory.CreateDirectory(_dir);
-            File.WriteAllText(_path, JsonSerializer.Serialize(settings, _jsonOptions));
+            _cachedSettings = settings;
+            try
+            {
+                Directory.CreateDirectory(_dir);
+                File.WriteAllText(_path, JsonSerializer.Serialize(settings, _jsonOptions));
+            }
+            catch { }
         }
-        catch { }
     }
 }
