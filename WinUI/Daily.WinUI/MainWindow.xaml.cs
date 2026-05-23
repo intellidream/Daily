@@ -266,6 +266,39 @@ public sealed partial class MainWindow : Window
 
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    private (int left, int top, int right, int bottom) GetWindowMargins()
+    {
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        if (GetWindowRect(hwnd, out RECT windowRect) &&
+            DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT frameRect, Marshal.SizeOf(typeof(RECT))) == 0)
+        {
+            int left = frameRect.Left - windowRect.Left;
+            int top = frameRect.Top - windowRect.Top;
+            int right = windowRect.Right - frameRect.Right;
+            int bottom = windowRect.Bottom - frameRect.Bottom;
+            return (left, top, right, bottom);
+        }
+        return (7, 0, 7, 7); // Default fallback margins for Windows 10/11 standard borders
+    }
+
     private void ConfigureStartupWindow()
     {
         if (AppWindow.Presenter is OverlappedPresenter overlappedPresenter)
@@ -304,15 +337,16 @@ public sealed partial class MainWindow : Window
     {
         if (!args.DidPositionChange && !args.DidSizeChange) return;
 
-        // Enforce minimum window size (500×500 logical px, converted to physical)
+        // Enforce minimum window size (400×400 logical px, converted to physical)
         double scale = this.Content?.XamlRoot?.RasterizationScale ?? 1.0;
-        int minPx = (int)(500 * scale);
+        int minWidthPx = (int)(400 * scale);
+        int minHeightPx = (int)(400 * scale);
         var size = sender.Size;
-        if (size.Width < minPx || size.Height < minPx)
+        if (size.Width < minWidthPx || size.Height < minHeightPx)
         {
             sender.ResizeClient(new SizeInt32(
-                Math.Max(size.Width,  minPx),
-                Math.Max(size.Height, minPx)));
+                Math.Max(size.Width,  minWidthPx),
+                Math.Max(size.Height, minHeightPx)));
             return; // ResizeClient fires another Changed — skip saving on the clamped event
         }
 
@@ -364,11 +398,15 @@ public sealed partial class MainWindow : Window
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         double scale = GetDpiForWindow(hwnd) / 96.0;
 
-        int width = Math.Min((int)(1380 * scale), workArea.Width);
-        int height = Math.Min((int)(790 * scale), workArea.Height);
+        int targetWidth = Math.Min((int)(1380 * scale), workArea.Width);
+        int targetHeight = Math.Min((int)(790 * scale), workArea.Height);
 
-        int x = workArea.X + (workArea.Width - width) / 2;
-        int y = workArea.Y + workArea.Height - height;
+        var margins = GetWindowMargins();
+
+        int x = workArea.X + (workArea.Width - targetWidth) / 2 - margins.left;
+        int y = workArea.Y + workArea.Height - targetHeight - margins.top;
+        int width = targetWidth + margins.left + margins.right;
+        int height = targetHeight + margins.top + margins.bottom;
 
         AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
     }
@@ -381,11 +419,15 @@ public sealed partial class MainWindow : Window
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         double scale = GetDpiForWindow(hwnd) / 96.0;
 
-        int width = Math.Min((int)(480 * scale), workArea.Width);
-        int height = workArea.Height;
+        int targetWidth = Math.Min((int)(480 * scale), workArea.Width);
+        int targetHeight = workArea.Height;
 
-        int x = workArea.X;
-        int y = workArea.Y;
+        var margins = GetWindowMargins();
+
+        int x = workArea.X - margins.left;
+        int y = workArea.Y - margins.top;
+        int width = targetWidth + margins.left + margins.right;
+        int height = targetHeight + margins.top + margins.bottom;
 
         AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
     }
@@ -398,11 +440,15 @@ public sealed partial class MainWindow : Window
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         double scale = GetDpiForWindow(hwnd) / 96.0;
 
-        int width = Math.Min((int)(480 * scale), workArea.Width);
-        int height = workArea.Height;
+        int targetWidth = Math.Min((int)(480 * scale), workArea.Width);
+        int targetHeight = workArea.Height;
 
-        int x = workArea.X + workArea.Width - width;
-        int y = workArea.Y;
+        var margins = GetWindowMargins();
+
+        int x = workArea.X + workArea.Width - targetWidth - margins.left;
+        int y = workArea.Y - margins.top;
+        int width = targetWidth + margins.left + margins.right;
+        int height = targetHeight + margins.top + margins.bottom;
 
         AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
     }
