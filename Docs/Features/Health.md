@@ -29,8 +29,14 @@ Aggregates and organizes 35+ metrics into structured categories:
 - **Sync Status**: Displays relative timestamps indicating when the biometric sync occurred (e.g. "Synced 5m ago"), falling back to row update times if sync logs are unavailable.
 
 ### 1.4 Historical Trends (Past 7 Days)
-- Renders historical trends inside a collapsible panel.
-- To prevent today's incomplete/in-progress metrics (e.g. partial step counts) from skewing the graph downward, the trend line calculations explicitly query and display data for the **past 7 completed days**, skipping the current day entirely.
+- **6-Metric Trends Catalog**: Displays trends for Steps, Heart Rate, Sleep, Active Energy (Calories), Weight, and Heart Rate Variability (HRV).
+- **Incomplete Day Filtering**: To prevent today's incomplete/in-progress metrics (e.g. partial step counts) from skewing the graph downward, the trend calculations explicitly query and display data for the **past 7 completed days**, skipping the current day.
+- **Vitals Stats Grid**: Under each line graph, a compact stats panel displays key historical statistics:
+  - **Steps / Calories**: AVG, HIGH, LOW, and TOTAL.
+  - **Heart Rate / Sleep / Weight / HRV**: AVG, HIGH, LOW, and TODAY's latest value.
+- **Daily Capsule Bar Charts**: Under the stats panel, a custom daily breakdown shows a horizontal list of 7 vertical capsule bars representing daily totals/values:
+  - Cumulative metrics (Steps, Calories, Sleep) are scaled linearly against the maximum value in the range.
+  - Spot/fluctuating metrics (Heart Rate, Weight, HRV) are normalized using a range-based formula `((val - min) / (max - min)) * 50.0` clamped between 15% and 100% height to emphasize relative daily fluctuations rather than absolute zeros.
 
 ---
 
@@ -74,8 +80,14 @@ CREATE TABLE public.vitals (
 - **Vitals Hero Ring**: Displays circular progress rings for Steps, Calories, and Sleep.
 - **Breathing Guides (Lungs Control)**: In WinUI, the health section features an interactive breathing exercises panel (`LungsControl.cs`). It uses WinUI composition animations to dynamically expand and contract circles, guiding users through inhale/hold/exhale breathing exercises.
 
-### 3.2 Trend Charts
-- Employs light sparkline trend charts for Steps (orange), Sleep (purple), and Heart Rate (red). If no data points exist in the 7-day completed window, it displays a placeholder.
+### 3.2 Trend Charts & Breakdown
+- Employs light sparkline trend charts for Steps (orange), Heart Rate (red), Sleep (purple), Active Energy (orange), Weight (blue), and HRV (purple). If no data points exist in the 7-day completed window, it displays a placeholder.
+- Contains a compact Stats Grid and a custom 7-day capsule bar chart breakdown under each line chart.
+
+### 3.3 Adaptive Responsive Layout
+- **Visual State Transitions**: The details dashboard integrates a VisualStateManager layout controller targeting a trigger threshold of `850px`:
+  - **Wide Layout (Width >= 850px)**: Split-screen column setup (2* Hero / 3* Vitals Grid) and a 3-row, 2-column Grid arrangement for the 6 trend cards.
+  - **Narrow Layout (Width < 850px)**: Columns stack vertically into a single-column layout (spans 3 columns, spacers set to 0 width), and the 6 trend cards shift to separate rows (0 through 5) in a vertical stack to optimize vertical space on smaller screens or snapped windows.
 
 ---
 
@@ -87,4 +99,4 @@ CREATE TABLE public.vitals (
 | **Vitals Store** | Fallback to `MockHealthService.cs` (or queries Supabase database for synced data) | Hooks into iOS `HealthKitService` and Android `HealthConnectService` native libraries |
 | **Breathing Control** | Native XAML custom shape rendering (`LungsControl.cs`) | Simplified static card grids (does not include the breathing animation) |
 | **Manual Logs** | Desktop manual logging modals using standard WinUI XAML dialogs | MudBlazor forms and dialog overlays |
-| **Charts** | Custom XAML path-drawn lines | MudBlazor chart controls (`MudChart` line/bar visualizers) |
+| **Charts & Trends** | Syncfusion line charts with a compact Stats Grid and a custom daily breakdown capsule bar chart | MudBlazor chart controls (`MudChart` line/bar visualizers) |
