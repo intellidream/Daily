@@ -6,15 +6,16 @@ namespace Daily_WinUI.Controls
 {
     public class WidgetTemplateSelector : DataTemplateSelector
     {
-        public DataTemplate WeatherTemplate { get; set; }
-        public DataTemplate FinancesTemplate { get; set; }
-        public DataTemplate HabitsTemplate { get; set; }
-        public DataTemplate HealthTemplate { get; set; }
-        public DataTemplate CalendarTemplate { get; set; }
-        public DataTemplate RssFeedTemplate { get; set; }
-        public DataTemplate NotesTemplate { get; set; }
-        public DataTemplate MediaTemplate { get; set; }
-        public DataTemplate SystemInfoTemplate { get; set; }
+        public DataTemplate WeatherTemplate { get; set; } = null!;
+        public DataTemplate FinancesTemplate { get; set; } = null!;
+        public DataTemplate HabitsTemplate { get; set; } = null!;
+        public DataTemplate HealthTemplate { get; set; } = null!;
+        public DataTemplate CalendarTemplate { get; set; } = null!;
+        public DataTemplate RssFeedTemplate { get; set; } = null!;
+        public DataTemplate NotesTemplate { get; set; } = null!;
+        public DataTemplate MediaTemplate { get; set; } = null!;
+        public DataTemplate SystemInfoTemplate { get; set; } = null!;
+        public DataTemplate NewsRecommendationsTemplate { get; set; } = null!;
 
         protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
         {
@@ -31,6 +32,7 @@ namespace Daily_WinUI.Controls
                     case "NotesWidget": return NotesTemplate;
                     case "MediaWidget": return MediaTemplate;
                     case "SystemInfoWidget": return SystemInfoTemplate;
+                    case "NewsRecommendationsWidget": return NewsRecommendationsTemplate;
                 }
             }
             return base.SelectTemplateCore(item, container);

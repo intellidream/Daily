@@ -66,7 +66,14 @@
             </Border>
         </DataTemplate>
 
+        <DataTemplate x:Key="NewsRecommendationsWidgetTemplate">
+            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
+                <controls:NewsRecommendationsWidgetControl />
+            </Border>
+        </DataTemplate>
+
         <controls:WidgetTemplateSelector x:Key="WidgetSelector"
+            NewsRecommendationsTemplate="{StaticResource NewsRecommendationsWidgetTemplate}"
             WeatherTemplate="{StaticResource WeatherWidgetTemplate}"
             FinancesTemplate="{StaticResource FinancesWidgetTemplate}"
             HabitsTemplate="{StaticResource HabitsWidgetTemplate}"
@@ -164,29 +171,25 @@
         </Grid>
 
         <!-- Smart Briefing Overlay -->
-        <Grid x:Name="SmartBriefingOverlay" Visibility="Collapsed" Background="#C8000000" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+        <Grid x:Name="SmartBriefingOverlay" Visibility="Collapsed" Background="{ThemeResource AppBriefingOverlayBackgroundBrush}" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
             <!-- Glass Overlay Card -->
-            <Border Width="950" Height="620" 
-                    Background="{ThemeResource AppGlassColorBrush}" 
-                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
-                    BorderThickness="1" 
-                    CornerRadius="24"
-                    Padding="32" 
-                    VerticalAlignment="Center" 
-                    HorizontalAlignment="Center"
-                    Translation="0,0,32">
+            <Border x:Name="BriefingCardBorder" MaxWidth="1400" MaxHeight="900" Margin="24"
+                    Background="{ThemeResource AppBriefingGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppBriefingGlassBorderColorBrush}"
+                    BorderThickness="1" CornerRadius="24" Padding="32" Translation="0,0,32"
+                    VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
                 <Border.Shadow>
                     <ThemeShadow />
                 </Border.Shadow>
                 
-                <Grid>
+                <Grid x:Name="BriefingGrid">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="3*" /> <!-- Left Panel: text narrative -->
                         <ColumnDefinition Width="2*" /> <!-- Right Panel: visual cards -->
                     </Grid.ColumnDefinitions>
                     
                     <!-- Left Column: Narratives -->
-                    <Grid Grid.Column="0" Margin="0,0,24,0">
+                    <Grid x:Name="BriefingNarrativePanel" Grid.Column="0" Margin="0,0,24,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/> <!-- Greeting -->
                             <RowDefinition Height="*"/>    <!-- Typing Text Area -->
@@ -245,27 +248,25 @@
                             </StackPanel>
                         </Border>
                         
-                        <!-- Actions / Close -->
-                        <Grid Grid.Row="3">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <CheckBox x:Name="ShowBriefingStartupCheck" Content="Show at startup" IsChecked="True" Checked="ShowBriefingStartupCheck_Changed" Unchecked="ShowBriefingStartupCheck_Changed" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Content="Start My Day" Click="CloseBriefing_Click" Style="{ThemeResource AccentButtonStyle}" Padding="20,8" CornerRadius="8" FontSize="14" FontWeight="SemiBold"/>
-                        </Grid>
+                        <!-- Actions / Close (Centered Layout) -->
+                        <StackPanel Grid.Row="3" HorizontalAlignment="Center" Spacing="8" Margin="0,8,0,0">
+                            <Button Content="Start My Day" Click="CloseBriefing_Click" Style="{ThemeResource AccentButtonStyle}" Padding="32,10" CornerRadius="8" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                            <CheckBox x:Name="ShowBriefingStartupCheck" Content="Show at startup" IsChecked="True" Checked="ShowBriefingStartupCheck_Changed" Unchecked="ShowBriefingStartupCheck_Changed" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center"/>
+                        </StackPanel>
                     </Grid>
                     
-                    <!-- Right Column: 4 Visual Cards (Weather, Health, Finances, Habits) -->
-                    <Grid Grid.Column="1" VerticalAlignment="Stretch">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                    <!-- Right Column: Visual Cards with ScrollViewer -->
+                    <ScrollViewer x:Name="BriefingWidgetsPanel" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <Grid Margin="0,0,12,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                         
                         <!-- Card 1: Weather (Row 0, Col 0) -->
                         <Border x:Name="BriefingWeatherCard" Grid.Row="0" Grid.Column="0" 
@@ -469,8 +470,24 @@
                                     </StackPanel>
                                 </Grid>
                             </Grid>
-                        </Border>
-                    </Grid>
+                            </Border>
+
+                            <!-- Card 5: News recommendations (Row 2, Col 0, ColSpan 2) -->
+                            <Border x:Name="BriefingNewsCard" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" 
+                                    Background="{ThemeResource AppGlassSubColorBrush}" 
+                                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                    BorderThickness="1" 
+                                    CornerRadius="16" 
+                                    Margin="6" 
+                                    Opacity="0" 
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="NewsCardTransform" Y="30"/>
+                                </Border.RenderTransform>
+                                <controls:NewsRecommendationsWidgetControl x:Name="BriefingNewsWidget" />
+                            </Border>
+                        </Grid>
+                    </ScrollViewer>
                 </Grid>
             </Border>
             
@@ -503,6 +520,16 @@
                         </DoubleAnimation.EasingFunction>
                     </DoubleAnimation>
                 </Storyboard>
+                <!-- Storyboard for News Card -->
+                <Storyboard x:Name="FadeInNewsStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="BriefingNewsCard" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.5"/>
+                    <DoubleAnimation Storyboard.TargetName="NewsCardTransform" Storyboard.TargetProperty="Y" From="30" To="0" Duration="0:0:0.5">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+
                 <!-- Storyboard for Habits Card -->
                 <Storyboard x:Name="FadeInHabitsStoryboard">
                     <DoubleAnimation Storyboard.TargetName="BriefingHabitsCard" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.5"/>

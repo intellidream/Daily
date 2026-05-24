@@ -78,6 +78,45 @@
                     <Button Grid.Column="1" Content="Toggle Theme" Click="ToggleThemeButton_Click" VerticalAlignment="Center" Margin="12,0,0,0"/>
                 </Grid>
             </Border>
+
+            <!-- Local AI Engine Settings Card -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <StackPanel Spacing="16">
+                    <RelativePanel>
+                        <StackPanel x:Name="AcceleratorTextPanel" Spacing="4" RelativePanel.AlignLeftWithPanel="True" RelativePanel.LeftOf="SettingsAiAcceleratorCombo">
+                            <TextBlock Text="Local AI Accelerator (NPU)" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Select the hardware device for local on-device smart features." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                            <TextBlock x:Name="SettingsAiDeviceStatusText" Text="AI Core: Qualcomm Hexagon NPU | Ready" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" Margin="0,4,0,0" />
+                        </StackPanel>
+                        <ComboBox x:Name="SettingsAiAcceleratorCombo" Width="200" SelectionChanged="SettingsAiAcceleratorCombo_SelectionChanged" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignVerticalCenterWithPanel="True" Margin="12,0,0,0">
+                            <ComboBoxItem Content="Auto (Recommended)" Tag="Auto" />
+                            <ComboBoxItem Content="Qualcomm Hexagon NPU" Tag="NPU" />
+                            <ComboBoxItem Content="Intel AI Boost / AMD IPU" Tag="NPU_IntelAmd" />
+                            <ComboBoxItem Content="DirectML GPU Accelerator" Tag="GPU" />
+                            <ComboBoxItem Content="DirectML CPU (Slow)" Tag="CPU" />
+                        </ComboBox>
+                    </RelativePanel>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    
+                    <RelativePanel>
+                        <StackPanel x:Name="DownloadTextPanel" Spacing="4" RelativePanel.AlignLeftWithPanel="True" RelativePanel.LeftOf="SettingsDownloadModelBtn">
+                            <TextBlock Text="Bring Your Own AI (ONNX Weights)" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="On-device models require local ONNX weights (1.2GB package) for generation." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button x:Name="SettingsDownloadModelBtn" Content="Download AI Pack" Click="SettingsDownloadModelBtn_Click" Style="{ThemeResource AccentButtonStyle}" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignVerticalCenterWithPanel="True" Margin="12,0,0,0" />
+                    </RelativePanel>
+                    
+                    <StackPanel x:Name="SettingsDownloadProgressGrid" Visibility="Collapsed" Spacing="4">
+                        <ProgressBar x:Name="SettingsDownloadProgressBar" Minimum="0" Maximum="100" Value="0" Height="4" Margin="0,4" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" />
+                        <TextBlock x:Name="SettingsDownloadStatusText" Text="Downloading..." FontSize="11" Opacity="0.7" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
             
         </StackPanel>
     </ScrollViewer>

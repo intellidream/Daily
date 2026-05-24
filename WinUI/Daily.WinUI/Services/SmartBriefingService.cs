@@ -27,6 +27,13 @@ namespace Daily_WinUI.Services
         public string FormattedChange => (PercentChange >= 0 ? "+" : "") + PercentChange.ToString("F2") + "%";
     }
 
+    public sealed class NewsRecommendationData
+    {
+        public string Title { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
     public sealed class SmartBriefingData
     {
         public string Greeting { get; set; } = string.Empty;
@@ -50,6 +57,9 @@ namespace Daily_WinUI.Services
         // Habits
         public int HabitsTotal { get; set; }
         public int HabitsCompleted { get; set; }
+
+        // News Recommendations
+        public List<NewsRecommendationData> NewsRecommendations { get; set; } = new();
     }
 
     public sealed class SmartBriefingService
@@ -59,6 +69,7 @@ namespace Daily_WinUI.Services
         private readonly IHealthService? _healthService;
         private readonly IFinancesService? _financesService;
         private readonly IHabitsService? _habitsService;
+        private readonly IRssFeedService? _rssFeedService;
 
         public SmartBriefingService()
         {
@@ -67,6 +78,7 @@ namespace Daily_WinUI.Services
                 _healthService = App.Current.Services.GetService(typeof(IHealthService)) as IHealthService;
                 _financesService = App.Current.Services.GetService(typeof(IFinancesService)) as IFinancesService;
                 _habitsService = App.Current.Services.GetService(typeof(IHabitsService)) as IHabitsService;
+                _rssFeedService = App.Current.Services.GetService(typeof(IRssFeedService)) as IRssFeedService;
             }
             catch (Exception ex)
             {
@@ -171,7 +183,7 @@ namespace Daily_WinUI.Services
                 if (stepsMetric != null) steps = (int)stepsMetric.Value;
                 
                 var sleepMetric = await _healthService.GetLatestMetricAsync(VitalType.SleepDuration);
-                if (sleepMetric != null) sleep = sleepMetric.Value;
+                if (sleepMetric != null) sleep = SettingsService.ConvertSleepToHours(sleepMetric.Value, sleepMetric.Unit);
 
                 var hrMetric = await _healthService.GetLatestMetricAsync(VitalType.HeartRate);
                 if (hrMetric != null) heartRate = (int)hrMetric.Value;
@@ -275,7 +287,46 @@ namespace Daily_WinUI.Services
                 habitsSentence = $"You've completed {habitsCompleted} of your {habitsTotal} habits today. Stay consistent and keep the streak alive!";
             }
 
-            // 6. Assemble Full Briefing Text
+            // 6. News AI Recommendations
+            if (_rssFeedService != null && _rssFeedService.Items != null && _rssFeedService.Items.Count > 0)
+            {
+                int count = 0;
+                foreach (var item in _rssFeedService.Items)
+                {
+                    string categoryReason = "Recommended from your feed";
+                    if (!string.IsNullOrEmpty(item.PublicationName))
+                    {
+                        categoryReason = $"Top story from {item.PublicationName}";
+                    }
+
+                    data.NewsRecommendations.Add(new NewsRecommendationData
+                    {
+                        Title = item.Title,
+                        Source = item.PublicationName ?? "RSS Feed",
+                        Reason = categoryReason
+                    });
+                    count++;
+                    if (count >= 2) break;
+                }
+            }
+
+            if (data.NewsRecommendations.Count == 0)
+            {
+                data.NewsRecommendations.Add(new NewsRecommendationData
+                {
+                    Title = "The Rise of On-Device AI: NPUs and Privacy",
+                    Source = "Wired",
+                    Reason = "Top story in Technology"
+                });
+                data.NewsRecommendations.Add(new NewsRecommendationData
+                {
+                    Title = "Global Markets Rally Amid Economic Forecasts",
+                    Source = "Bloomberg",
+                    Reason = "Based on your Finance watchlist interest"
+                });
+            }
+
+            // 7. Assemble Full Briefing Text
             StringBuilder sb = new StringBuilder();
             sb.Append("Here is your Local AI Smart Briefing for today.\n\n");
             sb.Append(weatherSentence);
@@ -285,6 +336,10 @@ namespace Daily_WinUI.Services
             sb.Append(financeSentence);
             sb.Append(" ");
             sb.Append(habitsSentence);
+            sb.Append("\n\n");
+            sb.Append("Lastly, we found a couple of interesting articles in your feed you might like: ");
+            sb.Append($"\"{data.NewsRecommendations[0].Title}\" from {data.NewsRecommendations[0].Source}, and ");
+            sb.Append($"\"{data.NewsRecommendations[1].Title}\" from {data.NewsRecommendations[1].Source}.");
             sb.Append("\n\nHave a highly productive day!");
 
             data.BriefingText = sb.ToString();

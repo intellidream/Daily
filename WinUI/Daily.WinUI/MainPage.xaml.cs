@@ -41,6 +41,7 @@ public sealed partial class MainPage : Page
         _authService = App.Current.Services.GetRequiredService<WinUIAuthService>();
         _widgetService = App.Current.Services.GetRequiredService<WinUIWidgetService>();
         Loaded += MainPage_Loaded;
+        SizeChanged += MainPage_SizeChanged;
         Unloaded += (_, _) => 
         {
             WeatherBannerService.WeatherConditionChanged -= OnWeatherConditionChanged;
@@ -519,6 +520,9 @@ public sealed partial class MainPage : Page
 
     public async void ShowSmartBriefing()
     {
+        // Update layout based on current actual width
+        UpdateBriefingLayout(ActualWidth);
+
         // Cancel any active typewriter or download timers
         _typewriterTimer?.Stop();
         _downloadTimer?.Stop();
@@ -603,14 +607,21 @@ public sealed partial class MainPage : Page
         BriefingHabitsProgressText.Text = $"{data.HabitsCompleted}/{data.HabitsTotal}";
 
         // Configure local AI Engine device status bar
+        string npu = SettingsService.GetDetectedNpuName();
+        string activeDevice = settings.SelectedAiAccelerator ?? "Auto";
+        string activeLabel = activeDevice == "Auto" ? npu : 
+                            (activeDevice == "NPU" ? "Qualcomm Hexagon NPU (45 TOPS)" :
+                            (activeDevice == "NPU_IntelAmd" ? "Intel(R) AI Boost NPU (48 TOPS)" :
+                            (activeDevice == "GPU" ? "DirectML GPU Accelerator" : "DirectML CPU (Slow)")));
+
         if (settings.LocalAiModelDownloaded)
         {
-            AiDeviceStatusText.Text = "AI Core: Qualcomm Hexagon NPU | Local Engine Active";
+            AiDeviceStatusText.Text = $"AI Core: {activeLabel} | Local Engine Active";
             DownloadModelBtn.Visibility = Visibility.Collapsed;
         }
         else
         {
-            AiDeviceStatusText.Text = "AI Core: Qualcomm Hexagon NPU | Local Model Missing";
+            AiDeviceStatusText.Text = $"AI Core: {activeLabel} | Local Model Missing";
             DownloadModelBtn.Visibility = Visibility.Visible;
         }
 
@@ -623,6 +634,8 @@ public sealed partial class MainPage : Page
         FinancesCardTransform.Y = 30;
         BriefingHabitsCard.Opacity = 0;
         HabitsCardTransform.Y = 30;
+        BriefingNewsCard.Opacity = 0;
+        NewsCardTransform.Y = 30;
 
         // Show Briefing Overlay Grid
         SmartBriefingOverlay.Visibility = Visibility.Visible;
@@ -647,12 +660,14 @@ public sealed partial class MainPage : Page
                 // Animate visual cards in as typewriter milestones are reached
                 if (percent >= 0.20 && BriefingWeatherCard.Opacity == 0)
                     FadeInWeatherStoryboard.Begin();
-                if (percent >= 0.45 && BriefingHealthCard.Opacity == 0)
+                if (percent >= 0.40 && BriefingHealthCard.Opacity == 0)
                     FadeInHealthStoryboard.Begin();
-                if (percent >= 0.70 && BriefingFinancesCard.Opacity == 0)
+                if (percent >= 0.60 && BriefingFinancesCard.Opacity == 0)
                     FadeInFinancesStoryboard.Begin();
-                if (percent >= 0.90 && BriefingHabitsCard.Opacity == 0)
+                if (percent >= 0.80 && BriefingHabitsCard.Opacity == 0)
                     FadeInHabitsStoryboard.Begin();
+                if (percent >= 0.92 && BriefingNewsCard.Opacity == 0)
+                    FadeInNewsStoryboard.Begin();
             }
             else
             {
@@ -662,6 +677,7 @@ public sealed partial class MainPage : Page
                 if (BriefingHealthCard.Opacity == 0) FadeInHealthStoryboard.Begin();
                 if (BriefingFinancesCard.Opacity == 0) FadeInFinancesStoryboard.Begin();
                 if (BriefingHabitsCard.Opacity == 0) FadeInHabitsStoryboard.Begin();
+                if (BriefingNewsCard.Opacity == 0) FadeInNewsStoryboard.Begin();
             }
         };
         _typewriterTimer.Start();
@@ -719,13 +735,81 @@ public sealed partial class MainPage : Page
                 SettingsService.Save(settings);
 
                 DownloadProgressGrid.Visibility = Visibility.Collapsed;
-                AiDeviceStatusText.Text = "AI Core: Qualcomm Hexagon NPU | Local Engine Active";
+
+                string npu = SettingsService.GetDetectedNpuName();
+                string activeDevice = settings.SelectedAiAccelerator ?? "Auto";
+                string activeLabel = activeDevice == "Auto" ? npu : 
+                                    (activeDevice == "NPU" ? "Qualcomm Hexagon NPU (45 TOPS)" :
+                                    (activeDevice == "NPU_IntelAmd" ? "Intel(R) AI Boost NPU (48 TOPS)" :
+                                    (activeDevice == "GPU" ? "DirectML GPU Accelerator" : "DirectML CPU (Slow)")));
+                AiDeviceStatusText.Text = $"AI Core: {activeLabel} | Local Engine Active";
 
                 // Restart summary compilation with updated engine status
                 ShowSmartBriefing();
             }
         };
         _downloadTimer.Start();
+    }
+
+    private void MainPage_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateBriefingLayout(e.NewSize.Width);
+    }
+
+    private void UpdateBriefingLayout(double width)
+    {
+        if (BriefingGrid == null || BriefingNarrativePanel == null || BriefingWidgetsPanel == null || BriefingCardBorder == null)
+            return;
+
+        if (width < 850)
+        {
+            // Narrow/docked layout: Stack vertically
+            if (BriefingGrid.ColumnDefinitions.Count > 1)
+            {
+                BriefingGrid.ColumnDefinitions.Clear();
+                BriefingGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            }
+            
+            if (BriefingGrid.RowDefinitions.Count < 2)
+            {
+                BriefingGrid.RowDefinitions.Clear();
+                BriefingGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                BriefingGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            }
+            
+            Grid.SetColumn(BriefingNarrativePanel, 0);
+            Grid.SetRow(BriefingNarrativePanel, 0);
+            BriefingNarrativePanel.Margin = new Thickness(0, 0, 0, 16);
+            
+            Grid.SetColumn(BriefingWidgetsPanel, 0);
+            Grid.SetRow(BriefingWidgetsPanel, 1);
+
+            BriefingCardBorder.Margin = new Thickness(6);
+        }
+        else
+        {
+            // Wide layout: Side-by-side
+            if (BriefingGrid.ColumnDefinitions.Count < 2)
+            {
+                BriefingGrid.ColumnDefinitions.Clear();
+                BriefingGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
+                BriefingGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+            }
+            
+            if (BriefingGrid.RowDefinitions.Count > 0)
+            {
+                BriefingGrid.RowDefinitions.Clear();
+            }
+            
+            Grid.SetColumn(BriefingNarrativePanel, 0);
+            Grid.SetRow(BriefingNarrativePanel, 0);
+            BriefingNarrativePanel.Margin = new Thickness(0, 0, 24, 0);
+            
+            Grid.SetColumn(BriefingWidgetsPanel, 1);
+            Grid.SetRow(BriefingWidgetsPanel, 0);
+
+            BriefingCardBorder.Margin = new Thickness(24);
+        }
     }
 }
 

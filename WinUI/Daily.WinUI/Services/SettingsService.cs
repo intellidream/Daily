@@ -35,6 +35,7 @@ public sealed class AppSettings
     public bool CloseToTray { get; set; } = false;
     public bool EnableSmartBriefing { get; set; } = true;
     public bool LocalAiModelDownloaded { get; set; } = false;
+    public string SelectedAiAccelerator { get; set; } = "Auto";
     /// <summary>Saved position per detail page type name (e.g. "WeatherDetailPage").</summary>
     public Dictionary<string, DetailWindowPosition> DetailWindowPositions { get; set; } = new();
 }
@@ -101,5 +102,81 @@ public static class SettingsService
             }
             catch { }
         }
+    }
+
+    public static string GetDetectedNpuName()
+    {
+        try
+        {
+            using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0"))
+            {
+                if (key != null)
+                {
+                    var name = key.GetValue("ProcessorNameString")?.ToString();
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        if (name.Contains("Snapdragon") || name.Contains("Qualcomm") || name.Contains("SQ3") || name.Contains("SQ2"))
+                        {
+                            return "Qualcomm Hexagon NPU (45 TOPS)";
+                        }
+                        if (name.Contains("Ultra") || name.Contains("Intel") && (name.Contains("Core(TM) Ultra") || name.Contains("Lunar Lake")))
+                        {
+                            return "Intel(R) AI Boost NPU (48 TOPS)";
+                        }
+                        if (name.Contains("Ryzen") || name.Contains("AMD") && (name.Contains("AI") || name.Contains("Strix Point") || name.Contains("7840") || name.Contains("8840")))
+                        {
+                            return "AMD Ryzen AI NPU (50 TOPS)";
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        return "Qualcomm Hexagon NPU (45 TOPS)";
+    }
+
+    public static double ConvertSleepToHours(double value, string? unit)
+    {
+        if (value <= 0) return 0;
+        
+        if (string.IsNullOrEmpty(unit))
+        {
+            // Auto-detect based on magnitude
+            if (value > 2000)
+            {
+                // Likely seconds (e.g. 25000s = 6.94h)
+                return value / 3600.0;
+            }
+            else if (value > 24)
+            {
+                // Likely minutes (e.g. 450m = 7.5h)
+                return value / 60.0;
+            }
+            return value; // Likely hours
+        }
+
+        var normalizedUnit = unit.ToLowerInvariant();
+        if (normalizedUnit.Contains("sec") || normalizedUnit == "s")
+        {
+            return value / 3600.0;
+        }
+        if (normalizedUnit.Contains("min") || normalizedUnit == "m")
+        {
+            return value / 60.0;
+        }
+        if (normalizedUnit.Contains("hour") || normalizedUnit == "h")
+        {
+            return value;
+        }
+        
+        // Guess fallback
+        if (value > 2000) return value / 3600.0;
+        if (value > 24) return value / 60.0;
+        return value;
+    }
+
+    public static double ConvertSleepToMinutes(double value, string? unit)
+    {
+        return ConvertSleepToHours(value, unit) * 60.0;
     }
 }

@@ -153,14 +153,45 @@ namespace Daily_WinUI.Controls
             get
             {
                 var m = GetMetric(VitalType.SleepDuration);
-                return FormatSleep(m?.Value ?? 0);
+                return FormatSleep(m?.Value ?? 0, m?.Unit);
             }
         }
 
-        public string DeepSleepText => FormatSleepShort(GetMetric(VitalType.SleepDeep)?.Value ?? 0);
-        public string LightSleepText => FormatSleepShort(GetMetric(VitalType.SleepLight)?.Value ?? 0);
-        public string RemSleepText => FormatSleepShort(GetMetric(VitalType.SleepREM)?.Value ?? 0);
-        public string AwakeSleepText => FormatSleepShort(GetMetric(VitalType.SleepAwake)?.Value ?? 0);
+        public string DeepSleepText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.SleepDeep);
+                return FormatSleepShort(m?.Value ?? 0, m?.Unit);
+            }
+        }
+
+        public string LightSleepText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.SleepLight);
+                return FormatSleepShort(m?.Value ?? 0, m?.Unit);
+            }
+        }
+
+        public string RemSleepText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.SleepREM);
+                return FormatSleepShort(m?.Value ?? 0, m?.Unit);
+            }
+        }
+
+        public string AwakeSleepText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.SleepAwake);
+                return FormatSleepShort(m?.Value ?? 0, m?.Unit);
+            }
+        }
 
         public string HrvText
         {
@@ -226,19 +257,21 @@ namespace Daily_WinUI.Controls
             return val > 0 ? val.ToString("N0") : "--";
         }
 
-        private string FormatSleep(double minutes)
+        private string FormatSleep(double rawValue, string? unit)
         {
-            if (minutes <= 0) return "--";
+            if (rawValue <= 0) return "--";
+            double minutes = Daily_WinUI.Services.SettingsService.ConvertSleepToMinutes(rawValue, unit);
             var ts = TimeSpan.FromMinutes(minutes);
-            return $"{ts.Hours}h {ts.Minutes}m";
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
         }
 
-        private string FormatSleepShort(double minutes)
+        private string FormatSleepShort(double rawValue, string? unit)
         {
-            if (minutes <= 0) return "--";
+            if (rawValue <= 0) return "--";
+            double minutes = Daily_WinUI.Services.SettingsService.ConvertSleepToMinutes(rawValue, unit);
             if (minutes < 60) return $"{(int)minutes}m";
             var ts = TimeSpan.FromMinutes(minutes);
-            return $"{ts.Hours}h{ts.Minutes}m";
+            return $"{(int)ts.TotalHours}h{ts.Minutes}m";
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

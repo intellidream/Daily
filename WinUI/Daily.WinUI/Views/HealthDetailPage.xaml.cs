@@ -155,8 +155,9 @@ namespace Daily_WinUI.Views
                     var hrValue = hrData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
                     hrRawList.Add(hrValue);
 
-                    var sleepMin = sleepData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
-                    sleepRawList.Add(Math.Round(sleepMin / 60.0, 1));
+                    var sleepMetricObj = sleepData.FirstOrDefault(m => m.Date.Date == day);
+                    var sleepHours = sleepMetricObj != null ? Daily_WinUI.Services.SettingsService.ConvertSleepToHours(sleepMetricObj.Value, sleepMetricObj.Unit) : 0;
+                    sleepRawList.Add(Math.Round(sleepHours, 1));
 
                     var calValue = caloriesData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
                     caloriesRawList.Add(calValue);
@@ -458,7 +459,14 @@ namespace Daily_WinUI.Views
                 return Math.Min((val / goal) * 100, 100);
             }
         }
-        public string SleepText => FormatSleep(GetMetric(VitalType.SleepDuration)?.Value ?? 0);
+        public string SleepText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.SleepDuration);
+                return FormatSleep(m?.Value ?? 0, m?.Unit);
+            }
+        }
         
         public string DistanceText => GetMetric(VitalType.Distance)?.Value > 0 ? Math.Round(GetMetric(VitalType.Distance).Value / 1000.0, 2) + " km" : "--";
         public string FloorsText => GetMetric(VitalType.FloorsClimbed)?.Value > 0 ? GetMetric(VitalType.FloorsClimbed).Value.ToString("N0") : "--";
@@ -498,10 +506,38 @@ namespace Daily_WinUI.Views
         public string LeanMassText => GetMetric(VitalType.LeanBodyMass)?.Value > 0 ? GetMetric(VitalType.LeanBodyMass).Value + " kg" : "--";
 
         // Sleep Stages
-        public string DeepSleepText => FormatSleep(GetMetric(VitalType.SleepDeep)?.Value ?? 0);
-        public string LightSleepText => FormatSleep(GetMetric(VitalType.SleepLight)?.Value ?? 0);
-        public string RemSleepText => FormatSleep(GetMetric(VitalType.SleepREM)?.Value ?? 0);
-        public string AwakeSleepText => FormatSleep(GetMetric(VitalType.SleepAwake)?.Value ?? 0);
+        public string DeepSleepText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.SleepDeep);
+                return FormatSleep(m?.Value ?? 0, m?.Unit);
+            }
+        }
+        public string LightSleepText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.SleepLight);
+                return FormatSleep(m?.Value ?? 0, m?.Unit);
+            }
+        }
+        public string RemSleepText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.SleepREM);
+                return FormatSleep(m?.Value ?? 0, m?.Unit);
+            }
+        }
+        public string AwakeSleepText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.SleepAwake);
+                return FormatSleep(m?.Value ?? 0, m?.Unit);
+            }
+        }
         public Microsoft.UI.Xaml.Visibility SleepStagesVisibility => ((GetMetric(VitalType.SleepDeep)?.Value ?? 0) > 0 || (GetMetric(VitalType.SleepLight)?.Value ?? 0) > 0) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
         // Wellness
@@ -534,11 +570,12 @@ namespace Daily_WinUI.Views
 
         private string FormatNumber(double val) => val >= 1000 ? (val / 1000.0).ToString("N1") + "k" : (val > 0 ? val.ToString("N0") : "--");
         
-        private string FormatSleep(double minutes)
+        private string FormatSleep(double rawValue, string? unit = null)
         {
-            if (minutes <= 0) return "--";
+            if (rawValue <= 0) return "--";
+            double minutes = Daily_WinUI.Services.SettingsService.ConvertSleepToMinutes(rawValue, unit);
             var ts = TimeSpan.FromMinutes(minutes);
-            return $"{ts.Hours}h {ts.Minutes}m";
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
         }
 
         private void NotifyAllProperties()

@@ -27,26 +27,38 @@ namespace Daily_WinUI.Services
                 new WidgetModel { Title = "Habits", ComponentType = "HabitsWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "News", ComponentType = "RssFeedWidget", ColumnSpan = 1, RowSpan = 2 },
                 new WidgetModel { Title = "Vitals", ComponentType = "HealthWidget", ColumnSpan = 1, RowSpan = 1 },
-                new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", ColumnSpan = 1, RowSpan = 1 }
+                new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", ColumnSpan = 1, RowSpan = 1 },
+                new WidgetModel { Title = "Recommendations", ComponentType = "NewsRecommendationsWidget", ColumnSpan = 1, RowSpan = 1 }
             };
         }
 
         public Task<List<WidgetModel>> GetWidgetsAsync()
         {
             var json = _settingsService.Settings.WinUIDashboardWidgetsJson;
+            List<WidgetModel> widgets;
             if (string.IsNullOrEmpty(json)) 
             {
-                return Task.FromResult(GetDefaultWidgets());
+                widgets = GetDefaultWidgets();
             }
-            try 
+            else
             {
-                var widgets = Newtonsoft.Json.JsonConvert.DeserializeObject<List<WidgetModel>>(json);
-                return Task.FromResult(widgets ?? GetDefaultWidgets());
+                try 
+                {
+                    widgets = Newtonsoft.Json.JsonConvert.DeserializeObject<List<WidgetModel>>(json) ?? GetDefaultWidgets();
+                }
+                catch 
+                {
+                    widgets = GetDefaultWidgets();
+                }
             }
-            catch 
+
+            // Ensure NewsRecommendationsWidget is present
+            if (!widgets.Any(w => w.ComponentType == "NewsRecommendationsWidget"))
             {
-                return Task.FromResult(GetDefaultWidgets());
+                widgets.Add(new WidgetModel { Title = "Recommendations", ComponentType = "NewsRecommendationsWidget", ColumnSpan = 1, RowSpan = 1 });
             }
+
+            return Task.FromResult(widgets);
         }
 
         public async Task SaveWidgetsAsync(List<WidgetModel> widgets)

@@ -168,13 +168,21 @@ public class OnnxGenAiSmartService : ISmartIntelligenceService
 ## 3. UI/UX & Layout
 
 ### 3.1 Integrated Views & Interacting Panels
-- **News Summary Card**: Added to the bottom of the News Reader Detail View as a collapsible card, containing the reading time badge and bulleted points.
-- **Smart Recommendations Box**: Under Health/Finances Details, an expanding banner labeled **"AI Coach Insights"** displays the generated recommendations with an animating gradient border.
-- **Settings Panel (AI Preferences)**:
-  - Toggle switch for "Enable Local Intelligence".
-  - Provider Selector: `[Auto (Recommended), Windows Copilot Runtime (Phi Silica), Local ONNX Engine, Cloud Fallback]`.
-  - Download Button displaying progress bar for downloading the 1.2GB model binary.
-  - Active device indicator displaying either `Qualcomm Hexagon NPU`, `NVIDIA RTX 4070 GPU`, `Intel Xe Graphics GPU`, or `Generic CPU (Fallback)`.
+- **Smart Briefing Overlay**: A premium welcome screen that overlays the main dashboard (frosted glassmorphism, adapting to light/dark themes).
+  - *Dynamic Typing Narrative*: A Samsung Bixby/Assistant-style text typing block displaying time-adapted greetings and summarized daily highlights.
+  - *Typewriter Animation Milestones*: Visual cards slide up and fade into view sequentially as typing progress metrics are reached:
+    - **20% Progress**: Fades in the *Weather Forecast card* (max temp, 3-day preview).
+    - **40% Progress**: Fades in the *Health & Vitals card* (steps progress, sleep duration, resting heart rate).
+    - **60% Progress**: Fades in the *Finances & Watchlist card* (net worth, ticker changes).
+    - **80% Progress**: Fades in the *Habits Tracker card* (completion ratio, circular progress).
+    - **92% Progress**: Fades in the *AI News Recommendations card* (embedded `NewsRecommendationsWidgetControl` showing custom feed topics).
+  - *Responsive Layout & Docking*: Listens to window resizing to toggle layouts. Wide window widths display narrative and cards side-by-side (24px margins). When docked or resized under 850px width, panels stack vertically with narrow margins (6px margins) to optimize layout density.
+  - *Start My Day Centering*: The primary action button and "Show at startup" checkbox are vertically and horizontally centered in the actions panel.
+- **Settings Panel (AI & Accelerator Preferences)**:
+  - Toggle switch for "Startup Smart Briefing" which saves state immediately.
+  - Local AI Accelerator combo box to select the hardware device (`Auto`, `NPU`, `Intel AI Boost / AMD IPU`, `DirectML GPU`, `CPU Fallback`).
+  - NPU/Hardware engine detection displaying active TOPS metrics and execution provider readiness.
+  - "Download AI Pack" button running simulated download progress bar for the 1.2GB model weights and updating status to "Local Engine Active" on finish.
 
 ---
 

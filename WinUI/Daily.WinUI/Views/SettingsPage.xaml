@@ -23,9 +23,9 @@
             <!-- ── General ─────────────────────────────── -->
             <NavigationViewItemHeader Content="General" />
 
-            <NavigationViewItem Tag="Appearance" Content="Appearance">
+            <NavigationViewItem Tag="General" Content="General Settings">
                 <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE771;" FontFamily="Segoe Fluent Icons"/>
+                    <FontIcon Glyph="&#xE713;" FontFamily="Segoe Fluent Icons"/>
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
 
