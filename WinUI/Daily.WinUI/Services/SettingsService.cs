@@ -38,6 +38,26 @@ public sealed class AppSettings
     public string SelectedAiAccelerator { get; set; } = "Auto";
     /// <summary>Saved position per detail page type name (e.g. "WeatherDetailPage").</summary>
     public Dictionary<string, DetailWindowPosition> DetailWindowPositions { get; set; } = new();
+
+    // ── Smart Behavior Configurations ──
+    public bool EnableSmartBehavior { get; set; } = true;
+    public bool SyncSmartBehaviorToCloud { get; set; } = true;
+
+    // ── News Configurations ──
+    public bool AutoRefreshNewsOnStartup { get; set; } = true;
+    public bool ShowNewsImages { get; set; } = true;
+
+    // ── Health Configurations ──
+    public bool HealthMockDataEnabled { get; set; } = false;
+    public double HealthSleepTargetHours { get; set; } = 8.0;
+
+    // ── Habits Configurations ──
+    public double HabitsWaterTargetLiters { get; set; } = 2.0;
+    public bool HabitsRemindersEnabled { get; set; } = true;
+
+    // ── Finances Configurations ──
+    public string DefaultCurrency { get; set; } = "USD";
+    public bool ShowFinanceStockChangeBadges { get; set; } = true;
 }
 
 public sealed class SavedLocation

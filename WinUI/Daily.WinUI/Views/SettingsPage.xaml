@@ -23,7 +23,7 @@
             <!-- ── General ─────────────────────────────── -->
             <NavigationViewItemHeader Content="General" />
 
-            <NavigationViewItem Tag="General" Content="General Settings">
+            <NavigationViewItem Tag="Features" Content="Features">
                 <NavigationViewItem.Icon>
                     <FontIcon Glyph="&#xE713;" FontFamily="Segoe Fluent Icons"/>
                 </NavigationViewItem.Icon>

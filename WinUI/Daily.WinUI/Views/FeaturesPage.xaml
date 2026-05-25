@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Daily_WinUI.Views.FeaturesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Background="Transparent"
+    mc:Ignorable="d">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,32">
+        <StackPanel MaxWidth="650" HorizontalAlignment="Left" Spacing="24">
+            
+            <TextBlock Text="Features Configuration" FontSize="26" FontWeight="SemiBold" CharacterSpacing="20" Margin="0,0,0,8"/>
+            
+            <!-- Divider -->
+            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+            <!-- SECTION 1: Local Smart Briefing -->
+            <TextBlock Text="Local Smart Briefing" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+            
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Startup Smart Briefing" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Show a personalized AI welcome briefing summary of your day upon launching the application." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="SmartBriefingSwitch" IsOn="True" Toggled="SmartBriefingSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <RelativePanel>
+                        <StackPanel x:Name="AcceleratorTextPanel" Spacing="4" RelativePanel.AlignLeftWithPanel="True" RelativePanel.LeftOf="SettingsAiAcceleratorCombo">
+                            <TextBlock Text="Local AI Accelerator" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Select the hardware device for local on-device smart features." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                            
+                            <!-- Hardware Capabilities details -->
+                            <StackPanel Spacing="2" Margin="0,6,0,0">
+                                <TextBlock x:Name="SettingsCpuModelText" Text="CPU: Unknown Processor" FontSize="11" Opacity="0.8" />
+                                <TextBlock x:Name="SettingsNpuStatusText" Text="NPU: Not Detected" FontSize="11" Opacity="0.8" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" />
+                                <TextBlock x:Name="SettingsAiDeviceStatusText" Text="Active AI Backend: Auto | Local Model Missing" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <ComboBox x:Name="SettingsAiAcceleratorCombo" Width="200" SelectionChanged="SettingsAiAcceleratorCombo_SelectionChanged" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignVerticalCenterWithPanel="True" Margin="12,0,0,0" />
+                    </RelativePanel>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    
+                    <RelativePanel>
+                        <StackPanel x:Name="DownloadTextPanel" Spacing="4" RelativePanel.AlignLeftWithPanel="True" RelativePanel.LeftOf="SettingsDownloadModelBtn">
+                            <TextBlock Text="Bring Your Own AI (ONNX Weights)" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="On-device models require local ONNX weights (1.2GB package) for generation." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button x:Name="SettingsDownloadModelBtn" Content="Download AI Pack" Click="SettingsDownloadModelBtn_Click" Style="{ThemeResource AccentButtonStyle}" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignVerticalCenterWithPanel="True" Margin="12,0,0,0" />
+                    </RelativePanel>
+                    
+                    <StackPanel x:Name="SettingsDownloadProgressGrid" Visibility="Collapsed" Spacing="4">
+                        <ProgressBar x:Name="SettingsDownloadProgressBar" Minimum="0" Maximum="100" Value="0" Height="4" Margin="0,4" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" />
+                        <TextBlock x:Name="SettingsDownloadStatusText" Text="Downloading..." FontSize="11" Opacity="0.7" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- SECTION 2: Smart Behavior Tracking -->
+            <TextBlock Text="Smart Behavior Analytics" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+            
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Smart Behavior Engine" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Trace user habits, reads, and searches across weather, news, finance, vitals, and habits to build a local semantic profile." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="SmartBehaviorSwitch" Toggled="SmartBehaviorSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Sync Behavior to Cloud" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Batch synchronize behavior events to Supabase securely for cross-device analysis." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="SmartBehaviorSyncSwitch" Toggled="SmartBehaviorSyncSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Clear Behavior Data" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Completely erase your tracked behavior events and restart your profile." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button Grid.Column="1" x:Name="SettingsClearBehaviorBtn" Content="Clear History" Click="SettingsClearBehaviorBtn_Click" Style="{ThemeResource DefaultButtonStyle}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- SECTION 3: Configurable Traditional Features -->
+            <TextBlock Text="Traditional Features" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="16">
+                    <!-- Weather -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Weather: Auto location detection" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Always auto-detect your location at startup instead of saving a preferred location." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="WeatherAutoLocationSwitch" Toggled="WeatherAutoLocationSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Weather: Unit system" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Preferred measurement units for temperature and forecast data." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="WeatherUnitSystemCombo" SelectionChanged="WeatherUnitSystemCombo_SelectionChanged" Width="150" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <ComboBoxItem Content="Metric (°C, m/s)" Tag="metric" />
+                            <ComboBoxItem Content="Imperial (°F, mph)" Tag="imperial" />
+                        </ComboBox>
+                    </Grid>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <!-- News -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="News: Auto-refresh on startup" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Automatically refresh your RSS feed subscriptions upon launching." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="NewsAutoRefreshSwitch" Toggled="NewsAutoRefreshSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="News: Show article covers" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Render cover images for RSS stories in lists and reader view cards." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="NewsShowImagesSwitch" Toggled="NewsShowImagesSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <!-- Health -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Health: Enable mock health store" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Simulate vitals history data (steps, heart rate, sleep) for development." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="HealthMockDataSwitch" Toggled="HealthMockDataSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Health: Sleep goal (hours)" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Define your target recovery duration for daily vitals progress tracker." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <Slider x:Name="HealthSleepTargetSlider" Minimum="6.0" Maximum="10.0" StepFrequency="0.5" ValueChanged="HealthSleepTargetSlider_ValueChanged" Width="120" SnapsTo="StepValues" />
+                            <TextBlock x:Name="HealthSleepTargetLabel" Text="8.0h" FontSize="12" FontWeight="SemiBold" Width="35" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        </StackPanel>
+                    </Grid>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <!-- Habits -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Habits: Hydration target (L)" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Daily target water intake for habits tracker logging." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <Slider x:Name="HabitsWaterTargetSlider" Minimum="1.0" Maximum="4.0" StepFrequency="0.25" ValueChanged="HabitsWaterTargetSlider_ValueChanged" Width="120" SnapsTo="StepValues" />
+                            <TextBlock x:Name="HabitsWaterTargetLabel" Text="2.0L" FontSize="12" FontWeight="SemiBold" Width="35" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Habits: Streak notifications" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Enable reminders and warnings to protect active habit streaks." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="HabitsRemindersSwitch" Toggled="HabitsRemindersSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <!-- Finances -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Finances: Default currency" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Primary ledger currency for asset calculation and charts." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="FinancesCurrencyCombo" SelectionChanged="FinancesCurrencyCombo_SelectionChanged" Width="150" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <ComboBoxItem Content="USD ($)" Tag="USD" />
+                            <ComboBoxItem Content="EUR (€)" Tag="EUR" />
+                            <ComboBoxItem Content="GBP (£)" Tag="GBP" />
+                            <ComboBoxItem Content="CAD ($)" Tag="CAD" />
+                            <ComboBoxItem Content="RON (lei)" Tag="RON" />
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Finances: Watchlist badges" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Show green/red stock daily percentage change badges in widgets." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="FinancesShowBadgesSwitch" Toggled="FinancesShowBadgesSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+            
+        </StackPanel>
+    </ScrollViewer>
+</Page>

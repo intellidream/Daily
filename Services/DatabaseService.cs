@@ -66,6 +66,9 @@ namespace Daily.Services
                 
                 // Health (Vitals)
                 await _connection.CreateTableAsync<LocalVitalMetric>().ConfigureAwait(false);
+
+                // Smart Behavior
+                await _connection.CreateTableAsync<SmartBehaviorEvent>().ConfigureAwait(false);
                 
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
                 await AddColumnIfNotExists("user_preferences", "UpdatedAt", "varchar").ConfigureAwait(false);

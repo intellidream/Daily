@@ -9,7 +9,7 @@ public sealed partial class SettingsPage : Page
     {
         { "DayOne",        typeof(AboutPage) },
         // Stub placeholders — replace with real pages when built
-        { "General",       typeof(GeneralSettingsPage) },
+        { "Features",      typeof(FeaturesPage) },
         { "Appearance",    typeof(AppearanceSettingsPage) },
         { "Notifications", typeof(AboutPage) },
         { "Account",       typeof(AboutPage) },
@@ -24,16 +24,16 @@ public sealed partial class SettingsPage : Page
 
     private void SettingsPage_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        // Select "General" by default
+        // Select "Features" by default
         foreach (var item in NavView.MenuItems)
         {
-            if (item is NavigationViewItem navItem && navItem.Tag?.ToString() == "General")
+            if (item is NavigationViewItem navItem && navItem.Tag?.ToString() == "Features")
             {
                 NavView.SelectedItem = navItem;
                 break;
             }
         }
-        NavigateTo("General");
+        NavigateTo("Features");
     }
 
     private void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)

@@ -233,4 +233,27 @@ namespace Daily.Models
         [Indexed]
         public DateTime? SyncedAt { get; set; }
     }
+
+    [Table("smart_behavior_events")]
+    public class SmartBehaviorEvent
+    {
+        [PrimaryKey]
+        public string Id { get; set; } = string.Empty;
+
+        [Indexed]
+        public string UserId { get; set; } = string.Empty;
+
+        [Indexed]
+        public string Feature { get; set; } = string.Empty; // e.g. "Weather", "Finances", "News", "Health", "Habits"
+
+        public string ActionType { get; set; } = string.Empty; // e.g. "View", "Log", "Search", "Summarize"
+
+        public string Metadata { get; set; } = string.Empty; // JSON payload details
+
+        [Indexed]
+        public DateTime Timestamp { get; set; }
+
+        [Indexed]
+        public bool IsSynced { get; set; } = false;
+    }
 }
