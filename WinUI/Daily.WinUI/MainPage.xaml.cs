@@ -30,9 +30,6 @@ public sealed partial class MainPage : Page
     private string _fullBriefingText = string.Empty;
     private int _typewriterIndex = 0;
     private string[] _briefingWords = System.Array.Empty<string>();
-    private bool _downloadInProgress = false;
-    private DispatcherTimer? _downloadTimer;
-    private int _downloadProgressValue = 0;
 
     public MainPage()
     {
@@ -530,8 +527,6 @@ public sealed partial class MainPage : Page
 
         // Cancel any active typewriter or download timers
         _typewriterTimer?.Stop();
-        _downloadTimer?.Stop();
-        DownloadProgressGrid.Visibility = Visibility.Collapsed;
 
         var settings = SettingsService.Load();
         ShowBriefingStartupCheck.IsChecked = settings.EnableSmartBriefing;
@@ -610,25 +605,6 @@ public sealed partial class MainPage : Page
         BriefingHabitsProgress.Maximum = data.HabitsTotal;
         BriefingHabitsProgress.Value = data.HabitsCompleted;
         BriefingHabitsProgressText.Text = $"{data.HabitsCompleted}/{data.HabitsTotal}";
-
-        // Configure local AI Engine device status bar
-        string npu = SettingsService.GetDetectedNpuName();
-        string activeDevice = settings.SelectedAiAccelerator ?? "Auto";
-        string activeLabel = activeDevice == "Auto" ? npu : 
-                            (activeDevice == "NPU" ? "Qualcomm Hexagon NPU (45 TOPS)" :
-                            (activeDevice == "NPU_IntelAmd" ? "Intel(R) AI Boost NPU (48 TOPS)" :
-                            (activeDevice == "GPU" ? "DirectML GPU Accelerator" : "DirectML CPU (Slow)")));
-
-        if (settings.LocalAiModelDownloaded)
-        {
-            AiDeviceStatusText.Text = $"AI Core: {activeLabel} | Local Engine Active";
-            DownloadModelBtn.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            AiDeviceStatusText.Text = $"AI Core: {activeLabel} | Local Model Missing";
-            DownloadModelBtn.Visibility = Visibility.Visible;
-        }
 
         // Reset visual cards state for animation
         BriefingWeatherCard.Opacity = 0;
@@ -745,7 +721,6 @@ public sealed partial class MainPage : Page
     private void CloseBriefing_Click(object sender, RoutedEventArgs e)
     {
         _typewriterTimer?.Stop();
-        _downloadTimer?.Stop();
         SmartBriefingOverlay.Visibility = Visibility.Collapsed;
     }
 
@@ -754,60 +729,6 @@ public sealed partial class MainPage : Page
         var settings = SettingsService.Load();
         settings.EnableSmartBriefing = ShowBriefingStartupCheck.IsChecked ?? false;
         SettingsService.Save(settings);
-    }
-
-    private void DownloadModelBtn_Click(object sender, RoutedEventArgs e)
-    {
-        if (_downloadInProgress) return;
-
-        _downloadInProgress = true;
-        DownloadModelBtn.Visibility = Visibility.Collapsed;
-        DownloadProgressGrid.Visibility = Visibility.Visible;
-        DownloadProgressBar.Value = 0;
-        DownloadStatusText.Text = "Connecting to ONNX AI Model Repository...";
-
-        _downloadProgressValue = 0;
-        _downloadTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
-        _downloadTimer.Tick += (s, ev) =>
-        {
-            _downloadProgressValue += 1;
-            DownloadProgressBar.Value = _downloadProgressValue;
-
-            if (_downloadProgressValue == 15)
-                DownloadStatusText.Text = "Downloading: Qwen-2.5-1.5B-Instruct-INT4 (1.2GB)... 15%";
-            else if (_downloadProgressValue == 40)
-                DownloadStatusText.Text = "Downloading: Qwen-2.5-1.5B-Instruct-INT4 (1.2GB)... 40%";
-            else if (_downloadProgressValue == 70)
-                DownloadStatusText.Text = "Downloading: Qwen-2.5-1.5B-Instruct-INT4 (1.2GB)... 70%";
-            else if (_downloadProgressValue == 90)
-                DownloadStatusText.Text = "Verifying ONNX model signature...";
-            else if (_downloadProgressValue == 96)
-                DownloadStatusText.Text = "Extracting model weights to LocalAppData...";
-            else if (_downloadProgressValue >= 100)
-            {
-                _downloadTimer.Stop();
-                _downloadInProgress = false;
-
-                // Save status
-                var settings = SettingsService.Load();
-                settings.LocalAiModelDownloaded = true;
-                SettingsService.Save(settings);
-
-                DownloadProgressGrid.Visibility = Visibility.Collapsed;
-
-                string npu = SettingsService.GetDetectedNpuName();
-                string activeDevice = settings.SelectedAiAccelerator ?? "Auto";
-                string activeLabel = activeDevice == "Auto" ? npu : 
-                                    (activeDevice == "NPU" ? "Qualcomm Hexagon NPU (45 TOPS)" :
-                                    (activeDevice == "NPU_IntelAmd" ? "Intel(R) AI Boost NPU (48 TOPS)" :
-                                    (activeDevice == "GPU" ? "DirectML GPU Accelerator" : "DirectML CPU (Slow)")));
-                AiDeviceStatusText.Text = $"AI Core: {activeLabel} | Local Engine Active";
-
-                // Restart summary compilation with updated engine status
-                ShowSmartBriefing();
-            }
-        };
-        _downloadTimer.Start();
     }
 
     private void MainPage_SizeChanged(object sender, SizeChangedEventArgs e)

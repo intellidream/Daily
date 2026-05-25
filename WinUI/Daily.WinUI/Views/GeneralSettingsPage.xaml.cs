@@ -1,3 +1,4 @@
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Daily_WinUI.Services;
@@ -21,19 +22,57 @@ public sealed partial class GeneralSettingsPage : Page
 
     private void GeneralSettingsPage_Loaded(object sender, RoutedEventArgs e)
     {
-        // Unregister event during initial load to prevent saving on load
-        CloseToTraySwitch.Toggled -= CloseToTraySwitch_Toggled;
-        CloseToTraySwitch.IsOn = _settings.CloseToTray;
-        CloseToTraySwitch.Toggled += CloseToTraySwitch_Toggled;
-
         SmartBriefingSwitch.Toggled -= SmartBriefingSwitch_Toggled;
         SmartBriefingSwitch.IsOn = _settings.EnableSmartBriefing;
         SmartBriefingSwitch.Toggled += SmartBriefingSwitch_Toggled;
 
-        // Load Accelerator selection
+        // Display detected Hardware Capabilities
+        string cpu = SettingsService.GetProcessorName();
+        SettingsCpuModelText.Text = $"CPU: {cpu}";
+
+        string? npu = SettingsService.GetDetectedNpuName();
+        if (!string.IsNullOrEmpty(npu))
+        {
+            SettingsNpuStatusText.Text = $"NPU: {npu} [Detected]";
+            SettingsNpuStatusText.Foreground = App.Current.Resources.TryGetValue("SystemControlForegroundAccentBrush", out var brush) && brush is Microsoft.UI.Xaml.Media.Brush b ? b : null;
+        }
+        else
+        {
+            SettingsNpuStatusText.Text = "NPU: No supported NPU detected";
+            SettingsNpuStatusText.Foreground = null;
+        }
+
+        // Dynamically build AI accelerator list based on machine hardware
         SettingsAiAcceleratorCombo.SelectionChanged -= SettingsAiAcceleratorCombo_SelectionChanged;
+        SettingsAiAcceleratorCombo.Items.Clear();
+
+        // 1. Auto (Recommended) - always available
+        SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "Auto (Recommended)", Tag = "Auto" });
+
+        // 2. Add matching NPU choice if detected
+        if (!string.IsNullOrEmpty(npu))
+        {
+            if (npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
+            {
+                SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "Qualcomm Hexagon NPU", Tag = "NPU" });
+            }
+            else if (npu.Contains("Intel", StringComparison.OrdinalIgnoreCase))
+            {
+                SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "Intel AI Boost NPU", Tag = "NPU_IntelAmd" });
+            }
+            else if (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase))
+            {
+                SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "AMD Ryzen AI NPU", Tag = "NPU_IntelAmd" });
+            }
+        }
+
+        // 3. GPU / CPU - always available
+        SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "DirectML GPU Accelerator", Tag = "GPU" });
+        SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "DirectML CPU (Slow)", Tag = "CPU" });
+
+        // Load selection matching saved setting or default to Auto
         string savedAcc = _settings.SelectedAiAccelerator ?? "Auto";
-        int selectedIndex = 0; // Default Auto
+        int selectedIndex = 0; // Default to Auto
         for (int i = 0; i < SettingsAiAcceleratorCombo.Items.Count; i++)
         {
             if (SettingsAiAcceleratorCombo.Items[i] is ComboBoxItem item && item.Tag?.ToString() == savedAcc)
@@ -50,21 +89,41 @@ public sealed partial class GeneralSettingsPage : Page
 
     private void UpdateModelStatus()
     {
-        string npu = SettingsService.GetDetectedNpuName();
+        string? npu = SettingsService.GetDetectedNpuName();
         string activeDevice = _settings.SelectedAiAccelerator ?? "Auto";
-        string activeLabel = activeDevice == "Auto" ? npu : 
-                            (activeDevice == "NPU" ? "Qualcomm Hexagon NPU (45 TOPS)" :
-                            (activeDevice == "NPU_IntelAmd" ? "Intel AI Boost / AMD IPU" :
-                            (activeDevice == "GPU" ? "DirectML GPU" : "DirectML CPU (Fallback)")));
+        
+        string activeLabel;
+        if (activeDevice == "Auto")
+        {
+            activeLabel = !string.IsNullOrEmpty(npu) ? npu : "DirectML GPU (Auto fallback)";
+        }
+        else if (activeDevice == "NPU")
+        {
+            activeLabel = "Qualcomm Hexagon NPU (45 TOPS)";
+        }
+        else if (activeDevice == "NPU_IntelAmd")
+        {
+            activeLabel = (npu != null && (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)))
+                ? "AMD Ryzen AI NPU (50 TOPS)"
+                : "Intel(R) AI Boost NPU (48 TOPS)";
+        }
+        else if (activeDevice == "GPU")
+        {
+            activeLabel = "DirectML GPU";
+        }
+        else
+        {
+            activeLabel = "DirectML CPU (Fallback)";
+        }
 
         if (_settings.LocalAiModelDownloaded)
         {
-            SettingsAiDeviceStatusText.Text = $"AI Core: {activeLabel} | Local Engine Active";
+            SettingsAiDeviceStatusText.Text = $"Active AI Backend: {activeLabel} | Local Engine Active";
             SettingsDownloadModelBtn.Visibility = Visibility.Collapsed;
         }
         else
         {
-            SettingsAiDeviceStatusText.Text = $"AI Core: {activeLabel} | Local Model Missing";
+            SettingsAiDeviceStatusText.Text = $"Active AI Backend: {activeLabel} | Local Model Missing";
             SettingsDownloadModelBtn.Visibility = Visibility.Visible;
         }
     }
@@ -77,12 +136,6 @@ public sealed partial class GeneralSettingsPage : Page
             SettingsService.Save(_settings);
             UpdateModelStatus();
         }
-    }
-
-    private void CloseToTraySwitch_Toggled(object sender, RoutedEventArgs e)
-    {
-        _settings.CloseToTray = CloseToTraySwitch.IsOn;
-        SettingsService.Save(_settings);
     }
 
     private void SmartBriefingSwitch_Toggled(object sender, RoutedEventArgs e)
@@ -132,13 +185,5 @@ public sealed partial class GeneralSettingsPage : Page
             }
         };
         _downloadTimer.Start();
-    }
-
-    private void ToggleThemeButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (App.Current.MainWindow is MainWindow mw)
-        {
-            mw.TitleBarTheme_Click(sender, e);
-        }
     }
 }

@@ -11,31 +11,10 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,32">
         <StackPanel MaxWidth="600" HorizontalAlignment="Left" Spacing="24">
             
-            <TextBlock Text="Appearance" FontSize="26" FontWeight="SemiBold" CharacterSpacing="20" Margin="0,0,0,8"/>
+            <TextBlock Text="General Settings" FontSize="26" FontWeight="SemiBold" CharacterSpacing="20" Margin="0,0,0,8"/>
             
             <!-- Divider -->
             <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-
-            <!-- Close to Tray card -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="16">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    
-                    <StackPanel Spacing="4" VerticalAlignment="Center">
-                        <TextBlock Text="Minimize to System Tray" FontWeight="SemiBold" FontSize="14" />
-                        <TextBlock Text="When closing the main window, keep the app running in the system tray." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
-                    </StackPanel>
-                    
-                    <ToggleSwitch Grid.Column="1" x:Name="CloseToTraySwitch" IsOn="False" Toggled="CloseToTraySwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
-                </Grid>
-            </Border>
 
             <!-- Smart Briefing card -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -58,27 +37,6 @@
                 </Grid>
             </Border>
 
-            <!-- Theme Settings card (Bonus convenience) -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="16">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    
-                    <StackPanel Spacing="4" VerticalAlignment="Center">
-                        <TextBlock Text="Application Theme" FontWeight="SemiBold" FontSize="14" />
-                        <TextBlock Text="Toggle between light and dark visual aesthetics." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
-                    </StackPanel>
-                    
-                    <Button Grid.Column="1" Content="Toggle Theme" Click="ToggleThemeButton_Click" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                </Grid>
-            </Border>
-
             <!-- Local AI Engine Settings Card -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -88,17 +46,19 @@
                 <StackPanel Spacing="16">
                     <RelativePanel>
                         <StackPanel x:Name="AcceleratorTextPanel" Spacing="4" RelativePanel.AlignLeftWithPanel="True" RelativePanel.LeftOf="SettingsAiAcceleratorCombo">
-                            <TextBlock Text="Local AI Accelerator (NPU)" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Local AI Accelerator" FontWeight="SemiBold" FontSize="14" />
                             <TextBlock Text="Select the hardware device for local on-device smart features." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
-                            <TextBlock x:Name="SettingsAiDeviceStatusText" Text="AI Core: Qualcomm Hexagon NPU | Ready" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" Margin="0,4,0,0" />
+                            
+                            <!-- Hardware Capabilities details -->
+                            <StackPanel Spacing="2" Margin="0,6,0,0">
+                                <TextBlock x:Name="SettingsCpuModelText" Text="CPU: Unknown Processor" FontSize="11" Opacity="0.8" />
+                                <TextBlock x:Name="SettingsNpuStatusText" Text="NPU: Not Detected" FontSize="11" Opacity="0.8" />
+                                <TextBlock x:Name="SettingsAiDeviceStatusText" Text="Active AI Backend: Auto | Local Model Missing" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" Margin="0,4,0,0" />
+                            </StackPanel>
                         </StackPanel>
-                        <ComboBox x:Name="SettingsAiAcceleratorCombo" Width="200" SelectionChanged="SettingsAiAcceleratorCombo_SelectionChanged" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignVerticalCenterWithPanel="True" Margin="12,0,0,0">
-                            <ComboBoxItem Content="Auto (Recommended)" Tag="Auto" />
-                            <ComboBoxItem Content="Qualcomm Hexagon NPU" Tag="NPU" />
-                            <ComboBoxItem Content="Intel AI Boost / AMD IPU" Tag="NPU_IntelAmd" />
-                            <ComboBoxItem Content="DirectML GPU Accelerator" Tag="GPU" />
-                            <ComboBoxItem Content="DirectML CPU (Slow)" Tag="CPU" />
-                        </ComboBox>
+                        
+                        <!-- Dynamically populated in code-behind -->
+                        <ComboBox x:Name="SettingsAiAcceleratorCombo" Width="200" SelectionChanged="SettingsAiAcceleratorCombo_SelectionChanged" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignVerticalCenterWithPanel="True" Margin="12,0,0,0" />
                     </RelativePanel>
                     
                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />

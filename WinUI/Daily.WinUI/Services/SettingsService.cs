@@ -104,7 +104,7 @@ public static class SettingsService
         }
     }
 
-    public static string GetDetectedNpuName()
+    public static string GetProcessorName()
     {
         try
         {
@@ -112,27 +112,37 @@ public static class SettingsService
             {
                 if (key != null)
                 {
-                    var name = key.GetValue("ProcessorNameString")?.ToString();
-                    if (!string.IsNullOrEmpty(name))
-                    {
-                        if (name.Contains("Snapdragon") || name.Contains("Qualcomm") || name.Contains("SQ3") || name.Contains("SQ2"))
-                        {
-                            return "Qualcomm Hexagon NPU (45 TOPS)";
-                        }
-                        if (name.Contains("Ultra") || name.Contains("Intel") && (name.Contains("Core(TM) Ultra") || name.Contains("Lunar Lake")))
-                        {
-                            return "Intel(R) AI Boost NPU (48 TOPS)";
-                        }
-                        if (name.Contains("Ryzen") || name.Contains("AMD") && (name.Contains("AI") || name.Contains("Strix Point") || name.Contains("7840") || name.Contains("8840")))
-                        {
-                            return "AMD Ryzen AI NPU (50 TOPS)";
-                        }
-                    }
+                    return key.GetValue("ProcessorNameString")?.ToString() ?? "Unknown Processor";
                 }
             }
         }
         catch { }
-        return "Qualcomm Hexagon NPU (45 TOPS)";
+        return "Unknown Processor";
+    }
+
+    public static string? GetDetectedNpuName()
+    {
+        try
+        {
+            string name = GetProcessorName();
+            if (!string.IsNullOrEmpty(name))
+            {
+                if (name.Contains("Snapdragon") || name.Contains("Qualcomm") || name.Contains("SQ3") || name.Contains("SQ2"))
+                {
+                    return "Qualcomm Hexagon NPU (45 TOPS)";
+                }
+                if (name.Contains("Ultra") || name.Contains("Intel") && (name.Contains("Core(TM) Ultra") || name.Contains("Lunar Lake")))
+                {
+                    return "Intel(R) AI Boost NPU (48 TOPS)";
+                }
+                if (name.Contains("Ryzen") || name.Contains("AMD") && (name.Contains("AI") || name.Contains("Strix Point") || name.Contains("7840") || name.Contains("8840")))
+                {
+                    return "AMD Ryzen AI NPU (50 TOPS)";
+                }
+            }
+        }
+        catch { }
+        return null;
     }
 
     public static double ConvertSleepToHours(double value, string? unit)

@@ -29,6 +29,12 @@
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
 
+            <NavigationViewItem Tag="Appearance" Content="Appearance">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE771;" FontFamily="Segoe Fluent Icons"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
             <NavigationViewItem Tag="Notifications" Content="Notifications">
                 <NavigationViewItem.Icon>
                     <FontIcon Glyph="&#xEA8F;" FontFamily="Segoe Fluent Icons"/>
