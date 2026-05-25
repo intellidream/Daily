@@ -648,6 +648,10 @@ public sealed partial class MainPage : Page
 
         // Typewriter Animation
         BriefingGreetingText.Text = data.Greeting;
+        BriefingIntroText.Text = data.IntroText;
+        BriefingOutroText.Text = data.OutroText;
+        BriefingOutroText.Opacity = 0.0; // Hide initially
+
         BriefingTypedText.Text = string.Empty;
         _fullBriefingText = data.BriefingText;
         _briefingWords = _fullBriefingText.Split(' ');
@@ -661,6 +665,22 @@ public sealed partial class MainPage : Page
             {
                 BriefingTypedText.Text += _briefingWords[_typewriterIndex] + " ";
                 _typewriterIndex++;
+
+                // Pulsate and glow effect for the AI Icon (slowed down for a "thinking" feel)
+                try
+                {
+                    double sinVal = Math.Sin(_typewriterIndex * 0.12);
+                    double scaleVal = 1.0 + 0.08 * sinVal;      // pulsates between 0.92 and 1.08
+                    double glowScaleVal = 1.0 + 0.3 * sinVal;   // glow pulsates between 0.7 and 1.3
+                    double opacityVal = 0.35 + 0.25 * sinVal;   // opacity pulsates between 0.1 and 0.6
+
+                    IconScale.ScaleX = scaleVal;
+                    IconScale.ScaleY = scaleVal;
+                    GlowScale.ScaleX = glowScaleVal;
+                    GlowScale.ScaleY = glowScaleVal;
+                    AIIconGlow.Opacity = opacityVal;
+                }
+                catch { }
 
                 double percent = (double)_typewriterIndex / _briefingWords.Length;
 
@@ -679,6 +699,38 @@ public sealed partial class MainPage : Page
             else
             {
                 _typewriterTimer.Stop();
+
+                // Reset AI Icon scale to resting state
+                try
+                {
+                    IconScale.ScaleX = 1.0;
+                    IconScale.ScaleY = 1.0;
+                    GlowScale.ScaleX = 1.0;
+                    GlowScale.ScaleY = 1.0;
+                    AIIconGlow.Opacity = 0.3;
+                }
+                catch { }
+
+                // Fade in sign-off text at the end
+                try
+                {
+                    var fadeAnimation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+                    {
+                        From = 0.0,
+                        To = 0.75, // Muted opacity
+                        Duration = new Duration(TimeSpan.FromSeconds(0.8))
+                    };
+                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeAnimation, BriefingOutroText);
+                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeAnimation, "Opacity");
+                    var outroStoryboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+                    outroStoryboard.Children.Add(fadeAnimation);
+                    outroStoryboard.Begin();
+                }
+                catch
+                {
+                    BriefingOutroText.Opacity = 0.75;
+                }
+
                 // Ensure all visual cards are shown
                 if (BriefingWeatherCard.Opacity == 0) FadeInWeatherStoryboard.Begin();
                 if (BriefingHealthCard.Opacity == 0) FadeInHealthStoryboard.Begin();

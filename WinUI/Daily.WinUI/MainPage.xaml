@@ -208,29 +208,92 @@
                     <!-- Left Column: Narratives -->
                     <Grid x:Name="BriefingNarrativePanel" Grid.Column="0" Margin="0,0,24,0">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/> <!-- Greeting -->
-                            <RowDefinition Height="*"/>    <!-- Typing Text Area -->
+                            <RowDefinition Height="Auto"/> <!-- Header (Icon + Greeting + Description) -->
+                            <RowDefinition Height="*"/>    <!-- Body (Typed body + Outro) -->
                             <RowDefinition Height="Auto"/> <!-- AI Status Bar -->
                             <RowDefinition Height="Auto"/> <!-- Actions / Checkbox -->
                         </Grid.RowDefinitions>
                         
-                        <!-- Greeting -->
-                        <TextBlock x:Name="BriefingGreetingText" 
-                                   Text="Good morning, User!" 
-                                   FontSize="28" 
-                                   FontWeight="Bold" 
-                                   Foreground="{ThemeResource AppFgColorBrush}" 
-                                   Margin="0,0,0,16"/>
-                        
-                        <!-- Scrollable Typing Content -->
+                        <!-- Header Row (Row 0) -->
+                        <Grid Grid.Row="0" Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/> <!-- AI Icon on Left -->
+                                <ColumnDefinition Width="*"/>    <!-- Greeting & Intro on Right -->
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- GemAIcon SVG Image & Pulsating Glow Container -->
+                            <Grid Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center" Width="96" Height="96">
+                                <Ellipse x:Name="AIIconGlow"
+                                         Width="84"
+                                         Height="84"
+                                         Opacity="0.3"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         RenderTransformOrigin="0.5,0.5">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                                            <GradientStop Color="{ThemeResource LoginGlowColor}" Offset="0" />
+                                            <GradientStop Color="Transparent" Offset="1" />
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                    <Ellipse.RenderTransform>
+                                        <ScaleTransform x:Name="GlowScale" ScaleX="1.0" ScaleY="1.0"/>
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
+                                
+                                <Image x:Name="SmartBriefAIIcon"
+                                       Source="Assets/GemAIcon.svg"
+                                       Width="64"
+                                       Height="64"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       RenderTransformOrigin="0.5,0.5">
+                                    <Image.RenderTransform>
+                                        <ScaleTransform x:Name="IconScale" ScaleX="1.0" ScaleY="1.0"/>
+                                    </Image.RenderTransform>
+                                </Image>
+                            </Grid>
+
+                            <!-- Vertical stack for Greeting & Intro on the Right -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                <!-- Greeting (Muted as requested) -->
+                                <TextBlock x:Name="BriefingGreetingText" 
+                                           Text="Good morning, User!" 
+                                           FontSize="28" 
+                                           FontWeight="Bold" 
+                                           Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                           Opacity="0.8"/>
+
+                                <!-- Descriptive Intro (Muted as requested) -->
+                                <TextBlock x:Name="BriefingIntroText" 
+                                           Text="Here is your on-device DayOne AI Smart Briefing for today." 
+                                           FontSize="14" 
+                                           Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                           Opacity="0.75"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Body Row (Row 1): Content flows underneath the entire Header Grid, aligned to the left edge -->
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
-                            <TextBlock x:Name="BriefingTypedText" 
-                                       Text="" 
-                                       FontSize="16" 
-                                       Foreground="{ThemeResource AppFgColorBrush}" 
-                                       TextWrapping="Wrap" 
-                                       LineHeight="26"
-                                       Opacity="0.9"/>
+                            <StackPanel Spacing="16">
+                                <!-- Main Typed Text (Body, pops out) -->
+                                <TextBlock x:Name="BriefingTypedText" 
+                                           Text="" 
+                                           FontSize="16" 
+                                           Foreground="{ThemeResource AppFgColorBrush}" 
+                                           TextWrapping="Wrap" 
+                                           LineHeight="26"
+                                           Opacity="1.0"/>
+                                           
+                                <!-- Sign-off / Outro Text (Muted, shown at the end) -->
+                                <TextBlock x:Name="BriefingOutroText" 
+                                           Text="Have a highly productive day!" 
+                                           FontSize="14" 
+                                           Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                           Opacity="0.0" 
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
                         </ScrollViewer>
                         
                         <!-- AI Status Bar -->

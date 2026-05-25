@@ -37,7 +37,9 @@ namespace Daily_WinUI.Services
     public sealed class SmartBriefingData
     {
         public string Greeting { get; set; } = string.Empty;
+        public string IntroText { get; set; } = string.Empty;
         public string BriefingText { get; set; } = string.Empty;
+        public string OutroText { get; set; } = string.Empty;
         
         // Weather
         public string WeatherSummary { get; set; } = string.Empty;
@@ -349,22 +351,22 @@ namespace Daily_WinUI.Services
             }
 
             // 7. Assemble Full Briefing Text
-            StringBuilder sb = new StringBuilder();
-            sb.Append("Here is your Local AI Smart Briefing for today.\n\n");
-            sb.Append(weatherSentence);
-            sb.Append(" ");
-            sb.Append(healthSentence);
-            sb.Append("\n\n");
-            sb.Append(financeSentence);
-            sb.Append(" ");
-            sb.Append(habitsSentence);
-            sb.Append("\n\n");
-            sb.Append("Lastly, we found a couple of interesting articles in your feed you might like: ");
-            sb.Append($"\"{data.NewsRecommendations[0].Title}\" from {data.NewsRecommendations[0].Source}, and ");
-            sb.Append($"\"{data.NewsRecommendations[1].Title}\" from {data.NewsRecommendations[1].Source}.");
-            sb.Append("\n\nHave a highly productive day!");
+            StringBuilder sbBody = new StringBuilder();
+            sbBody.Append(weatherSentence);
+            sbBody.Append(" ");
+            sbBody.Append(healthSentence);
+            sbBody.Append("\n\n");
+            sbBody.Append(financeSentence);
+            sbBody.Append(" ");
+            sbBody.Append(habitsSentence);
+            sbBody.Append("\n\n");
+            sbBody.Append("Lastly, we found a couple of interesting articles in your feed you might like: ");
+            sbBody.Append($"\"{data.NewsRecommendations[0].Title}\" from {data.NewsRecommendations[0].Source}, and ");
+            sbBody.Append($"\"{data.NewsRecommendations[1].Title}\" from {data.NewsRecommendations[1].Source}.");
 
-            data.BriefingText = sb.ToString();
+            data.IntroText = "Here is your on-device DayOne AI Smart Briefing for today.";
+            data.BriefingText = sbBody.ToString();
+            data.OutroText = "Have a highly productive day!";
 
             return data;
         }
