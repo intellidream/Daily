@@ -21,8 +21,8 @@
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#20FFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#44FFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#16FFFFFF"/>
-                    <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#FA020305"/>
-                    <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#FC060A14"/>
+                    <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#BF060912"/>
+                    <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#BF141A2D"/>
                     <SolidColorBrush x:Key="AppBriefingGlassBorderColorBrush" Color="#60FFFFFF"/>
                     <SolidColorBrush x:Key="AppReaderRibbonBrush" Color="#FF4B3564"/>
                     <LinearGradientBrush x:Key="AppBgBrush" StartPoint="0,0" EndPoint="0,1">
@@ -72,8 +72,8 @@
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#25000000"/>
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#40000000"/>
                     <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#18000000"/>
-                    <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#F2B8AC90"/>
-                    <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#FCD6CCA4"/>
+                    <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#BFBEB298"/>
+                    <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#BFDFD8BC"/>
                     <SolidColorBrush x:Key="AppBriefingGlassBorderColorBrush" Color="#50000000"/>
                     <SolidColorBrush x:Key="AppReaderRibbonBrush" Color="#FFD4A87F"/>
                     <LinearGradientBrush x:Key="AppBgBrush" StartPoint="0,0" EndPoint="0,1">

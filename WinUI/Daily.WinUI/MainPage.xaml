@@ -182,7 +182,24 @@
                     <ThemeShadow />
                 </Border.Shadow>
                 
-                <Grid x:Name="BriefingGrid">
+                <Grid>
+                    <!-- Loading Panel -->
+                    <Grid x:Name="BriefingLoadingPanel" Visibility="Visible" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <ProgressRing IsActive="True" Width="48" Height="48" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                            <TextBlock Text="AI is compiling your briefing..." 
+                                       FontSize="18" 
+                                       FontWeight="SemiBold" 
+                                       Foreground="{ThemeResource AppFgColorBrush}" 
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="Gathering news, weather, habits, and health insights..." 
+                                       FontSize="13" 
+                                       Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid x:Name="BriefingGrid" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="3*" /> <!-- Left Panel: text narrative -->
                         <ColumnDefinition Width="2*" /> <!-- Right Panel: visual cards -->
@@ -488,6 +505,7 @@
                             </Border>
                         </Grid>
                     </ScrollViewer>
+                </Grid>
                 </Grid>
             </Border>
             

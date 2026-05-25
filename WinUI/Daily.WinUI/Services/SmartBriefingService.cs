@@ -98,6 +98,15 @@ namespace Daily_WinUI.Services
             
             data.Greeting = $"{greetingBase}, {userName}!";
 
+            // Kick off all background operations in parallel tasks
+            var coordsTask = _locationService.GetCurrentCoordinatesAsync();
+            var stepsTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.Steps) : Task.FromResult<VitalMetric?>(null);
+            var sleepTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.SleepDuration) : Task.FromResult<VitalMetric?>(null);
+            var hrTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.HeartRate) : Task.FromResult<VitalMetric?>(null);
+            var netWorthTask = _financesService != null ? _financesService.GetNetWorthAsync() : Task.FromResult(0m);
+            var symbolsTask = _financesService != null ? _financesService.GetWatchlistSymbolsAsync() : Task.FromResult<List<string>?>(null);
+            var hydrationTask = _habitsService != null ? _habitsService.GetDailyProgressAsync("water", DateTime.Today) : Task.FromResult(0.0);
+
             // 2. Weather Aggregation
             double temp = 21.5;
             string condition = "sunny";
@@ -105,11 +114,22 @@ namespace Daily_WinUI.Services
             
             try
             {
-                var coords = await _locationService.GetCurrentCoordinatesAsync();
+                var coords = await coordsTask;
+                var settings = SettingsService.Load();
+                if (!coords.HasValue && settings.LastLatitude.HasValue && settings.LastLongitude.HasValue)
+                {
+                    coords = (settings.LastLatitude.Value, settings.LastLongitude.Value);
+                    System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Location detection timed out/failed. Falling back to cached coords: {coords.Value.Latitude}, {coords.Value.Longitude}");
+                }
+
                 if (coords.HasValue)
                 {
-                    var settings = SettingsService.Load();
-                    var snapshot = await _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
+                    var weatherTask = _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
+                    var forecastTask = _weatherClient.GetFiveDayForecastAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
+                    
+                    await Task.WhenAll(weatherTask, forecastTask);
+                    
+                    var snapshot = weatherTask.Result;
                     if (snapshot != null)
                     {
                         temp = snapshot.Temperature;
@@ -129,7 +149,7 @@ namespace Daily_WinUI.Services
                         }
                     }
 
-                    var forecastList = await _weatherClient.GetFiveDayForecastAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
+                    var forecastList = forecastTask.Result;
                     if (forecastList != null && forecastList.Count > 0)
                     {
                         int added = 0;
@@ -177,16 +197,22 @@ namespace Daily_WinUI.Services
             int heartRate = 68;
             string healthSentence = "";
 
-            if (_healthService != null)
+            try
             {
-                var stepsMetric = await _healthService.GetLatestMetricAsync(VitalType.Steps);
+                await Task.WhenAll(stepsTask, sleepTask, hrTask);
+                
+                var stepsMetric = stepsTask.Result;
                 if (stepsMetric != null) steps = (int)stepsMetric.Value;
                 
-                var sleepMetric = await _healthService.GetLatestMetricAsync(VitalType.SleepDuration);
+                var sleepMetric = sleepTask.Result;
                 if (sleepMetric != null) sleep = SettingsService.ConvertSleepToHours(sleepMetric.Value, sleepMetric.Unit);
 
-                var hrMetric = await _healthService.GetLatestMetricAsync(VitalType.HeartRate);
+                var hrMetric = hrTask.Result;
                 if (hrMetric != null) heartRate = (int)hrMetric.Value;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Health Fetch Error: {ex.Message}");
             }
             
             data.HealthSteps = steps;
@@ -207,41 +233,40 @@ namespace Daily_WinUI.Services
                 healthSentence += $" You got {sleep:F1} hours of sleep last night, providing a solid foundation for your recovery.";
             }
 
+
             // 4. Finances Aggregation
             decimal netWorth = 24500;
             string financeSentence = "";
-            if (_financesService != null)
+            try
             {
-                try
-                {
-                    netWorth = await _financesService.GetNetWorthAsync();
-                    if (netWorth <= 0) netWorth = 24500; // placeholder safety if ledger is empty
+                await Task.WhenAll(netWorthTask, symbolsTask);
+                netWorth = netWorthTask.Result;
+                if (netWorth <= 0) netWorth = 24500; // placeholder safety if ledger is empty
 
-                    var symbols = await _financesService.GetWatchlistSymbolsAsync();
-                    if (symbols != null && symbols.Count > 0)
+                var symbols = symbolsTask.Result;
+                if (symbols != null && symbols.Count > 0)
+                {
+                    var quotes = await _financesService.GetStockQuotesAsync(symbols);
+                    if (quotes != null)
                     {
-                        var quotes = await _financesService.GetStockQuotesAsync(symbols);
-                        if (quotes != null)
+                        int count = 0;
+                        foreach (var q in quotes)
                         {
-                            int count = 0;
-                            foreach (var q in quotes)
+                            data.WatchlistStocks.Add(new StockBriefingData
                             {
-                                data.WatchlistStocks.Add(new StockBriefingData
-                                {
-                                    Symbol = q.Symbol,
-                                    Price = (decimal)q.CurrentPrice,
-                                    PercentChange = (decimal)q.PercentChange
-                                });
-                                count++;
-                                if (count >= 2) break; // keep top 2
-                            }
+                                Symbol = q.Symbol,
+                                Price = (decimal)q.CurrentPrice,
+                                PercentChange = (decimal)q.PercentChange
+                            });
+                            count++;
+                            if (count >= 2) break; // keep top 2
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Finance Error: {ex.Message}");
-                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Finance Error: {ex.Message}");
             }
 
             // Fallback stocks if empty
@@ -253,26 +278,23 @@ namespace Daily_WinUI.Services
 
             financeSentence = $"Your ledger net worth is looking healthy at {netWorth:C0}. Markets are showing active movements: {data.WatchlistStocks[0].Symbol} is at {data.WatchlistStocks[0].Price:C2} ({data.WatchlistStocks[0].FormattedChange}).";
 
+
             // 5. Habits Aggregation
             int habitsTotal = 4;
             int habitsCompleted = 1;
             string habitsSentence = "";
 
-            if (_habitsService != null)
+            try
             {
-                try
+                double hydration = await hydrationTask;
+                if (hydration > 0)
                 {
-                    // Check hydration progress
-                    double hydration = await _habitsService.GetDailyProgressAsync("water", DateTime.Today);
-                    if (hydration > 0)
-                    {
-                        habitsCompleted = hydration >= 1.0 ? 2 : 1;
-                    }
+                    habitsCompleted = hydration >= 1.0 ? 2 : 1;
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Habits Error: {ex.Message}");
-                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Habits Error: {ex.Message}");
             }
             
             data.HabitsTotal = habitsTotal;

@@ -1,4 +1,8 @@
+using System;
+using System.Net.Http;
 using System.Net.Http.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Windows.Devices.Geolocation;
 
 namespace Daily_WinUI.Services;
@@ -13,13 +17,43 @@ public sealed class LocationService : IDisposable
 
     public async Task<(double Latitude, double Longitude)?> GetCurrentCoordinatesAsync(CancellationToken cancellationToken = default)
     {
-        var windowsLocation = await TryWindowsLocationAsync(cancellationToken);
-        if (windowsLocation.HasValue)
+        // Try Windows location with a strict timeout of 1500 milliseconds
+        using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
-            return windowsLocation;
+            cts.CancelAfter(1500);
+            try
+            {
+                var windowsLocation = await TryWindowsLocationAsync(cts.Token);
+                if (windowsLocation.HasValue)
+                {
+                    return windowsLocation;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationService] Windows location failed/timed out: {ex.Message}");
+            }
         }
 
-        return await TryIpLocationAsync(cancellationToken);
+        // Fallback to IP location with a strict timeout of 1500 milliseconds
+        using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        {
+            cts.CancelAfter(1500);
+            try
+            {
+                var ipLocation = await TryIpLocationAsync(cts.Token);
+                if (ipLocation.HasValue)
+                {
+                    return ipLocation;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationService] IP location failed/timed out: {ex.Message}");
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

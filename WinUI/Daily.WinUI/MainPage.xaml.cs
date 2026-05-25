@@ -520,6 +520,11 @@ public sealed partial class MainPage : Page
 
     public async void ShowSmartBriefing()
     {
+        // Show overlay and loading panel immediately
+        SmartBriefingOverlay.Visibility = Visibility.Visible;
+        BriefingLoadingPanel.Visibility = Visibility.Visible;
+        BriefingGrid.Visibility = Visibility.Collapsed;
+
         // Update layout based on current actual width
         UpdateBriefingLayout(ActualWidth);
 
@@ -637,8 +642,9 @@ public sealed partial class MainPage : Page
         BriefingNewsCard.Opacity = 0;
         NewsCardTransform.Y = 30;
 
-        // Show Briefing Overlay Grid
-        SmartBriefingOverlay.Visibility = Visibility.Visible;
+        // Hide loading panel and show briefing content grid
+        BriefingLoadingPanel.Visibility = Visibility.Collapsed;
+        BriefingGrid.Visibility = Visibility.Visible;
 
         // Typewriter Animation
         BriefingGreetingText.Text = data.Greeting;
@@ -647,7 +653,8 @@ public sealed partial class MainPage : Page
         _briefingWords = _fullBriefingText.Split(' ');
         _typewriterIndex = 0;
 
-        _typewriterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        // Speed up the typewriter animation (20ms interval instead of 50ms)
+        _typewriterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(20) };
         _typewriterTimer.Tick += (s, ev) =>
         {
             if (_typewriterIndex < _briefingWords.Length)
