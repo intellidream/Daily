@@ -738,37 +738,129 @@ public sealed partial class MainPage : Page
 
     private void UpdateBriefingLayout(double width)
     {
-        if (BriefingGrid == null || BriefingNarrativePanel == null || BriefingWidgetsPanel == null || BriefingCardBorder == null)
+        if (BriefingGrid == null || BriefingNarrativePanel == null || BriefingWidgetsPanel == null || 
+            BriefingCardBorder == null || BriefingOuterScrollViewer == null || 
+            BriefingWidgetsGrid == null || BriefingTextScrollViewer == null ||
+            BriefingHeaderGrid == null || BriefingIconContainer == null || BriefingHeaderTextPanel == null ||
+            BriefingGreetingText == null || BriefingIntroText == null || AIIconGlow == null || SmartBriefAIIcon == null)
             return;
 
         if (width < 850)
         {
-            // Narrow/docked layout: Stack vertically
+            // ─── Narrow / Docked Layout (Stacked Vertically) ───
+            
+            // 1. Enable outer ScrollViewer, disable inner ScrollViewers
+            BriefingOuterScrollViewer.VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto;
+            BriefingOuterScrollViewer.VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Enabled;
+            
+            BriefingTextScrollViewer.VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled;
+            BriefingTextScrollViewer.VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Disabled;
+            
+            BriefingWidgetsPanel.VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled;
+            BriefingWidgetsPanel.VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Disabled;
+
+            // 2. Stack Narrative and Widgets Grid in BriefingGrid (using Auto height for both rows)
             if (BriefingGrid.ColumnDefinitions.Count > 1)
             {
                 BriefingGrid.ColumnDefinitions.Clear();
                 BriefingGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             }
             
-            if (BriefingGrid.RowDefinitions.Count < 2)
-            {
-                BriefingGrid.RowDefinitions.Clear();
-                BriefingGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                BriefingGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            }
+            BriefingGrid.RowDefinitions.Clear();
+            BriefingGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            BriefingGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             
             Grid.SetColumn(BriefingNarrativePanel, 0);
             Grid.SetRow(BriefingNarrativePanel, 0);
-            BriefingNarrativePanel.Margin = new Thickness(0, 0, 0, 16);
+            BriefingNarrativePanel.Margin = new Thickness(0, 0, 0, 24);
             
             Grid.SetColumn(BriefingWidgetsPanel, 0);
             Grid.SetRow(BriefingWidgetsPanel, 1);
 
+            // 3. Stack and Center the Greeting Header elements vertically to fit narrow sidebars
+            if (BriefingHeaderGrid.ColumnDefinitions.Count > 1)
+            {
+                BriefingHeaderGrid.ColumnDefinitions.Clear();
+                BriefingHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            }
+            
+            BriefingHeaderGrid.RowDefinitions.Clear();
+            BriefingHeaderGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            BriefingHeaderGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            Grid.SetColumn(BriefingIconContainer, 0);
+            Grid.SetRow(BriefingIconContainer, 0);
+            Grid.SetColumn(BriefingHeaderTextPanel, 0);
+            Grid.SetRow(BriefingHeaderTextPanel, 1);
+
+            BriefingIconContainer.Width = 64;
+            BriefingIconContainer.Height = 64;
+            BriefingIconContainer.Margin = new Thickness(0, 0, 0, 12);
+            BriefingIconContainer.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center;
+
+            AIIconGlow.Width = 56;
+            AIIconGlow.Height = 56;
+            SmartBriefAIIcon.Width = 44;
+            SmartBriefAIIcon.Height = 44;
+
+            BriefingHeaderTextPanel.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center;
+            
+            BriefingGreetingText.FontSize = 20;
+            BriefingGreetingText.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center;
+            
+            BriefingIntroText.FontSize = 12;
+            BriefingIntroText.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center;
+            BriefingIntroText.TextAlignment = Microsoft.UI.Xaml.TextAlignment.Center;
+
+            // 4. Re-layout widgets inside BriefingWidgetsGrid to stack in a single column
+            BriefingWidgetsGrid.ColumnDefinitions.Clear();
+            BriefingWidgetsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            BriefingWidgetsGrid.RowDefinitions.Clear();
+            for (int i = 0; i < 5; i++)
+            {
+                BriefingWidgetsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            }
+
+            Grid.SetRow(BriefingWeatherCard, 0);
+            Grid.SetColumn(BriefingWeatherCard, 0);
+            Grid.SetColumnSpan(BriefingWeatherCard, 1);
+
+            Grid.SetRow(BriefingHealthCard, 1);
+            Grid.SetColumn(BriefingHealthCard, 0);
+            Grid.SetColumnSpan(BriefingHealthCard, 1);
+
+            Grid.SetRow(BriefingFinancesCard, 2);
+            Grid.SetColumn(BriefingFinancesCard, 0);
+            Grid.SetColumnSpan(BriefingFinancesCard, 1);
+
+            Grid.SetRow(BriefingHabitsCard, 3);
+            Grid.SetColumn(BriefingHabitsCard, 0);
+            Grid.SetColumnSpan(BriefingHabitsCard, 1);
+
+            Grid.SetRow(BriefingNewsCard, 4);
+            Grid.SetColumn(BriefingNewsCard, 0);
+            Grid.SetColumnSpan(BriefingNewsCard, 1);
+
+            // 5. Tighten outer margins and paddings for small viewport space efficiency
             BriefingCardBorder.Margin = new Thickness(6);
+            BriefingCardBorder.Padding = new Thickness(16);
         }
         else
         {
-            // Wide layout: Side-by-side
+            // ─── Wide Layout (Side-by-Side) ───
+            
+            // 1. Disable outer ScrollViewer, enable inner ScrollViewers for independent scroll areas
+            BriefingOuterScrollViewer.VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled;
+            BriefingOuterScrollViewer.VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Disabled;
+            
+            BriefingTextScrollViewer.VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto;
+            BriefingTextScrollViewer.VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Auto;
+            
+            BriefingWidgetsPanel.VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto;
+            BriefingWidgetsPanel.VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Auto;
+
+            // 2. Put Narrative (Col 0) and Widgets (Col 1) side-by-side
             if (BriefingGrid.ColumnDefinitions.Count < 2)
             {
                 BriefingGrid.ColumnDefinitions.Clear();
@@ -776,10 +868,7 @@ public sealed partial class MainPage : Page
                 BriefingGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
             }
             
-            if (BriefingGrid.RowDefinitions.Count > 0)
-            {
-                BriefingGrid.RowDefinitions.Clear();
-            }
+            BriefingGrid.RowDefinitions.Clear();
             
             Grid.SetColumn(BriefingNarrativePanel, 0);
             Grid.SetRow(BriefingNarrativePanel, 0);
@@ -788,7 +877,73 @@ public sealed partial class MainPage : Page
             Grid.SetColumn(BriefingWidgetsPanel, 1);
             Grid.SetRow(BriefingWidgetsPanel, 0);
 
+            // 3. Restore Wide Greeting Header Layout (Side-by-Side)
+            if (BriefingHeaderGrid.ColumnDefinitions.Count < 2)
+            {
+                BriefingHeaderGrid.ColumnDefinitions.Clear();
+                BriefingHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+                BriefingHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            }
+            
+            BriefingHeaderGrid.RowDefinitions.Clear();
+
+            Grid.SetColumn(BriefingIconContainer, 0);
+            Grid.SetRow(BriefingIconContainer, 0);
+            Grid.SetColumn(BriefingHeaderTextPanel, 1);
+            Grid.SetRow(BriefingHeaderTextPanel, 0);
+
+            BriefingIconContainer.Width = 96;
+            BriefingIconContainer.Height = 96;
+            BriefingIconContainer.Margin = new Thickness(0, 0, 16, 0);
+            BriefingIconContainer.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left;
+
+            AIIconGlow.Width = 84;
+            AIIconGlow.Height = 84;
+            SmartBriefAIIcon.Width = 64;
+            SmartBriefAIIcon.Height = 64;
+
+            BriefingHeaderTextPanel.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left;
+            
+            BriefingGreetingText.FontSize = 28;
+            BriefingGreetingText.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left;
+            
+            BriefingIntroText.FontSize = 14;
+            BriefingIntroText.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left;
+            BriefingIntroText.TextAlignment = Microsoft.UI.Xaml.TextAlignment.Left;
+
+            // 4. Reset widgets inside BriefingWidgetsGrid to 2-column layout
+            BriefingWidgetsGrid.ColumnDefinitions.Clear();
+            BriefingWidgetsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            BriefingWidgetsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            BriefingWidgetsGrid.RowDefinitions.Clear();
+            BriefingWidgetsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            BriefingWidgetsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            BriefingWidgetsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            Grid.SetRow(BriefingWeatherCard, 0);
+            Grid.SetColumn(BriefingWeatherCard, 0);
+            Grid.SetColumnSpan(BriefingWeatherCard, 1);
+
+            Grid.SetRow(BriefingHealthCard, 0);
+            Grid.SetColumn(BriefingHealthCard, 1);
+            Grid.SetColumnSpan(BriefingHealthCard, 1);
+
+            Grid.SetRow(BriefingFinancesCard, 1);
+            Grid.SetColumn(BriefingFinancesCard, 0);
+            Grid.SetColumnSpan(BriefingFinancesCard, 1);
+
+            Grid.SetRow(BriefingHabitsCard, 1);
+            Grid.SetColumn(BriefingHabitsCard, 1);
+            Grid.SetColumnSpan(BriefingHabitsCard, 1);
+
+            Grid.SetRow(BriefingNewsCard, 2);
+            Grid.SetColumn(BriefingNewsCard, 0);
+            Grid.SetColumnSpan(BriefingNewsCard, 2);
+
+            // 5. Restore spacious margins and paddings
             BriefingCardBorder.Margin = new Thickness(24);
+            BriefingCardBorder.Padding = new Thickness(32);
         }
     }
 }

@@ -199,7 +199,11 @@
                         </StackPanel>
                     </Grid>
 
-                    <Grid x:Name="BriefingGrid" Visibility="Collapsed">
+                    <ScrollViewer x:Name="BriefingOuterScrollViewer" 
+                                  VerticalScrollBarVisibility="Disabled" 
+                                  HorizontalScrollBarVisibility="Disabled" 
+                                  VerticalScrollMode="Disabled">
+                        <Grid x:Name="BriefingGrid" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="3*" /> <!-- Left Panel: text narrative -->
                         <ColumnDefinition Width="2*" /> <!-- Right Panel: visual cards -->
@@ -214,14 +218,14 @@
                         </Grid.RowDefinitions>
                         
                         <!-- Header Row (Row 0) -->
-                        <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid x:Name="BriefingHeaderGrid" Grid.Row="0" Margin="0,0,0,16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/> <!-- AI Icon on Left -->
                                 <ColumnDefinition Width="*"/>    <!-- Greeting & Intro on Right -->
                             </Grid.ColumnDefinitions>
                             
                             <!-- GemAIcon SVG Image & Pulsating Glow Container -->
-                            <Grid Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center" Width="96" Height="96">
+                            <Grid x:Name="BriefingIconContainer" Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center" Width="96" Height="96">
                                 <Ellipse x:Name="AIIconGlow"
                                          Width="84"
                                          Height="84"
@@ -254,7 +258,7 @@
                             </Grid>
 
                             <!-- Vertical stack for Greeting & Intro on the Right -->
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                            <StackPanel x:Name="BriefingHeaderTextPanel" Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                                 <!-- Greeting (Muted as requested) -->
                                 <TextBlock x:Name="BriefingGreetingText" 
                                            Text="Good morning, User!" 
@@ -274,7 +278,7 @@
                         </Grid>
 
                         <!-- Body Row (Row 1): Content flows underneath the entire Header Grid, aligned to the left edge -->
-                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
+                        <ScrollViewer x:Name="BriefingTextScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
                             <StackPanel Spacing="16">
                                 <!-- Main Typed Text (Body, pops out) -->
                                 <TextBlock x:Name="BriefingTypedText" 
@@ -304,7 +308,7 @@
                     
                     <!-- Right Column: Visual Cards with ScrollViewer -->
                     <ScrollViewer x:Name="BriefingWidgetsPanel" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                        <Grid Margin="0,0,12,0">
+                        <Grid x:Name="BriefingWidgetsGrid" Margin="0,0,12,0">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -536,6 +540,7 @@
                         </Grid>
                     </ScrollViewer>
                 </Grid>
+                </ScrollViewer>
                 </Grid>
             </Border>
             
