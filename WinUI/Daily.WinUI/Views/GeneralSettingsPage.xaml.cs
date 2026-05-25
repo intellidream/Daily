@@ -14,37 +14,52 @@ public sealed partial class GeneralSettingsPage : Page
 
     public GeneralSettingsPage()
     {
-        InitializeComponent();
-        _settings = SettingsService.Load();
-        Loaded += GeneralSettingsPage_Loaded;
-        Unloaded += (s, ev) => _downloadTimer?.Stop();
+        try
+        {
+            InitializeComponent();
+            _settings = SettingsService.Load();
+            Loaded += GeneralSettingsPage_Loaded;
+            Unloaded += (s, ev) => _downloadTimer?.Stop();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                string dir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+                System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "general_settings_ctor_error.txt"), $"GeneralSettingsPage constructor failed:\n{ex}");
+            }
+            catch { }
+            throw;
+        }
     }
 
     private void GeneralSettingsPage_Loaded(object sender, RoutedEventArgs e)
     {
-        SmartBriefingSwitch.Toggled -= SmartBriefingSwitch_Toggled;
-        SmartBriefingSwitch.IsOn = _settings.EnableSmartBriefing;
-        SmartBriefingSwitch.Toggled += SmartBriefingSwitch_Toggled;
-
-        // Display detected Hardware Capabilities
-        string cpu = SettingsService.GetProcessorName();
-        SettingsCpuModelText.Text = $"CPU: {cpu}";
-
-        string? npu = SettingsService.GetDetectedNpuName();
-        if (!string.IsNullOrEmpty(npu))
+        try
         {
-            SettingsNpuStatusText.Text = $"NPU: {npu} [Detected]";
-            SettingsNpuStatusText.Foreground = App.Current.Resources.TryGetValue("SystemControlForegroundAccentBrush", out var brush) && brush is Microsoft.UI.Xaml.Media.Brush b ? b : null;
-        }
-        else
-        {
-            SettingsNpuStatusText.Text = "NPU: No supported NPU detected";
-            SettingsNpuStatusText.Foreground = null;
-        }
+            SmartBriefingSwitch.Toggled -= SmartBriefingSwitch_Toggled;
+            SmartBriefingSwitch.IsOn = _settings.EnableSmartBriefing;
+            SmartBriefingSwitch.Toggled += SmartBriefingSwitch_Toggled;
 
-        // Dynamically build AI accelerator list based on machine hardware
-        SettingsAiAcceleratorCombo.SelectionChanged -= SettingsAiAcceleratorCombo_SelectionChanged;
-        SettingsAiAcceleratorCombo.Items.Clear();
+            // Display detected Hardware Capabilities
+            string cpu = SettingsService.GetProcessorName();
+            SettingsCpuModelText.Text = $"CPU: {cpu}";
+
+            string? npu = SettingsService.GetDetectedNpuName();
+            if (!string.IsNullOrEmpty(npu))
+            {
+                SettingsNpuStatusText.Text = $"NPU: {npu} [Detected]";
+            }
+            else
+            {
+                SettingsNpuStatusText.Text = "NPU: No supported NPU detected";
+                SettingsNpuStatusText.ClearValue(TextBlock.ForegroundProperty);
+            }
+
+            // Dynamically build AI accelerator list based on machine hardware
+            SettingsAiAcceleratorCombo.SelectionChanged -= SettingsAiAcceleratorCombo_SelectionChanged;
+            SettingsAiAcceleratorCombo.Items.Clear();
 
         // 1. Auto (Recommended) - always available
         SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "Auto (Recommended)", Tag = "Auto" });
@@ -85,6 +100,11 @@ public sealed partial class GeneralSettingsPage : Page
         SettingsAiAcceleratorCombo.SelectionChanged += SettingsAiAcceleratorCombo_SelectionChanged;
 
         UpdateModelStatus();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[GeneralSettings] Loaded Error: {ex}");
+        }
     }
 
     private void UpdateModelStatus()
@@ -130,6 +150,7 @@ public sealed partial class GeneralSettingsPage : Page
 
     private void SettingsAiAcceleratorCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_settings == null || SettingsAiAcceleratorCombo == null) return;
         if (SettingsAiAcceleratorCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
         {
             _settings.SelectedAiAccelerator = tag;
@@ -140,6 +161,7 @@ public sealed partial class GeneralSettingsPage : Page
 
     private void SmartBriefingSwitch_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_settings == null || SmartBriefingSwitch == null) return;
         _settings.EnableSmartBriefing = SmartBriefingSwitch.IsOn;
         SettingsService.Save(_settings);
     }

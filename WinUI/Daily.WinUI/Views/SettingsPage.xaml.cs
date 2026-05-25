@@ -47,7 +47,21 @@ public sealed partial class SettingsPage : Page
         if (_pageMap.TryGetValue(tag, out var pageType) &&
             ContentFrame.CurrentSourcePageType != pageType)
         {
-            ContentFrame.Navigate(pageType);
+            try
+            {
+                ContentFrame.Navigate(pageType);
+            }
+            catch (System.Exception ex)
+            {
+                try
+                {
+                    string dir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+                    System.IO.Directory.CreateDirectory(dir);
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "nav_error.txt"), $"Navigation to {tag} ({pageType?.FullName}) failed:\n{ex}");
+                }
+                catch { }
+                System.Diagnostics.Debug.WriteLine($"[SettingsPage] Navigation failed to {tag}: {ex}");
+            }
         }
     }
 }

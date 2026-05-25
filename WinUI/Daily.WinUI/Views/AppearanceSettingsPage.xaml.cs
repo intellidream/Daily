@@ -24,6 +24,7 @@ public sealed partial class AppearanceSettingsPage : Page
 
     private void CloseToTraySwitch_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_settings == null || CloseToTraySwitch == null) return;
         _settings.CloseToTray = CloseToTraySwitch.IsOn;
         SettingsService.Save(_settings);
     }

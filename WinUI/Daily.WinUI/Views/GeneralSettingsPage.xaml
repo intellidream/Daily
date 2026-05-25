@@ -52,7 +52,7 @@
                             <!-- Hardware Capabilities details -->
                             <StackPanel Spacing="2" Margin="0,6,0,0">
                                 <TextBlock x:Name="SettingsCpuModelText" Text="CPU: Unknown Processor" FontSize="11" Opacity="0.8" />
-                                <TextBlock x:Name="SettingsNpuStatusText" Text="NPU: Not Detected" FontSize="11" Opacity="0.8" />
+                                <TextBlock x:Name="SettingsNpuStatusText" Text="NPU: Not Detected" FontSize="11" Opacity="0.8" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" />
                                 <TextBlock x:Name="SettingsAiDeviceStatusText" Text="Active AI Backend: Auto | Local Model Missing" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" Margin="0,4,0,0" />
                             </StackPanel>
                         </StackPanel>
