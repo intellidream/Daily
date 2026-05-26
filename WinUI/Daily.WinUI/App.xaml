@@ -21,9 +21,29 @@
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#20FFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#44FFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#16FFFFFF"/>
-                    <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#D804060C"/>
-                    <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#D80E1220"/>
-                    <SolidColorBrush x:Key="AppBriefingGlassBorderColorBrush" Color="#60FFFFFF"/>
+                    <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#C8000000"/>
+                    <AcrylicBrush x:Key="AppBriefingBackdropBrush"
+                                  TintColor="#04060C"
+                                  TintOpacity="0.65"
+                                  FallbackColor="#04060C"/>
+                    <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#550E1220"/>
+                    <LinearGradientBrush x:Key="AppBriefingGlassBorderColorBrush" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#95FFFFFF" Offset="0"/>
+                        <GradientStop Color="#25FFFFFF" Offset="0.5"/>
+                        <GradientStop Color="#55FFFFFF" Offset="1"/>
+                    </LinearGradientBrush>
+                    <RadialGradientBrush x:Key="AppBriefingShadowBrush" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#E5000000" Offset="0.4"/>
+                        <GradientStop Color="Transparent" Offset="1.0"/>
+                    </RadialGradientBrush>
+                    <RadialGradientBrush x:Key="AppBriefingGlowAccentBrush" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#7000E5FF" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
+                    <RadialGradientBrush x:Key="AppBriefingGlowAmbientBrush" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#40FFFFFF" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
                     <SolidColorBrush x:Key="AppReaderRibbonBrush" Color="#FF4B3564"/>
                     <LinearGradientBrush x:Key="AppBgBrush" StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#FF030609" Offset="0"/>
@@ -72,9 +92,29 @@
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#25000000"/>
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#40000000"/>
                     <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#18000000"/>
-                    <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#D8A89C82"/>
-                    <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#D8C2BBA1"/>
-                    <SolidColorBrush x:Key="AppBriefingGlassBorderColorBrush" Color="#50000000"/>
+                    <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#C8D4C9B0"/>
+                    <AcrylicBrush x:Key="AppBriefingBackdropBrush"
+                                  TintColor="#D4C9B0"
+                                  TintOpacity="0.55"
+                                  FallbackColor="#D4C9B0"/>
+                    <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#B5DFD5BC"/>
+                    <LinearGradientBrush x:Key="AppBriefingGlassBorderColorBrush" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#C0FFFFFF" Offset="0"/>
+                        <GradientStop Color="#35D4C9B0" Offset="0.5"/>
+                        <GradientStop Color="#655C4F3C" Offset="1"/>
+                    </LinearGradientBrush>
+                    <RadialGradientBrush x:Key="AppBriefingShadowBrush" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#9042382A" Offset="0.5"/>
+                        <GradientStop Color="Transparent" Offset="1.0"/>
+                    </RadialGradientBrush>
+                    <RadialGradientBrush x:Key="AppBriefingGlowAccentBrush" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#60FF7A00" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
+                    <RadialGradientBrush x:Key="AppBriefingGlowAmbientBrush" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#45FFA800" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
                     <SolidColorBrush x:Key="AppReaderRibbonBrush" Color="#FFD4A87F"/>
                     <LinearGradientBrush x:Key="AppBgBrush" StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#FFD4C9B0" Offset="0"/>

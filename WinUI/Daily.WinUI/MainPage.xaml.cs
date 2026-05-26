@@ -38,6 +38,7 @@ public sealed partial class MainPage : Page
         _authService = App.Current.Services.GetRequiredService<WinUIAuthService>();
         _widgetService = App.Current.Services.GetRequiredService<WinUIWidgetService>();
         Loaded += MainPage_Loaded;
+        FadeOutBriefingStoryboard.Completed += FadeOutBriefingStoryboard_Completed;
         SizeChanged += MainPage_SizeChanged;
         Unloaded += (_, _) => 
         {
@@ -517,8 +518,11 @@ public sealed partial class MainPage : Page
 
     public async void ShowSmartBriefing()
     {
-        // Show overlay and loading panel immediately
+        // Show overlay and loading panel immediately with fade-in animation
+        SmartBriefingOverlay.Opacity = 0.0;
         SmartBriefingOverlay.Visibility = Visibility.Visible;
+        FadeInBriefingStoryboard.Begin();
+
         BriefingLoadingPanel.Visibility = Visibility.Visible;
         BriefingGrid.Visibility = Visibility.Collapsed;
 
@@ -721,6 +725,11 @@ public sealed partial class MainPage : Page
     private void CloseBriefing_Click(object sender, RoutedEventArgs e)
     {
         _typewriterTimer?.Stop();
+        FadeOutBriefingStoryboard.Begin();
+    }
+
+    private void FadeOutBriefingStoryboard_Completed(object? sender, object e)
+    {
         SmartBriefingOverlay.Visibility = Visibility.Collapsed;
     }
 
