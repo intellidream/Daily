@@ -250,15 +250,15 @@
                             <!-- GemAIcon SVG Image & Pulsating Glow Container -->
                             <Grid x:Name="BriefingIconContainer" Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center" Width="96" Height="96">
                                 <Ellipse x:Name="AIIconGlow"
-                                         Width="84"
-                                         Height="84"
+                                         Width="64"
+                                         Height="64"
                                          Opacity="0.3"
                                          HorizontalAlignment="Center"
                                          VerticalAlignment="Center"
                                          RenderTransformOrigin="0.5,0.5">
                                     <Ellipse.Fill>
                                         <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
-                                            <GradientStop Color="{ThemeResource LoginGlowColor}" Offset="0" />
+                                            <GradientStop Color="{ThemeResource AppBriefingIconGlowColor}" Offset="0" />
                                             <GradientStop Color="Transparent" Offset="1" />
                                         </RadialGradientBrush>
                                     </Ellipse.Fill>

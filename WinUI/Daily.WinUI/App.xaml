@@ -16,6 +16,7 @@
                     <x:String x:Key="IntellIdreamIconSource">ms-appx:///Assets/companyicon.theme-dark.svg</x:String>
                     <Color x:Key="AppBgColor">#FF0B1121</Color>
                     <Color x:Key="AppTopBgColor">#FF030609</Color>
+                    <Color x:Key="AppBriefingIconGlowColor">#FF00E5FF</Color>
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FFFFFFFF"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BBFFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#20FFFFFF"/>
@@ -24,12 +25,13 @@
                     <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#C8000000"/>
                     <AcrylicBrush x:Key="AppBriefingBackdropBrush"
                                   TintColor="#04060C"
-                                  TintOpacity="0.65"
+                                  TintOpacity="0.64"
+                                  Opacity="0.99"
                                   FallbackColor="#04060C"/>
                     <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#550E1220"/>
                     <LinearGradientBrush x:Key="AppBriefingGlassBorderColorBrush" StartPoint="0,0" EndPoint="1,1">
                         <GradientStop Color="#95FFFFFF" Offset="0"/>
-                        <GradientStop Color="#25FFFFFF" Offset="0.5"/>
+                        <GradientStop Color="Transparent" Offset="0.5"/>
                         <GradientStop Color="#55FFFFFF" Offset="1"/>
                     </LinearGradientBrush>
                     <RadialGradientBrush x:Key="AppBriefingShadowBrush" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
@@ -87,6 +89,7 @@
                     <x:String x:Key="IntellIdreamIconSource">ms-appx:///Assets/companyicon.theme-light.svg</x:String>
                     <Color x:Key="AppBgColor">#FFD4C9B0</Color>
                     <Color x:Key="AppTopBgColor">#FFD4C9B0</Color>
+                    <Color x:Key="AppBriefingIconGlowColor">#FFFFA800</Color>
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FF1A1A1A"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BB1A1A1A"/>
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#25000000"/>
@@ -95,7 +98,8 @@
                     <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#C8D4C9B0"/>
                     <AcrylicBrush x:Key="AppBriefingBackdropBrush"
                                   TintColor="#D4C9B0"
-                                  TintOpacity="0.55"
+                                  TintOpacity="0.54"
+                                  Opacity="0.99"
                                   FallbackColor="#D4C9B0"/>
                     <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#B5DFD5BC"/>
                     <LinearGradientBrush x:Key="AppBriefingGlassBorderColorBrush" StartPoint="0,0" EndPoint="1,1">

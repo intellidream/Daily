@@ -652,7 +652,7 @@ public sealed partial class MainPage : Page
                     double sinVal = Math.Sin(_typewriterIndex * 0.12);
                     double scaleVal = 1.0 + 0.08 * sinVal;      // pulsates between 0.92 and 1.08
                     double glowScaleVal = 1.0 + 0.3 * sinVal;   // glow pulsates between 0.7 and 1.3
-                    double opacityVal = 0.35 + 0.25 * sinVal;   // opacity pulsates between 0.1 and 0.6
+                    double opacityVal = 0.45 + 0.25 * sinVal;   // opacity pulsates between 0.2 and 0.7
 
                     IconScale.ScaleX = scaleVal;
                     IconScale.ScaleY = scaleVal;
@@ -687,7 +687,7 @@ public sealed partial class MainPage : Page
                     IconScale.ScaleY = 1.0;
                     GlowScale.ScaleX = 1.0;
                     GlowScale.ScaleY = 1.0;
-                    AIIconGlow.Opacity = 0.3;
+                    AIIconGlow.Opacity = 0.4;
                 }
                 catch { }
 
@@ -807,8 +807,8 @@ public sealed partial class MainPage : Page
             BriefingIconContainer.Margin = new Thickness(0, 0, 0, 12);
             BriefingIconContainer.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center;
 
-            AIIconGlow.Width = 56;
-            AIIconGlow.Height = 56;
+            AIIconGlow.Width = 44;
+            AIIconGlow.Height = 44;
             SmartBriefAIIcon.Width = 44;
             SmartBriefAIIcon.Height = 44;
 
@@ -906,8 +906,8 @@ public sealed partial class MainPage : Page
             BriefingIconContainer.Margin = new Thickness(0, 0, 16, 0);
             BriefingIconContainer.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left;
 
-            AIIconGlow.Width = 84;
-            AIIconGlow.Height = 84;
+            AIIconGlow.Width = 64;
+            AIIconGlow.Height = 64;
             SmartBriefAIIcon.Width = 64;
             SmartBriefAIIcon.Height = 64;
 
