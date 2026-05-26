@@ -25,8 +25,8 @@
                     <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#C8000000"/>
                     <AcrylicBrush x:Key="AppBriefingBackdropBrush"
                                   TintColor="#04060C"
-                                  TintOpacity="0.64"
-                                  Opacity="0.99"
+                                  TintOpacity="0.6475"
+                                  Opacity="0.9975"
                                   FallbackColor="#04060C"/>
                     <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#550E1220"/>
                     <LinearGradientBrush x:Key="AppBriefingGlassBorderColorBrush" StartPoint="0,0" EndPoint="1,1">
@@ -98,8 +98,8 @@
                     <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#C8D4C9B0"/>
                     <AcrylicBrush x:Key="AppBriefingBackdropBrush"
                                   TintColor="#D4C9B0"
-                                  TintOpacity="0.54"
-                                  Opacity="0.99"
+                                  TintOpacity="0.5475"
+                                  Opacity="0.9975"
                                   FallbackColor="#D4C9B0"/>
                     <SolidColorBrush x:Key="AppBriefingGlassColorBrush" Color="#B5DFD5BC"/>
                     <LinearGradientBrush x:Key="AppBriefingGlassBorderColorBrush" StartPoint="0,0" EndPoint="1,1">
