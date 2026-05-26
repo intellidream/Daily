@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Daily.Services;
@@ -8,6 +9,7 @@ using Daily.Services.Finances;
 using Daily.Models;
 using Daily.Models.Health;
 using Daily.Models.Finances;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Daily_WinUI.Services
 {
@@ -318,26 +320,123 @@ namespace Daily_WinUI.Services
                 habitsSentence = $"You've completed {habitsCompleted} of your {habitsTotal} habits today. Stay consistent and keep the streak alive!";
             }
 
-            // 6. News AI Recommendations
+            // 6. News AI Recommendations with Source Diversity & Interest Matching
             if (_rssFeedService != null && _rssFeedService.Items != null && _rssFeedService.Items.Count > 0)
             {
-                int count = 0;
-                foreach (var item in _rssFeedService.Items)
+                var readSources = new List<string>();
+                var readTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
                 {
-                    string categoryReason = "Recommended from your feed";
-                    if (!string.IsNullOrEmpty(item.PublicationName))
+                    var dbService = App.Current.Services.GetService(typeof(Daily.Services.IDatabaseService)) as Daily.Services.IDatabaseService;
+                    if (dbService != null)
                     {
-                        categoryReason = $"Top story from {item.PublicationName}";
-                    }
+                        await dbService.InitializeAsync();
+                        var cutoff = DateTime.UtcNow.AddDays(-7);
+                        string userId = App.Current.Services.GetRequiredService<Supabase.Client>().Auth?.CurrentUser?.Id ?? "local_user";
+                        var recentEvents = await dbService.Connection.Table<SmartBehaviorEvent>()
+                            .Where(e => e.UserId == userId && e.Feature == "News" && e.ActionType == "ReadArticle" && e.Timestamp > cutoff)
+                            .ToListAsync();
 
+                        if (recentEvents != null)
+                        {
+                            foreach (var ev in recentEvents)
+                            {
+                                try
+                                {
+                                    using var doc = System.Text.Json.JsonDocument.Parse(ev.Metadata);
+                                    if (doc.RootElement.TryGetProperty("source", out var srcProp))
+                                    {
+                                        readSources.Add(srcProp.GetString() ?? "");
+                                    }
+                                    if (doc.RootElement.TryGetProperty("title", out var titleProp))
+                                    {
+                                        readTitles.Add(titleProp.GetString() ?? "");
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                // Group all available feed items by publication source to ensure diversity
+                var itemsBySource = _rssFeedService.Items
+                    .Where(item => !string.IsNullOrEmpty(item.Title) && !readTitles.Contains(item.Title)) // filter out already read
+                    .GroupBy(item => item.PublicationName ?? "RSS Feed")
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
+                // Find the user's favorite read sources (most frequent first)
+                var favoriteSources = readSources
+                    .Where(s => !string.IsNullOrEmpty(s))
+                    .GroupBy(s => s)
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => g.Key)
+                    .ToList();
+
+                var selectedItems = new List<Daily.Models.RssItem>();
+                var selectedReasons = new List<string>();
+
+                // Helper to try selecting an item from a source
+                bool TrySelectFromSource(string source, string reason)
+                {
+                    if (itemsBySource.TryGetValue(source, out var sourceItems) && sourceItems.Count > 0)
+                    {
+                        var item = sourceItems[0];
+                        selectedItems.Add(item);
+                        selectedReasons.Add(reason);
+                        sourceItems.RemoveAt(0); // consume
+                        if (sourceItems.Count == 0) itemsBySource.Remove(source);
+                        return true;
+                    }
+                    return false;
+                }
+
+                // 1. First priority: Try to pick one from the user's favorite source if available
+                foreach (var fav in favoriteSources)
+                {
+                    if (TrySelectFromSource(fav, $"Based on your interest in {fav}"))
+                    {
+                        break;
+                    }
+                }
+
+                // 2. Second priority: Pick from other sources to guarantee source diversity
+                var remainingSources = itemsBySource.Keys.ToList();
+                foreach (var src in remainingSources)
+                {
+                    if (selectedItems.Count >= 2) break;
+                    
+                    // If we already have one item, make sure we pick from a different source
+                    if (selectedItems.Count == 1 && selectedItems[0].PublicationName == src)
+                        continue;
+
+                    string reason = $"Top story from {src}";
+                    TrySelectFromSource(src, reason);
+                }
+
+                // 3. Fallback: If we still don't have 2 items, grab whatever is left (from any source)
+                if (selectedItems.Count < 2)
+                {
+                    foreach (var src in itemsBySource.Keys.ToList())
+                    {
+                        if (selectedItems.Count >= 2) break;
+                        while (itemsBySource[src].Count > 0 && selectedItems.Count < 2)
+                        {
+                            TrySelectFromSource(src, "Recommended for you");
+                        }
+                    }
+                }
+
+                // Populate recommendations data
+                for (int i = 0; i < selectedItems.Count; i++)
+                {
                     data.NewsRecommendations.Add(new NewsRecommendationData
                     {
-                        Title = item.Title,
-                        Source = item.PublicationName ?? "RSS Feed",
-                        Reason = categoryReason
+                        Title = selectedItems[i].Title,
+                        Source = selectedItems[i].PublicationName ?? "RSS Feed",
+                        Reason = selectedReasons[i]
                     });
-                    count++;
-                    if (count >= 2) break;
                 }
             }
 

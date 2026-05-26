@@ -157,6 +157,21 @@ public sealed partial class FeaturesPage : Page
         }
         catch { }
 
+        bool onnxModelReady = false;
+        try
+        {
+            var onnxService = App.Current.Services.GetRequiredService<OnnxGenAiSmartService>();
+            onnxModelReady = Task.Run(async () => await onnxService.IsModelReadyAsync()).GetAwaiter().GetResult();
+        }
+        catch { }
+
+        // Automatically correct settings state based on actual files on disk
+        if (_settings.LocalAiModelDownloaded != onnxModelReady)
+        {
+            _settings.LocalAiModelDownloaded = onnxModelReady;
+            SettingsService.Save(_settings);
+        }
+
         string recommendedOption = "Auto (Recommended)";
         if (!string.IsNullOrEmpty(npu))
         {
@@ -178,7 +193,7 @@ public sealed partial class FeaturesPage : Page
                 activeLabel = $"Auto -> Phi Silica NPU (Active)";
                 description = $"System automatically resolved execution to the built-in Microsoft Copilot Runtime (Phi Silica) utilizing the NPU. Recommendation: {recommendedOption}.";
             }
-            else if (_settings.LocalAiModelDownloaded)
+            else if (onnxModelReady)
             {
                 activeLabel = $"Auto -> ONNX Llama 3.2 GPU/CPU (Active)";
                 description = $"System resolved execution to the custom Llama 3.2 1B ONNX model. Recommendation: {recommendedOption}.";
@@ -214,7 +229,7 @@ public sealed partial class FeaturesPage : Page
         {
             activeLabel = "DirectML GPU (Llama 3.2 ONNX)";
             description = "Uses the custom Llama 3.2 1B model running locally via DirectML on your graphics card. Offers excellent generation speed.";
-            if (!_settings.LocalAiModelDownloaded)
+            if (!onnxModelReady)
             {
                 description += " (Requires Model Download)";
                 needsDownload = true;
@@ -224,7 +239,7 @@ public sealed partial class FeaturesPage : Page
         {
             activeLabel = "DirectML CPU (Llama 3.2 ONNX)";
             description = "Uses the custom Llama 3.2 1B model running locally on your processor. Note: CPU generation will be slower and use more battery.";
-            if (!_settings.LocalAiModelDownloaded)
+            if (!onnxModelReady)
             {
                 description += " (Requires Model Download)";
                 needsDownload = true;

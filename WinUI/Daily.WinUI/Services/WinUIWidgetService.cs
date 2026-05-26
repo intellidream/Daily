@@ -27,8 +27,7 @@ namespace Daily_WinUI.Services
                 new WidgetModel { Title = "Habits", ComponentType = "HabitsWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "News", ComponentType = "RssFeedWidget", ColumnSpan = 1, RowSpan = 2 },
                 new WidgetModel { Title = "Vitals", ComponentType = "HealthWidget", ColumnSpan = 1, RowSpan = 1 },
-                new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", ColumnSpan = 1, RowSpan = 1 },
-                new WidgetModel { Title = "Recommendations", ComponentType = "NewsRecommendationsWidget", ColumnSpan = 1, RowSpan = 1 }
+                new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", ColumnSpan = 1, RowSpan = 1 }
             };
         }
 
@@ -52,11 +51,8 @@ namespace Daily_WinUI.Services
                 }
             }
 
-            // Ensure NewsRecommendationsWidget is present
-            if (!widgets.Any(w => w.ComponentType == "NewsRecommendationsWidget"))
-            {
-                widgets.Add(new WidgetModel { Title = "Recommendations", ComponentType = "NewsRecommendationsWidget", ColumnSpan = 1, RowSpan = 1 });
-            }
+            // Remove NewsRecommendationsWidget from the dashboard widgets list
+            widgets.RemoveAll(w => w.ComponentType == "NewsRecommendationsWidget");
 
             return Task.FromResult(widgets);
         }
