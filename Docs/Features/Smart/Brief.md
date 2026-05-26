@@ -37,7 +37,7 @@ The Local Smart Intelligence feature integrates lightweight, privacy-first, on-d
 
 #### 1.2.6 Smart Behavior Personalization
 - **Behavior-Aware Narrative**: Integrates aggregated 7-day semantic behavior profile statistics (e.g., hydration trends, preferred news topics) to personalize the daily narrative.
-- **Dynamic Recommendations**: Tailors news feed suggestions and habit streak warnings based on user pattern history. For full details on database schemas and sync mechanisms, refer to the [Smart Behavior Guide](SmartBehavior.md).
+- **Dynamic Recommendations**: Tailors news feed suggestions and habit streak warnings based on user pattern history. For full details on database schemas and sync mechanisms, refer to the [Smart Behavior Guide](Behavior.md).
 
 ---
 
