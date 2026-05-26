@@ -7,12 +7,12 @@ The **Smart Behavior** engine provides a privacy-first, context-aware user profi
 ## 1. Functional Specification
 
 ### 1.1 Local Profile Analytics
-The engine traces the *what*, *how*, *when*, and *why* of user behaviors locally on the device:
-- **News**: Tracks read articles, categories, time spent reading, and active search topics.
-- **Weather**: Analyzes searched locations and temperature unit preferences.
-- **Habits**: Logs completions, streak milestones, hydration trends, and habit updates.
-- **Health**: Tracks step counts, sleep duration trends, resting heart rate values, and target goals.
-- **Finances**: Logs ledger transactions, watchlisted stocks, currency selections, and budget metrics.
+The engine traces user behaviors locally on the device using specific event schemas:
+- **News**: Logs `ReadArticle` events inside `RssFeedDetailPage.xaml.cs` when the article reader is opened. Tracks `title` and `source` metadata.
+- **Weather**: Logs `ViewWeather` events in `WeatherDetailPage.xaml.cs` when forecasts are loaded/refreshed. Tracks `location` names along with `latitude` and `longitude` coordinates.
+- **Habits**: Logs completions in `HabitsDetailPage.xaml.cs` under two action types: `LogWater` (metadata tracks drink name e.g., Water, Coffee, Tea, Juice, Beer, Wine, and volume in ml) and `LogSmoke` (metadata tracks tobacco type e.g., Cigarette, Heated Tobacco, Rolled, Cigarillo, and unit count).
+- **Health**: Logs `ViewVitals` events in `HealthDetailPage.xaml.cs` when metrics are fetched. Tracks daily summary data including `steps`, `heartRate`, and `sleepHours`.
+- **Finances**: Logs `ViewPortfolio` events when financial overviews are loaded (capturing `netWorth`, `cash`, and `investments` totals) and `FilterMarket` events when selecting stock/crypto/forex markets in `FinancesDetailPage.xaml.cs`.
 
 ### 1.2 Privacy-First Design
 - **On-Device by Default**: All raw timeline events are stored in a local, encrypted SQLite database.
@@ -93,7 +93,7 @@ public class SmartBehaviorEventRemote : BaseModel
 ```
 
 ### 2.3 Context Window Optimization (SLM Recommendations)
-Feeding thousands of raw behavior events into a local Small Language Model (SLM) like Qwen-2.5-1.5B or Phi Silica is impractical due to context-window token limits (typically 2,048 tokens).
+Feeding thousands of raw behavior events into a local Small Language Model (SLM) like Llama 3.2 1B or Phi Silica is impractical due to context-window token limits (typically 2,048 tokens).
 
 To resolve this, `BehaviorService` aggregates the raw timeline logs into a compact **7-Day Semantic Summary** prior to generating recommendations:
 

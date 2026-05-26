@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.Extensions.DependencyInjection;
 using Syncfusion.UI.Xaml.Editors;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Media;
@@ -259,6 +260,18 @@ public sealed partial class WeatherDetailPage : Page
             _settings.LastLocationWasAuto = _selectedLocation.Name == "Auto Location";
             SaveLocationsToSettings();
             SettingsService.Save(_settings);
+
+            try
+            {
+                var behaviorService = App.Current.Services.GetService<Daily_WinUI.Services.IBehaviorService>();
+                if (behaviorService != null && _selectedLocation != null)
+                {
+                    string safeLocation = (_selectedLocation.DisplayName ?? "").Replace("\"", "\\\"");
+                    string metadata = $"{{\"location\":\"{safeLocation}\",\"latitude\":{_selectedLocation.Latitude:F4},\"longitude\":{_selectedLocation.Longitude:F4}}}";
+                    _ = behaviorService.TrackEventAsync("Weather", "ViewWeather", metadata);
+                }
+            }
+            catch { }
         }
         finally
         {

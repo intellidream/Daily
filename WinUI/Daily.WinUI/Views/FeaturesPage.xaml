@@ -47,6 +47,7 @@
                                 <TextBlock x:Name="SettingsCpuModelText" Text="CPU: Unknown Processor" FontSize="11" Opacity="0.8" />
                                 <TextBlock x:Name="SettingsNpuStatusText" Text="NPU: Not Detected" FontSize="11" Opacity="0.8" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" />
                                 <TextBlock x:Name="SettingsAiDeviceStatusText" Text="Active AI Backend: Auto | Local Model Missing" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" Margin="0,4,0,0" />
+                                <TextBlock x:Name="SettingsAiAcceleratorDescriptionText" Text="Select an option to view hardware details and recommendations." FontSize="11" Opacity="0.7" TextWrapping="Wrap" Margin="0,4,0,0" />
                             </StackPanel>
                         </StackPanel>
                         
@@ -58,14 +59,17 @@
                     <RelativePanel>
                         <StackPanel x:Name="DownloadTextPanel" Spacing="4" RelativePanel.AlignLeftWithPanel="True" RelativePanel.LeftOf="SettingsDownloadModelBtn">
                             <TextBlock Text="Bring Your Own AI (ONNX Weights)" FontWeight="SemiBold" FontSize="14" />
-                            <TextBlock Text="On-device models require local ONNX weights (1.2GB package) for generation." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                            <TextBlock Text="On-device models require local ONNX weights (Llama 3.2 1B Instruct INT4, ~670MB download) for generation." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
                         </StackPanel>
                         <Button x:Name="SettingsDownloadModelBtn" Content="Download AI Pack" Click="SettingsDownloadModelBtn_Click" Style="{ThemeResource AccentButtonStyle}" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignVerticalCenterWithPanel="True" Margin="12,0,0,0" />
                     </RelativePanel>
                     
                     <StackPanel x:Name="SettingsDownloadProgressGrid" Visibility="Collapsed" Spacing="4">
                         <ProgressBar x:Name="SettingsDownloadProgressBar" Minimum="0" Maximum="100" Value="0" Height="4" Margin="0,4" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" />
-                        <TextBlock x:Name="SettingsDownloadStatusText" Text="Downloading..." FontSize="11" Opacity="0.7" />
+                        <Grid>
+                            <TextBlock x:Name="SettingsDownloadStatusText" Text="Downloading..." FontSize="11" Opacity="0.7" VerticalAlignment="Center" HorizontalAlignment="Left" />
+                            <Button x:Name="SettingsCancelDownloadBtn" Content="Cancel" Click="SettingsCancelDownloadBtn_Click" Style="{ThemeResource DefaultButtonStyle}" FontSize="11" Height="24" Padding="8,2" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        </Grid>
                     </StackPanel>
                 </StackPanel>
             </Border>

@@ -190,6 +190,17 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
             Holdings.Clear();
             foreach (var p in portfolio) Holdings.Add(p);
+
+            try
+            {
+                var behaviorService = App.Current.Services.GetService<Daily_WinUI.Services.IBehaviorService>();
+                if (behaviorService != null)
+                {
+                    string metadata = $"{{\"netWorth\":{nw},\"cash\":{cash},\"investments\":{investments}}}";
+                    _ = behaviorService.TrackEventAsync("Finances", "ViewPortfolio", metadata);
+                }
+            }
+            catch { }
         }
         catch (Exception ex)
         {
@@ -239,6 +250,17 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
             string marketType = btn.Tag?.ToString() ?? "stock";
             _ = FilterWatchlistAsync(marketType);
+
+            try
+            {
+                var behaviorService = App.Current.Services.GetService<Daily_WinUI.Services.IBehaviorService>();
+                if (behaviorService != null)
+                {
+                    string metadata = $"{{\"marketType\":\"{marketType}\"}}";
+                    _ = behaviorService.TrackEventAsync("Finances", "FilterMarket", metadata);
+                }
+            }
+            catch { }
         }
     }
 

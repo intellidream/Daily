@@ -192,6 +192,16 @@ public sealed partial class RssFeedDetailPage : Page
 
     private async Task OpenReaderViewAsync(RssItem item)
     {
+        try
+        {
+            var behaviorService = App.Current.Services.GetRequiredService<IBehaviorService>();
+            string safeTitle = (item.Title ?? "").Replace("\"", "\\\"");
+            string safeSource = (item.PublicationName ?? "RSS").Replace("\"", "\\\"");
+            string metadata = $"{{\"title\":\"{safeTitle}\",\"source\":\"{safeSource}\"}}";
+            _ = behaviorService.TrackEventAsync("News", "ReadArticle", metadata);
+        }
+        catch { }
+
         _currentRenderedArticle = null;
         _selectedItem = item;
         UpdateReaderToolbarStates();

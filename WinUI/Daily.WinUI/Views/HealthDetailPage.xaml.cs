@@ -107,6 +107,24 @@ namespace Daily_WinUI.Views
 
                 // Load History
                 await LoadHistoryAsync();
+
+                try
+                {
+                    var behaviorService = App.Current.Services.GetService<Daily_WinUI.Services.IBehaviorService>();
+                    if (behaviorService != null)
+                    {
+                        var stepsMetric = GetMetric(VitalType.Steps);
+                        var hrMetric = GetMetric(VitalType.HeartRate);
+                        var sleepMetric = GetMetric(VitalType.SleepDuration);
+                        double steps = stepsMetric?.Value ?? 0;
+                        double hr = hrMetric?.Value ?? 0;
+                        double sleepHours = sleepMetric != null ? Daily_WinUI.Services.SettingsService.ConvertSleepToHours(sleepMetric.Value, sleepMetric.Unit) : 0;
+                        
+                        string metadata = $"{{\"steps\":{steps},\"heartRate\":{hr},\"sleepHours\":{sleepHours:F1}}}";
+                        _ = behaviorService.TrackEventAsync("Health", "ViewVitals", metadata);
+                    }
+                }
+                catch { }
             }
             catch (Exception ex)
             {

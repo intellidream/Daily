@@ -681,59 +681,81 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
         return Windows.UI.Color.FromArgb(a, r, g, b);
     }
 
+    private void TrackHabitEvent(string action, double value, string unit, string detailsJson)
+    {
+        try
+        {
+            var behaviorService = App.Current.Services.GetRequiredService<Daily_WinUI.Services.IBehaviorService>();
+            string metadata = $"{{\"value\":{value},\"unit\":\"{unit}\",\"details\":{detailsJson}}}";
+            _ = behaviorService.TrackEventAsync("Habits", action, metadata);
+        }
+        catch { }
+    }
+
     private async void AddWater_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("water", 150, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Water\",\"size\":\"Small\"}");
+        TrackHabitEvent("LogWater", 150, "ml", "{\"drink\":\"Water\",\"size\":\"Small\"}");
     }
 
     private async void AddWaterLarge_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("water", 300, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Water\",\"size\":\"Large\"}");
+        TrackHabitEvent("LogWater", 300, "ml", "{\"drink\":\"Water\",\"size\":\"Large\"}");
     }
 
     private async void AddCoffee_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("water", 150, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Coffee\"}");
+        TrackHabitEvent("LogWater", 150, "ml", "{\"drink\":\"Coffee\"}");
     }
 
     private async void AddTea_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("water", 200, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Tea\"}");
+        TrackHabitEvent("LogWater", 200, "ml", "{\"drink\":\"Tea\"}");
     }
 
     private async void AddJuice_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("water", 250, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Juice\"}");
+        TrackHabitEvent("LogWater", 250, "ml", "{\"drink\":\"Juice\"}");
     }
 
     private async void AddBeer_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("water", 330, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Beer\"}");
+        TrackHabitEvent("LogWater", 330, "ml", "{\"drink\":\"Beer\"}");
     }
 
     private async void AddWine_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("water", 150, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Wine\"}");
+        TrackHabitEvent("LogWater", 150, "ml", "{\"drink\":\"Wine\"}");
     }
 
     private async void AddCigarette_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("smokes", 1, "unit", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"type\":\"Cigarette\"}");
+        TrackHabitEvent("LogSmoke", 1, "unit", "{\"type\":\"Cigarette\"}");
     }
 
     private async void AddHeated_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("smokes", 1, "unit", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"type\":\"Heated Tobacco\"}");
+        TrackHabitEvent("LogSmoke", 1, "unit", "{\"type\":\"Heated Tobacco\"}");
     }
 
     private async void AddRolled_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("smokes", 1, "unit", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"type\":\"Rolled\"}");
+        TrackHabitEvent("LogSmoke", 1, "unit", "{\"type\":\"Rolled\"}");
     }
 
     private async void AddCigarillo_Click(object sender, RoutedEventArgs e)
     {
         await _habitsService.AddLogAsync("smokes", 1, "unit", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"type\":\"Cigarillo\"}");
+        TrackHabitEvent("LogSmoke", 1, "unit", "{\"type\":\"Cigarillo\"}");
     }
 
     private async void DeleteLog_Click(object sender, RoutedEventArgs e)

@@ -207,6 +207,12 @@ public partial class App : Application
         services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Services.Health.MockNativeHealthStore>();
         services.AddSingleton<Microsoft.Extensions.Logging.ILogger<Daily.Services.Health.SupabaseHealthService>>(Microsoft.Extensions.Logging.Abstractions.NullLogger<Daily.Services.Health.SupabaseHealthService>.Instance);
         services.AddSingleton<Daily.Services.Health.IHealthService, Daily.Services.Health.SupabaseHealthService>();
+
+        // Local AI Services
+        services.AddSingleton<Daily_WinUI.Services.PhiSilicaSmartService>();
+        services.AddSingleton<Daily_WinUI.Services.OnnxGenAiSmartService>();
+        services.AddSingleton<Daily_WinUI.Services.ISmartIntelligenceService, Daily_WinUI.Services.SmartIntelligenceCoordinator>();
+        services.AddHttpClient<Daily_WinUI.Services.ModelDownloadManager>();
     }
 
     private async Task InitializeAsync()

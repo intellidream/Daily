@@ -72,9 +72,16 @@ namespace Daily_WinUI.Services
         private readonly IFinancesService? _financesService;
         private readonly IHabitsService? _habitsService;
         private readonly IRssFeedService? _rssFeedService;
+        private readonly ISmartIntelligenceService _smartService;
+        private readonly IBehaviorService _behaviorService;
 
-        public SmartBriefingService()
+        public SmartBriefingService(
+            ISmartIntelligenceService smartService,
+            IBehaviorService behaviorService)
         {
+            _smartService = smartService;
+            _behaviorService = behaviorService;
+
             try
             {
                 _healthService = App.Current.Services.GetService(typeof(IHealthService)) as IHealthService;
@@ -350,23 +357,76 @@ namespace Daily_WinUI.Services
                 });
             }
 
-            // 7. Assemble Full Briefing Text
-            StringBuilder sbBody = new StringBuilder();
-            sbBody.Append(weatherSentence);
-            sbBody.Append(" ");
-            sbBody.Append(healthSentence);
-            sbBody.Append("\n\n");
-            sbBody.Append(financeSentence);
-            sbBody.Append(" ");
-            sbBody.Append(habitsSentence);
-            sbBody.Append("\n\n");
-            sbBody.Append("Lastly, we found a couple of interesting articles in your feed you might like: ");
-            sbBody.Append($"\"{data.NewsRecommendations[0].Title}\" from {data.NewsRecommendations[0].Source}, and ");
-            sbBody.Append($"\"{data.NewsRecommendations[1].Title}\" from {data.NewsRecommendations[1].Source}.");
+            // 7. Generate AI narrative or fallback
+            string fallbackBriefing = $"{weatherSentence} {healthSentence}\n\n{financeSentence} {habitsSentence}\n\nLastly, we found a couple of interesting articles in your feed you might like: \"{data.NewsRecommendations[0].Title}\" from {data.NewsRecommendations[0].Source}, and \"{data.NewsRecommendations[1].Title}\" from {data.NewsRecommendations[1].Source}.";
 
-            data.IntroText = "Here is your on-device DayOne AI Smart Briefing for today.";
-            data.BriefingText = sbBody.ToString();
-            data.OutroText = "Have a highly productive day!";
+            bool useAi = false;
+            try
+            {
+                useAi = await _smartService.IsModelReadyAsync();
+            }
+            catch { }
+
+            if (useAi)
+            {
+                try
+                {
+                    string behaviorSummary = await _behaviorService.GetWeeklyBehaviorSummaryAsync();
+                    
+                    StringBuilder stocksBuilder = new StringBuilder();
+                    foreach (var stock in data.WatchlistStocks)
+                    {
+                        stocksBuilder.Append($"{stock.Symbol}: {stock.Price:F2} ({stock.FormattedChange}), ");
+                    }
+                    string watchlistDetails = stocksBuilder.Length > 0 ? stocksBuilder.ToString().TrimEnd(',', ' ') : "None";
+
+                    string systemPrompt = 
+                        "You are DayOne, a helpful personal assistant AI running locally on the user's device. " +
+                        "Generate a concise, natural, and friendly daily briefing narrative based on the user's data. " +
+                        "Analyze their weather, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice. " +
+                        "Keep the briefing structured:\n" +
+                        "- Friendly time-of-day greeting.\n" +
+                        "- Cohesive summary of weather, vitals, habits, and finances. Highlight any interesting correlations or trends (e.g. step goal, sleep quality, habits streak, or finance watchlists).\n" +
+                        "- Keep it highly professional, personal, and brief (2-3 short paragraphs max). Do not use markdown headers or lists, keep it as conversational flowing text.";
+
+                    string userPrompt = 
+                        $"User Name: {userName}\n" +
+                        $"Current Time: {DateTime.Now:f}\n\n" +
+                        $"--- WEATHER DATA ---\n" +
+                        $"Condition: {data.WeatherCondition} (Temp: {data.WeatherTemp}°C)\n" +
+                        $"Summary: {data.WeatherSummary}\n\n" +
+                        $"--- HEALTH DATA ---\n" +
+                        $"Steps Today: {data.HealthSteps}\n" +
+                        $"Sleep Last Night: {data.HealthSleepHours:F1} hours\n" +
+                        $"Average Heart Rate: {data.HealthAvgHr} BPM\n\n" +
+                        $"--- FINANCE DATA ---\n" +
+                        $"Net Worth: {data.NetWorth:C0}\n" +
+                        $"Watchlist stocks info: {watchlistDetails}\n\n" +
+                        $"--- HABITS DATA ---\n" +
+                        $"Habits completed today: {data.HabitsCompleted} out of {data.HabitsTotal}\n\n" +
+                        $"--- RECENT USER BEHAVIOR TELEMETRY (Last 7 Days) ---\n" +
+                        $"{behaviorSummary}";
+
+                    string responseText = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                    
+                    data.IntroText = "Here is your on-device DayOne AI Smart Briefing for today.";
+                    data.BriefingText = responseText;
+                    data.OutroText = "Have a highly productive day!";
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] AI Generation failed: {ex.Message}. Falling back to template.");
+                    data.IntroText = "Here is your on-device DayOne AI Smart Briefing for today.";
+                    data.BriefingText = fallbackBriefing;
+                    data.OutroText = "Have a highly productive day!";
+                }
+            }
+            else
+            {
+                data.IntroText = "Here is your on-device DayOne AI Smart Briefing for today.";
+                data.BriefingText = fallbackBriefing;
+                data.OutroText = "Have a highly productive day!";
+            }
 
             return data;
         }

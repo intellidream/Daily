@@ -1,9 +1,13 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Daily_WinUI.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Windows.AI;
+using Microsoft.Windows.AI.Text;
 
 namespace Daily_WinUI.Views;
 
@@ -12,8 +16,7 @@ public sealed partial class FeaturesPage : Page
     private readonly AppSettings _settings;
     private readonly IBehaviorService _behaviorService;
     private bool _downloadInProgress = false;
-    private DispatcherTimer? _downloadTimer;
-    private int _downloadProgressValue = 0;
+    private CancellationTokenSource? _downloadCts;
     private bool _isInitializing = false;
 
     public FeaturesPage()
@@ -22,7 +25,7 @@ public sealed partial class FeaturesPage : Page
         _settings = SettingsService.Load();
         _behaviorService = App.Current.Services.GetRequiredService<IBehaviorService>();
         Loaded += FeaturesPage_Loaded;
-        Unloaded += (s, ev) => _downloadTimer?.Stop();
+        Unloaded += (s, ev) => _downloadCts?.Cancel();
     }
 
     private void FeaturesPage_Loaded(object sender, RoutedEventArgs e)
@@ -147,39 +150,97 @@ public sealed partial class FeaturesPage : Page
         string? npu = SettingsService.GetDetectedNpuName();
         string activeDevice = _settings.SelectedAiAccelerator ?? "Auto";
         
+        bool phiSilicaAvailable = false;
+        try
+        {
+            phiSilicaAvailable = LanguageModel.GetReadyState() == AIFeatureReadyState.Ready;
+        }
+        catch { }
+
+        string recommendedOption = "Auto (Recommended)";
+        if (!string.IsNullOrEmpty(npu))
+        {
+            recommendedOption = npu.Contains("Qualcomm") ? "Qualcomm Hexagon NPU" : (npu.Contains("Intel") ? "Intel AI Boost NPU" : "AMD Ryzen AI NPU");
+        }
+        else
+        {
+            recommendedOption = "DirectML GPU Accelerator";
+        }
+
         string activeLabel;
+        string description = "";
+        bool needsDownload = false;
+
         if (activeDevice == "Auto")
         {
-            activeLabel = !string.IsNullOrEmpty(npu) ? npu : "DirectML GPU (Auto fallback)";
+            if (phiSilicaAvailable)
+            {
+                activeLabel = $"Auto -> Phi Silica NPU (Active)";
+                description = $"System automatically resolved execution to the built-in Microsoft Copilot Runtime (Phi Silica) utilizing the NPU. Recommendation: {recommendedOption}.";
+            }
+            else if (_settings.LocalAiModelDownloaded)
+            {
+                activeLabel = $"Auto -> ONNX Llama 3.2 GPU/CPU (Active)";
+                description = $"System resolved execution to the custom Llama 3.2 1B ONNX model. Recommendation: {recommendedOption}.";
+            }
+            else
+            {
+                activeLabel = $"Auto -> Fallback Template Engine";
+                description = $"No local AI engine is currently ready. Using procedural templates. Recommendation: Choose ONNX weights or configure NPU. Recommended: {recommendedOption}.";
+                needsDownload = true;
+            }
         }
         else if (activeDevice == "NPU")
         {
-            activeLabel = "Qualcomm Hexagon NPU (45 TOPS)";
+            activeLabel = "Qualcomm Hexagon NPU (Phi Silica)";
+            description = "Uses the built-in Microsoft Copilot Runtime (Phi Silica 3.3B) accelerated by the Qualcomm NPU. Zero download required.";
+            if (!phiSilicaAvailable)
+            {
+                description += " WARNING: Phi Silica is NOT ready or supported on this system. Falling back to template.";
+            }
         }
         else if (activeDevice == "NPU_IntelAmd")
         {
             activeLabel = (npu != null && (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)))
-                ? "AMD Ryzen AI NPU (50 TOPS)"
-                : "Intel(R) AI Boost NPU (48 TOPS)";
+                ? "AMD Ryzen AI NPU (Phi Silica)"
+                : "Intel(R) AI Boost NPU (Phi Silica)";
+            description = "Uses the built-in Microsoft Copilot Runtime (Phi Silica 3.3B) accelerated by the NPU. Zero download required.";
+            if (!phiSilicaAvailable)
+            {
+                description += " WARNING: Phi Silica is NOT ready or supported on this system. Falling back to template.";
+            }
         }
         else if (activeDevice == "GPU")
         {
-            activeLabel = "DirectML GPU";
+            activeLabel = "DirectML GPU (Llama 3.2 ONNX)";
+            description = "Uses the custom Llama 3.2 1B model running locally via DirectML on your graphics card. Offers excellent generation speed.";
+            if (!_settings.LocalAiModelDownloaded)
+            {
+                description += " (Requires Model Download)";
+                needsDownload = true;
+            }
         }
-        else
+        else // CPU
         {
-            activeLabel = "DirectML CPU (Fallback)";
+            activeLabel = "DirectML CPU (Llama 3.2 ONNX)";
+            description = "Uses the custom Llama 3.2 1B model running locally on your processor. Note: CPU generation will be slower and use more battery.";
+            if (!_settings.LocalAiModelDownloaded)
+            {
+                description += " (Requires Model Download)";
+                needsDownload = true;
+            }
         }
 
-        if (_settings.LocalAiModelDownloaded)
+        SettingsAiDeviceStatusText.Text = $"Active Engine: {activeLabel}";
+        SettingsAiAcceleratorDescriptionText.Text = description;
+
+        if (needsDownload)
         {
-            SettingsAiDeviceStatusText.Text = $"Active AI Backend: {activeLabel} | Local Engine Active";
-            SettingsDownloadModelBtn.Visibility = Visibility.Collapsed;
+            SettingsDownloadModelBtn.Visibility = Visibility.Visible;
         }
         else
         {
-            SettingsAiDeviceStatusText.Text = $"Active AI Backend: {activeLabel} | Local Model Missing";
-            SettingsDownloadModelBtn.Visibility = Visibility.Visible;
+            SettingsDownloadModelBtn.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -203,7 +264,12 @@ public sealed partial class FeaturesPage : Page
         }
     }
 
-    private void SettingsDownloadModelBtn_Click(object sender, RoutedEventArgs e)
+    private void SettingsCancelDownloadBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _downloadCts?.Cancel();
+    }
+
+    private async void SettingsDownloadModelBtn_Click(object sender, RoutedEventArgs e)
     {
         if (_downloadInProgress) return;
 
@@ -213,37 +279,67 @@ public sealed partial class FeaturesPage : Page
         SettingsDownloadProgressBar.Value = 0;
         SettingsDownloadStatusText.Text = "Connecting to ONNX AI Model Repository...";
 
-        _downloadProgressValue = 0;
-        _downloadTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
-        _downloadTimer.Tick += (s, ev) =>
+        _downloadCts = new CancellationTokenSource();
+
+        try
         {
-            _downloadProgressValue += 1;
-            SettingsDownloadProgressBar.Value = _downloadProgressValue;
-
-            if (_downloadProgressValue == 15)
-                SettingsDownloadStatusText.Text = "Downloading: Qwen-2.5-1.5B-Instruct-INT4 (1.2GB)... 15%";
-            else if (_downloadProgressValue == 40)
-                SettingsDownloadStatusText.Text = "Downloading: Qwen-2.5-1.5B-Instruct-INT4 (1.2GB)... 40%";
-            else if (_downloadProgressValue == 70)
-                SettingsDownloadStatusText.Text = "Downloading: Qwen-2.5-1.5B-Instruct-INT4 (1.2GB)... 70%";
-            else if (_downloadProgressValue == 90)
-                SettingsDownloadStatusText.Text = "Verifying ONNX model signature...";
-            else if (_downloadProgressValue == 96)
-                SettingsDownloadStatusText.Text = "Extracting model weights to LocalAppData...";
-            else if (_downloadProgressValue >= 100)
+            var downloadManager = App.Current.Services.GetRequiredService<ModelDownloadManager>();
+            
+            downloadManager.ProgressChanged += (s, args) =>
             {
-                _downloadTimer.Stop();
-                _downloadInProgress = false;
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    SettingsDownloadProgressBar.Value = args.Percentage;
+                    SettingsDownloadStatusText.Text = $"Downloading: {args.CurrentFileName} ({args.DownloadedMBs:F1}/{args.TotalMBs:F1} MB) | Speed: {args.SpeedMBs:F2} MB/s | Remaining: {args.TimeRemaining:mm\\:ss}";
+                });
+            };
 
-                // Save status
-                _settings.LocalAiModelDownloaded = true;
-                SettingsService.Save(_settings);
+            downloadManager.StatusChanged += (s, status) =>
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    SettingsDownloadStatusText.Text = status;
+                });
+            };
 
-                SettingsDownloadProgressGrid.Visibility = Visibility.Collapsed;
-                UpdateModelStatus();
-            }
-        };
-        _downloadTimer.Start();
+            await downloadManager.DownloadModelAsync(_downloadCts.Token);
+
+            _settings.LocalAiModelDownloaded = true;
+            SettingsService.Save(_settings);
+            
+            ContentDialog dialog = new ContentDialog
+            {
+                Title = "Model Download Complete",
+                Content = "The local Llama 3.2 1B ONNX model has been successfully downloaded and verified. Local AI accelerator is now active.",
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            SettingsDownloadStatusText.Text = "Download canceled by user.";
+        }
+        catch (Exception ex)
+        {
+            ContentDialog dialog = new ContentDialog
+            {
+                Title = "Download Failed",
+                Content = $"An error occurred while downloading the model: {ex.Message}",
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+            SettingsDownloadStatusText.Text = "Download failed.";
+        }
+        finally
+        {
+            _downloadInProgress = false;
+            SettingsDownloadProgressGrid.Visibility = Visibility.Collapsed;
+            _downloadCts?.Dispose();
+            _downloadCts = null;
+            UpdateModelStatus();
+        }
     }
 
     private void SmartBehaviorSwitch_Toggled(object sender, RoutedEventArgs e)
