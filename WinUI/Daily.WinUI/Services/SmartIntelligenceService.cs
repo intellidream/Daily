@@ -75,6 +75,7 @@ namespace Daily_WinUI.Services
         private Model? _model;
         private Tokenizer? _tokenizer;
         private readonly string _modelPath;
+        private string? _lastUsedAccelerator;
 
         public OnnxGenAiSmartService()
         {
@@ -95,6 +96,18 @@ namespace Daily_WinUI.Services
 
         private async Task EnsureLoadedAsync()
         {
+            var settings = SettingsService.Load();
+            string choice = settings.SelectedAiAccelerator ?? "Auto";
+
+            if (_model != null && _lastUsedAccelerator != choice)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Accelerator changed from {_lastUsedAccelerator} to {choice}. Reloading model.");
+                _model.Dispose();
+                _model = null;
+                _tokenizer?.Dispose();
+                _tokenizer = null;
+            }
+
             if (_model == null)
             {
                 if (!await IsModelReadyAsync())
@@ -104,7 +117,56 @@ namespace Daily_WinUI.Services
 
                 await Task.Run(() =>
                 {
-                    _model = new Model(_modelPath);
+                    _lastUsedAccelerator = choice;
+
+                    string resolvedChoice = choice;
+                    if (choice == "Auto")
+                    {
+                        string? npu = SettingsService.GetDetectedNpuName();
+                        if (!string.IsNullOrEmpty(npu))
+                        {
+                            resolvedChoice = "NPU_IntelAmd";
+                        }
+                        else
+                        {
+                            resolvedChoice = "GPU";
+                        }
+                    }
+
+                    using var config = new Config(_modelPath);
+                    config.ClearProviders();
+
+                    if (resolvedChoice == "CPU")
+                    {
+                        config.AppendProvider("cpu");
+                        System.Diagnostics.Debug.WriteLine("[OnnxGenAi] Loading model on CPU");
+                    }
+                    else if (resolvedChoice == "NPU_IntelAmd")
+                    {
+                        config.AppendProvider("dml");
+                        int npuIndex = Daily_WinUI.Helpers.DeviceHelper.GetAdapterIndex("NPU");
+                        config.SetProviderOption("dml", "device_id", npuIndex.ToString());
+                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Loading model on NPU (DirectML Adapter Index: {npuIndex})");
+                    }
+                    else // GPU
+                    {
+                        config.AppendProvider("dml");
+                        int gpuIndex = Daily_WinUI.Helpers.DeviceHelper.GetAdapterIndex("GPU");
+                        config.SetProviderOption("dml", "device_id", gpuIndex.ToString());
+                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Loading model on GPU (DirectML Adapter Index: {gpuIndex})");
+                    }
+
+                    try
+                    {
+                        _model = new Model(config);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Failed to load model with customized config: {ex.Message}. Falling back to default.");
+                        using var fallbackConfig = new Config(_modelPath);
+                        _model = new Model(fallbackConfig);
+                    }
+
                     _tokenizer = new Tokenizer(_model);
                 });
             }

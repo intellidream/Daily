@@ -173,9 +173,13 @@ public sealed partial class FeaturesPage : Page
         }
 
         string recommendedOption = "Auto (Recommended)";
-        if (!string.IsNullOrEmpty(npu))
+        if (phiSilicaAvailable && !string.IsNullOrEmpty(npu))
         {
             recommendedOption = npu.Contains("Qualcomm") ? "Qualcomm Hexagon NPU" : (npu.Contains("Intel") ? "Intel AI Boost NPU" : "AMD Ryzen AI NPU");
+        }
+        else if (!string.IsNullOrEmpty(npu))
+        {
+            recommendedOption = npu.Contains("Intel") ? "Intel AI Boost NPU" : "AMD Ryzen AI NPU";
         }
         else
         {
@@ -195,13 +199,18 @@ public sealed partial class FeaturesPage : Page
             }
             else if (onnxModelReady)
             {
-                activeLabel = $"Auto -> ONNX Llama 3.2 GPU/CPU (Active)";
-                description = $"System resolved execution to the custom Llama 3.2 1B ONNX model. Recommendation: {recommendedOption}.";
+                string resolvedTarget = "DirectML GPU";
+                if (!string.IsNullOrEmpty(npu))
+                {
+                    resolvedTarget = npu.Contains("Intel", StringComparison.OrdinalIgnoreCase) ? "Intel AI Boost NPU" : "AMD Ryzen AI NPU";
+                }
+                activeLabel = $"Auto -> {resolvedTarget} (ONNX Llama 3.2) (Active)";
+                description = $"System automatically resolved execution to the custom Llama 3.2 1B ONNX model running on the {resolvedTarget}.";
             }
             else
             {
                 activeLabel = $"Auto -> Fallback Template Engine";
-                description = $"No local AI engine is currently ready. Using procedural templates. Recommendation: Choose ONNX weights or configure NPU. Recommended: {recommendedOption}.";
+                description = $"No local AI engine is currently ready. Using procedural templates. Recommended: {recommendedOption} (Requires Model Download).";
                 needsDownload = true;
             }
         }
@@ -216,13 +225,15 @@ public sealed partial class FeaturesPage : Page
         }
         else if (activeDevice == "NPU_IntelAmd")
         {
-            activeLabel = (npu != null && (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)))
-                ? "AMD Ryzen AI NPU (Phi Silica)"
-                : "Intel(R) AI Boost NPU (Phi Silica)";
-            description = "Uses the built-in Microsoft Copilot Runtime (Phi Silica 3.3B) accelerated by the NPU. Zero download required.";
-            if (!phiSilicaAvailable)
+            string npuName = (npu != null && (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)))
+                ? "AMD Ryzen AI NPU"
+                : "Intel(R) AI Boost NPU";
+            activeLabel = $"{npuName} (Llama 3.2 ONNX)";
+            description = $"Uses the custom Llama 3.2 1B model running locally on the {npuName} via ONNX Runtime GenAI.";
+            if (!onnxModelReady)
             {
-                description += " WARNING: Phi Silica is NOT ready or supported on this system. Falling back to template.";
+                description += " (Requires Model Download)";
+                needsDownload = true;
             }
         }
         else if (activeDevice == "GPU")
