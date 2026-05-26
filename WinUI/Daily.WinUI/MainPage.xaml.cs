@@ -852,8 +852,10 @@ public sealed partial class MainPage : Page
             Grid.SetColumnSpan(BriefingNewsCard, 1);
 
             // 5. Tighten outer margins and paddings for small viewport space efficiency
-            BriefingCardBorder.Margin = new Thickness(6);
+            BriefingCardBorder.Margin = new Thickness(24);
             BriefingCardBorder.Padding = new Thickness(16);
+            BriefingCardBorder.MaxWidth = double.PositiveInfinity;
+            BriefingCardBorder.MaxHeight = double.PositiveInfinity;
         }
         else
         {
@@ -953,6 +955,8 @@ public sealed partial class MainPage : Page
             // 5. Restore spacious margins and paddings
             BriefingCardBorder.Margin = new Thickness(24);
             BriefingCardBorder.Padding = new Thickness(32);
+            BriefingCardBorder.MaxWidth = 1400;
+            BriefingCardBorder.MaxHeight = 900;
         }
     }
 }

@@ -67,6 +67,8 @@ public sealed partial class MainWindow : Window
         {
             rootContent.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPointerPressed), true);
         }
+
+        UpdateTitleBarElementsVisibility();
     }
 
     private void OnPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
@@ -305,6 +307,34 @@ public sealed partial class MainWindow : Window
         return (7, 0, 7, 7); // Default fallback margins for Windows 10/11 standard borders
     }
 
+    private double GetDpiScale()
+    {
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        uint dpi = GetDpiForWindow(hwnd);
+        return dpi > 0 ? (double)dpi / 96.0 : 1.0;
+    }
+
+    private void UpdateTitleBarElementsVisibility()
+    {
+        double scale = GetDpiScale();
+        double logicalWidth = AppWindow.Size.Width / scale;
+
+        if (logicalWidth < 640)
+        {
+            if (TitleBarDateText != null)
+                TitleBarDateText.Visibility = Visibility.Collapsed;
+            if (TitleBarUserEmailText != null)
+                TitleBarUserEmailText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            if (TitleBarDateText != null)
+                TitleBarDateText.Visibility = Visibility.Visible;
+            if (TitleBarUserEmailText != null)
+                TitleBarUserEmailText.Visibility = Visibility.Visible;
+        }
+    }
+
     private void ConfigureStartupWindow()
     {
         if (AppWindow.Presenter is OverlappedPresenter overlappedPresenter)
@@ -344,7 +374,7 @@ public sealed partial class MainWindow : Window
         if (!args.DidPositionChange && !args.DidSizeChange) return;
 
         // Enforce minimum window size (400×400 logical px, converted to physical)
-        double scale = this.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        double scale = GetDpiScale();
         int minWidthPx = (int)(400 * scale);
         int minHeightPx = (int)(400 * scale);
         var size = sender.Size;
@@ -362,38 +392,25 @@ public sealed partial class MainWindow : Window
         _settings.WindowWidth = size.Width;
         _settings.WindowHeight = size.Height;
         _settings.HasWindowPosition = true;
+
+        UpdateTitleBarElementsVisibility();
     }
 
     private void AppTitleBar_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (AppWindow.TitleBar == null) return;
-        double scale = this.Content?.XamlRoot?.RasterizationScale ?? 1.0;
-        if (scale <= 0) return;
-
-        // Snap our grid height to exactly match the OS caption-button height
-        double captionHeight = AppWindow.TitleBar.Height / scale;
-        AppTitleBar.Height = captionHeight;
-
-        // Keep the spacer column wide enough to clear the system buttons
-        if (RightPaddingColumn != null)
-            RightPaddingColumn.Width = new GridLength(AppWindow.TitleBar.RightInset / scale);
-
-        // Adjust title bar elements dynamically when resized below 640 logical pixels
-        double width = e.NewSize.Width;
-        if (width < 640)
+        double scale = GetDpiScale();
+        if (scale > 0 && AppWindow.TitleBar != null)
         {
-            if (TitleBarDateText != null)
-                TitleBarDateText.Visibility = Visibility.Collapsed;
-            if (TitleBarUserEmailText != null)
-                TitleBarUserEmailText.Visibility = Visibility.Collapsed;
+            // Snap our grid height to exactly match the OS caption-button height
+            double captionHeight = AppWindow.TitleBar.Height / scale;
+            AppTitleBar.Height = captionHeight;
+
+            // Keep the spacer column wide enough to clear the system buttons
+            if (RightPaddingColumn != null)
+                RightPaddingColumn.Width = new GridLength(AppWindow.TitleBar.RightInset / scale);
         }
-        else
-        {
-            if (TitleBarDateText != null)
-                TitleBarDateText.Visibility = Visibility.Visible;
-            if (TitleBarUserEmailText != null)
-                TitleBarUserEmailText.Visibility = Visibility.Visible;
-        }
+
+        UpdateTitleBarElementsVisibility();
     }
 
     private void DockNormal_Click(object sender, RoutedEventArgs e)
@@ -401,8 +418,7 @@ public sealed partial class MainWindow : Window
         var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
         var workArea = displayArea.WorkArea;
 
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        double scale = GetDpiForWindow(hwnd) / 96.0;
+        double scale = GetDpiScale();
 
         int targetWidth = Math.Min((int)(1380 * scale), workArea.Width);
         int targetHeight = Math.Min((int)(790 * scale), workArea.Height);
@@ -422,8 +438,7 @@ public sealed partial class MainWindow : Window
         var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
         var workArea = displayArea.WorkArea;
 
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        double scale = GetDpiForWindow(hwnd) / 96.0;
+        double scale = GetDpiScale();
 
         int targetWidth = Math.Min((int)(480 * scale), workArea.Width);
         int targetHeight = workArea.Height;
@@ -443,8 +458,7 @@ public sealed partial class MainWindow : Window
         var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
         var workArea = displayArea.WorkArea;
 
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        double scale = GetDpiForWindow(hwnd) / 96.0;
+        double scale = GetDpiScale();
 
         int targetWidth = Math.Min((int)(480 * scale), workArea.Width);
         int targetHeight = workArea.Height;
