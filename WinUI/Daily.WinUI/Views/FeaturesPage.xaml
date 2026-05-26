@@ -11,13 +11,13 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,32">
         <StackPanel MaxWidth="650" HorizontalAlignment="Left" Spacing="24">
             
-            <TextBlock Text="Features Configuration" FontSize="26" FontWeight="SemiBold" CharacterSpacing="20" Margin="0,0,0,8"/>
+            <TextBlock Text="Features" FontSize="26" FontWeight="SemiBold" CharacterSpacing="20" Margin="0,0,0,8"/>
             
             <!-- Divider -->
             <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
             <!-- SECTION 1: Local Smart Briefing -->
-            <TextBlock Text="Local Smart Briefing" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+            <TextBlock Text="Smart Briefing" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
             
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -71,7 +71,7 @@
             </Border>
 
             <!-- SECTION 2: Smart Behavior Tracking -->
-            <TextBlock Text="Smart Behavior Analytics" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+            <TextBlock Text="Smart Behavior" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
             
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
