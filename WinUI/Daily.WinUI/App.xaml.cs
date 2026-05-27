@@ -213,6 +213,12 @@ public partial class App : Application
         services.AddSingleton<Daily_WinUI.Services.OnnxGenAiSmartService>();
         services.AddSingleton<Daily_WinUI.Services.ISmartIntelligenceService, Daily_WinUI.Services.SmartIntelligenceCoordinator>();
         services.AddHttpClient<Daily_WinUI.Services.ModelDownloadManager>();
+        services.AddSingleton<Daily_WinUI.Services.ModelDownloadManager>(sp =>
+        {
+            var factory = sp.GetRequiredService<System.Net.Http.IHttpClientFactory>();
+            var client = factory.CreateClient(typeof(Daily_WinUI.Services.ModelDownloadManager).FullName ?? nameof(Daily_WinUI.Services.ModelDownloadManager));
+            return new Daily_WinUI.Services.ModelDownloadManager(client);
+        });
     }
 
     private async Task InitializeAsync()

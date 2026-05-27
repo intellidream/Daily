@@ -76,6 +76,10 @@ namespace Daily_WinUI.Services
         private Tokenizer? _tokenizer;
         private readonly string _modelPath;
         private string? _lastUsedAccelerator;
+        private string? _lastConfiguredAccelerator;
+        private bool _useCpuFallback = false;
+
+        public bool IsUsingCpuFallback => _useCpuFallback;
 
         public OnnxGenAiSmartService()
         {
@@ -88,9 +92,19 @@ namespace Daily_WinUI.Services
 
         public Task<bool> IsModelReadyAsync()
         {
-            // Verify model file exists
+            // Verify model file and its external weights exist
             string filePath = Path.Combine(_modelPath, "model.onnx");
-            bool ready = Directory.Exists(_modelPath) && File.Exists(filePath);
+            string dataPath = Path.Combine(_modelPath, "model.onnx.data");
+            bool ready = Directory.Exists(_modelPath) && File.Exists(filePath) && File.Exists(dataPath);
+            if (ready)
+            {
+                // Verify the weights file is not truncated (should be at least 1.2 GB)
+                var fileInfo = new FileInfo(dataPath);
+                if (fileInfo.Length < 1200000000)
+                {
+                    ready = false;
+                }
+            }
             return Task.FromResult(ready);
         }
 
@@ -99,9 +113,17 @@ namespace Daily_WinUI.Services
             var settings = SettingsService.Load();
             string choice = settings.SelectedAiAccelerator ?? "Auto";
 
-            if (_model != null && _lastUsedAccelerator != choice)
+            if (_lastConfiguredAccelerator != choice)
             {
-                System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Accelerator changed from {_lastUsedAccelerator} to {choice}. Reloading model.");
+                _useCpuFallback = false;
+                _lastConfiguredAccelerator = choice;
+            }
+
+            string actualChoice = _useCpuFallback ? "CPU" : choice;
+
+            if (_model != null && _lastUsedAccelerator != actualChoice)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Accelerator changed from {_lastUsedAccelerator} to {actualChoice}. Reloading model.");
                 _model.Dispose();
                 _model = null;
                 _tokenizer?.Dispose();
@@ -117,20 +139,12 @@ namespace Daily_WinUI.Services
 
                 await Task.Run(() =>
                 {
-                    _lastUsedAccelerator = choice;
+                    _lastUsedAccelerator = actualChoice;
 
-                    string resolvedChoice = choice;
-                    if (choice == "Auto")
+                    string resolvedChoice = actualChoice;
+                    if (actualChoice == "Auto")
                     {
-                        string? npu = SettingsService.GetDetectedNpuName();
-                        if (!string.IsNullOrEmpty(npu))
-                        {
-                            resolvedChoice = "NPU_IntelAmd";
-                        }
-                        else
-                        {
-                            resolvedChoice = "GPU";
-                        }
+                        resolvedChoice = "GPU";
                     }
 
                     using var config = new Config(_modelPath);
@@ -162,9 +176,22 @@ namespace Daily_WinUI.Services
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Failed to load model with customized config: {ex.Message}. Falling back to default.");
-                        using var fallbackConfig = new Config(_modelPath);
-                        _model = new Model(fallbackConfig);
+                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Failed to load model with customized config: {ex.Message}. Falling back to CPU.");
+                        _useCpuFallback = true;
+                        _lastUsedAccelerator = "CPU";
+                        try
+                        {
+                            using var cpuConfig = new Config(_modelPath);
+                            cpuConfig.ClearProviders();
+                            cpuConfig.AppendProvider("cpu");
+                            _model = new Model(cpuConfig);
+                        }
+                        catch (Exception innerEx)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] CPU fallback load failed: {innerEx.Message}. Trying default fallback.");
+                            using var fallbackConfig = new Config(_modelPath);
+                            _model = new Model(fallbackConfig);
+                        }
                     }
 
                     _tokenizer = new Tokenizer(_model);
@@ -186,29 +213,87 @@ namespace Daily_WinUI.Services
 
             StringBuilder responseText = new StringBuilder();
 
-            await Task.Run(() =>
+            try
             {
-                using var tokens = _tokenizer.Encode(formattedPrompt);
-                using var generatorParams = new GeneratorParams(_model);
-                generatorParams.SetSearchOption("max_length", 2048);
-
-                using var generator = new Generator(_model, generatorParams);
-                generator.AppendTokenSequences(tokens);
-                using var tokenizerStream = _tokenizer.CreateStream();
-
-                while (!generator.IsDone() && !ct.IsCancellationRequested)
+                await Task.Run(() =>
                 {
-                    generator.GenerateNextToken();
-                    
-                    var sequence = generator.GetSequence(0);
-                    var newToken = sequence[^1];
-                    
-                    string chunk = tokenizerStream.Decode(newToken);
-                    responseText.Append(chunk);
-                }
-            }, ct);
+                    using var tokens = _tokenizer.Encode(formattedPrompt);
+                    using var generatorParams = new GeneratorParams(_model);
+                    generatorParams.SetSearchOption("max_length", 2048);
 
-            return responseText.ToString();
+                    using var generator = new Generator(_model, generatorParams);
+                    generator.AppendTokenSequences(tokens);
+                    using var tokenizerStream = _tokenizer.CreateStream();
+
+                    while (!generator.IsDone() && !ct.IsCancellationRequested)
+                    {
+                        generator.GenerateNextToken();
+                        
+                        var sequence = generator.GetSequence(0);
+                        var newToken = sequence[^1];
+                        
+                        string chunk = tokenizerStream.Decode(newToken);
+                        responseText.Append(chunk);
+                    }
+                }, ct);
+
+                return responseText.ToString();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Generation exception: {ex.Message}");
+
+                // If we were not already using CPU, attempt CPU fallback
+                if (_lastUsedAccelerator != "CPU")
+                {
+                    System.Diagnostics.Debug.WriteLine("[OnnxGenAi] Generation failed on hardware accelerator. Attempting CPU fallback...");
+                    _useCpuFallback = true;
+
+                    // Clean up and load CPU model
+                    _model?.Dispose();
+                    _model = null;
+                    _tokenizer?.Dispose();
+                    _tokenizer = null;
+
+                    await EnsureLoadedAsync();
+
+                    if (_model == null || _tokenizer == null)
+                    {
+                        throw new InvalidOperationException("ONNX model could not be loaded during CPU fallback.", ex);
+                    }
+
+                    responseText.Clear();
+
+                    await Task.Run(() =>
+                    {
+                        using var tokens = _tokenizer.Encode(formattedPrompt);
+                        using var generatorParams = new GeneratorParams(_model);
+                        generatorParams.SetSearchOption("max_length", 2048);
+
+                        using var generator = new Generator(_model, generatorParams);
+                        generator.AppendTokenSequences(tokens);
+                        using var tokenizerStream = _tokenizer.CreateStream();
+
+                        while (!generator.IsDone() && !ct.IsCancellationRequested)
+                        {
+                            generator.GenerateNextToken();
+                            
+                            var sequence = generator.GetSequence(0);
+                            var newToken = sequence[^1];
+                            
+                            string chunk = tokenizerStream.Decode(newToken);
+                            responseText.Append(chunk);
+                        }
+                    }, ct);
+
+                    return responseText.ToString();
+                }
+                else
+                {
+                    // If CPU also failed, propagate the exception
+                    throw;
+                }
+            }
         }
     }
 
@@ -227,6 +312,11 @@ namespace Daily_WinUI.Services
         {
             var settings = SettingsService.Load();
             string choice = settings.SelectedAiAccelerator ?? "Auto";
+
+            if (choice == "Fallback")
+            {
+                return null;
+            }
 
             if (choice == "NPU")
             {

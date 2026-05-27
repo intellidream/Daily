@@ -15,8 +15,6 @@ public sealed partial class FeaturesPage : Page
 {
     private readonly AppSettings _settings;
     private readonly IBehaviorService _behaviorService;
-    private bool _downloadInProgress = false;
-    private CancellationTokenSource? _downloadCts;
     private bool _isInitializing = false;
 
     public FeaturesPage()
@@ -25,7 +23,7 @@ public sealed partial class FeaturesPage : Page
         _settings = SettingsService.Load();
         _behaviorService = App.Current.Services.GetRequiredService<IBehaviorService>();
         Loaded += FeaturesPage_Loaded;
-        Unloaded += (s, ev) => _downloadCts?.Cancel();
+        Unloaded += FeaturesPage_Unloaded;
     }
 
     private void FeaturesPage_Loaded(object sender, RoutedEventArgs e)
@@ -33,6 +31,31 @@ public sealed partial class FeaturesPage : Page
         _isInitializing = true;
         try
         {
+            var downloadManager = App.Current.Services.GetRequiredService<ModelDownloadManager>();
+            downloadManager.ProgressChanged += DownloadManager_ProgressChanged;
+            downloadManager.StatusChanged += DownloadManager_StatusChanged;
+            downloadManager.DownloadCompleted += DownloadManager_DownloadCompleted;
+            downloadManager.DownloadFailed += DownloadManager_DownloadFailed;
+
+            if (downloadManager.IsDownloading)
+            {
+                SettingsDownloadModelBtn.Visibility = Visibility.Collapsed;
+                SettingsDownloadProgressGrid.Visibility = Visibility.Visible;
+                if (downloadManager.LastProgress != null)
+                {
+                    DownloadManager_ProgressChanged(downloadManager, downloadManager.LastProgress);
+                }
+                else
+                {
+                    SettingsDownloadStatusText.Text = downloadManager.StatusText;
+                    SettingsDownloadProgressBar.Value = downloadManager.Percentage;
+                }
+            }
+            else
+            {
+                SettingsDownloadProgressGrid.Visibility = Visibility.Collapsed;
+            }
+
             // ── SECTION 1: Local Smart Briefing ──
             SmartBriefingSwitch.IsOn = _settings.EnableSmartBriefing;
 
@@ -73,6 +96,7 @@ public sealed partial class FeaturesPage : Page
 
             SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "DirectML GPU Accelerator", Tag = "GPU" });
             SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "DirectML CPU (Slow)", Tag = "CPU" });
+            SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "Fallback Template Engine", Tag = "Fallback" });
 
             // Load selection matching saved setting or default to Auto
             string savedAcc = _settings.SelectedAiAccelerator ?? "Auto";
@@ -158,10 +182,12 @@ public sealed partial class FeaturesPage : Page
         catch { }
 
         bool onnxModelReady = false;
+        bool cpuFallbackActive = false;
         try
         {
             var onnxService = App.Current.Services.GetRequiredService<OnnxGenAiSmartService>();
             onnxModelReady = Task.Run(async () => await onnxService.IsModelReadyAsync()).GetAwaiter().GetResult();
+            cpuFallbackActive = onnxService.IsUsingCpuFallback;
         }
         catch { }
 
@@ -172,45 +198,55 @@ public sealed partial class FeaturesPage : Page
             SettingsService.Save(_settings);
         }
 
-        string recommendedOption = "Auto (Recommended)";
-        if (phiSilicaAvailable && !string.IsNullOrEmpty(npu))
+        // Determine the best hardware engine for the current machine
+        string bestEngineName;
+        string bestEngineTag;
+        bool bestEngineReady;
+
+        if (phiSilicaAvailable && !string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
         {
-            recommendedOption = npu.Contains("Qualcomm") ? "Qualcomm Hexagon NPU" : (npu.Contains("Intel") ? "Intel AI Boost NPU" : "AMD Ryzen AI NPU");
-        }
-        else if (!string.IsNullOrEmpty(npu))
-        {
-            recommendedOption = npu.Contains("Intel") ? "Intel AI Boost NPU" : "AMD Ryzen AI NPU";
+            bestEngineName = "Qualcomm Hexagon NPU";
+            bestEngineTag = "NPU";
+            bestEngineReady = true;
         }
         else
         {
-            recommendedOption = "DirectML GPU Accelerator";
+            // For x64 systems, DirectML GPU is the recommended, most stable, and high-performance target.
+            bestEngineName = "DirectML GPU Accelerator";
+            bestEngineTag = "GPU";
+            bestEngineReady = onnxModelReady;
         }
 
+        string recommendedOption = bestEngineName;
         string activeLabel;
         string description = "";
         bool needsDownload = false;
 
-        if (activeDevice == "Auto")
+        if (cpuFallbackActive)
         {
-            if (phiSilicaAvailable)
+            activeLabel = "DirectML CPU (Llama 3.2 ONNX) (Safe Fallback)";
+            description = "The system encountered a graphics card driver error or compatibility issue and automatically fell back to CPU mode for stability. You can restart the application or choose a different accelerator to try again.";
+        }
+        else if (activeDevice == "Auto")
+        {
+            if (bestEngineReady)
             {
-                activeLabel = $"Auto -> Phi Silica NPU (Active)";
-                description = $"System automatically resolved execution to the built-in Microsoft Copilot Runtime (Phi Silica) utilizing the NPU. Recommendation: {recommendedOption}.";
-            }
-            else if (onnxModelReady)
-            {
-                string resolvedTarget = "DirectML GPU";
-                if (!string.IsNullOrEmpty(npu))
+                if (bestEngineTag == "NPU")
                 {
-                    resolvedTarget = npu.Contains("Intel", StringComparison.OrdinalIgnoreCase) ? "Intel AI Boost NPU" : "AMD Ryzen AI NPU";
+                    activeLabel = $"Auto -> {bestEngineName} (Phi Silica) (Active)";
+                    description = $"System automatically resolved execution to the built-in Microsoft Copilot Runtime (Phi Silica) utilizing the NPU. Recommendation: {bestEngineName}.";
                 }
-                activeLabel = $"Auto -> {resolvedTarget} (ONNX Llama 3.2) (Active)";
-                description = $"System automatically resolved execution to the custom Llama 3.2 1B ONNX model running on the {resolvedTarget}.";
+                else
+                {
+                    activeLabel = $"Auto -> {bestEngineName} (Llama 3.2 ONNX) (Active)";
+                    description = $"System automatically resolved execution to the custom Llama 3.2 1B ONNX model running on the {bestEngineName}.";
+                }
+                needsDownload = false;
             }
             else
             {
-                activeLabel = $"Auto -> Fallback Template Engine";
-                description = $"No local AI engine is currently ready. Using procedural templates. Recommended: {recommendedOption} (Requires Model Download).";
+                activeLabel = $"Auto -> {bestEngineName} (Llama 3.2 ONNX) (Requires Download)";
+                description = $"No local AI engine is currently ready. System resolved target to the {bestEngineName}. The local model files must be downloaded first.";
                 needsDownload = true;
             }
         }
@@ -246,7 +282,7 @@ public sealed partial class FeaturesPage : Page
                 needsDownload = true;
             }
         }
-        else // CPU
+        else if (activeDevice == "CPU")
         {
             activeLabel = "DirectML CPU (Llama 3.2 ONNX)";
             description = "Uses the custom Llama 3.2 1B model running locally on your processor. Note: CPU generation will be slower and use more battery.";
@@ -255,6 +291,12 @@ public sealed partial class FeaturesPage : Page
                 description += " (Requires Model Download)";
                 needsDownload = true;
             }
+        }
+        else // Fallback
+        {
+            activeLabel = "Fallback Template Engine";
+            description = "Uses procedural templates to generate daily briefings. No local AI model execution is performed.";
+            needsDownload = false;
         }
 
         SettingsAiDeviceStatusText.Text = $"Active Engine: {activeLabel}";
@@ -292,47 +334,60 @@ public sealed partial class FeaturesPage : Page
 
     private void SettingsCancelDownloadBtn_Click(object sender, RoutedEventArgs e)
     {
-        _downloadCts?.Cancel();
+        var downloadManager = App.Current.Services.GetRequiredService<ModelDownloadManager>();
+        downloadManager.CancelDownload();
     }
 
-    private async void SettingsDownloadModelBtn_Click(object sender, RoutedEventArgs e)
+    private void SettingsDownloadModelBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (_downloadInProgress) return;
+        var downloadManager = App.Current.Services.GetRequiredService<ModelDownloadManager>();
+        if (downloadManager.IsDownloading) return;
 
-        _downloadInProgress = true;
         SettingsDownloadModelBtn.Visibility = Visibility.Collapsed;
         SettingsDownloadProgressGrid.Visibility = Visibility.Visible;
         SettingsDownloadProgressBar.Value = 0;
         SettingsDownloadStatusText.Text = "Connecting to ONNX AI Model Repository...";
 
-        _downloadCts = new CancellationTokenSource();
+        downloadManager.StartDownload();
+    }
 
+    private void FeaturesPage_Unloaded(object sender, RoutedEventArgs e)
+    {
         try
         {
             var downloadManager = App.Current.Services.GetRequiredService<ModelDownloadManager>();
-            
-            downloadManager.ProgressChanged += (s, args) =>
-            {
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    SettingsDownloadProgressBar.Value = args.Percentage;
-                    SettingsDownloadStatusText.Text = $"Downloading: {args.CurrentFileName} ({args.DownloadedMBs:F1}/{args.TotalMBs:F1} MB) | Speed: {args.SpeedMBs:F2} MB/s | Remaining: {args.TimeRemaining:mm\\:ss}";
-                });
-            };
+            downloadManager.ProgressChanged -= DownloadManager_ProgressChanged;
+            downloadManager.StatusChanged -= DownloadManager_StatusChanged;
+            downloadManager.DownloadCompleted -= DownloadManager_DownloadCompleted;
+            downloadManager.DownloadFailed -= DownloadManager_DownloadFailed;
+        }
+        catch { }
+    }
 
-            downloadManager.StatusChanged += (s, status) =>
-            {
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    SettingsDownloadStatusText.Text = status;
-                });
-            };
+    private void DownloadManager_ProgressChanged(object? sender, DownloadProgressEventArgs args)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            SettingsDownloadProgressBar.Value = args.Percentage;
+            SettingsDownloadStatusText.Text = $"Downloading: {args.CurrentFileName} ({args.DownloadedMBs:F1}/{args.TotalMBs:F1} MB) | Speed: {args.SpeedMBs:F2} MB/s | Remaining: {args.TimeRemaining:mm\\:ss}";
+        });
+    }
 
-            await downloadManager.DownloadModelAsync(_downloadCts.Token);
+    private void DownloadManager_StatusChanged(object? sender, string status)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            SettingsDownloadStatusText.Text = status;
+        });
+    }
 
-            _settings.LocalAiModelDownloaded = true;
-            SettingsService.Save(_settings);
-            
+    private void DownloadManager_DownloadCompleted(object? sender, EventArgs e)
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            SettingsDownloadProgressGrid.Visibility = Visibility.Collapsed;
+            UpdateModelStatus();
+
             ContentDialog dialog = new ContentDialog
             {
                 Title = "Model Download Complete",
@@ -340,32 +395,33 @@ public sealed partial class FeaturesPage : Page
                 CloseButtonText = "OK",
                 XamlRoot = this.XamlRoot
             };
-            await dialog.ShowAsync();
-        }
-        catch (OperationCanceledException)
+            try { await dialog.ShowAsync(); } catch { }
+        });
+    }
+
+    private void DownloadManager_DownloadFailed(object? sender, Exception ex)
+    {
+        DispatcherQueue.TryEnqueue(async () =>
         {
-            SettingsDownloadStatusText.Text = "Download canceled by user.";
-        }
-        catch (Exception ex)
-        {
-            ContentDialog dialog = new ContentDialog
-            {
-                Title = "Download Failed",
-                Content = $"An error occurred while downloading the model: {ex.Message}",
-                CloseButtonText = "OK",
-                XamlRoot = this.XamlRoot
-            };
-            await dialog.ShowAsync();
-            SettingsDownloadStatusText.Text = "Download failed.";
-        }
-        finally
-        {
-            _downloadInProgress = false;
             SettingsDownloadProgressGrid.Visibility = Visibility.Collapsed;
-            _downloadCts?.Dispose();
-            _downloadCts = null;
             UpdateModelStatus();
-        }
+
+            if (ex is OperationCanceledException)
+            {
+                SettingsDownloadStatusText.Text = "Download canceled by user.";
+            }
+            else
+            {
+                ContentDialog dialog = new ContentDialog
+                {
+                    Title = "Download Failed",
+                    Content = $"An error occurred while downloading the model: {ex.Message}",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.XamlRoot
+                };
+                try { await dialog.ShowAsync(); } catch { }
+            }
+        });
     }
 
     private void SmartBehaviorSwitch_Toggled(object sender, RoutedEventArgs e)
