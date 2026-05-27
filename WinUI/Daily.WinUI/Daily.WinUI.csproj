@@ -5,10 +5,8 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>Daily_WinUI</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Platforms>AnyCPU;x64</Platforms>
-    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>AnyCPU;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>false</EnableMsixTooling>
@@ -19,6 +17,38 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <DefineConstants>$(DefineConstants);WINUI_NATIVE;DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
+
+  <!-- Normalize Platform to AnyCPU if it's empty or Any CPU -->
+  <PropertyGroup>
+    <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
+    <Platform Condition="'$(Platform)' == 'Any CPU'">AnyCPU</Platform>
+  </PropertyGroup>
+
+  <!-- Determine the build architecture (ActivePlatform) -->
+  <PropertyGroup>
+    <ActivePlatform>$(Platform)</ActivePlatform>
+    <ActivePlatform Condition="'$(ActivePlatform)' == 'AnyCPU'">$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</ActivePlatform>
+  </PropertyGroup>
+
+  <!-- Normalize ActivePlatform case -->
+  <PropertyGroup Condition="'$(ActivePlatform)' == 'Arm64' or '$(ActivePlatform)' == 'arm64'">
+    <ActivePlatform>ARM64</ActivePlatform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ActivePlatform)' == 'X64' or '$(ActivePlatform)' == 'x64'">
+    <ActivePlatform>x64</ActivePlatform>
+  </PropertyGroup>
+
+  <!-- Configure PlatformTarget and RuntimeIdentifier based on resolved ActivePlatform -->
+  <PropertyGroup Condition="'$(ActivePlatform)' == 'x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ActivePlatform)' == 'ARM64'">
+    <PlatformTarget>ARM64</PlatformTarget>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+
 
   <ItemGroup>
     <Content Include="Assets\SplashScreen.scale-200.png" />
