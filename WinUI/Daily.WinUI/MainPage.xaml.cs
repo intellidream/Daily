@@ -30,6 +30,7 @@ public sealed partial class MainPage : Page
     private string _fullBriefingText = string.Empty;
     private int _typewriterIndex = 0;
     private string[] _briefingWords = System.Array.Empty<string>();
+    private System.Threading.Tasks.Task<SmartBriefingData>? _pregeneratedBriefingTask;
 
     public MainPage()
     {
@@ -132,6 +133,11 @@ public sealed partial class MainPage : Page
             }
         }
 
+        // Pre-generate Smart Briefing data in background as soon as data loading is complete
+        string currentUserName = _authService.CurrentUserDisplayName ?? "Explorer";
+        var briefingSvc = App.Current.Services.GetRequiredService<SmartBriefingService>();
+        _pregeneratedBriefingTask = briefingSvc.GenerateBriefingDataAsync(currentUserName);
+
         if (isInitialBoot && mainWindow != null)
         {
             // 5. Ensure minimum boot time has elapsed
@@ -162,7 +168,13 @@ public sealed partial class MainPage : Page
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
+        _pregeneratedBriefingTask = null; // Reset cached task
         await LoadWidgetsAsync();
+
+        // Re-trigger pre-generation in the background since data is refreshed
+        string userName = _authService.CurrentUserDisplayName ?? "Explorer";
+        var briefingSvc = App.Current.Services.GetRequiredService<SmartBriefingService>();
+        _pregeneratedBriefingTask = briefingSvc.GenerateBriefingDataAsync(userName);
     }
 
     public void TriggerRefresh() => RefreshLiveWidgets();
@@ -535,10 +547,28 @@ public sealed partial class MainPage : Page
         var settings = SettingsService.Load();
         ShowBriefingStartupCheck.IsChecked = settings.EnableSmartBriefing;
 
-        // Fetch dynamic data from services
+        // Fetch dynamic data from services (using pre-generated task if available)
         string userName = _authService.CurrentUserDisplayName ?? "Explorer";
-        var briefingService = App.Current.Services.GetRequiredService<SmartBriefingService>();
-        var data = await briefingService.GenerateBriefingDataAsync(userName);
+        SmartBriefingData data;
+        if (_pregeneratedBriefingTask != null)
+        {
+            try
+            {
+                data = await _pregeneratedBriefingTask;
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainPage] Pregenerated briefing task failed: {ex.Message}");
+                var briefingService = App.Current.Services.GetRequiredService<SmartBriefingService>();
+                data = await briefingService.GenerateBriefingDataAsync(userName);
+            }
+            _pregeneratedBriefingTask = null; // Consume the task
+        }
+        else
+        {
+            var briefingService = App.Current.Services.GetRequiredService<SmartBriefingService>();
+            data = await briefingService.GenerateBriefingDataAsync(userName);
+        }
 
         // Bind Weather Card
         BriefingWeatherTempText.Text = $"{data.WeatherTemp:F0}°C";

@@ -216,7 +216,7 @@ namespace Daily_WinUI.Services
                             string cond = day.Description;
                             if (cond.Contains("Rain", StringComparison.OrdinalIgnoreCase) || cond.Contains("Drizzle", StringComparison.OrdinalIgnoreCase))
                             {
-                                iconGlyph = "\u26C6"; // rain
+                                iconGlyph = "\uE774"; // rain
                                 colorHex = "#2196F3"; // blue
                             }
                             else if (cond.Contains("Cloud", StringComparison.OrdinalIgnoreCase))
@@ -226,7 +226,7 @@ namespace Daily_WinUI.Services
                             }
                             else if (cond.Contains("Snow", StringComparison.OrdinalIgnoreCase))
                             {
-                                iconGlyph = "\u2744"; // snow
+                                iconGlyph = "\uE77C"; // snow
                                 colorHex = "#90CAF9"; // light blue
                             }
                             
@@ -256,7 +256,7 @@ namespace Daily_WinUI.Services
             {
                 data.WeatherForecast.Add(new ForecastDayData { DayName = "Tomorrow", Temp = temp + 1, Icon = "\uE706", ColorHex = "#FF9800" });
                 data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(2).ToString("dddd"), Temp = temp - 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
-                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(3).ToString("dddd"), Temp = temp, Icon = "\u26C6", ColorHex = "#2196F3" });
+                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(3).ToString("dddd"), Temp = temp, Icon = "\uE774", ColorHex = "#2196F3" });
                 data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(4).ToString("dddd"), Temp = temp + 2, Icon = "\uE706", ColorHex = "#FF9800" });
                 data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(5).ToString("dddd"), Temp = temp + 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
             }
@@ -589,22 +589,26 @@ namespace Daily_WinUI.Services
                 // Order by score and take top, ensuring source diversity if possible
                 var selected = new List<(RssItem Item, string Reason)>();
                 var ordered = scoredItems.OrderByDescending(x => x.Score).ToList();
-                
-                foreach (var cand in ordered)
+                if (ordered.Count > 0)
                 {
-                    if (selected.Count >= 2) break;
-                    // Source diversity check for first 2 selections
-                    if (selected.Count == 1 && string.Equals(selected[0].Item.PublicationName, cand.Item.PublicationName, StringComparison.OrdinalIgnoreCase))
+                    var first = ordered[0];
+                    selected.Add((first.Item, first.Reason));
+
+                    if (ordered.Count > 1)
                     {
-                        var diffSourceCand = ordered.Skip(ordered.IndexOf(cand) + 1)
-                            .FirstOrDefault(x => !string.Equals(x.Item.PublicationName, cand.Item.PublicationName, StringComparison.OrdinalIgnoreCase));
-                        if (diffSourceCand.Item != null)
+                        var second = ordered.Skip(1).FirstOrDefault(x => 
+                            !string.Equals(x.Item.PublicationName, first.Item.PublicationName, StringComparison.OrdinalIgnoreCase));
+                        
+                        if (second.Item != null)
                         {
-                            selected.Add((diffSourceCand.Item, diffSourceCand.Reason));
-                            break;
+                            selected.Add((second.Item, second.Reason));
+                        }
+                        else
+                        {
+                            var secondOverall = ordered[1];
+                            selected.Add((secondOverall.Item, secondOverall.Reason));
                         }
                     }
-                    selected.Add((cand.Item, cand.Reason));
                 }
 
                 foreach (var sel in selected)
@@ -667,7 +671,9 @@ namespace Daily_WinUI.Services
                         "Generate a concise, natural, and friendly daily briefing narrative based on the user's data. " +
                         "Analyze their weather, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.\n" +
                         "Rules:\n" +
+                        "- Jump straight into the greeting and the narrative briefing. Do NOT write introductory filler like 'Here is your briefing tailored for you' or 'Based on your data'.\n" +
                         "- Keep the briefing structured in 2-3 short paragraphs of conversational flowing text. Do not use markdown headers or lists.\n" +
+                        "- Format your paragraphs clearly, using double newlines (\n\n) to separate them.\n" +
                         "- If finance data is marked as UNINITIALIZED, do not congratulate the user on net worth or mention a $0 net worth. Suggest setting up their ledger or adding an account instead.\n" +
                         "- If smoking habit data is present, treat it as a negative target (reduction/cessation). Do NOT congratulate the user for smoking or logging smokes; instead, encourage reduction or praise staying under limit.\n" +
                         "- Evaluate the weather forecast over the next hours and next 5 days, highlighting key transitions (e.g. if it will rain later, recommend taking an umbrella or exercising indoors).\n\n" +
@@ -678,7 +684,7 @@ namespace Daily_WinUI.Services
                         "  \"financeAdvice\": \"short advice based on ledger/watchlist\",\n" +
                         "  \"habitsAdvice\": \"short advice based on water/smoking\"\n" +
                         "}\n" +
-                        "Do not write any text after the </insights> tag.";
+                        "Do not write any introductory or transition text before or after the JSON block. Go directly from the end of your narrative text to the <insights> tag. Do not write any text after the </insights> tag.";
 
                     string userPrompt = 
                         $"User Name: {userName}\n" +
@@ -719,6 +725,32 @@ namespace Daily_WinUI.Services
                         string jsonContent = responseText.Substring(startIndex + 10, endIndex - (startIndex + 10)).Trim();
                         cleanBriefingText = responseText.Substring(0, startIndex).Trim();
                         
+                        // Clean up trailing metadata transition lines (e.g. "Here is the JSON block...", "Below are the insights...")
+                        var lines = cleanBriefingText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
+                        while (lines.Count > 0)
+                        {
+                            var lastLine = lines.Last().Trim();
+                            if (string.IsNullOrWhiteSpace(lastLine))
+                            {
+                                lines.RemoveAt(lines.Count - 1);
+                                continue;
+                            }
+                            
+                            if (lastLine.Contains("json", StringComparison.OrdinalIgnoreCase) || 
+                                lastLine.Contains("insights", StringComparison.OrdinalIgnoreCase) || 
+                                lastLine.Contains("enclosed", StringComparison.OrdinalIgnoreCase) ||
+                                lastLine.Contains("below", StringComparison.OrdinalIgnoreCase) ||
+                                lastLine.Contains("<insights", StringComparison.OrdinalIgnoreCase))
+                            {
+                                lines.RemoveAt(lines.Count - 1);
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                        cleanBriefingText = string.Join("\n", lines).Trim();
+                        
                         try
                         {
                             using var doc = System.Text.Json.JsonDocument.Parse(jsonContent);
@@ -734,21 +766,21 @@ namespace Daily_WinUI.Services
                         }
                     }
                     
-                    data.IntroText = "Here is your on-device DayOne AI Smart Briefing for today.";
+                    data.IntroText = "";
                     data.BriefingText = cleanBriefingText;
                     data.OutroText = "Have a highly productive day!";
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] AI Generation failed: {ex.Message}. Falling back to template.");
-                    data.IntroText = "Here is your on-device DayOne AI Smart Briefing for today.";
+                    data.IntroText = "";
                     data.BriefingText = fallbackBriefing;
                     data.OutroText = "Have a highly productive day!";
                 }
             }
             else
             {
-                data.IntroText = "Here is your on-device DayOne AI Smart Briefing for today.";
+                data.IntroText = "";
                 data.BriefingText = fallbackBriefing;
                 data.OutroText = "Have a highly productive day!";
             }
