@@ -22,6 +22,7 @@ public partial class App : Application
     static void Main(string[] args)
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
+        LogDebug($"Main started. Args: {(args != null ? string.Join(" | ", args) : "null")}");
 
         // ── Single-Instance gate via named Mutex + named pipe for URI forwarding ──
         const string MutexName   = "DailyWinUI_SingleInstance_Mutex";
@@ -32,6 +33,7 @@ public partial class App : Application
 
         if (!createdNew)
         {
+            LogDebug("Another instance is running. Handling forwarding.");
             // Another instance is running. If we were launched by a protocol URL,
             // forward it via named pipe so the running instance can handle it.
             var activationArgs = Microsoft.Windows.AppLifecycle.AppInstance
@@ -44,18 +46,37 @@ public partial class App : Application
                 uriToForward = proto?.Uri?.ToString();
             }
 
+            // Unpackaged apps launched via HKCU registry open-commands might activate as Launch instead of Protocol.
+            // Check command-line args as fallback to retrieve the protocol URL.
+            if (string.IsNullOrEmpty(uriToForward) && args != null)
+            {
+                foreach (var arg in args)
+                {
+                    if (arg.StartsWith("----ms-protocol:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        uriToForward = arg.Substring("----ms-protocol:".Length);
+                        break;
+                    }
+                }
+            }
+
+            LogDebug($"Resolved uriToForward: '{uriToForward}'");
             string message = !string.IsNullOrEmpty(uriToForward) ? uriToForward : "show";
             try
             {
+                LogDebug($"Connecting to pipe '{PipeName}'...");
                 using var client = new System.IO.Pipes.NamedPipeClientStream(".", PipeName,
                     System.IO.Pipes.PipeDirection.Out);
                 client.Connect(2000); // 2 second timeout
+                LogDebug("Connected to pipe. Writing message...");
                 using var writer = new System.IO.StreamWriter(client);
                 writer.WriteLine(message);
                 writer.Flush();
+                LogDebug("Message written successfully.");
             }
-            catch
+            catch (Exception ex)
             {
+                LogDebug($"Pipe write failed: {ex.Message}");
                 // Bring the running window to front
                 var existing = System.Diagnostics.Process.GetProcessesByName(
                     System.IO.Path.GetFileNameWithoutExtension(System.Environment.ProcessPath ?? "Daily.WinUI"));
@@ -74,13 +95,16 @@ public partial class App : Application
 
         // We are the main instance — keep mutex alive
         GC.KeepAlive(mutex);
+        LogDebug("This is the main instance.");
 
+        // ── Register protocol handler pointing to this exe ──
         // ── Register protocol handler pointing to this exe ──
         RegisterProtocolDirectly("com.intellidream.daily.desktop", "DayOne");
 
         // ── Start listening for protocol URIs forwarded from second instances ──
         System.Threading.Tasks.Task.Run(() =>
         {
+            LogDebug("Pipe server listener thread started.");
             while (true)
             {
                 try
@@ -91,8 +115,10 @@ public partial class App : Application
                         System.IO.Pipes.PipeTransmissionMode.Message,
                         System.IO.Pipes.PipeOptions.Asynchronous);
                     server.WaitForConnection();
+                    LogDebug("Pipe server accepted connection.");
                     using var reader = new System.IO.StreamReader(server);
                     var line = reader.ReadLine();
+                    LogDebug($"Pipe server read line: '{line}'");
                     if (!string.IsNullOrEmpty(line))
                     {
                         if (line.Equals("show", StringComparison.OrdinalIgnoreCase))
@@ -109,12 +135,19 @@ public partial class App : Application
                         }
                         else if (Uri.TryCreate(line, UriKind.Absolute, out var uri))
                         {
-                            System.Diagnostics.Debug.WriteLine($"[Pipe] Received URI: {uri}");
+                            LogDebug($"Pipe server parsed URI: {uri}. Handling...");
                             HandleProtocolUri(uri);
+                        }
+                        else
+                        {
+                            LogDebug($"Pipe server failed to parse URI: {line}");
                         }
                     }
                 }
-                catch { /* pipe error — restart listener */ }
+                catch (Exception ex)
+                {
+                    LogDebug($"Pipe server error: {ex.Message}");
+                }
             }
         });
 
@@ -277,13 +310,15 @@ public partial class App : Application
     /// </summary>
     internal static void HandleProtocolUri(Uri uri)
     {
-        System.Diagnostics.Debug.WriteLine($"[WinUIAuth] Protocol URI received: {uri}");
+        LogDebug($"HandleProtocolUri entered with URI: {uri}");
 
         var code = "";
         string queryToParse = "";
 
         if (!string.IsNullOrEmpty(uri.Query)) queryToParse = uri.Query.TrimStart('?');
         else if (!string.IsNullOrEmpty(uri.Fragment)) queryToParse = uri.Fragment.TrimStart('#');
+
+        LogDebug($"Parsing query/fragment: '{queryToParse}'");
 
         if (!string.IsNullOrEmpty(queryToParse))
         {
@@ -293,7 +328,7 @@ public partial class App : Application
                 if (kv.Length == 2 && kv[0] == "code")
                 {
                     code = System.Net.WebUtility.UrlDecode(kv[1]);
-                    System.Diagnostics.Debug.WriteLine("[WinUIAuth] Code found via pipe!");
+                    LogDebug($"Found code: '{code}'");
                     break;
                 }
             }
@@ -302,15 +337,20 @@ public partial class App : Application
         if (!string.IsNullOrEmpty(code))
         {
             var tcs = Daily_WinUI.Services.WinUIAuthService.GoogleAuthTcs;
+            LogDebug($"TCS state: null={tcs == null}, TaskCompleted={(tcs != null ? tcs.Task.IsCompleted.ToString() : "N/A")}");
             if (tcs != null && !tcs.Task.IsCompleted)
             {
-                System.Diagnostics.Debug.WriteLine("[WinUIAuth] Setting TCS Result from pipe...");
+                LogDebug("Setting TCS Result...");
                 tcs.TrySetResult(code);
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine($"[WinUIAuth] TCS null or done (null: {tcs == null})");
+                LogDebug("TCS was null or already completed.");
             }
+        }
+        else
+        {
+            LogDebug("No code extracted from URI.");
         }
 
         // Bring main window to front
@@ -329,64 +369,80 @@ public partial class App : Application
     /// </summary>
     internal static void HandleActivation(Microsoft.Windows.AppLifecycle.AppActivationArguments args)
     {
+        string? uriString = null;
         if (args.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
         {
             var protocolArgs = args.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs;
-            if (protocolArgs != null)
+            uriString = protocolArgs?.Uri?.ToString();
+        }
+
+        // Unpackaged apps launched via HKCU registry open-commands might activate as Launch instead of Protocol.
+        // Check command-line args as fallback to retrieve the protocol URL.
+        if (string.IsNullOrEmpty(uriString))
+        {
+            var cmdArgs = System.Environment.GetCommandLineArgs();
+            foreach (var arg in cmdArgs)
             {
-                System.Diagnostics.Debug.WriteLine($"[WinUIAuth] Protocol Activated: {protocolArgs.Uri}");
-                var uri = protocolArgs.Uri;
-
-                var code = "";
-                string queryToParse = "";
-
-                if (!string.IsNullOrEmpty(uri.Query)) queryToParse = uri.Query.TrimStart('?');
-                else if (!string.IsNullOrEmpty(uri.Fragment)) queryToParse = uri.Fragment.TrimStart('#');
-
-                System.Diagnostics.Debug.WriteLine($"[WinUIAuth] Query to parse: {queryToParse}");
-
-                if (!string.IsNullOrEmpty(queryToParse))
+                if (arg.StartsWith("----ms-protocol:", StringComparison.OrdinalIgnoreCase))
                 {
-                    var parts = queryToParse.Split('&');
-                    foreach (var part in parts)
+                    uriString = arg.Substring("----ms-protocol:".Length);
+                    break;
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(uriString) && Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
+        {
+            System.Diagnostics.Debug.WriteLine($"[WinUIAuth] Protocol Activated: {uri}");
+            var code = "";
+            string queryToParse = "";
+
+            if (!string.IsNullOrEmpty(uri.Query)) queryToParse = uri.Query.TrimStart('?');
+            else if (!string.IsNullOrEmpty(uri.Fragment)) queryToParse = uri.Fragment.TrimStart('#');
+
+            System.Diagnostics.Debug.WriteLine($"[WinUIAuth] Query to parse: {queryToParse}");
+
+            if (!string.IsNullOrEmpty(queryToParse))
+            {
+                var parts = queryToParse.Split('&');
+                foreach (var part in parts)
+                {
+                    var kv = part.Split('=');
+                    if (kv.Length == 2 && kv[0] == "code")
                     {
-                        var kv = part.Split('=');
-                        if (kv.Length == 2 && kv[0] == "code")
-                        {
-                            code = System.Net.WebUtility.UrlDecode(kv[1]);
-                            System.Diagnostics.Debug.WriteLine("[WinUIAuth] Code found!");
-                            break;
-                        }
+                        code = System.Net.WebUtility.UrlDecode(kv[1]);
+                        System.Diagnostics.Debug.WriteLine("[WinUIAuth] Code found!");
+                        break;
                     }
                 }
+            }
 
-                if (!string.IsNullOrEmpty(code))
+            if (!string.IsNullOrEmpty(code))
+            {
+                var tcs = Daily_WinUI.Services.WinUIAuthService.GoogleAuthTcs;
+                if (tcs != null && !tcs.Task.IsCompleted)
                 {
-                    var tcs = Daily_WinUI.Services.WinUIAuthService.GoogleAuthTcs;
-                    if (tcs != null && !tcs.Task.IsCompleted)
-                    {
-                        System.Diagnostics.Debug.WriteLine("[WinUIAuth] Setting TCS Result...");
-                        tcs.TrySetResult(code);
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[WinUIAuth] TCS is null or already completed! (tcs null: {tcs == null})");
-                    }
+                    System.Diagnostics.Debug.WriteLine("[WinUIAuth] Setting TCS Result...");
+                    tcs.TrySetResult(code);
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("[WinUIAuth] No code found in URI.");
+                    System.Diagnostics.Debug.WriteLine($"[WinUIAuth] TCS is null or already completed! (tcs null: {tcs == null})");
                 }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[WinUIAuth] No code found in URI.");
+            }
 
-                // Bring window to front
-                var app = App.Current;
-                if (app?.MainWindow != null)
+            // Bring window to front
+            var app = App.Current;
+            if (app?.MainWindow != null)
+            {
+                app.MainWindow.DispatcherQueue.TryEnqueue(() =>
                 {
-                    app.MainWindow.DispatcherQueue.TryEnqueue(() =>
-                    {
-                        app.MainWindow.ShowAndActivate();
-                    });
-                }
+                    app.MainWindow.ShowAndActivate();
+                });
             }
         }
     }
@@ -398,14 +454,13 @@ public partial class App : Application
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
-    /// <summary>
-    /// Writes the full HKCU protocol handler directly to the registry.
-    /// More reliable than RegisterForProtocolActivation for unpackaged apps.
-    /// </summary>
+    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto, SetLastError = true)]
+    private static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
     private static void RegisterProtocolDirectly(string scheme, string appName)
     {
         var exePath = System.Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
-        var command = $"\"{exePath}\" \"----ms-protocol:%1\"";
+        var command = $"\"{exePath}\" \"%1\"";
 
         using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey($@"Software\Classes\{scheme}");
         key.SetValue("", $"URL:{scheme}");
@@ -417,7 +472,25 @@ public partial class App : Application
         using var cmdKey = key.CreateSubKey(@"shell\open\command");
         cmdKey.SetValue("", command);
 
-        System.Diagnostics.Debug.WriteLine($"[Protocol] Registered {scheme} -> {exePath}");
+        try
+        {
+            SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); // SHCNE_ASSOCCHANGED
+            LogDebug($"[Protocol] Registered {scheme} -> {exePath} and flushed associations.");
+        }
+        catch (Exception ex)
+        {
+            LogDebug($"[Protocol] Registered {scheme} -> {exePath} but flush failed: {ex.Message}");
+        }
+    }
+
+    private static void LogDebug(string message)
+    {
+        try
+        {
+            var logPath = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "protocol_debug.log");
+            System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{System.Environment.NewLine}");
+        }
+        catch { }
     }
 }
 
