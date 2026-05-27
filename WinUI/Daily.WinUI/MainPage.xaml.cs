@@ -544,21 +544,40 @@ public sealed partial class MainPage : Page
         BriefingWeatherTempText.Text = $"{data.WeatherTemp:F0}°C";
         BriefingWeatherCondText.Text = data.WeatherCondition;
         
-        // 3-day forecast columns
-        if (data.WeatherForecast.Count >= 3)
+        // 5-day forecast columns
+        if (data.WeatherForecast.Count >= 5)
         {
             ForecastDay1Text.Text = data.WeatherForecast[0].DayName.Length >= 3 ? data.WeatherForecast[0].DayName.Substring(0, 3) : data.WeatherForecast[0].DayName;
             ForecastDay1Temp.Text = $"{data.WeatherForecast[0].Temp:F0}°";
             ForecastDay1Icon.Glyph = data.WeatherForecast[0].Icon;
+            ForecastDay1Icon.Foreground = GetBrushFromHex(data.WeatherForecast[0].ColorHex);
 
             ForecastDay2Text.Text = data.WeatherForecast[1].DayName.Length >= 3 ? data.WeatherForecast[1].DayName.Substring(0, 3) : data.WeatherForecast[1].DayName;
             ForecastDay2Temp.Text = $"{data.WeatherForecast[1].Temp:F0}°";
             ForecastDay2Icon.Glyph = data.WeatherForecast[1].Icon;
+            ForecastDay2Icon.Foreground = GetBrushFromHex(data.WeatherForecast[1].ColorHex);
 
             ForecastDay3Text.Text = data.WeatherForecast[2].DayName.Length >= 3 ? data.WeatherForecast[2].DayName.Substring(0, 3) : data.WeatherForecast[2].DayName;
             ForecastDay3Temp.Text = $"{data.WeatherForecast[2].Temp:F0}°";
             ForecastDay3Icon.Glyph = data.WeatherForecast[2].Icon;
+            ForecastDay3Icon.Foreground = GetBrushFromHex(data.WeatherForecast[2].ColorHex);
+
+            ForecastDay4Text.Text = data.WeatherForecast[3].DayName.Length >= 3 ? data.WeatherForecast[3].DayName.Substring(0, 3) : data.WeatherForecast[3].DayName;
+            ForecastDay4Temp.Text = $"{data.WeatherForecast[3].Temp:F0}°";
+            ForecastDay4Icon.Glyph = data.WeatherForecast[3].Icon;
+            ForecastDay4Icon.Foreground = GetBrushFromHex(data.WeatherForecast[3].ColorHex);
+
+            ForecastDay5Text.Text = data.WeatherForecast[4].DayName.Length >= 3 ? data.WeatherForecast[4].DayName.Substring(0, 3) : data.WeatherForecast[4].DayName;
+            ForecastDay5Temp.Text = $"{data.WeatherForecast[4].Temp:F0}°";
+            ForecastDay5Icon.Glyph = data.WeatherForecast[4].Icon;
+            ForecastDay5Icon.Foreground = GetBrushFromHex(data.WeatherForecast[4].ColorHex);
         }
+
+        // Set advices
+        WeatherAdviceText.Text = data.WeatherAdvice;
+        HealthAdviceText.Text = data.HealthAdvice;
+        FinancesAdviceText.Text = data.FinanceAdvice;
+        HabitsAdviceText.Text = data.HabitsAdvice;
 
         // Bind Health Card
         BriefingStepsText.Text = data.HealthSteps.ToString("N0");
@@ -609,6 +628,50 @@ public sealed partial class MainPage : Page
         BriefingHabitsProgress.Maximum = data.HabitsTotal;
         BriefingHabitsProgress.Value = data.HabitsCompleted;
         BriefingHabitsProgressText.Text = $"{data.HabitsCompleted}/{data.HabitsTotal}";
+
+        // Habits dynamic checklist
+        double waterProgress = data.HabitsWaterProgress;
+        double waterGoal = data.HabitsWaterGoal;
+        BriefingHabit1Text.Text = $"Water: {waterProgress:F0}/{waterGoal:F0} ml";
+        if (waterProgress >= waterGoal && waterGoal > 0)
+        {
+            BriefingHabit1Icon.Glyph = "\uE73E"; // Checkmark
+            BriefingHabit1Icon.Foreground = greenBrush;
+            BriefingHabit1Panel.Opacity = 1.0;
+        }
+        else
+        {
+            BriefingHabit1Icon.Glyph = "\uE739"; // Circle
+            BriefingHabit1Icon.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(128, 128, 128, 128));
+            BriefingHabit1Panel.Opacity = 0.6;
+        }
+
+        double smokesProgress = data.HabitsSmokesProgress;
+        double smokesGoal = data.HabitsSmokesGoal;
+        if (smokesGoal > 0 || smokesProgress > 0)
+        {
+            BriefingHabit2Panel.Visibility = Visibility.Visible;
+            BriefingHabit2Text.Text = $"Smokes: {smokesProgress:F0}/{smokesGoal:F0} today";
+            if (smokesProgress > smokesGoal && smokesGoal > 0)
+            {
+                BriefingHabit2Icon.Glyph = "\uE711"; // Warning
+                BriefingHabit2Icon.Foreground = redBrush;
+                BriefingHabit2Panel.Opacity = 1.0;
+            }
+            else
+            {
+                BriefingHabit2Icon.Glyph = "\uE73E"; // Checkmark
+                BriefingHabit2Icon.Foreground = greenBrush;
+                BriefingHabit2Panel.Opacity = 1.0;
+            }
+        }
+        else
+        {
+            BriefingHabit2Panel.Visibility = Visibility.Collapsed;
+        }
+
+        // Bind News recommendations control directly
+        BriefingNewsWidget.Populate(data.NewsRecommendations);
 
         // Reset visual cards state for animation
         BriefingWeatherCard.Opacity = 0;
@@ -958,6 +1021,28 @@ public sealed partial class MainPage : Page
             BriefingCardBorder.MaxWidth = 1400;
             BriefingCardBorder.MaxHeight = 900;
         }
+    }
+
+    private static Microsoft.UI.Xaml.Media.SolidColorBrush GetBrushFromHex(string hex)
+    {
+        if (string.IsNullOrEmpty(hex)) return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.LightGray);
+        hex = hex.Replace("#", "");
+        byte a = 255;
+        byte r = 0, g = 0, b = 0;
+        if (hex.Length == 8)
+        {
+            a = byte.Parse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
+            r = byte.Parse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
+            g = byte.Parse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
+            b = byte.Parse(hex.Substring(6, 2), System.Globalization.NumberStyles.HexNumber);
+        }
+        else if (hex.Length == 6)
+        {
+            r = byte.Parse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
+            g = byte.Parse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
+            b = byte.Parse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
+        }
+        return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(a, r, g, b));
     }
 }
 

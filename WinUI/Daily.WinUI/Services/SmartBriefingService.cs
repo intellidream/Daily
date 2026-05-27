@@ -18,6 +18,7 @@ namespace Daily_WinUI.Services
         public string DayName { get; set; } = string.Empty;
         public double Temp { get; set; }
         public string Icon { get; set; } = string.Empty; // e.g. Glyph representable
+        public string ColorHex { get; set; } = string.Empty;
     }
 
     public sealed class StockBriefingData
@@ -53,14 +54,31 @@ namespace Daily_WinUI.Services
         public int HealthSteps { get; set; }
         public double HealthSleepHours { get; set; }
         public int HealthAvgHr { get; set; }
+        public double HealthWeight { get; set; }
+        public double HealthActiveEnergy { get; set; }
+        public double HealthHrv { get; set; }
+        public double HealthBpSystolic { get; set; }
+        public double HealthBpDiastolic { get; set; }
+        public double HealthSpO2 { get; set; }
 
         // Finances
         public decimal NetWorth { get; set; }
+        public bool HasLedgerData { get; set; }
         public List<StockBriefingData> WatchlistStocks { get; set; } = new();
 
         // Habits
         public int HabitsTotal { get; set; }
         public int HabitsCompleted { get; set; }
+        public double HabitsWaterProgress { get; set; }
+        public double HabitsWaterGoal { get; set; }
+        public double HabitsSmokesProgress { get; set; }
+        public double HabitsSmokesGoal { get; set; }
+
+        // Insights/Advice
+        public string WeatherAdvice { get; set; } = string.Empty;
+        public string HealthAdvice { get; set; } = string.Empty;
+        public string FinanceAdvice { get; set; } = string.Empty;
+        public string HabitsAdvice { get; set; } = string.Empty;
 
         // News Recommendations
         public List<NewsRecommendationData> NewsRecommendations { get; set; } = new();
@@ -74,6 +92,7 @@ namespace Daily_WinUI.Services
         private readonly IFinancesService? _financesService;
         private readonly IHabitsService? _habitsService;
         private readonly IRssFeedService? _rssFeedService;
+        private readonly IRssArticleService? _rssArticleService;
         private readonly ISmartIntelligenceService _smartService;
         private readonly IBehaviorService _behaviorService;
 
@@ -90,6 +109,7 @@ namespace Daily_WinUI.Services
                 _financesService = App.Current.Services.GetService(typeof(IFinancesService)) as IFinancesService;
                 _habitsService = App.Current.Services.GetService(typeof(IHabitsService)) as IHabitsService;
                 _rssFeedService = App.Current.Services.GetService(typeof(IRssFeedService)) as IRssFeedService;
+                _rssArticleService = App.Current.Services.GetService(typeof(IRssArticleService)) as IRssArticleService;
             }
             catch (Exception ex)
             {
@@ -114,14 +134,26 @@ namespace Daily_WinUI.Services
             var stepsTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.Steps) : Task.FromResult<VitalMetric?>(null);
             var sleepTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.SleepDuration) : Task.FromResult<VitalMetric?>(null);
             var hrTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.HeartRate) : Task.FromResult<VitalMetric?>(null);
+            var weightTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.Weight) : Task.FromResult<VitalMetric?>(null);
+            var activeEnergyTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.ActiveEnergy) : Task.FromResult<VitalMetric?>(null);
+            var hrvTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.HeartRateVariabilitySDNN) : Task.FromResult<VitalMetric?>(null);
+            var bpSystolicTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.BloodPressureSystolic) : Task.FromResult<VitalMetric?>(null);
+            var bpDiastolicTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.BloodPressureDiastolic) : Task.FromResult<VitalMetric?>(null);
+            var oxygenTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.OxygenSaturation) : Task.FromResult<VitalMetric?>(null);
+
             var netWorthTask = _financesService != null ? _financesService.GetNetWorthAsync() : Task.FromResult(0m);
             var symbolsTask = _financesService != null ? _financesService.GetWatchlistSymbolsAsync() : Task.FromResult<List<string>?>(null);
+            
             var hydrationTask = _habitsService != null ? _habitsService.GetDailyProgressAsync("water", DateTime.Today) : Task.FromResult(0.0);
+            var smokesTask = _habitsService != null ? _habitsService.GetDailyProgressAsync("smokes", DateTime.Today) : Task.FromResult(0.0);
+            var waterGoalTask = _habitsService != null ? _habitsService.GetGoalAsync("water") : Task.FromResult<HabitGoal?>(null);
 
             // 2. Weather Aggregation
             double temp = 21.5;
             string condition = "sunny";
             string weatherSentence = "The weather today looks warm and sunny, perfect for outdoor activities.";
+            string hourlyWeatherDetails = "No hourly data available.";
+            string fiveDayWeatherDetails = "No 5-day forecast available.";
             
             try
             {
@@ -137,8 +169,9 @@ namespace Daily_WinUI.Services
                 {
                     var weatherTask = _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
                     var forecastTask = _weatherClient.GetFiveDayForecastAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
+                    var hourlyTask = _weatherClient.GetHourlyForecastAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem, 8);
                     
-                    await Task.WhenAll(weatherTask, forecastTask);
+                    await Task.WhenAll(weatherTask, forecastTask, hourlyTask);
                     
                     var snapshot = weatherTask.Result;
                     if (snapshot != null)
@@ -160,27 +193,56 @@ namespace Daily_WinUI.Services
                         }
                     }
 
+                    var hourlyList = hourlyTask.Result;
+                    if (hourlyList != null && hourlyList.Count > 0)
+                    {
+                        var sb = new StringBuilder();
+                        foreach (var hourData in hourlyList)
+                        {
+                            sb.AppendLine($"- {hourData.HourLabel}: {hourData.Temperature}°C (Feels like {hourData.FeelsLike}°C, Precip: {hourData.PrecipitationChance}%)");
+                        }
+                        hourlyWeatherDetails = sb.ToString();
+                    }
+
                     var forecastList = forecastTask.Result;
                     if (forecastList != null && forecastList.Count > 0)
                     {
+                        var sb = new StringBuilder();
                         int added = 0;
                         foreach (var day in forecastList)
                         {
                             string iconGlyph = "\uE706"; // default sun
+                            string colorHex = "#FF9800"; // sunny orange
                             string cond = day.Description;
-                            if (cond.Contains("Rain", StringComparison.OrdinalIgnoreCase)) iconGlyph = "\uE709"; // rain
-                            else if (cond.Contains("Cloud", StringComparison.OrdinalIgnoreCase)) iconGlyph = "\uE701"; // cloudy
-                            else if (cond.Contains("Snow", StringComparison.OrdinalIgnoreCase)) iconGlyph = "\uE70A"; // snow
+                            if (cond.Contains("Rain", StringComparison.OrdinalIgnoreCase) || cond.Contains("Drizzle", StringComparison.OrdinalIgnoreCase))
+                            {
+                                iconGlyph = "\u26C6"; // rain
+                                colorHex = "#2196F3"; // blue
+                            }
+                            else if (cond.Contains("Cloud", StringComparison.OrdinalIgnoreCase))
+                            {
+                                iconGlyph = "\uE753"; // cloudy
+                                colorHex = "#B0BEC5"; // grey-blue
+                            }
+                            else if (cond.Contains("Snow", StringComparison.OrdinalIgnoreCase))
+                            {
+                                iconGlyph = "\u2744"; // snow
+                                colorHex = "#90CAF9"; // light blue
+                            }
                             
                             data.WeatherForecast.Add(new ForecastDayData
                             {
                                 DayName = day.DayLabel,
                                 Temp = day.MaxTemp,
-                                Icon = iconGlyph
+                                Icon = iconGlyph,
+                                ColorHex = colorHex
                             });
+                            
+                            sb.AppendLine($"- {day.DayLabel}: Max {day.MaxTemp:F0}°C, Min {day.MinTemp:F0}°C, {day.Description} (Precip: {day.PrecipitationChance}%)");
                             added++;
-                            if (added >= 3) break;
+                            if (added >= 5) break;
                         }
+                        fiveDayWeatherDetails = sb.ToString();
                     }
                 }
             }
@@ -192,9 +254,11 @@ namespace Daily_WinUI.Services
             // Fallback weather forecast if empty
             if (data.WeatherForecast.Count == 0)
             {
-                data.WeatherForecast.Add(new ForecastDayData { DayName = "Tomorrow", Temp = temp + 1, Icon = "\uE706" });
-                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(2).ToString("dddd"), Temp = temp - 1, Icon = "\uE701" });
-                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(3).ToString("dddd"), Temp = temp, Icon = "\uE709" });
+                data.WeatherForecast.Add(new ForecastDayData { DayName = "Tomorrow", Temp = temp + 1, Icon = "\uE706", ColorHex = "#FF9800" });
+                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(2).ToString("dddd"), Temp = temp - 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
+                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(3).ToString("dddd"), Temp = temp, Icon = "\u26C6", ColorHex = "#2196F3" });
+                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(4).ToString("dddd"), Temp = temp + 2, Icon = "\uE706", ColorHex = "#FF9800" });
+                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(5).ToString("dddd"), Temp = temp + 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
             }
 
             data.WeatherTemp = temp;
@@ -206,11 +270,17 @@ namespace Daily_WinUI.Services
             int steps = 2450;
             double sleep = 7.5;
             int heartRate = 68;
+            double weightVal = 0;
+            double caloriesVal = 0;
+            double hrvVal = 0;
+            double bpSystolic = 0;
+            double bpDiastolic = 0;
+            double oxygenVal = 0;
             string healthSentence = "";
 
             try
             {
-                await Task.WhenAll(stepsTask, sleepTask, hrTask);
+                await Task.WhenAll(stepsTask, sleepTask, hrTask, weightTask, activeEnergyTask, hrvTask, bpSystolicTask, bpDiastolicTask, oxygenTask);
                 
                 var stepsMetric = stepsTask.Result;
                 if (stepsMetric != null) steps = (int)stepsMetric.Value;
@@ -220,6 +290,24 @@ namespace Daily_WinUI.Services
 
                 var hrMetric = hrTask.Result;
                 if (hrMetric != null) heartRate = (int)hrMetric.Value;
+
+                var weightMetric = weightTask.Result;
+                if (weightMetric != null) weightVal = weightMetric.Value;
+
+                var aeMetric = activeEnergyTask.Result;
+                if (aeMetric != null) caloriesVal = aeMetric.Value;
+
+                var hrvMetric = hrvTask.Result;
+                if (hrvMetric != null) hrvVal = hrvMetric.Value;
+
+                var bpSysMetric = bpSystolicTask.Result;
+                if (bpSysMetric != null) bpSystolic = bpSysMetric.Value;
+
+                var bpDiaMetric = bpDiastolicTask.Result;
+                if (bpDiaMetric != null) bpDiastolic = bpDiaMetric.Value;
+
+                var oxMetric = oxygenTask.Result;
+                if (oxMetric != null) oxygenVal = oxMetric.Value;
             }
             catch (Exception ex)
             {
@@ -229,6 +317,12 @@ namespace Daily_WinUI.Services
             data.HealthSteps = steps;
             data.HealthSleepHours = sleep;
             data.HealthAvgHr = heartRate;
+            data.HealthWeight = weightVal;
+            data.HealthActiveEnergy = caloriesVal;
+            data.HealthHrv = hrvVal;
+            data.HealthBpSystolic = bpSystolic;
+            data.HealthBpDiastolic = bpDiastolic;
+            data.HealthSpO2 = oxygenVal;
 
             if (steps < 4000)
             {
@@ -246,13 +340,25 @@ namespace Daily_WinUI.Services
 
 
             // 4. Finances Aggregation
-            decimal netWorth = 24500;
+            decimal netWorth = 0;
+            bool hasLedgerData = false;
             string financeSentence = "";
             try
             {
                 await Task.WhenAll(netWorthTask, symbolsTask);
                 netWorth = netWorthTask.Result;
-                if (netWorth <= 0) netWorth = 24500; // placeholder safety if ledger is empty
+
+                var accounts = _financesService != null ? await _financesService.GetAccountsAsync() : null;
+                var holdings = _financesService != null ? await _financesService.GetHoldingsWithQuotesAsync() : null;
+                hasLedgerData = (accounts != null && accounts.Count > 0) || (holdings != null && holdings.Count > 0);
+
+                if (!hasLedgerData)
+                {
+                    netWorth = 0; // True 0 if ledger is uninitialized
+                }
+
+                data.NetWorth = netWorth;
+                data.HasLedgerData = hasLedgerData;
 
                 var symbols = symbolsTask.Result;
                 if (symbols != null && symbols.Count > 0)
@@ -287,38 +393,79 @@ namespace Daily_WinUI.Services
                 data.WatchlistStocks.Add(new StockBriefingData { Symbol = "AAPL", Price = 189.84m, PercentChange = -0.32m });
             }
 
-            financeSentence = $"Your ledger net worth is looking healthy at {netWorth:C0}. Markets are showing active movements: {data.WatchlistStocks[0].Symbol} is at {data.WatchlistStocks[0].Price:C2} ({data.WatchlistStocks[0].FormattedChange}).";
+            if (hasLedgerData)
+            {
+                financeSentence = $"Your ledger net worth is looking healthy at {netWorth:C0}. Markets are showing active movements: {data.WatchlistStocks[0].Symbol} is at {data.WatchlistStocks[0].Price:C2} ({data.WatchlistStocks[0].FormattedChange}).";
+            }
+            else
+            {
+                financeSentence = "You haven't set up your financial ledger yet. Add accounts to start tracking your net worth!";
+            }
 
 
             // 5. Habits Aggregation
-            int habitsTotal = 4;
-            int habitsCompleted = 1;
+            double waterProgress = 0;
+            double waterGoal = 2000;
+            double smokesProgress = 0;
+            double smokesGoal = 0;
             string habitsSentence = "";
 
             try
             {
-                double hydration = await hydrationTask;
-                if (hydration > 0)
-                {
-                    habitsCompleted = hydration >= 1.0 ? 2 : 1;
-                }
+                waterProgress = await hydrationTask;
+                var waterGoalObj = await waterGoalTask;
+                waterGoal = waterGoalObj?.TargetValue > 0 ? waterGoalObj.TargetValue : 2000;
+
+                smokesProgress = smokesTask != null ? await smokesTask : 0;
+                var settingsService = App.Current.Services.GetService(typeof(ISettingsService)) as ISettingsService;
+                smokesGoal = settingsService?.Settings?.SmokesBaselineDaily ?? 20;
+
+                data.HabitsWaterProgress = waterProgress;
+                data.HabitsWaterGoal = waterGoal;
+                data.HabitsSmokesProgress = smokesProgress;
+                data.HabitsSmokesGoal = smokesGoal;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Habits Error: {ex.Message}");
             }
-            
+
+            // Calculate completed/total habits dynamically
+            int habitsTotal = 1; // Hydration is always present
+            int habitsCompleted = 0;
+            if (waterProgress >= waterGoal) habitsCompleted++;
+
+            if (smokesGoal > 0 || smokesProgress > 0)
+            {
+                habitsTotal++;
+                // Smokes habit: succeed/complete if we haven't exceeded baseline
+                if (smokesProgress <= smokesGoal) habitsCompleted++;
+            }
+
             data.HabitsTotal = habitsTotal;
             data.HabitsCompleted = habitsCompleted;
 
-            if (habitsCompleted == 0)
+            if (waterProgress < waterGoal)
             {
-                habitsSentence = $"You haven't completed any daily habits yet today. Water intake quick logging is waiting to kick off your streak!";
+                habitsSentence = $"You've logged {waterProgress:F0} ml of water today out of your {waterGoal:F0} ml goal. Remember to hydrate!";
             }
             else
             {
-                habitsSentence = $"You've completed {habitsCompleted} of your {habitsTotal} habits today. Stay consistent and keep the streak alive!";
+                habitsSentence = $"Great job on hydration! You reached your {waterGoal:F0} ml water goal today.";
             }
+
+            if (smokesGoal > 0 || smokesProgress > 0)
+            {
+                if (smokesProgress > smokesGoal)
+                {
+                    habitsSentence += $" You have smoked {smokesProgress} today, which exceeds your target limit of {smokesGoal}. Try to resist logging any more.";
+                }
+                else
+                {
+                    habitsSentence += $" You have smoked {smokesProgress} out of your daily limit of {smokesGoal}. Keep up the control!";
+                }
+            }
+
 
             // 6. News AI Recommendations with Source Diversity & Interest Matching
             if (_rssFeedService != null && _rssFeedService.Items != null && _rssFeedService.Items.Count > 0)
@@ -360,82 +507,113 @@ namespace Daily_WinUI.Services
                 }
                 catch { }
 
-                // Group all available feed items by publication source to ensure diversity
-                var itemsBySource = _rssFeedService.Items
-                    .Where(item => !string.IsNullOrEmpty(item.Title) && !readTitles.Contains(item.Title)) // filter out already read
-                    .GroupBy(item => item.PublicationName ?? "RSS Feed")
-                    .ToDictionary(g => g.Key, g => g.ToList());
-
-                // Find the user's favorite read sources (most frequent first)
-                var favoriteSources = readSources
-                    .Where(s => !string.IsNullOrEmpty(s))
-                    .GroupBy(s => s)
-                    .OrderByDescending(g => g.Count())
-                    .Select(g => g.Key)
-                    .ToList();
-
-                var selectedItems = new List<Daily.Models.RssItem>();
-                var selectedReasons = new List<string>();
-
-                // Helper to try selecting an item from a source
-                bool TrySelectFromSource(string source, string reason)
+                // Fetch favorite and read-later articles to match themes and publications
+                var favorites = _rssArticleService?.FavoriteItems ?? new List<LocalSavedArticle>();
+                var readLater = _rssArticleService?.ReadLaterItems ?? new List<LocalSavedArticle>();
+                
+                var favPublications = new HashSet<string>(favorites.Select(f => f.PublicationName), StringComparer.OrdinalIgnoreCase);
+                var rlPublications = new HashSet<string>(readLater.Select(r => r.PublicationName), StringComparer.OrdinalIgnoreCase);
+                
+                // Collect keywords from titles of saved articles to match interests
+                var savedKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var commonWords = new HashSet<string>(new[] { "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with", "of", "is", "are", "was", "were", "it", "its" }, StringComparer.OrdinalIgnoreCase);
+                
+                foreach (var title in favorites.Concat(readLater).Select(a => a.Title))
                 {
-                    if (itemsBySource.TryGetValue(source, out var sourceItems) && sourceItems.Count > 0)
+                    var words = title.Split(new[] { ' ', ',', '.', '-', ':', '?', '!' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var w in words)
                     {
-                        var item = sourceItems[0];
-                        selectedItems.Add(item);
-                        selectedReasons.Add(reason);
-                        sourceItems.RemoveAt(0); // consume
-                        if (sourceItems.Count == 0) itemsBySource.Remove(source);
-                        return true;
-                    }
-                    return false;
-                }
-
-                // 1. First priority: Try to pick one from the user's favorite source if available
-                foreach (var fav in favoriteSources)
-                {
-                    if (TrySelectFromSource(fav, $"Based on your interest in {fav}"))
-                    {
-                        break;
-                    }
-                }
-
-                // 2. Second priority: Pick from other sources to guarantee source diversity
-                var remainingSources = itemsBySource.Keys.ToList();
-                foreach (var src in remainingSources)
-                {
-                    if (selectedItems.Count >= 2) break;
-                    
-                    // If we already have one item, make sure we pick from a different source
-                    if (selectedItems.Count == 1 && selectedItems[0].PublicationName == src)
-                        continue;
-
-                    string reason = $"Top story from {src}";
-                    TrySelectFromSource(src, reason);
-                }
-
-                // 3. Fallback: If we still don't have 2 items, grab whatever is left (from any source)
-                if (selectedItems.Count < 2)
-                {
-                    foreach (var src in itemsBySource.Keys.ToList())
-                    {
-                        if (selectedItems.Count >= 2) break;
-                        while (itemsBySource[src].Count > 0 && selectedItems.Count < 2)
+                        if (w.Length > 3 && !commonWords.Contains(w))
                         {
-                            TrySelectFromSource(src, "Recommended for you");
+                            savedKeywords.Add(w);
                         }
                     }
                 }
 
-                // Populate recommendations data
-                for (int i = 0; i < selectedItems.Count; i++)
+                // Score all available feed items
+                var scoredItems = new List<(RssItem Item, double Score, string Reason)>();
+                foreach (var item in _rssFeedService.Items)
+                {
+                    if (string.IsNullOrEmpty(item.Title) || readTitles.Contains(item.Title))
+                        continue;
+
+                    double score = 0;
+                    string reason = $"Top story from {item.PublicationName ?? "Feed"}";
+                    string pub = item.PublicationName ?? "";
+                    
+                    // Match behavior history
+                    int historyCount = readSources.Count(s => string.Equals(s, pub, StringComparison.OrdinalIgnoreCase));
+                    if (historyCount > 0)
+                    {
+                        score += 3 + Math.Min(3, historyCount); // Caps history boost
+                        reason = $"Based on your interest in {pub}";
+                    }
+                    
+                    // Match favorites
+                    if (favPublications.Contains(pub))
+                    {
+                        score += 5;
+                        reason = $"From your favorite publication: {pub}";
+                    }
+                    
+                    // Match read later
+                    if (rlPublications.Contains(pub))
+                    {
+                        score += 4;
+                        reason = $"Matches your Read Later source: {pub}";
+                    }
+
+                    // Match title keywords for semantic recommendation
+                    int keywordMatches = 0;
+                    var itemWords = item.Title.Split(new[] { ' ', ',', '.', '-', ':', '?', '!' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var w in itemWords)
+                    {
+                        if (savedKeywords.Contains(w))
+                        {
+                            keywordMatches++;
+                        }
+                    }
+
+                    if (keywordMatches > 0)
+                    {
+                        score += 2 * keywordMatches;
+                        if (score >= 5)
+                        {
+                            reason = "Matches your reading interests";
+                        }
+                    }
+
+                    scoredItems.Add((item, score, reason));
+                }
+
+                // Order by score and take top, ensuring source diversity if possible
+                var selected = new List<(RssItem Item, string Reason)>();
+                var ordered = scoredItems.OrderByDescending(x => x.Score).ToList();
+                
+                foreach (var cand in ordered)
+                {
+                    if (selected.Count >= 2) break;
+                    // Source diversity check for first 2 selections
+                    if (selected.Count == 1 && string.Equals(selected[0].Item.PublicationName, cand.Item.PublicationName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var diffSourceCand = ordered.Skip(ordered.IndexOf(cand) + 1)
+                            .FirstOrDefault(x => !string.Equals(x.Item.PublicationName, cand.Item.PublicationName, StringComparison.OrdinalIgnoreCase));
+                        if (diffSourceCand.Item != null)
+                        {
+                            selected.Add((diffSourceCand.Item, diffSourceCand.Reason));
+                            break;
+                        }
+                    }
+                    selected.Add((cand.Item, cand.Reason));
+                }
+
+                foreach (var sel in selected)
                 {
                     data.NewsRecommendations.Add(new NewsRecommendationData
                     {
-                        Title = selectedItems[i].Title,
-                        Source = selectedItems[i].PublicationName ?? "RSS Feed",
-                        Reason = selectedReasons[i]
+                        Title = sel.Item.Title,
+                        Source = sel.Item.PublicationName ?? "RSS Feed",
+                        Reason = sel.Reason
                     });
                 }
             }
@@ -466,6 +644,11 @@ namespace Daily_WinUI.Services
             }
             catch { }
 
+            string weatherAdvice = "";
+            string healthAdvice = "";
+            string financeAdvice = "";
+            string habitsAdvice = "";
+
             if (useAi)
             {
                 try
@@ -482,34 +665,77 @@ namespace Daily_WinUI.Services
                     string systemPrompt = 
                         "You are DayOne, a helpful personal assistant AI running locally on the user's device. " +
                         "Generate a concise, natural, and friendly daily briefing narrative based on the user's data. " +
-                        "Analyze their weather, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice. " +
-                        "Keep the briefing structured:\n" +
-                        "- Friendly time-of-day greeting.\n" +
-                        "- Cohesive summary of weather, vitals, habits, and finances. Highlight any interesting correlations or trends (e.g. step goal, sleep quality, habits streak, or finance watchlists).\n" +
-                        "- Keep it highly professional, personal, and brief (2-3 short paragraphs max). Do not use markdown headers or lists, keep it as conversational flowing text.";
+                        "Analyze their weather, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.\n" +
+                        "Rules:\n" +
+                        "- Keep the briefing structured in 2-3 short paragraphs of conversational flowing text. Do not use markdown headers or lists.\n" +
+                        "- If finance data is marked as UNINITIALIZED, do not congratulate the user on net worth or mention a $0 net worth. Suggest setting up their ledger or adding an account instead.\n" +
+                        "- If smoking habit data is present, treat it as a negative target (reduction/cessation). Do NOT congratulate the user for smoking or logging smokes; instead, encourage reduction or praise staying under limit.\n" +
+                        "- Evaluate the weather forecast over the next hours and next 5 days, highlighting key transitions (e.g. if it will rain later, recommend taking an umbrella or exercising indoors).\n\n" +
+                        "At the very end of your response, you MUST append a JSON block enclosed in <insights> and </insights> tags. The JSON must contain short advice strings (1 sentence each) for the widgets: " +
+                        "{\n" +
+                        "  \"weatherAdvice\": \"short advice based on weather forecast\",\n" +
+                        "  \"healthAdvice\": \"short advice based on vitals/sleep\",\n" +
+                        "  \"financeAdvice\": \"short advice based on ledger/watchlist\",\n" +
+                        "  \"habitsAdvice\": \"short advice based on water/smoking\"\n" +
+                        "}\n" +
+                        "Do not write any text after the </insights> tag.";
 
                     string userPrompt = 
                         $"User Name: {userName}\n" +
                         $"Current Time: {DateTime.Now:f}\n\n" +
                         $"--- WEATHER DATA ---\n" +
                         $"Condition: {data.WeatherCondition} (Temp: {data.WeatherTemp}°C)\n" +
-                        $"Summary: {data.WeatherSummary}\n\n" +
+                        $"Hourly Forecast (next 8 hours):\n{hourlyWeatherDetails}\n" +
+                        $"5-Day Forecast:\n{fiveDayWeatherDetails}\n\n" +
                         $"--- HEALTH DATA ---\n" +
                         $"Steps Today: {data.HealthSteps}\n" +
                         $"Sleep Last Night: {data.HealthSleepHours:F1} hours\n" +
-                        $"Average Heart Rate: {data.HealthAvgHr} BPM\n\n" +
+                        $"Average Heart Rate: {data.HealthAvgHr} BPM\n" +
+                        (data.HealthWeight > 0 ? $"Weight: {data.HealthWeight:F1} kg\n" : "") +
+                        (data.HealthActiveEnergy > 0 ? $"Active Energy Burned: {data.HealthActiveEnergy:F0} kcal\n" : "") +
+                        (data.HealthHrv > 0 ? $"Heart Rate Variability (HRV): {data.HealthHrv:F0} ms\n" : "") +
+                        (data.HealthBpSystolic > 0 && data.HealthBpDiastolic > 0 ? $"Blood Pressure: {data.HealthBpSystolic:F0}/{data.HealthBpDiastolic:F0} mmHg\n" : "") +
+                        (data.HealthSpO2 > 0 ? $"Oxygen Saturation (SpO2): {data.HealthSpO2:F1}%\n" : "") + "\n" +
                         $"--- FINANCE DATA ---\n" +
-                        $"Net Worth: {data.NetWorth:C0}\n" +
-                        $"Watchlist stocks info: {watchlistDetails}\n\n" +
+                        (data.HasLedgerData 
+                            ? $"Net Worth: {data.NetWorth:C0}\nWatchlist stocks info: {watchlistDetails}\n" 
+                            : "Ledger status: UNINITIALIZED (No accounts or transactions logged yet. Do not mention a $0 net worth; suggest setting up their ledger or adding their first account/transaction instead)\n") + "\n" +
                         $"--- HABITS DATA ---\n" +
-                        $"Habits completed today: {data.HabitsCompleted} out of {data.HabitsTotal}\n\n" +
+                        $"Water target: {data.HabitsWaterGoal:F0} ml, Drank today: {data.HabitsWaterProgress:F0} ml\n" +
+                        (data.HabitsSmokesGoal > 0 || data.HabitsSmokesProgress > 0 
+                            ? $"Cigarettes limit/baseline: {data.HabitsSmokesGoal:F0} today, Smoked today: {data.HabitsSmokesProgress:F0}\n"
+                             : "") + "\n" +
                         $"--- RECENT USER BEHAVIOR TELEMETRY (Last 7 Days) ---\n" +
                         $"{behaviorSummary}";
 
                     string responseText = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
                     
+                    // Parse insights tag
+                    string cleanBriefingText = responseText;
+                    int startIndex = responseText.IndexOf("<insights>");
+                    int endIndex = responseText.IndexOf("</insights>");
+                    if (startIndex >= 0 && endIndex > startIndex)
+                    {
+                        string jsonContent = responseText.Substring(startIndex + 10, endIndex - (startIndex + 10)).Trim();
+                        cleanBriefingText = responseText.Substring(0, startIndex).Trim();
+                        
+                        try
+                        {
+                            using var doc = System.Text.Json.JsonDocument.Parse(jsonContent);
+                            var root = doc.RootElement;
+                            if (root.TryGetProperty("weatherAdvice", out var w)) weatherAdvice = w.GetString() ?? "";
+                            if (root.TryGetProperty("healthAdvice", out var h)) healthAdvice = h.GetString() ?? "";
+                            if (root.TryGetProperty("financeAdvice", out var f)) financeAdvice = f.GetString() ?? "";
+                            if (root.TryGetProperty("habitsAdvice", out var hb)) habitsAdvice = hb.GetString() ?? "";
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Failed to parse AI insights JSON: {ex.Message}");
+                        }
+                    }
+                    
                     data.IntroText = "Here is your on-device DayOne AI Smart Briefing for today.";
-                    data.BriefingText = responseText;
+                    data.BriefingText = cleanBriefingText;
                     data.OutroText = "Have a highly productive day!";
                 }
                 catch (Exception ex)
@@ -526,6 +752,50 @@ namespace Daily_WinUI.Services
                 data.BriefingText = fallbackBriefing;
                 data.OutroText = "Have a highly productive day!";
             }
+
+            // Apply rule-based fallbacks for advice if they are empty
+            if (string.IsNullOrEmpty(weatherAdvice))
+            {
+                if (data.WeatherCondition.Contains("rain", StringComparison.OrdinalIgnoreCase) || data.WeatherCondition.Contains("drizzle", StringComparison.OrdinalIgnoreCase))
+                    weatherAdvice = "Rain expected today, keep an umbrella handy.";
+                else if (data.WeatherTemp < 10)
+                    weatherAdvice = "It's cold today, dress in warm layers.";
+                else
+                    weatherAdvice = "Weather looks pleasant for outdoor activities.";
+            }
+
+            if (string.IsNullOrEmpty(healthAdvice))
+            {
+                if (data.HealthSteps < 4000)
+                    healthAdvice = "You are behind on steps today. Let's aim to reach your target baseline!";
+                else if (data.HealthSleepHours < 7 && data.HealthSleepHours > 0)
+                    healthAdvice = "You got less than 7 hours of sleep. Prioritize rest and recovery.";
+                else
+                    healthAdvice = "Vitals are looking good. Keep up the active baseline!";
+            }
+
+            if (string.IsNullOrEmpty(financeAdvice))
+            {
+                if (!data.HasLedgerData)
+                    financeAdvice = "Your ledger is empty. Tap the widget to configure your accounts!";
+                else
+                    financeAdvice = "Watchlist is active. Markets are showing movements.";
+            }
+
+            if (string.IsNullOrEmpty(habitsAdvice))
+            {
+                if (data.HabitsWaterProgress < data.HabitsWaterGoal)
+                    habitsAdvice = $"Hydration: you need {(data.HabitsWaterGoal - data.HabitsWaterProgress):F0} ml more water today.";
+                else if (data.HabitsSmokesProgress > data.HabitsSmokesGoal && data.HabitsSmokesGoal > 0)
+                    habitsAdvice = "Smokes limit exceeded! Try to resist logging any more units today.";
+                else
+                    habitsAdvice = "Habits are on track today. Stay consistent!";
+            }
+
+            data.WeatherAdvice = weatherAdvice;
+            data.HealthAdvice = healthAdvice;
+            data.FinanceAdvice = financeAdvice;
+            data.HabitsAdvice = habitsAdvice;
 
             return data;
         }

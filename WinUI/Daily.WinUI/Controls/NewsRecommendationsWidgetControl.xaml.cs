@@ -19,8 +19,39 @@ namespace Daily_WinUI.Controls
             this.InitializeComponent();
         }
 
+        public void Populate(List<NewsRecommendationData> recs)
+        {
+            _recs = recs;
+            if (_recs != null && _recs.Count >= 2)
+            {
+                Rec1Title.Text = _recs[0].Title;
+                Rec1Reason.Text = _recs[0].Reason;
+                Rec1Source.Text = _recs[0].Source;
+
+                Rec2Title.Text = _recs[1].Title;
+                Rec2Reason.Text = _recs[1].Reason;
+                Rec2Source.Text = _recs[1].Source;
+
+                ContentPanel.Visibility = Visibility.Visible;
+                NoDataText.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                NoDataText.Visibility = Visibility.Visible;
+                ContentPanel.Visibility = Visibility.Collapsed;
+            }
+            LoadingRing.IsActive = false;
+            LoadingRing.Visibility = Visibility.Collapsed;
+        }
+
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
+            if (_recs != null && _recs.Count >= 2)
+            {
+                // Already populated by parent overlay
+                return;
+            }
+
             try
             {
                 _briefingService = App.Current.Services.GetService<SmartBriefingService>();
@@ -28,39 +59,19 @@ namespace Daily_WinUI.Controls
                 {
                     // Generate brief data (this handles fallback to static if empty)
                     var data = await _briefingService.GenerateBriefingDataAsync("User");
-                    _recs = data.NewsRecommendations;
-                    
-                    if (_recs != null && _recs.Count >= 2)
-                    {
-                        Rec1Title.Text = _recs[0].Title;
-                        Rec1Reason.Text = _recs[0].Reason;
-                        Rec1Source.Text = _recs[0].Source;
-
-                        Rec2Title.Text = _recs[1].Title;
-                        Rec2Reason.Text = _recs[1].Reason;
-                        Rec2Source.Text = _recs[1].Source;
-
-                        ContentPanel.Visibility = Visibility.Visible;
-                        NoDataText.Visibility = Visibility.Collapsed;
-                    }
-                    else
-                    {
-                        NoDataText.Visibility = Visibility.Visible;
-                        ContentPanel.Visibility = Visibility.Collapsed;
-                    }
+                    Populate(data.NewsRecommendations);
                 }
                 else
                 {
                     NoDataText.Visibility = Visibility.Visible;
+                    LoadingRing.IsActive = false;
+                    LoadingRing.Visibility = Visibility.Collapsed;
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[NewsRecommendationsWidgetControl] Error: {ex.Message}");
                 NoDataText.Visibility = Visibility.Visible;
-            }
-            finally
-            {
                 LoadingRing.IsActive = false;
                 LoadingRing.Visibility = Visibility.Collapsed;
             }
