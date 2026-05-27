@@ -7,11 +7,25 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- Set to true to build and run as a Packaged MSIX app, or false for Unpackaged development -->
+    <AppPackaged>true</AppPackaged>
+    
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
-    <EnableMsixTooling>false</EnableMsixTooling>
-    <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+  </PropertyGroup>
+
+  <!-- Conditional configuration based on packaging selection -->
+  <PropertyGroup Condition="'$(AppPackaged)' == 'true'">
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <EnableMsixTooling>true</EnableMsixTooling>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(AppPackaged)' != 'true'">
+    <WindowsPackageType>None</WindowsPackageType>
+    <EnableMsixTooling>false</EnableMsixTooling>
+  </PropertyGroup>
+  <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
@@ -134,7 +148,9 @@
     Tools extension to be activated for this project even if the Windows App SDK Nuget
     package has not yet been restored.
   -->
-  <!-- MSIX project capability omitted - running unpackaged/self-contained -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
@@ -172,5 +188,14 @@
     <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
   </PropertyGroup>
+
+  <!-- Target to resolve APPX1101 payload duplicate errors by filtering out conflicting DLLs from MsixContent -->
+  <Target Name="FilterAppxPackagePayload" BeforeTargets="_ComputeAppxPackagePayload">
+    <ItemGroup>
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Filename)' == 'DirectML' and $([System.String]::new('%(Identity)').Contains('MsixContent'))" />
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Filename)' == 'onnxruntime' and $([System.String]::new('%(Identity)').Contains('MsixContent'))" />
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Filename)' == 'onnxruntime_providers_shared' and $([System.String]::new('%(Identity)').Contains('MsixContent'))" />
+    </ItemGroup>
+  </Target>
 </Project>
 

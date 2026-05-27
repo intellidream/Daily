@@ -256,7 +256,47 @@ public sealed partial class FeaturesPage : Page
             description = "Uses the built-in Microsoft Copilot Runtime (Phi Silica 3.3B) accelerated by the Qualcomm NPU. Zero download required.";
             if (!phiSilicaAvailable)
             {
-                description += " WARNING: Phi Silica is NOT ready or supported on this system. Falling back to template.";
+                var isUnpackaged = false;
+                try
+                {
+                    var p = global::Windows.ApplicationModel.Package.Current;
+                }
+                catch (InvalidOperationException)
+                {
+                    isUnpackaged = true;
+                }
+
+                if (isUnpackaged)
+                {
+                    description += "\n\nCRITICAL WARNING: Access Denied. The application is running in unpackaged mode. Windows Copilot Runtime (Phi Silica) APIs strictly require MSIX package identity and the 'systemAIModels' capability to run. Please run the application using a Packaged launch profile to use Phi Silica.";
+                }
+                else
+                {
+                    try
+                    {
+                        var state = LanguageModel.GetReadyState();
+                        if (state == AIFeatureReadyState.NotReady)
+                        {
+                            description += "\n\nWARNING: Phi Silica is supported on this machine but is not ready/downloaded. Please ensure that Windows Update has finished downloading the Copilot model components, or trigger provisioning.";
+                        }
+                        else if (state == AIFeatureReadyState.NotSupportedOnCurrentSystem)
+                        {
+                            description += "\n\nWARNING: The hardware or OS version on this machine does not support the Windows Copilot Runtime. Ensure this is a Copilot+ PC running Windows 11 version 24H2 or higher.";
+                        }
+                        else if (state == AIFeatureReadyState.DisabledByUser)
+                        {
+                            description += "\n\nWARNING: The Copilot AI features have been disabled by system policy or user preferences.";
+                        }
+                        else
+                        {
+                            description += $"\n\nWARNING: Phi Silica is not ready. Current State: {state}";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        description += $"\n\nWARNING: Failed to query model state: {ex.Message}";
+                    }
+                }
             }
         }
         else if (activeDevice == "NPU_IntelAmd")

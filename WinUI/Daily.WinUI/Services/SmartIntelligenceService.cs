@@ -37,6 +37,23 @@ namespace Daily_WinUI.Services
         {
             if (_model == null)
             {
+                try
+                {
+                    var state = LanguageModel.GetReadyState();
+                    if (state == AIFeatureReadyState.NotReady)
+                    {
+                        var result = await LanguageModel.EnsureReadyAsync();
+                        if (result.Status != AIFeatureReadyResultState.Success)
+                        {
+                            throw new InvalidOperationException($"Phi Silica model provisioning failed. Status: {result.Status}, Error: {result.ErrorDisplayText}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PhiSilica] Provisioning error: {ex}");
+                }
+
                 _model = await LanguageModel.CreateAsync();
             }
         }
