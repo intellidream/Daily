@@ -178,13 +178,16 @@ public sealed partial class FeaturesPage : Page
         
         bool phiSilicaAvailable = false;
         bool phiSilicaSupported = false;
-        try
+        if (!string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
         {
-            var state = LanguageModel.GetReadyState();
-            phiSilicaAvailable = state == AIFeatureReadyState.Ready;
-            phiSilicaSupported = state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
+            try
+            {
+                var state = LanguageModel.GetReadyState();
+                phiSilicaAvailable = state == AIFeatureReadyState.Ready;
+                phiSilicaSupported = state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
+            }
+            catch { }
         }
-        catch { }
 
         bool onnxModelReady = false;
         bool cpuFallbackActive = false;
@@ -254,6 +257,18 @@ public sealed partial class FeaturesPage : Page
             bestEngineName = "Qualcomm Hexagon NPU";
             bestEngineTag = "NPU";
             bestEngineReady = true;
+        }
+        else if (!string.IsNullOrEmpty(npu) && (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)))
+        {
+            bestEngineName = "AMD Ryzen AI NPU";
+            bestEngineTag = "NPU_IntelAmd";
+            bestEngineReady = onnxModelReady;
+        }
+        else if (!string.IsNullOrEmpty(npu) && npu.Contains("Intel", StringComparison.OrdinalIgnoreCase))
+        {
+            bestEngineName = "Intel(R) AI Boost NPU";
+            bestEngineTag = "NPU_IntelAmd";
+            bestEngineReady = onnxModelReady;
         }
         else
         {
@@ -435,12 +450,16 @@ public sealed partial class FeaturesPage : Page
         string activeAccelerator = _settings.SelectedAiAccelerator ?? "Auto";
 
         bool phiSilicaSupported = false;
-        try
+        string? npu = SettingsService.GetDetectedNpuName();
+        if (!string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
         {
-            var state = LanguageModel.GetReadyState();
-            phiSilicaSupported = state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
+            try
+            {
+                var state = LanguageModel.GetReadyState();
+                phiSilicaSupported = state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
+            }
+            catch { }
         }
-        catch { }
 
         bool isInternalAiActive = _settings.UseWindowsInternalAi && phiSilicaSupported && (activeAccelerator == "Auto" || activeAccelerator == "NPU");
 
@@ -610,13 +629,17 @@ public sealed partial class FeaturesPage : Page
         {
             bool phiSilicaAvailable = false;
             bool phiSilicaSupported = false;
-            try
+            string? npu = SettingsService.GetDetectedNpuName();
+            if (!string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
             {
-                var state = LanguageModel.GetReadyState();
-                phiSilicaAvailable = state == AIFeatureReadyState.Ready;
-                phiSilicaSupported = state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
+                try
+                {
+                    var state = LanguageModel.GetReadyState();
+                    phiSilicaAvailable = state == AIFeatureReadyState.Ready;
+                    phiSilicaSupported = state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
+                }
+                catch { }
             }
-            catch { }
 
             if (!phiSilicaSupported)
             {

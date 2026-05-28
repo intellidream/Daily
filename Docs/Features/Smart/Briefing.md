@@ -181,6 +181,54 @@ public class OnnxGenAiSmartService : ISmartIntelligenceService
 }
 ```
 
+### 2.4 Packaging & DLL Conflict Resolution
+
+When building a self-contained packaged WinUI 3 application using the Windows App SDK, a conflict arises between the transitive dependency `Microsoft.WindowsAppSDK.ML` (which bundles an older version of `DirectML.dll` and `onnxruntime.dll` for WinML) and `Microsoft.ML.OnnxRuntimeGenAI.DirectML` (which requires newer versions of the same DLLs). 
+
+To resolve this conflict and allow hardware-accelerated execution:
+1. **Exclude Transitive Assets**: We explicitly add a PackageReference to the conflicting package with `ExcludeAssets="all"` in [Daily.WinUI.csproj](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Daily.WinUI.csproj):
+   ```xml
+   <PackageReference Include="Microsoft.WindowsAppSDK.ML" Version="1.8.2141" ExcludeAssets="all" />
+   ```
+2. **Exclude Components from Packaging**: We declare custom targets `RemoveWindowsAppSDKMLFilesFromPayload` and `FilterPackagingOutputs` in [Daily.WinUI.csproj](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Daily.WinUI.csproj) to remove the older, conflicting DLLs (`DirectML.dll`, `onnxruntime.dll`, and `onnxruntime_providers_shared.dll`) that are transitively placed in `MsixContent` by the Windows App SDK. By utilizing clean MSBuild wildcard filters, we bypass static property function limitations:
+   ```xml
+   <Target Name="RemoveWindowsAppSDKMLFilesFromPayload" BeforeTargets="GetCopyToOutputDirectoryItems;CopyFilesToOutputDirectory;_ComputeAppxPackagePayload">
+     <ItemGroup>
+       <None Remove="**\MsixContent\DirectML.dll" />
+       <None Remove="**\MsixContent\onnxruntime.dll" />
+       <None Remove="**\MsixContent\onnxruntime_providers_shared.dll" />
+       <None Remove="**\MsixContent\DirectML.pdb" />
+       <None Remove="**/MsixContent/DirectML.dll" />
+       <None Remove="**/MsixContent/onnxruntime.dll" />
+       <None Remove="**/MsixContent/onnxruntime_providers_shared.dll" />
+       <None Remove="**/MsixContent/DirectML.pdb" />
+
+       <Content Remove="**\MsixContent\DirectML.dll" />
+       <Content Remove="**\MsixContent\onnxruntime.dll" />
+       <Content Remove="**\MsixContent\onnxruntime_providers_shared.dll" />
+       <Content Remove="**\MsixContent\DirectML.pdb" />
+       <Content Remove="**/MsixContent/DirectML.dll" />
+       <Content Remove="**/MsixContent/onnxruntime.dll" />
+       <Content Remove="**/MsixContent/onnxruntime_providers_shared.dll" />
+       <Content Remove="**/MsixContent/DirectML.pdb" />
+     </ItemGroup>
+   </Target>
+
+   <Target Name="FilterPackagingOutputs" AfterTargets="_ComputeAppxPackagePayload">
+     <ItemGroup>
+       <PackagingOutputs Remove="**\MsixContent\DirectML.dll" />
+       <PackagingOutputs Remove="**\MsixContent\onnxruntime.dll" />
+       <PackagingOutputs Remove="**\MsixContent\onnxruntime_providers_shared.dll" />
+       <PackagingOutputs Remove="**\MsixContent\DirectML.pdb" />
+       <PackagingOutputs Remove="**/MsixContent/DirectML.dll" />
+       <PackagingOutputs Remove="**/MsixContent/onnxruntime.dll" />
+       <PackagingOutputs Remove="**/MsixContent/onnxruntime_providers_shared.dll" />
+       <PackagingOutputs Remove="**/MsixContent/DirectML.pdb" />
+     </ItemGroup>
+   </Target>
+   ```
+This ensures the final packaged MSIX contains the correct, newer `DirectML.dll` and `onnxruntime.dll` versions required by ONNX Runtime GenAI for GPU/NPU acceleration.
+
 ---
 
 ## 3. UI/UX & Layout

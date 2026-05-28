@@ -157,6 +157,7 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.7705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.ML" Version="1.8.2141" ExcludeAssets="all" />
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
     <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
     <PackageReference Include="Syncfusion.Chart.WinUI" Version="33.2.4" />
@@ -189,12 +190,13 @@
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
   </PropertyGroup>
 
-  <!-- Target to resolve APPX1101 payload duplicate errors by filtering out conflicting DLLs from MsixContent -->
-  <Target Name="FilterAppxPackagePayload" BeforeTargets="_ComputeAppxPackagePayload">
+  <!-- Remove older DirectML and ONNX Runtime DLLs from the MSIX packaging payload before it is computed -->
+  <Target Name="FilterPackagingOutputs" BeforeTargets="_ComputeAppxPackagePayload">
     <ItemGroup>
-      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Filename)' == 'DirectML' and $([System.String]::new('%(Identity)').Contains('MsixContent'))" />
-      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Filename)' == 'onnxruntime' and $([System.String]::new('%(Identity)').Contains('MsixContent'))" />
-      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Filename)' == 'onnxruntime_providers_shared' and $([System.String]::new('%(Identity)').Contains('MsixContent'))" />
+      <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\DirectML.dll" />
+      <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\onnxruntime.dll" />
+      <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\onnxruntime_providers_shared.dll" />
+      <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\DirectML.pdb" />
     </ItemGroup>
   </Target>
 </Project>

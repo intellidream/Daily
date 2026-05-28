@@ -66,14 +66,7 @@
             </Border>
         </DataTemplate>
 
-        <DataTemplate x:Key="NewsRecommendationsWidgetTemplate">
-            <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <controls:NewsRecommendationsWidgetControl />
-            </Border>
-        </DataTemplate>
-
         <controls:WidgetTemplateSelector x:Key="WidgetSelector"
-            NewsRecommendationsTemplate="{StaticResource NewsRecommendationsWidgetTemplate}"
             WeatherTemplate="{StaticResource WeatherWidgetTemplate}"
             FinancesTemplate="{StaticResource FinancesWidgetTemplate}"
             HabitsTemplate="{StaticResource HabitsWidgetTemplate}"
@@ -233,7 +226,7 @@
                                        FontWeight="SemiBold" 
                                        Foreground="{ThemeResource AppFgColorBrush}" 
                                        HorizontalAlignment="Center"/>
-                            <TextBlock Text="Gathering news, weather, finances, habits, and health insights..." 
+                            <TextBlock Text="Gathering news, weather, finances, habits, and health insights." 
                                        FontSize="13" 
                                        Foreground="{ThemeResource AppFgMutedColorBrush}" 
                                        HorizontalAlignment="Center"/>
@@ -314,14 +307,6 @@
                                            FontSize="14" 
                                            Foreground="{ThemeResource AppFgMutedColorBrush}" 
                                            Opacity="0.75"
-                                           TextWrapping="Wrap"/>
-                                           
-                                <!-- Sub-description (Less emphasized) -->
-                                <TextBlock x:Name="BriefingSubDescriptionText" 
-                                           Text="Here's your DayOne AI Smart Briefing..." 
-                                           FontSize="13" 
-                                           Foreground="{ThemeResource AppFgMutedColorBrush}" 
-                                           Opacity="0.6"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </Grid>

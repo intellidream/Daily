@@ -23,6 +23,12 @@ namespace Daily_WinUI.Services
         {
             try
             {
+                string? npu = SettingsService.GetDetectedNpuName();
+                if (string.IsNullOrEmpty(npu) || !npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
                 // In WinAppSDK 1.8, the ready state is checked using static GetReadyState()
                 var state = LanguageModel.GetReadyState();
                 return state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
@@ -168,22 +174,37 @@ namespace Daily_WinUI.Services
                     {
                         // Resolve Auto based on recommendation and execution history
                         string? npu = SettingsService.GetDetectedNpuName();
-                        if (!string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
+                        if (!string.IsNullOrEmpty(npu))
                         {
-                            resolvedChoice = "NPU";
-                        }
-                        else
-                        {
-                            // Check if GPU is marked as Failed in history
-                            var gpuHistory = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == selectedModelId && h.Accelerator == "GPU");
-                            if (gpuHistory != null && gpuHistory.Status == "Failed")
+                            if (npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
                             {
-                                resolvedChoice = "CPU"; // Auto fallback to CPU
+                                resolvedChoice = "NPU";
+                            }
+                            else if (npu.Contains("Intel", StringComparison.OrdinalIgnoreCase) || 
+                                     npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || 
+                                     npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var npuHistory = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == selectedModelId && h.Accelerator == "NPU_IntelAmd");
+                                if (npuHistory == null || npuHistory.Status != "Failed")
+                                {
+                                    resolvedChoice = "NPU_IntelAmd";
+                                }
+                                else
+                                {
+                                    var gpuHistory = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == selectedModelId && h.Accelerator == "GPU");
+                                    resolvedChoice = (gpuHistory != null && gpuHistory.Status == "Failed") ? "CPU" : "GPU";
+                                }
                             }
                             else
                             {
-                                resolvedChoice = "GPU";
+                                var gpuHistory = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == selectedModelId && h.Accelerator == "GPU");
+                                resolvedChoice = (gpuHistory != null && gpuHistory.Status == "Failed") ? "CPU" : "GPU";
                             }
+                        }
+                        else
+                        {
+                            var gpuHistory = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == selectedModelId && h.Accelerator == "GPU");
+                            resolvedChoice = (gpuHistory != null && gpuHistory.Status == "Failed") ? "CPU" : "GPU";
                         }
                     }
 
@@ -348,9 +369,28 @@ namespace Daily_WinUI.Services
             {
                 if (acc != "Auto") return acc;
                 string? npu = SettingsService.GetDetectedNpuName();
-                if (!string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(npu))
                 {
-                    return "NPU";
+                    if (npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return "NPU";
+                    }
+                    if (npu.Contains("Intel", StringComparison.OrdinalIgnoreCase) || 
+                        npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || 
+                        npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var npuHistory = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == modelId && h.Accelerator == "NPU_IntelAmd");
+                        if (npuHistory == null || npuHistory.Status != "Failed")
+                        {
+                            return "NPU_IntelAmd";
+                        }
+                    }
+                }
+
+                var gpuHistory = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == modelId && h.Accelerator == "GPU");
+                if (gpuHistory != null && gpuHistory.Status == "Failed")
+                {
+                    return "CPU";
                 }
                 return "GPU";
             }
@@ -362,8 +402,14 @@ namespace Daily_WinUI.Services
             // 1. The user's requested configuration
             configsToTry.Add((initialModelId, targetAcc));
 
-            // 2. If it was GPU/NPU, the same model on CPU
-            if (targetAcc != "CPU" && targetAcc != "NPU")
+            // 2. If it was NPU_IntelAmd, fall back to GPU then CPU
+            if (targetAcc == "NPU_IntelAmd")
+            {
+                configsToTry.Add((initialModelId, "GPU"));
+                configsToTry.Add((initialModelId, "CPU"));
+            }
+            // 3. If it was GPU or NPU, the same model on CPU (unless already added)
+            else if (targetAcc != "CPU")
             {
                 configsToTry.Add((initialModelId, "CPU"));
             }

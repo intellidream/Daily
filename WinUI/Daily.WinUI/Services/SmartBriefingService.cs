@@ -468,8 +468,48 @@ namespace Daily_WinUI.Services
 
 
             // 6. News AI Recommendations with Source Diversity & Interest Matching
-            if (_rssFeedService != null && _rssFeedService.Items != null && _rssFeedService.Items.Count > 0)
+            // 6. News AI Recommendations with Source Diversity & Interest Matching
+            if (_rssFeedService != null && _rssFeedService.Feeds != null && _rssFeedService.Feeds.Count > 0)
             {
+                var allFeedItems = new List<RssItem>();
+                
+                // Add current feed items if populated
+                if (_rssFeedService.Items != null)
+                {
+                    allFeedItems.AddRange(_rssFeedService.Items);
+                }
+
+                // Fetch other feeds in parallel to construct a rich recommendation pool
+                var otherFeeds = _rssFeedService.Feeds
+                    .Where(f => _rssFeedService.CurrentFeed == null || !string.Equals(f.Url, _rssFeedService.CurrentFeed.Url, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (otherFeeds.Count > 0)
+                {
+                    try
+                    {
+                        var tasks = otherFeeds.Select(feed => _rssFeedService.FetchFeedItemsAsync(feed));
+                        var results = await Task.WhenAll(tasks);
+                        foreach (var list in results)
+                        {
+                            if (list != null)
+                            {
+                                allFeedItems.AddRange(list);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Parallel feed fetch error: {ex.Message}");
+                    }
+                }
+
+                // Deduplicate by URL or title
+                var uniqueItems = allFeedItems
+                    .GroupBy(item => item.Link ?? item.Title)
+                    .Select(g => g.First())
+                    .ToList();
+
                 var readSources = new List<string>();
                 var readTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 try
@@ -532,7 +572,7 @@ namespace Daily_WinUI.Services
 
                 // Score all available feed items
                 var scoredItems = new List<(RssItem Item, double Score, string Reason)>();
-                foreach (var item in _rssFeedService.Items)
+                foreach (var item in uniqueItems)
                 {
                     if (string.IsNullOrEmpty(item.Title) || readTitles.Contains(item.Title))
                         continue;

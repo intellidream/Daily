@@ -21,5 +21,6 @@ namespace Daily.Services
         void SelectFeed(FeedSource feed);
         Task<RssItem> FetchFullArticleAsync(string url);
         Task InitializeCustomFeedsAsync();
+        Task<List<RssItem>> FetchFeedItemsAsync(FeedSource feed);
     }
 }
