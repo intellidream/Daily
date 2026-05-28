@@ -349,10 +349,12 @@ public sealed partial class FeaturesPage : Page
         {
             LastRunExplanationInfoBar.Message = _settings.LastExecutionExplanation;
             LastRunExplanationInfoBar.IsOpen = true;
+            LastRunExplanationInfoBar.Visibility = Visibility.Visible;
         }
         else
         {
             LastRunExplanationInfoBar.IsOpen = false;
+            LastRunExplanationInfoBar.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -367,6 +369,7 @@ public sealed partial class FeaturesPage : Page
 
         // Show/hide Copilot Runtime NPU override banner
         NpuCopilotRuntimeInfoBar.IsOpen = isNpuActive;
+        NpuCopilotRuntimeInfoBar.Visibility = isNpuActive ? Visibility.Visible : Visibility.Collapsed;
 
         // Update Llama Card
         UpdateCardState(
@@ -500,6 +503,7 @@ public sealed partial class FeaturesPage : Page
     private void UpdateHardwareWarning(string modelId, string accelerator)
     {
         HardwareWarningInfoBar.IsOpen = false;
+        HardwareWarningInfoBar.Visibility = Visibility.Collapsed;
 
         // Check if CPU is paired with Phi 3.5 Mini
         if (modelId == "phi35_mini" && accelerator == "CPU")
@@ -508,6 +512,7 @@ public sealed partial class FeaturesPage : Page
             HardwareWarningInfoBar.Message = "Phi 3.5 Mini (3.8B parameters) is a relatively heavy model. Running it on CPU will be extremely slow (~2 tokens/sec). We highly recommend using GPU acceleration.";
             HardwareWarningInfoBar.Severity = InfoBarSeverity.Warning;
             HardwareWarningInfoBar.IsOpen = true;
+            HardwareWarningInfoBar.Visibility = Visibility.Visible;
             return;
         }
 
@@ -527,6 +532,7 @@ public sealed partial class FeaturesPage : Page
                 HardwareWarningInfoBar.Message = "Qualcomm NPU mode is selected, but the Windows Copilot Runtime (Phi Silica) is not ready or supported on this system. Please select a different accelerator or ensure your device is a Copilot+ PC.";
                 HardwareWarningInfoBar.Severity = InfoBarSeverity.Error;
                 HardwareWarningInfoBar.IsOpen = true;
+                HardwareWarningInfoBar.Visibility = Visibility.Visible;
             }
         }
     }
