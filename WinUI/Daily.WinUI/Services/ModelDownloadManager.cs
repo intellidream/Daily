@@ -121,7 +121,8 @@ namespace Daily_WinUI.Services
                         new("special_tokens_map.json", "special_tokens_map.json", 1000),
                         new("tokenizer.json", "tokenizer.json", 8100000),
                         new("tokenizer_config.json", "tokenizer_config.json", 1000),
-                        new("onnx/model_q4.onnx", "model.onnx", 750000000)
+                        new("onnx/model_q4.onnx", "model.onnx", 500000),
+                        new("onnx/model_q4.onnx_data", "model_q4.onnx_data", 750000000)
                     },
                     true,
                     "gemma2"
@@ -130,7 +131,7 @@ namespace Daily_WinUI.Services
             {
                 "phi35_mini", new ModelDownloadInfo(
                     "phi35_mini",
-                    "https://huggingface.co/microsoft/Phi-3.5-mini-instruct-onnx/resolve/main/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/",
+                    "https://huggingface.co/microsoft/Phi-3.5-mini-instruct-onnx/resolve/main/cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/",
                     "phi35",
                     new()
                     {
@@ -139,8 +140,8 @@ namespace Daily_WinUI.Services
                         new("special_tokens_map.json", "special_tokens_map.json", 100000),
                         new("tokenizer.json", "tokenizer.json", 9100000),
                         new("tokenizer_config.json", "tokenizer_config.json", 100000),
-                        new("model.onnx", "model.onnx", 16000000),
-                        new("model.onnx.data", "model.onnx.data", 2200000000)
+                        new("phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", "model.onnx", 55000000),
+                        new("phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data", "model.onnx.data", 2730000000)
                     },
                     false,
                     "phi"

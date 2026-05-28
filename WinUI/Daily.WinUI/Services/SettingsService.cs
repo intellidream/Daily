@@ -155,28 +155,31 @@ public static class SettingsService
                 return false;
             }
 
-            var modelInfo = new FileInfo(modelPath);
             if (modelId == "llama32_1b")
             {
                 string dataPath = Path.Combine(dir, "model.onnx.data");
                 if (!File.Exists(dataPath)) return false;
                 var dataInfo = new FileInfo(dataPath);
-                return modelInfo.Length > 10000000 && dataInfo.Length > 500000000;
+                return dataInfo.Length > 500000000;
             }
             else if (modelId == "phi35_mini")
             {
                 string dataPath = Path.Combine(dir, "model.onnx.data");
                 if (!File.Exists(dataPath)) return false;
                 var dataInfo = new FileInfo(dataPath);
-                return modelInfo.Length > 10000000 && dataInfo.Length > 1500000000;
+                return dataInfo.Length > 1500000000;
             }
             else if (modelId == "qwen25_15b")
             {
+                var modelInfo = new FileInfo(modelPath);
                 return modelInfo.Length > 500000000;
             }
             else if (modelId == "gemma3_1b")
             {
-                return modelInfo.Length > 400000000;
+                string dataPath = Path.Combine(dir, "model_q4.onnx_data");
+                if (!File.Exists(dataPath)) return false;
+                var dataInfo = new FileInfo(dataPath);
+                return dataInfo.Length > 400000000;
             }
         }
         catch
