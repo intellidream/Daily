@@ -12,6 +12,7 @@ Daily supports two parallel local AI executing backends depending on the host ma
 * **Hardware Target**: Qualcomm Hexagon NPU (45 TOPS) on Snapdragon X Elite/Plus processors (Copilot+ PCs).
 * **Integration**: Utilizes the native Windows `LanguageModel` WinRT API.
 * **Benefits**: Extremely fast generation speeds and zero-download configuration (the weights are pre-provisioned by Windows Update and kept warm in memory by the OS).
+* **Toggles & Fallbacks**: The UI includes a "Use Windows built-in AI engine (Phi Silica)" checkbox for Snapdragon devices. When checked, the app prioritizes Phi Silica. When unchecked, it bypasses the built-in runtime and utilizes DirectML custom downloaded models (e.g., Llama 3.2 1B), allowing full developer customization and offline model usage even on NPU-equipped machines.
 
 ### B. ONNX Runtime Generative AI (DirectML Backend)
 * **Underlying Models**: Downloadable custom models (Llama 3.2 1B, Qwen 2.5 1.5B, Gemma 3 1B, Phi 3.5 Mini 3.8B).
@@ -118,7 +119,13 @@ The `Auto` accelerator setting dynamically reads the calibration history. If Dir
 #### D. Calibration Warning Panel
 The Settings Page reads `LastExecutionExplanation` from settings to display a system status warning in the UI:
 * Displays a detailed step-by-step description of any fallbacks or redirections that occurred during the last briefing run.
-* Keeps the user informed in natural, non-technical language (no raw exception trace logs) about why the app chose the active backend on their machine.
+* Keeps the user informed in natural, non-technical language (or detailed exception descriptions when debugging runtime features) about why the app chose the active backend.
+
+#### E. Windows Copilot Runtime (Phi Silica) Diagnostics & Fallback
+Because Phi Silica is restricted to packaged (MSIX) applications and requires Microsoft's Limited Access Feature (LAF) authorization, it can fail to load (throwing `System.UnauthorizedAccessException` with Status `3` / `Unknown` if the developer unlock token is missing or if OS builds are mismatched). 
+To handle and debug this:
+* **Resilient Fallback**: If Phi Silica fails to initialize or run, the system catches the exception and immediately attempts to redirect execution to the custom ONNX model (e.g. Llama 3.2) if downloaded and verified on disk.
+* **Detailed Diagnostic Logging**: The specific exception and error status are saved to `settings.LastExecutionExplanation`. This propagates directly to the **System Calibration Memory** panel in Settings, showing the exact error (such as `Access Denied. Limited access feature is not available. com.microsoft.windows.ai.languagemodel. Status: 3`) to help developers and users diagnose licensing or OS configuration issues.
 
 ---
 
