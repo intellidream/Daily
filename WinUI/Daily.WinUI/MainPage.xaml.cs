@@ -31,6 +31,8 @@ public sealed partial class MainPage : Page
     private int _typewriterIndex = 0;
     private string[] _briefingWords = System.Array.Empty<string>();
     private System.Threading.Tasks.Task<SmartBriefingData>? _pregeneratedBriefingTask;
+    private string? _pregeneratedAccelerator;
+    private string? _pregeneratedModelId;
 
     public MainPage()
     {
@@ -134,6 +136,9 @@ public sealed partial class MainPage : Page
         }
 
         // Pre-generate Smart Briefing data in background as soon as data loading is complete
+        var settingsForPreGen = SettingsService.Load();
+        _pregeneratedAccelerator = settingsForPreGen.SelectedAiAccelerator ?? "Auto";
+        _pregeneratedModelId = settingsForPreGen.SelectedLocalAiModel ?? "llama32_1b";
         string currentUserName = _authService.CurrentUserDisplayName ?? "Explorer";
         var briefingSvc = App.Current.Services.GetRequiredService<SmartBriefingService>();
         _pregeneratedBriefingTask = briefingSvc.GenerateBriefingDataAsync(currentUserName);
@@ -172,6 +177,9 @@ public sealed partial class MainPage : Page
         await LoadWidgetsAsync();
 
         // Re-trigger pre-generation in the background since data is refreshed
+        var settingsForRefresh = SettingsService.Load();
+        _pregeneratedAccelerator = settingsForRefresh.SelectedAiAccelerator ?? "Auto";
+        _pregeneratedModelId = settingsForRefresh.SelectedLocalAiModel ?? "llama32_1b";
         string userName = _authService.CurrentUserDisplayName ?? "Explorer";
         var briefingSvc = App.Current.Services.GetRequiredService<SmartBriefingService>();
         _pregeneratedBriefingTask = briefingSvc.GenerateBriefingDataAsync(userName);
@@ -550,6 +558,16 @@ public sealed partial class MainPage : Page
         // Fetch dynamic data from services (using pre-generated task if available)
         string userName = _authService.CurrentUserDisplayName ?? "Explorer";
         SmartBriefingData data;
+        
+        string currentAcc = settings.SelectedAiAccelerator ?? "Auto";
+        string currentModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+        if (_pregeneratedBriefingTask != null &&
+            (_pregeneratedAccelerator != currentAcc || _pregeneratedModelId != currentModelId))
+        {
+            System.Diagnostics.Debug.WriteLine("[MainPage] Discarding pregenerated briefing because AI settings changed.");
+            _pregeneratedBriefingTask = null;
+        }
+
         if (_pregeneratedBriefingTask != null)
         {
             try

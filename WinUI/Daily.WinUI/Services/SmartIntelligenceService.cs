@@ -96,7 +96,20 @@ namespace Daily_WinUI.Services
         private string? _lastUsedModelId;
         private bool _useCpuFallback = false;
 
-        public bool IsUsingCpuFallback => _useCpuFallback;
+        public bool IsUsingCpuFallback
+        {
+            get
+            {
+                var settings = SettingsService.Load();
+                string choice = settings.SelectedAiAccelerator ?? "Auto";
+                string selectedModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+                if (_lastConfiguredAccelerator != choice || _lastUsedModelId != selectedModelId)
+                {
+                    _useCpuFallback = false;
+                }
+                return _useCpuFallback;
+            }
+        }
 
         public Task<bool> IsModelReadyAsync()
         {
@@ -154,8 +167,7 @@ namespace Daily_WinUI.Services
 
                     if (resolvedChoice == "CPU")
                     {
-                        config.AppendProvider("cpu");
-                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Loading model {selectedModelId} on CPU");
+                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Loading model {selectedModelId} on CPU (Cleared providers)");
                     }
                     else if (resolvedChoice == "NPU_IntelAmd")
                     {
@@ -185,7 +197,6 @@ namespace Daily_WinUI.Services
                         {
                             using var cpuConfig = new Config(currentModelPath);
                             cpuConfig.ClearProviders();
-                            cpuConfig.AppendProvider("cpu");
                             _model = new Model(cpuConfig);
                         }
                         catch (Exception innerEx)

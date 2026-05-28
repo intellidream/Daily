@@ -408,15 +408,18 @@ namespace Daily_WinUI.Services
                     json = @"{
   ""model"": {
     ""type"": ""qwen2"",
+    ""context_length"": 2048,
+    ""vocab_size"": 151936,
+    ""bos_token_id"": 151643,
+    ""eos_token_id"": 151645,
+    ""pad_token_id"": 151643,
     ""decoder"": {
       ""filename"": ""model.onnx""
     }
   },
   ""search"": {
-    ""bos_token_id"": 151643,
-    ""eos_token_id"": 151645,
-    ""pad_token_id"": 151643,
-    ""max_length"": 2048
+    ""max_length"": 2048,
+    ""past_present_share_buffer"": true
   }
 }";
                 }
@@ -425,19 +428,34 @@ namespace Daily_WinUI.Services
                     json = @"{
   ""model"": {
     ""type"": ""gemma2"",
+    ""context_length"": 2048,
+    ""vocab_size"": 262144,
+    ""bos_token_id"": 2,
+    ""eos_token_id"": 106,
+    ""pad_token_id"": 0,
     ""decoder"": {
       ""filename"": ""model.onnx""
     }
   },
   ""search"": {
-    ""bos_token_id"": 2,
-    ""eos_token_id"": 106,
-    ""pad_token_id"": 0,
-    ""max_length"": 2048
+    ""max_length"": 2048,
+    ""past_present_share_buffer"": true
   }
 }";
                 }
                 await File.WriteAllTextAsync(genaiConfigPath, json, ct);
+            }
+            else if (info.ModelId == "phi35_mini")
+            {
+                // Patch the downloaded genai_config.json to reference model.onnx instead of the long original filename
+                string genaiConfigPath = Path.Combine(targetDir, "genai_config.json");
+                if (File.Exists(genaiConfigPath))
+                {
+                    UpdateStatus("Patching Phi 3.5 config...");
+                    string content = await File.ReadAllTextAsync(genaiConfigPath, ct);
+                    content = content.Replace("phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", "model.onnx");
+                    await File.WriteAllTextAsync(genaiConfigPath, content, ct);
+                }
             }
 
             UpdateStatus("Verifying model files...");
