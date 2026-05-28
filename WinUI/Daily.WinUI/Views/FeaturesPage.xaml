@@ -37,6 +37,14 @@
                         <ComboBox x:Name="SettingsAiAcceleratorCombo" Width="200" SelectionChanged="SettingsAiAcceleratorCombo_SelectionChanged" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignVerticalCenterWithPanel="True" Margin="12,0,0,0" />
                     </RelativePanel>
 
+                    <CheckBox x:Name="UseInternalAiCheckBox"
+                              Content="Use Windows built-in AI engine (Phi Silica)"
+                              Checked="UseInternalAiCheckBox_Checked"
+                              Unchecked="UseInternalAiCheckBox_Unchecked"
+                              Margin="0,0,0,0"
+                              FontWeight="SemiBold"
+                              Visibility="Collapsed" />
+
                     <!-- Active Status Text (Full Width) with Smart Icon -->
                     <StackPanel x:Name="AiActiveStatusPanel" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                         <FontIcon Glyph="&#xECA7;" FontSize="14" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center" />

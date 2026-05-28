@@ -48,6 +48,7 @@ public sealed class AppSettings
     public bool LocalAiModelDownloaded { get; set; } = false;
     public string SelectedLocalAiModel { get; set; } = "llama32_1b";
     public string SelectedAiAccelerator { get; set; } = "Auto";
+    public bool UseWindowsInternalAi { get; set; } = true;
     /// <summary>Saved position per detail page type name (e.g. "WeatherDetailPage").</summary>
     public Dictionary<string, DetailWindowPosition> DetailWindowPositions { get; set; } = new();
 

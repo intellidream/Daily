@@ -25,7 +25,7 @@ namespace Daily_WinUI.Services
             {
                 // In WinAppSDK 1.8, the ready state is checked using static GetReadyState()
                 var state = LanguageModel.GetReadyState();
-                return state == AIFeatureReadyState.Ready;
+                return state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
             }
             catch
             {
@@ -519,9 +519,18 @@ namespace Daily_WinUI.Services
                 return null;
             }
 
+            bool useInternalAi = settings.UseWindowsInternalAi;
+
             if (choice == "NPU")
             {
-                if (await _phiSilica.IsModelReadyAsync()) return _phiSilica;
+                if (useInternalAi)
+                {
+                    if (await _phiSilica.IsModelReadyAsync()) return _phiSilica;
+                }
+                else
+                {
+                    if (await _onnxGenAi.IsModelReadyAsync()) return _onnxGenAi;
+                }
             }
             else if (choice == "GPU" || choice == "CPU" || choice == "NPU_IntelAmd")
             {
@@ -529,10 +538,13 @@ namespace Daily_WinUI.Services
             }
             else // Auto
             {
-                // Prioritize Phi Silica if hardware is ready
-                if (await _phiSilica.IsModelReadyAsync())
+                if (useInternalAi)
                 {
-                    return _phiSilica;
+                    // Prioritize Phi Silica if hardware is ready
+                    if (await _phiSilica.IsModelReadyAsync())
+                    {
+                        return _phiSilica;
+                    }
                 }
                 
                 // Fallback to downloaded ONNX model

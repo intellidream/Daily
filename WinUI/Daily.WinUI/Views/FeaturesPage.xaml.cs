@@ -109,6 +109,7 @@ public sealed partial class FeaturesPage : Page
                 }
             }
             SettingsAiAcceleratorCombo.SelectedIndex = selectedIndex;
+            UseInternalAiCheckBox.IsChecked = _settings.UseWindowsInternalAi;
             
             UpdateModelStatus();
             UpdateModelListUi();
@@ -176,9 +177,12 @@ public sealed partial class FeaturesPage : Page
         string activeDevice = _settings.SelectedAiAccelerator ?? "Auto";
         
         bool phiSilicaAvailable = false;
+        bool phiSilicaSupported = false;
         try
         {
-            phiSilicaAvailable = LanguageModel.GetReadyState() == AIFeatureReadyState.Ready;
+            var state = LanguageModel.GetReadyState();
+            phiSilicaAvailable = state == AIFeatureReadyState.Ready;
+            phiSilicaSupported = state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
         }
         catch { }
 
@@ -199,12 +203,53 @@ public sealed partial class FeaturesPage : Page
             SettingsService.Save(_settings);
         }
 
+        // Configure checkbox visibility and state based on platform compatibility
+        if (phiSilicaSupported)
+        {
+            UseInternalAiCheckBox.Visibility = Visibility.Visible;
+            bool savedIsInitializing = _isInitializing;
+            _isInitializing = true;
+            try
+            {
+                if (activeDevice == "Auto" || activeDevice == "NPU")
+                {
+                    UseInternalAiCheckBox.IsEnabled = true;
+                    UseInternalAiCheckBox.IsChecked = _settings.UseWindowsInternalAi;
+                }
+                else
+                {
+                    UseInternalAiCheckBox.IsEnabled = false;
+                    UseInternalAiCheckBox.IsChecked = false;
+                }
+            }
+            finally
+            {
+                _isInitializing = savedIsInitializing;
+            }
+        }
+        else
+        {
+            UseInternalAiCheckBox.Visibility = Visibility.Collapsed;
+            bool savedIsInitializing = _isInitializing;
+            _isInitializing = true;
+            try
+            {
+                UseInternalAiCheckBox.IsEnabled = false;
+                UseInternalAiCheckBox.IsChecked = false;
+            }
+            finally
+            {
+                _isInitializing = savedIsInitializing;
+            }
+        }
+
         // Determine the best hardware engine for the current machine
+        bool useInternalAi = _settings.UseWindowsInternalAi && phiSilicaSupported;
         string bestEngineName;
         string bestEngineTag;
         bool bestEngineReady;
 
-        if (phiSilicaAvailable && !string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
+        if (useInternalAi && !string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
         {
             bestEngineName = "Qualcomm Hexagon NPU";
             bestEngineTag = "NPU";
@@ -242,8 +287,16 @@ public sealed partial class FeaturesPage : Page
             {
                 if (bestEngineTag == "NPU")
                 {
-                    activeLabel = $"Auto -> {bestEngineName} (Phi Silica) (Active)";
-                    description = $"System automatically resolved execution to the built-in Microsoft Copilot Runtime (Phi Silica) utilizing the NPU. Recommendation: {bestEngineName}.";
+                    if (phiSilicaAvailable)
+                    {
+                        activeLabel = $"Auto -> {bestEngineName} (Phi Silica) (Active)";
+                        description = $"System automatically resolved execution to the built-in Microsoft Copilot Runtime (Phi Silica) utilizing the NPU. Recommendation: {bestEngineName}.";
+                    }
+                    else
+                    {
+                        activeLabel = $"Auto -> {bestEngineName} (Phi Silica) (Requires Download)";
+                        description = $"System automatically resolved execution to the built-in Microsoft Copilot Runtime (Phi Silica). Note: Model components need to be downloaded. Running your first Smart Briefing will trigger provisioning in the background.";
+                    }
                 }
                 else
                 {
@@ -259,50 +312,65 @@ public sealed partial class FeaturesPage : Page
         }
         else if (activeDevice == "NPU")
         {
-            activeLabel = "Qualcomm Hexagon NPU (Phi Silica)";
-            description = "Uses the built-in Microsoft Copilot Runtime (Phi Silica 3.3B) accelerated by the Qualcomm NPU. Zero download required.";
-            if (!phiSilicaAvailable)
+            if (_settings.UseWindowsInternalAi && phiSilicaSupported)
             {
-                var isUnpackaged = false;
-                try
+                activeLabel = "Qualcomm Hexagon NPU (Phi Silica)";
+                description = "Uses the built-in Microsoft Copilot Runtime (Phi Silica 3.3B) accelerated by the Qualcomm NPU. Zero download required.";
+                if (!phiSilicaAvailable)
                 {
-                    var p = global::Windows.ApplicationModel.Package.Current;
-                }
-                catch (InvalidOperationException)
-                {
-                    isUnpackaged = true;
-                }
+                    var isUnpackaged = false;
+                    try
+                    {
+                        var p = global::Windows.ApplicationModel.Package.Current;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        isUnpackaged = true;
+                    }
 
-                if (isUnpackaged)
+                    if (isUnpackaged)
+                    {
+                        description += "\n\nCRITICAL WARNING: Access Denied. The application is running in unpackaged mode. Windows Copilot Runtime (Phi Silica) APIs strictly require MSIX package identity and the 'systemAIModels' capability to run. Please run the application using a Packaged launch profile to use Phi Silica.";
+                    }
+                    else
+                    {
+                        try
+                        {
+                            var state = LanguageModel.GetReadyState();
+                            if (state == AIFeatureReadyState.NotReady)
+                            {
+                                description += "\n\nWARNING: Phi Silica is supported on this machine but is not ready/downloaded. Please ensure that Windows Update has finished downloading the Copilot model components, or trigger provisioning.";
+                            }
+                            else if (state == AIFeatureReadyState.NotSupportedOnCurrentSystem)
+                            {
+                                description += "\n\nWARNING: The hardware or OS version on this machine does not support the Windows Copilot Runtime. Ensure this is a Copilot+ PC running Windows 11 version 24H2 or higher.";
+                            }
+                            else if (state == AIFeatureReadyState.DisabledByUser)
+                            {
+                                description += "\n\nWARNING: The Copilot AI features have been disabled by system policy or user preferences.";
+                            }
+                            else
+                            {
+                                description += $"\n\nWARNING: Phi Silica is not ready. Current State: {state}";
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            description += $"\n\nWARNING: Failed to query model state: {ex.Message}";
+                        }
+                    }
+                }
+            }
+            else
+            {
+                activeLabel = $"Qualcomm Hexagon NPU -> DirectML GPU ({modelName})";
+                if (onnxModelReady)
                 {
-                    description += "\n\nCRITICAL WARNING: Access Denied. The application is running in unpackaged mode. Windows Copilot Runtime (Phi Silica) APIs strictly require MSIX package identity and the 'systemAIModels' capability to run. Please run the application using a Packaged launch profile to use Phi Silica.";
+                    description = $"Uses the custom {modelName} model running locally via DirectML on your graphics card. (Routed from Hexagon NPU because built-in AI is disabled)";
                 }
                 else
                 {
-                    try
-                    {
-                        var state = LanguageModel.GetReadyState();
-                        if (state == AIFeatureReadyState.NotReady)
-                        {
-                            description += "\n\nWARNING: Phi Silica is supported on this machine but is not ready/downloaded. Please ensure that Windows Update has finished downloading the Copilot model components, or trigger provisioning.";
-                        }
-                        else if (state == AIFeatureReadyState.NotSupportedOnCurrentSystem)
-                        {
-                            description += "\n\nWARNING: The hardware or OS version on this machine does not support the Windows Copilot Runtime. Ensure this is a Copilot+ PC running Windows 11 version 24H2 or higher.";
-                        }
-                        else if (state == AIFeatureReadyState.DisabledByUser)
-                        {
-                            description += "\n\nWARNING: The Copilot AI features have been disabled by system policy or user preferences.";
-                        }
-                        else
-                        {
-                            description += $"\n\nWARNING: Phi Silica is not ready. Current State: {state}";
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        description += $"\n\nWARNING: Failed to query model state: {ex.Message}";
-                    }
+                    description = $"Uses the custom {modelName} model running locally via DirectML on your graphics card. Note: The custom model must be downloaded first. (Routed from Hexagon NPU because built-in AI is disabled)";
                 }
             }
         }
@@ -365,16 +433,37 @@ public sealed partial class FeaturesPage : Page
         string? downloadingModelId = downloadManager.DownloadingModelId;
         string activeModelId = _settings.SelectedLocalAiModel ?? "llama32_1b";
         string activeAccelerator = _settings.SelectedAiAccelerator ?? "Auto";
-        bool isNpuActive = activeAccelerator == "NPU";
+
+        bool phiSilicaSupported = false;
+        try
+        {
+            var state = LanguageModel.GetReadyState();
+            phiSilicaSupported = state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
+        }
+        catch { }
+
+        bool isInternalAiActive = _settings.UseWindowsInternalAi && phiSilicaSupported && (activeAccelerator == "Auto" || activeAccelerator == "NPU");
 
         // Show/hide Copilot Runtime NPU override banner
-        NpuCopilotRuntimeInfoBar.IsOpen = isNpuActive;
-        NpuCopilotRuntimeInfoBar.Visibility = isNpuActive ? Visibility.Visible : Visibility.Collapsed;
+        if (isInternalAiActive)
+        {
+            NpuCopilotRuntimeInfoBar.Title = activeAccelerator == "Auto" 
+                ? "Windows Copilot Runtime (Phi Silica) Active"
+                : "Qualcomm Hexagon NPU Active (Phi Silica)";
+            NpuCopilotRuntimeInfoBar.Message = "Phi Silica runs built-in via the Windows Copilot Runtime. External model downloads and selections are disabled.";
+            NpuCopilotRuntimeInfoBar.IsOpen = true;
+            NpuCopilotRuntimeInfoBar.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            NpuCopilotRuntimeInfoBar.IsOpen = false;
+            NpuCopilotRuntimeInfoBar.Visibility = Visibility.Collapsed;
+        }
 
         // Update Llama Card
         UpdateCardState(
             "llama32_1b",
-            isNpuActive,
+            isInternalAiActive,
             isDownloading,
             downloadingModelId,
             activeModelId,
@@ -388,7 +477,7 @@ public sealed partial class FeaturesPage : Page
         // Update Qwen Card
         UpdateCardState(
             "qwen25_15b",
-            isNpuActive,
+            isInternalAiActive,
             isDownloading,
             downloadingModelId,
             activeModelId,
@@ -402,7 +491,7 @@ public sealed partial class FeaturesPage : Page
         // Update Gemma Card
         UpdateCardState(
             "gemma3_1b",
-            isNpuActive,
+            isInternalAiActive,
             isDownloading,
             downloadingModelId,
             activeModelId,
@@ -416,7 +505,7 @@ public sealed partial class FeaturesPage : Page
         // Update Phi Card
         UpdateCardState(
             "phi35_mini",
-            isNpuActive,
+            isInternalAiActive,
             isDownloading,
             downloadingModelId,
             activeModelId,
@@ -433,7 +522,7 @@ public sealed partial class FeaturesPage : Page
 
     private void UpdateCardState(
         string modelId,
-        bool isNpuActive,
+        bool isBuiltInActive,
         bool isDownloading,
         string? downloadingModelId,
         string activeModelId,
@@ -446,11 +535,11 @@ public sealed partial class FeaturesPage : Page
         bool isDownloaded = SettingsService.IsModelDownloaded(modelId);
         bool isActive = activeModelId == modelId;
 
-        // If Copilot NPU override is active, everything is disabled
-        if (isNpuActive)
+        // If Copilot built-in AI is active, everything is disabled
+        if (isBuiltInActive)
         {
             activeBadge.Visibility = Visibility.Collapsed;
-            statusText.Text = "Disabled (NPU Mode)";
+            statusText.Text = "Disabled (Built-in Active)";
             downloadBtn.Visibility = Visibility.Collapsed;
             useBtn.Visibility = Visibility.Collapsed;
             deleteBtn.Visibility = Visibility.Collapsed;
@@ -517,20 +606,31 @@ public sealed partial class FeaturesPage : Page
         }
 
         // Check if Qualcomm NPU is selected but system doesn't support it
-        if (accelerator == "NPU")
+        if (accelerator == "NPU" && _settings.UseWindowsInternalAi)
         {
             bool phiSilicaAvailable = false;
+            bool phiSilicaSupported = false;
             try
             {
-                phiSilicaAvailable = LanguageModel.GetReadyState() == AIFeatureReadyState.Ready;
+                var state = LanguageModel.GetReadyState();
+                phiSilicaAvailable = state == AIFeatureReadyState.Ready;
+                phiSilicaSupported = state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
             }
             catch { }
 
-            if (!phiSilicaAvailable)
+            if (!phiSilicaSupported)
             {
                 HardwareWarningInfoBar.Title = "Incompatible Configuration";
-                HardwareWarningInfoBar.Message = "Qualcomm NPU mode is selected, but the Windows Copilot Runtime (Phi Silica) is not ready or supported on this system. Please select a different accelerator or ensure your device is a Copilot+ PC.";
+                HardwareWarningInfoBar.Message = "Qualcomm NPU mode is selected, but the Windows Copilot Runtime (Phi Silica) is not supported on this system or application context. Please select a different accelerator or ensure your device is a Copilot+ PC running packaged.";
                 HardwareWarningInfoBar.Severity = InfoBarSeverity.Error;
+                HardwareWarningInfoBar.IsOpen = true;
+                HardwareWarningInfoBar.Visibility = Visibility.Visible;
+            }
+            else if (!phiSilicaAvailable)
+            {
+                HardwareWarningInfoBar.Title = "Model Download Required";
+                HardwareWarningInfoBar.Message = "Phi Silica is supported on this Snapdragon Copilot+ PC, but the model packages are not fully downloaded yet. Running your first Smart Briefing will automatically trigger model provisioning and download in the background.";
+                HardwareWarningInfoBar.Severity = InfoBarSeverity.Warning;
                 HardwareWarningInfoBar.IsOpen = true;
                 HardwareWarningInfoBar.Visibility = Visibility.Visible;
             }
@@ -845,5 +945,23 @@ public sealed partial class FeaturesPage : Page
         if (_isInitializing || _settings == null || FinancesShowBadgesSwitch == null) return;
         _settings.ShowFinanceStockChangeBadges = FinancesShowBadgesSwitch.IsOn;
         SettingsService.Save(_settings);
+    }
+
+    private void UseInternalAiCheckBox_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing || _settings == null) return;
+        _settings.UseWindowsInternalAi = true;
+        SettingsService.Save(_settings);
+        UpdateModelStatus();
+        UpdateModelListUi();
+    }
+
+    private void UseInternalAiCheckBox_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing || _settings == null) return;
+        _settings.UseWindowsInternalAi = false;
+        SettingsService.Save(_settings);
+        UpdateModelStatus();
+        UpdateModelListUi();
     }
 }
