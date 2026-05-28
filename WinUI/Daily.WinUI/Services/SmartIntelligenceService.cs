@@ -95,6 +95,8 @@ namespace Daily_WinUI.Services
         private string? _lastConfiguredAccelerator;
         private string? _lastUsedModelId;
         private bool _useCpuFallback = false;
+        private string? _runtimeModelOverride;
+        private string? _runtimeAcceleratorOverride;
 
         public bool IsUsingCpuFallback
         {
@@ -115,6 +117,11 @@ namespace Daily_WinUI.Services
         {
             var settings = SettingsService.Load();
             string modelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+            return IsModelReadyAsync(modelId);
+        }
+
+        public Task<bool> IsModelReadyAsync(string modelId)
+        {
             bool ready = SettingsService.IsModelDownloaded(modelId);
             return Task.FromResult(ready);
         }
@@ -122,8 +129,8 @@ namespace Daily_WinUI.Services
         private async Task EnsureLoadedAsync()
         {
             var settings = SettingsService.Load();
-            string choice = settings.SelectedAiAccelerator ?? "Auto";
-            string selectedModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+            string choice = _runtimeAcceleratorOverride ?? settings.SelectedAiAccelerator ?? "Auto";
+            string selectedModelId = _runtimeModelOverride ?? settings.SelectedLocalAiModel ?? "llama32_1b";
 
             if (_lastConfiguredAccelerator != choice || _lastUsedModelId != selectedModelId)
             {
@@ -144,9 +151,9 @@ namespace Daily_WinUI.Services
 
             if (_model == null)
             {
-                if (!await IsModelReadyAsync())
+                if (!await IsModelReadyAsync(selectedModelId))
                 {
-                    throw new InvalidOperationException("ONNX model is not downloaded or verified yet.");
+                    throw new InvalidOperationException($"ONNX model {selectedModelId} is not downloaded or verified yet.");
                 }
 
                 string currentModelPath = SettingsService.GetModelDirectory(selectedModelId);
@@ -158,8 +165,26 @@ namespace Daily_WinUI.Services
 
                     string resolvedChoice = actualChoice;
                     if (actualChoice == "Auto")
-                      {
-                        resolvedChoice = "GPU";
+                    {
+                        // Resolve Auto based on recommendation and execution history
+                        string? npu = SettingsService.GetDetectedNpuName();
+                        if (!string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
+                        {
+                            resolvedChoice = "NPU";
+                        }
+                        else
+                        {
+                            // Check if GPU is marked as Failed in history
+                            var gpuHistory = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == selectedModelId && h.Accelerator == "GPU");
+                            if (gpuHistory != null && gpuHistory.Status == "Failed")
+                            {
+                                resolvedChoice = "CPU"; // Auto fallback to CPU
+                            }
+                            else
+                            {
+                                resolvedChoice = "GPU";
+                            }
+                        }
                     }
 
                     using var config = new Config(currentModelPath);
@@ -230,71 +255,175 @@ namespace Daily_WinUI.Services
             };
         }
 
-        public async Task<string> GenerateResponseAsync(string systemPrompt, string userPrompt, CancellationToken ct = default)
+        private string GetModelFriendlyName(string modelId)
         {
-            await EnsureLoadedAsync();
-
-            if (_model == null || _tokenizer == null)
+            return modelId switch
             {
-                throw new InvalidOperationException("ONNX model could not be loaded.");
+                "llama32_1b" => "Llama 3.2 1B Instruct",
+                "qwen25_15b" => "Qwen 2.5 1.5B Instruct",
+                "gemma3_1b" => "Gemma 3 1B Instruct",
+                "phi35_mini" => "Phi 3.5 Mini Instruct",
+                _ => modelId
+            };
+        }
+
+        private string GetAcceleratorFriendlyName(string acc)
+        {
+            return acc switch
+            {
+                "GPU" => "DirectML GPU",
+                "CPU" => "DirectML CPU",
+                "NPU" => "NPU",
+                "NPU_IntelAmd" => "Intel/AMD NPU",
+                _ => acc
+            };
+        }
+
+        private string GetUserFriendlyError(Exception ex)
+        {
+            string msg = ex.Message;
+            if (msg.Contains("DmlFusedNode") || msg.Contains("DirectML") || msg.Contains("dml"))
+            {
+                return "encountered a graphics card driver error or compatibility issue.";
             }
+            if (msg.Contains("vocab_size"))
+            {
+                return "encountered a vocabulary size initialization mismatch.";
+            }
+            if (msg.Contains("context_length"))
+            {
+                return "encountered a context length configuration mismatch.";
+            }
+            if (msg.Contains("File doesn't exist") || msg.Contains("failed:Load model"))
+            {
+                return "could not find model files on disk.";
+            }
+            return "encountered an unexpected execution error.";
+        }
 
-            var settings = SettingsService.Load();
-            string selectedModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
-            string formattedPrompt = FormatPrompt(selectedModelId, systemPrompt, userPrompt);
-
-            StringBuilder responseText = new StringBuilder();
-
+        private void RecordExecutionResult(string modelId, string acc, string status, string explanation)
+        {
             try
             {
-                await Task.Run(() =>
+                var settings = SettingsService.Load();
+                if (settings.ModelExecutionHistories == null)
                 {
-                    using var tokens = _tokenizer.Encode(formattedPrompt);
-                    using var generatorParams = new GeneratorParams(_model);
-                    generatorParams.SetSearchOption("max_length", 2048);
+                    settings.ModelExecutionHistories = new List<ModelExecutionHistory>();
+                }
 
-                    using var generator = new Generator(_model, generatorParams);
-                    generator.AppendTokenSequences(tokens);
-                    using var tokenizerStream = _tokenizer.CreateStream();
-
-                    while (!generator.IsDone() && !ct.IsCancellationRequested)
+                var existing = settings.ModelExecutionHistories.FirstOrDefault(h => h.ModelId == modelId && h.Accelerator == acc);
+                if (existing != null)
+                {
+                    existing.Status = status;
+                    existing.LastExplanation = explanation;
+                    existing.LastAttempted = System.DateTime.Now;
+                }
+                else
+                {
+                    settings.ModelExecutionHistories.Add(new ModelExecutionHistory
                     {
-                        generator.GenerateNextToken();
-                        
-                        var sequence = generator.GetSequence(0);
-                        var newToken = sequence[^1];
-                        
-                        string chunk = tokenizerStream.Decode(newToken);
-                        responseText.Append(chunk);
-                    }
-                }, ct);
-
-                return responseText.ToString();
+                        ModelId = modelId,
+                        Accelerator = acc,
+                        Status = status,
+                        LastExplanation = explanation,
+                        LastAttempted = System.DateTime.Now
+                    });
+                }
+                SettingsService.Save(settings);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Generation exception: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Error recording execution result: {ex.Message}");
+            }
+        }
 
-                // If we were not already using CPU, attempt CPU fallback
-                if (_lastUsedAccelerator != "CPU")
+        public async Task<string> GenerateResponseAsync(string systemPrompt, string userPrompt, CancellationToken ct = default)
+        {
+            var settings = SettingsService.Load();
+            string initialModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+            string initialAccelerator = settings.SelectedAiAccelerator ?? "Auto";
+
+            // Helper to get resolved accelerator
+            string ResolveAccelerator(string acc, string modelId)
+            {
+                if (acc != "Auto") return acc;
+                string? npu = SettingsService.GetDetectedNpuName();
+                if (!string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
                 {
-                    System.Diagnostics.Debug.WriteLine("[OnnxGenAi] Generation failed on hardware accelerator. Attempting CPU fallback...");
-                    _useCpuFallback = true;
+                    return "NPU";
+                }
+                return "GPU";
+            }
 
-                    // Clean up and load CPU model
-                    _model?.Dispose();
-                    _model = null;
-                    _tokenizer?.Dispose();
-                    _tokenizer = null;
+            string targetAcc = ResolveAccelerator(initialAccelerator, initialModelId);
+
+            var configsToTry = new List<(string ModelId, string Accelerator)>();
+
+            // 1. The user's requested configuration
+            configsToTry.Add((initialModelId, targetAcc));
+
+            // 2. If it was GPU/NPU, the same model on CPU
+            if (targetAcc != "CPU" && targetAcc != "NPU")
+            {
+                configsToTry.Add((initialModelId, "CPU"));
+            }
+
+            // 3. Other downloaded models in preference order
+            string[] allModels = { "llama32_1b", "qwen25_15b", "gemma3_1b", "phi35_mini" };
+            foreach (var modelId in allModels)
+            {
+                if (modelId == initialModelId) continue;
+                if (await IsModelReadyAsync(modelId))
+                {
+                    var hist = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == modelId);
+                    if (hist != null && hist.Status == "Working")
+                    {
+                        configsToTry.Add((modelId, hist.Accelerator));
+                    }
+                    else
+                    {
+                        configsToTry.Add((modelId, "CPU"));
+                    }
+                }
+            }
+
+            Exception? lastError = null;
+            string? workingModelId = null;
+            string? workingAccelerator = null;
+            string finalResponse = string.Empty;
+            var failedLogs = new List<string>();
+
+            for (int i = 0; i < configsToTry.Count; i++)
+            {
+                var config = configsToTry[i];
+
+                // Skip if marked as Failed in memory, unless it is the user's primary selection
+                if (i > 0)
+                {
+                    var hist = settings.ModelExecutionHistories?.FirstOrDefault(h => h.ModelId == config.ModelId && h.Accelerator == config.Accelerator);
+                    if (hist != null && hist.Status == "Failed")
+                    {
+                        failedLogs.Add($"{GetModelFriendlyName(config.ModelId)} on {GetAcceleratorFriendlyName(config.Accelerator)} (skipped - previously failed)");
+                        continue;
+                    }
+                }
+
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Cascading fallback: Attempting {config.ModelId} on {config.Accelerator}");
+
+                    _runtimeModelOverride = config.ModelId;
+                    _runtimeAcceleratorOverride = config.Accelerator;
 
                     await EnsureLoadedAsync();
 
                     if (_model == null || _tokenizer == null)
                     {
-                        throw new InvalidOperationException("ONNX model could not be loaded during CPU fallback.", ex);
+                        throw new InvalidOperationException("Model or tokenizer failed to load.");
                     }
 
-                    responseText.Clear();
+                    string formattedPrompt = FormatPrompt(config.ModelId, systemPrompt, userPrompt);
+                    StringBuilder responseText = new StringBuilder();
 
                     await Task.Run(() =>
                     {
@@ -309,23 +438,63 @@ namespace Daily_WinUI.Services
                         while (!generator.IsDone() && !ct.IsCancellationRequested)
                         {
                             generator.GenerateNextToken();
-                            
-                            var sequence = generator.GetSequence(0);
-                            var newToken = sequence[^1];
-                            
+                            var seq = generator.GetSequence(0);
+                            var newToken = seq[^1];
                             string chunk = tokenizerStream.Decode(newToken);
                             responseText.Append(chunk);
                         }
                     }, ct);
 
-                    return responseText.ToString();
+                    finalResponse = responseText.ToString();
+                    workingModelId = config.ModelId;
+                    workingAccelerator = config.Accelerator;
+                    break; // Success!
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Execution of {config.ModelId} on {config.Accelerator} failed: {ex.Message}");
+                    lastError = ex;
+
+                    RecordExecutionResult(config.ModelId, config.Accelerator, "Failed", GetUserFriendlyError(ex));
+                    failedLogs.Add($"{GetModelFriendlyName(config.ModelId)} on {GetAcceleratorFriendlyName(config.Accelerator)}");
+
+                    _model?.Dispose();
+                    _model = null;
+                    _tokenizer?.Dispose();
+                    _tokenizer = null;
+                }
+            }
+
+            _runtimeModelOverride = null;
+            _runtimeAcceleratorOverride = null;
+
+            if (workingModelId != null && workingAccelerator != null)
+            {
+                RecordExecutionResult(workingModelId, workingAccelerator, "Working", "Executed successfully.");
+
+                string explanation;
+                if (workingModelId == initialModelId && workingAccelerator == targetAcc)
+                {
+                    explanation = $"Executed successfully using your selected configuration: {GetModelFriendlyName(workingModelId)} on {GetAcceleratorFriendlyName(workingAccelerator)}.";
                 }
                 else
                 {
-                    // If CPU also failed, propagate the exception
-                    throw;
+                    explanation = $"Your selected configuration ({GetModelFriendlyName(initialModelId)} on {GetAcceleratorFriendlyName(targetAcc)}) fell back due to execution issues ({string.Join(", ", failedLogs)}). We successfully defaulted to {GetModelFriendlyName(workingModelId)} on {GetAcceleratorFriendlyName(workingAccelerator)}.";
                 }
+
+                settings = SettingsService.Load();
+                settings.LastExecutionExplanation = explanation;
+                SettingsService.Save(settings);
+
+                return finalResponse;
             }
+
+            string finalErrExplain = $"All attempted local AI models fell back due to errors ({string.Join(", ", failedLogs)}). Procedural Fallback Template Engine was activated to ensure stability.";
+            settings = SettingsService.Load();
+            settings.LastExecutionExplanation = finalErrExplain;
+            SettingsService.Save(settings);
+
+            throw new InvalidOperationException(finalErrExplain, lastError);
         }
     }
 

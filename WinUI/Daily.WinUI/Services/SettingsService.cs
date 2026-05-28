@@ -10,8 +10,19 @@ public sealed class DetailWindowPosition
     public int Height { get; set; }
 }
 
+public sealed class ModelExecutionHistory
+{
+    public string ModelId { get; set; } = string.Empty;
+    public string Accelerator { get; set; } = string.Empty;
+    public string Status { get; set; } = "Unknown"; // "Working", "Failed", "Unknown"
+    public string LastExplanation { get; set; } = string.Empty;
+    public System.DateTime LastAttempted { get; set; }
+}
+
 public sealed class AppSettings
 {
+    public List<ModelExecutionHistory> ModelExecutionHistories { get; set; } = new();
+    public string LastExecutionExplanation { get; set; } = string.Empty;
     public double? LastLatitude { get; set; }
     public double? LastLongitude { get; set; }
     public string? LastLocationName { get; set; }

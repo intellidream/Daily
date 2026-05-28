@@ -344,6 +344,16 @@ public sealed partial class FeaturesPage : Page
 
         SettingsAiDeviceStatusText.Text = $"Active Engine: {activeLabel}";
         SettingsAiAcceleratorDescriptionText.Text = description;
+
+        if (!string.IsNullOrEmpty(_settings.LastExecutionExplanation))
+        {
+            LastRunExplanationInfoBar.Message = _settings.LastExecutionExplanation;
+            LastRunExplanationInfoBar.IsOpen = true;
+        }
+        else
+        {
+            LastRunExplanationInfoBar.IsOpen = false;
+        }
     }
 
     private void UpdateModelListUi()
