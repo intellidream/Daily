@@ -91,37 +91,18 @@ namespace Daily_WinUI.Services
     {
         private Model? _model;
         private Tokenizer? _tokenizer;
-        private readonly string _modelPath;
         private string? _lastUsedAccelerator;
         private string? _lastConfiguredAccelerator;
+        private string? _lastUsedModelId;
         private bool _useCpuFallback = false;
 
         public bool IsUsingCpuFallback => _useCpuFallback;
 
-        public OnnxGenAiSmartService()
-        {
-            _modelPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Daily.WinUI",
-                "models",
-                "llama1b");
-        }
-
         public Task<bool> IsModelReadyAsync()
         {
-            // Verify model file and its external weights exist
-            string filePath = Path.Combine(_modelPath, "model.onnx");
-            string dataPath = Path.Combine(_modelPath, "model.onnx.data");
-            bool ready = Directory.Exists(_modelPath) && File.Exists(filePath) && File.Exists(dataPath);
-            if (ready)
-            {
-                // Verify the weights file is not truncated (should be at least 1.2 GB)
-                var fileInfo = new FileInfo(dataPath);
-                if (fileInfo.Length < 1200000000)
-                {
-                    ready = false;
-                }
-            }
+            var settings = SettingsService.Load();
+            string modelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+            bool ready = SettingsService.IsModelDownloaded(modelId);
             return Task.FromResult(ready);
         }
 
@@ -129,8 +110,9 @@ namespace Daily_WinUI.Services
         {
             var settings = SettingsService.Load();
             string choice = settings.SelectedAiAccelerator ?? "Auto";
+            string selectedModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
 
-            if (_lastConfiguredAccelerator != choice)
+            if (_lastConfiguredAccelerator != choice || _lastUsedModelId != selectedModelId)
             {
                 _useCpuFallback = false;
                 _lastConfiguredAccelerator = choice;
@@ -138,9 +120,9 @@ namespace Daily_WinUI.Services
 
             string actualChoice = _useCpuFallback ? "CPU" : choice;
 
-            if (_model != null && _lastUsedAccelerator != actualChoice)
+            if (_model != null && (_lastUsedAccelerator != actualChoice || _lastUsedModelId != selectedModelId))
             {
-                System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Accelerator changed from {_lastUsedAccelerator} to {actualChoice}. Reloading model.");
+                System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Reloading model because accelerator or model ID changed.");
                 _model.Dispose();
                 _model = null;
                 _tokenizer?.Dispose();
@@ -154,37 +136,40 @@ namespace Daily_WinUI.Services
                     throw new InvalidOperationException("ONNX model is not downloaded or verified yet.");
                 }
 
+                string currentModelPath = SettingsService.GetModelDirectory(selectedModelId);
+
                 await Task.Run(() =>
                 {
                     _lastUsedAccelerator = actualChoice;
+                    _lastUsedModelId = selectedModelId;
 
                     string resolvedChoice = actualChoice;
                     if (actualChoice == "Auto")
-                    {
+                      {
                         resolvedChoice = "GPU";
                     }
 
-                    using var config = new Config(_modelPath);
+                    using var config = new Config(currentModelPath);
                     config.ClearProviders();
 
                     if (resolvedChoice == "CPU")
                     {
                         config.AppendProvider("cpu");
-                        System.Diagnostics.Debug.WriteLine("[OnnxGenAi] Loading model on CPU");
+                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Loading model {selectedModelId} on CPU");
                     }
                     else if (resolvedChoice == "NPU_IntelAmd")
                     {
                         config.AppendProvider("dml");
                         int npuIndex = Daily_WinUI.Helpers.DeviceHelper.GetAdapterIndex("NPU");
                         config.SetProviderOption("dml", "device_id", npuIndex.ToString());
-                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Loading model on NPU (DirectML Adapter Index: {npuIndex})");
+                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Loading model {selectedModelId} on NPU (DirectML Adapter Index: {npuIndex})");
                     }
                     else // GPU
                     {
                         config.AppendProvider("dml");
                         int gpuIndex = Daily_WinUI.Helpers.DeviceHelper.GetAdapterIndex("GPU");
                         config.SetProviderOption("dml", "device_id", gpuIndex.ToString());
-                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Loading model on GPU (DirectML Adapter Index: {gpuIndex})");
+                        System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] Loading model {selectedModelId} on GPU (DirectML Adapter Index: {gpuIndex})");
                     }
 
                     try
@@ -198,7 +183,7 @@ namespace Daily_WinUI.Services
                         _lastUsedAccelerator = "CPU";
                         try
                         {
-                            using var cpuConfig = new Config(_modelPath);
+                            using var cpuConfig = new Config(currentModelPath);
                             cpuConfig.ClearProviders();
                             cpuConfig.AppendProvider("cpu");
                             _model = new Model(cpuConfig);
@@ -206,7 +191,7 @@ namespace Daily_WinUI.Services
                         catch (Exception innerEx)
                         {
                             System.Diagnostics.Debug.WriteLine($"[OnnxGenAi] CPU fallback load failed: {innerEx.Message}. Trying default fallback.");
-                            using var fallbackConfig = new Config(_modelPath);
+                            using var fallbackConfig = new Config(currentModelPath);
                             _model = new Model(fallbackConfig);
                         }
                     }
@@ -214,6 +199,24 @@ namespace Daily_WinUI.Services
                     _tokenizer = new Tokenizer(_model);
                 });
             }
+        }
+
+        private string FormatPrompt(string modelId, string systemPrompt, string userPrompt)
+        {
+            return modelId switch
+            {
+                "qwen25_15b" => 
+                    $"<|im_start|>system\n{systemPrompt}<|im_end|>\n<|im_start|>user\n{userPrompt}<|im_end|>\n<|im_start|>assistant\n",
+                
+                "gemma3_1b" => 
+                    $"<start_of_turn>system\n{systemPrompt}<end_of_turn>\n<start_of_turn>user\n{userPrompt}<end_of_turn>\n<start_of_turn>assistant\n",
+                
+                "phi35_mini" => 
+                    $"<|system|>\n{systemPrompt}<|end|>\n<|user|>\n{userPrompt}<|end|>\n<|assistant|>\n",
+                
+                "llama32_1b" or _ => 
+                    $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{userPrompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+            };
         }
 
         public async Task<string> GenerateResponseAsync(string systemPrompt, string userPrompt, CancellationToken ct = default)
@@ -225,8 +228,9 @@ namespace Daily_WinUI.Services
                 throw new InvalidOperationException("ONNX model could not be loaded.");
             }
 
-            // Llama 3 Chat Format
-            string formattedPrompt = $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{userPrompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
+            var settings = SettingsService.Load();
+            string selectedModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+            string formattedPrompt = FormatPrompt(selectedModelId, systemPrompt, userPrompt);
 
             StringBuilder responseText = new StringBuilder();
 

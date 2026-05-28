@@ -34,21 +34,118 @@ namespace Daily_WinUI.Services
         }
     }
 
+    public sealed class ModelDownloadFile
+    {
+        public string SourceRelativePath { get; }
+        public string TargetFileName { get; }
+        public long EstimatedSize { get; }
+
+        public ModelDownloadFile(string sourceRelativePath, string targetFileName, long estimatedSize)
+        {
+            SourceRelativePath = sourceRelativePath;
+            TargetFileName = targetFileName;
+            EstimatedSize = estimatedSize;
+        }
+    }
+
+    public sealed class ModelDownloadInfo
+    {
+        public string ModelId { get; }
+        public string RepoUrl { get; }
+        public string FolderName { get; }
+        public List<ModelDownloadFile> Files { get; }
+        public bool GenerateGenAiConfig { get; }
+        public string ModelType { get; }
+
+        public ModelDownloadInfo(string modelId, string repoUrl, string folderName, List<ModelDownloadFile> files, bool generateGenAiConfig, string modelType)
+        {
+            ModelId = modelId;
+            RepoUrl = repoUrl;
+            FolderName = folderName;
+            Files = files;
+            GenerateGenAiConfig = generateGenAiConfig;
+            ModelType = modelType;
+        }
+    }
+
     public sealed class ModelDownloadManager
     {
         private readonly HttpClient _httpClient;
-        private readonly string _targetDir;
-        private const string BaseUrl = "https://huggingface.co/onnx-community/Llama-3.2-1B-Instruct-GENAI-ONNX/resolve/main/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/";
-
-        private readonly List<string> _files = new()
+        
+        private static readonly Dictionary<string, ModelDownloadInfo> ModelDefinitions = new()
         {
-            "config.json",
-            "genai_config.json",
-            "special_tokens_map.json",
-            "tokenizer.json",
-            "tokenizer_config.json",
-            "model.onnx",
-            "model.onnx.data"
+            {
+                "llama32_1b", new ModelDownloadInfo(
+                    "llama32_1b",
+                    "https://huggingface.co/onnx-community/Llama-3.2-1B-Instruct-GENAI-ONNX/resolve/main/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/",
+                    "llama1b",
+                    new()
+                    {
+                        new("config.json", "config.json", 50000),
+                        new("genai_config.json", "genai_config.json", 1000),
+                        new("special_tokens_map.json", "special_tokens_map.json", 100000),
+                        new("tokenizer.json", "tokenizer.json", 9100000),
+                        new("tokenizer_config.json", "tokenizer_config.json", 100000),
+                        new("model.onnx", "model.onnx", 16000000),
+                        new("model.onnx.data", "model.onnx.data", 1750000000)
+                    },
+                    false,
+                    "llama"
+                )
+            },
+            {
+                "qwen25_15b", new ModelDownloadInfo(
+                    "qwen25_15b",
+                    "https://huggingface.co/onnx-community/Qwen2.5-1.5B-Instruct/resolve/main/",
+                    "qwen15b",
+                    new()
+                    {
+                        new("config.json", "config.json", 1000),
+                        new("special_tokens_map.json", "special_tokens_map.json", 1000),
+                        new("tokenizer.json", "tokenizer.json", 7100000),
+                        new("tokenizer_config.json", "tokenizer_config.json", 1000),
+                        new("onnx/model_q4.onnx", "model.onnx", 950000000)
+                    },
+                    true,
+                    "qwen2"
+                )
+            },
+            {
+                "gemma3_1b", new ModelDownloadInfo(
+                    "gemma3_1b",
+                    "https://huggingface.co/onnx-community/gemma-3-1b-it-ONNX/resolve/main/",
+                    "gemma1b",
+                    new()
+                    {
+                        new("config.json", "config.json", 1000),
+                        new("special_tokens_map.json", "special_tokens_map.json", 1000),
+                        new("tokenizer.json", "tokenizer.json", 8100000),
+                        new("tokenizer_config.json", "tokenizer_config.json", 1000),
+                        new("onnx/model_q4.onnx", "model.onnx", 750000000)
+                    },
+                    true,
+                    "gemma2"
+                )
+            },
+            {
+                "phi35_mini", new ModelDownloadInfo(
+                    "phi35_mini",
+                    "https://huggingface.co/microsoft/Phi-3.5-mini-instruct-onnx/resolve/main/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/",
+                    "phi35",
+                    new()
+                    {
+                        new("config.json", "config.json", 50000),
+                        new("genai_config.json", "genai_config.json", 1000),
+                        new("special_tokens_map.json", "special_tokens_map.json", 100000),
+                        new("tokenizer.json", "tokenizer.json", 9100000),
+                        new("tokenizer_config.json", "tokenizer_config.json", 100000),
+                        new("model.onnx", "model.onnx", 16000000),
+                        new("model.onnx.data", "model.onnx.data", 2200000000)
+                    },
+                    false,
+                    "phi"
+                )
+            }
         };
 
         private Task? _downloadTask;
@@ -57,6 +154,7 @@ namespace Daily_WinUI.Services
         private double _percentage;
         private string _statusText = "Not started";
         private DownloadProgressEventArgs? _lastProgress;
+        private string? _downloadingModelId;
 
         public event EventHandler<DownloadProgressEventArgs>? ProgressChanged;
         public event EventHandler<string>? StatusChanged;
@@ -67,20 +165,22 @@ namespace Daily_WinUI.Services
         public double Percentage => _percentage;
         public string StatusText => _statusText;
         public DownloadProgressEventArgs? LastProgress => _lastProgress;
+        public string? DownloadingModelId => _downloadingModelId;
 
         public ModelDownloadManager(HttpClient httpClient)
         {
             _httpClient = httpClient;
             // Set 10-minute timeout for requests
             _httpClient.Timeout = TimeSpan.FromMinutes(10);
-            _targetDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Daily.WinUI",
-                "models",
-                "llama1b");
         }
 
         public void StartDownload()
+        {
+            // Legacy / fallback method: default to Llama 3.2 1B
+            StartDownload("llama32_1b");
+        }
+
+        public void StartDownload(string modelId)
         {
             lock (this)
             {
@@ -89,6 +189,7 @@ namespace Daily_WinUI.Services
                 _percentage = 0;
                 _statusText = "Starting download...";
                 _lastProgress = null;
+                _downloadingModelId = modelId;
                 _cts = new CancellationTokenSource();
             }
 
@@ -96,7 +197,7 @@ namespace Daily_WinUI.Services
             {
                 try
                 {
-                    await DownloadModelInternalAsync(_cts.Token);
+                    await DownloadModelInternalAsync(modelId, _cts.Token);
                     
                     lock (this)
                     {
@@ -105,8 +206,9 @@ namespace Daily_WinUI.Services
                         _percentage = 100;
                     }
                     
-                    // Mark model as downloaded in settings
+                    // Mark model as downloaded and selected in settings
                     var settings = SettingsService.Load();
+                    settings.SelectedLocalAiModel = modelId;
                     settings.LocalAiModelDownloaded = true;
                     SettingsService.Save(settings);
 
@@ -136,6 +238,7 @@ namespace Daily_WinUI.Services
                     {
                         _cts?.Dispose();
                         _cts = null;
+                        _downloadingModelId = null;
                     }
                 }
             });
@@ -151,19 +254,30 @@ namespace Daily_WinUI.Services
             }
         }
 
-        private async Task DownloadModelInternalAsync(CancellationToken ct)
+        private async Task DownloadModelInternalAsync(string modelId, CancellationToken ct)
         {
-            Directory.CreateDirectory(_targetDir);
+            if (!ModelDefinitions.TryGetValue(modelId, out var info))
+            {
+                throw new ArgumentException($"Unknown model ID: {modelId}");
+            }
+
+            string targetDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Daily.WinUI",
+                "models",
+                info.FolderName);
+
+            Directory.CreateDirectory(targetDir);
             UpdateStatus("Resolving model sizes...");
 
             // 1. Get total expected size of all files using headers
             long totalExpectedBytes = 0;
             var fileSizes = new Dictionary<string, long>();
 
-            foreach (var file in _files)
+            foreach (var file in info.Files)
             {
                 ct.ThrowIfCancellationRequested();
-                string fileUrl = $"{BaseUrl}{file}";
+                string fileUrl = $"{info.RepoUrl}{file.SourceRelativePath}";
                 try
                 {
                     using var request = new HttpRequestMessage(HttpMethod.Head, fileUrl);
@@ -171,20 +285,19 @@ namespace Daily_WinUI.Services
                     if (response.IsSuccessStatusCode && response.Content.Headers.ContentLength.HasValue)
                     {
                         long size = response.Content.Headers.ContentLength.Value;
-                        fileSizes[file] = size;
+                        fileSizes[file.SourceRelativePath] = size;
                         totalExpectedBytes += size;
                     }
                     else
                     {
-                        // Fallback estimate if HEAD fails (approx ~1776MB total)
-                        fileSizes[file] = file == "model.onnx.data" ? 1750000000 : (file == "model.onnx" ? 16000000 : (file == "tokenizer.json" ? 9100000 : 100000));
-                        totalExpectedBytes += fileSizes[file];
+                        fileSizes[file.SourceRelativePath] = file.EstimatedSize;
+                        totalExpectedBytes += file.EstimatedSize;
                     }
                 }
                 catch
                 {
-                    fileSizes[file] = file == "model.onnx.data" ? 1750000000 : (file == "model.onnx" ? 16000000 : (file == "tokenizer.json" ? 9100000 : 100000));
-                    totalExpectedBytes += fileSizes[file];
+                    fileSizes[file.SourceRelativePath] = file.EstimatedSize;
+                    totalExpectedBytes += file.EstimatedSize;
                 }
             }
 
@@ -194,14 +307,14 @@ namespace Daily_WinUI.Services
 
             // 2. Download files sequentially
             byte[] buffer = new byte[81920]; // 80KB buffer
-            for (int i = 0; i < _files.Count; i++)
+            for (int i = 0; i < info.Files.Count; i++)
             {
-                string file = _files[i];
-                string fileUrl = $"{BaseUrl}{file}";
-                string targetPath = Path.Combine(_targetDir, file);
+                var file = info.Files[i];
+                string fileUrl = $"{info.RepoUrl}{file.SourceRelativePath}";
+                string targetPath = Path.Combine(targetDir, file.TargetFileName);
 
                 long expectedSize = 0;
-                if (fileSizes.TryGetValue(file, out long size))
+                if (fileSizes.TryGetValue(file.SourceRelativePath, out long size))
                 {
                     expectedSize = size;
                 }
@@ -213,12 +326,12 @@ namespace Daily_WinUI.Services
                     if (fileInfo.Length == expectedSize)
                     {
                         totalBytesDownloaded += expectedSize;
-                        UpdateStatus($"Verified {file} on disk.");
+                        UpdateStatus($"Verified {file.TargetFileName} on disk.");
                         continue;
                     }
                 }
 
-                UpdateStatus($"Downloading {file} ({i + 1}/{_files.Count})...");
+                UpdateStatus($"Downloading {file.TargetFileName} ({i + 1}/{info.Files.Count})...");
 
                 long fileBytesDownloaded = 0;
                 using (var response = await _httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Get, fileUrl), HttpCompletionOption.ResponseHeadersRead, ct))
@@ -252,14 +365,14 @@ namespace Daily_WinUI.Services
                                 downloadedMBs,
                                 totalMBs,
                                 timeRemaining,
-                                file
+                                file.TargetFileName
                             );
 
                             lock (this)
                             {
                                 _percentage = percentage;
                                 _lastProgress = progressArgs;
-                                _statusText = $"Downloading: {file} ({downloadedMBs:F1}/{totalMBs:F1} MB) | Speed: {speedMBs:F2} MB/s | Remaining: {timeRemaining:mm\\:ss}";
+                                _statusText = $"Downloading: {file.TargetFileName} ({downloadedMBs:F1}/{totalMBs:F1} MB) | Speed: {speedMBs:F2} MB/s | Remaining: {timeRemaining:mm\\:ss}";
                             }
 
                             // Throttle updates to UI at max once every 250ms
@@ -277,11 +390,55 @@ namespace Daily_WinUI.Services
                 if (expectedSize > 0 && fileBytesDownloaded < expectedSize)
                 {
                     try { File.Delete(targetPath); } catch { }
-                    throw new IOException($"Download truncated for {file}. Expected {expectedSize} bytes, but only received {fileBytesDownloaded} bytes.");
+                    throw new IOException($"Download truncated for {file.TargetFileName}. Expected {expectedSize} bytes, but only received {fileBytesDownloaded} bytes.");
                 }
             }
 
             stopwatch.Stop();
+
+            // 3. Generate genai_config.json if requested
+            if (info.GenerateGenAiConfig)
+            {
+                UpdateStatus("Generating GenAI configuration...");
+                string genaiConfigPath = Path.Combine(targetDir, "genai_config.json");
+                string json;
+                if (info.ModelId == "qwen25_15b")
+                {
+                    json = @"{
+  ""model"": {
+    ""type"": ""qwen2"",
+    ""decoder"": {
+      ""filename"": ""model.onnx""
+    }
+  },
+  ""search"": {
+    ""bos_token_id"": 151643,
+    ""eos_token_id"": 151645,
+    ""pad_token_id"": 151643,
+    ""max_length"": 2048
+  }
+}";
+                }
+                else // gemma3_1b
+                {
+                    json = @"{
+  ""model"": {
+    ""type"": ""gemma2"",
+    ""decoder"": {
+      ""filename"": ""model.onnx""
+    }
+  },
+  ""search"": {
+    ""bos_token_id"": 2,
+    ""eos_token_id"": 106,
+    ""pad_token_id"": 0,
+    ""max_length"": 2048
+  }
+}";
+                }
+                await File.WriteAllTextAsync(genaiConfigPath, json, ct);
+            }
+
             UpdateStatus("Verifying model files...");
         }
 

@@ -35,6 +35,7 @@ public sealed class AppSettings
     public bool CloseToTray { get; set; } = false;
     public bool EnableSmartBriefing { get; set; } = true;
     public bool LocalAiModelDownloaded { get; set; } = false;
+    public string SelectedLocalAiModel { get; set; } = "llama32_1b";
     public string SelectedAiAccelerator { get; set; } = "Auto";
     /// <summary>Saved position per detail page type name (e.g. "WeatherDetailPage").</summary>
     public Dictionary<string, DetailWindowPosition> DetailWindowPositions { get; set; } = new();
@@ -122,6 +123,67 @@ public static class SettingsService
             }
             catch { }
         }
+    }
+
+    public static string GetModelDirectory(string modelId)
+    {
+        string folder = modelId switch
+        {
+            "llama32_1b" => "llama1b",
+            "qwen25_15b" => "qwen15b",
+            "gemma3_1b" => "gemma1b",
+            "phi35_mini" => "phi35",
+            _ => "llama1b"
+        };
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Daily.WinUI",
+            "models",
+            folder);
+    }
+
+    public static bool IsModelDownloaded(string modelId)
+    {
+        try
+        {
+            string dir = GetModelDirectory(modelId);
+            string modelPath = Path.Combine(dir, "model.onnx");
+            string configPath = Path.Combine(dir, "config.json");
+            
+            if (!Directory.Exists(dir) || !File.Exists(modelPath) || !File.Exists(configPath))
+            {
+                return false;
+            }
+
+            var modelInfo = new FileInfo(modelPath);
+            if (modelId == "llama32_1b")
+            {
+                string dataPath = Path.Combine(dir, "model.onnx.data");
+                if (!File.Exists(dataPath)) return false;
+                var dataInfo = new FileInfo(dataPath);
+                return modelInfo.Length > 10000000 && dataInfo.Length > 500000000;
+            }
+            else if (modelId == "phi35_mini")
+            {
+                string dataPath = Path.Combine(dir, "model.onnx.data");
+                if (!File.Exists(dataPath)) return false;
+                var dataInfo = new FileInfo(dataPath);
+                return modelInfo.Length > 10000000 && dataInfo.Length > 1500000000;
+            }
+            else if (modelId == "qwen25_15b")
+            {
+                return modelInfo.Length > 500000000;
+            }
+            else if (modelId == "gemma3_1b")
+            {
+                return modelInfo.Length > 400000000;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+        return false;
     }
 
     public static string GetProcessorName()

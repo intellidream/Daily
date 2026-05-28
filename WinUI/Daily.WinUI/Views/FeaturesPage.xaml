@@ -55,15 +55,137 @@
                     </RelativePanel>
                     
                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                    
-                    <RelativePanel>
-                        <StackPanel x:Name="DownloadTextPanel" Spacing="4" RelativePanel.AlignLeftWithPanel="True" RelativePanel.LeftOf="SettingsDownloadModelBtn">
-                            <TextBlock Text="Bring Your Own AI (ONNX Weights)" FontWeight="SemiBold" FontSize="14" />
-                            <TextBlock Text="On-device models require local ONNX weights (Llama 3.2 1B Instruct INT4, ~670MB download) for generation." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <Button x:Name="SettingsDownloadModelBtn" Content="Download AI Pack" Click="SettingsDownloadModelBtn_Click" Style="{ThemeResource AccentButtonStyle}" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignVerticalCenterWithPanel="True" Margin="12,0,0,0" />
-                    </RelativePanel>
-                    
+
+                    <!-- Model Management Header -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Local AI Models" FontWeight="SemiBold" FontSize="14" />
+                        <TextBlock Text="Select and manage the local LLM weights for offline briefings. Only one model can be active at a time." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        
+                        <!-- Qualcomm NPU Override Info -->
+                        <InfoBar x:Name="NpuCopilotRuntimeInfoBar"
+                                 Severity="Informational"
+                                 IsOpen="False"
+                                 IsClosable="False"
+                                 Title="Qualcomm Hexagon NPU Active"
+                                 Message="Phi Silica runs built-in via the Windows Copilot Runtime. External model downloads and selections are disabled."
+                                 Margin="0,8,0,0" />
+                        
+                        <!-- Accelerator Compatibility / Speed warning InfoBar -->
+                        <InfoBar x:Name="HardwareWarningInfoBar"
+                                 Severity="Warning"
+                                 IsOpen="False"
+                                 IsClosable="True"
+                                 Title="Configuration Alert"
+                                 Message="Warning detail goes here."
+                                 Margin="0,8,0,0" />
+                    </StackPanel>
+
+                    <!-- Models List Container -->
+                    <StackPanel x:Name="ModelsContainer" Spacing="12" Margin="0,4,0,0">
+                        
+                        <!-- Llama 3.2 1B Card -->
+                        <Border x:Name="LlamaCard" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="Llama 3.2 1B Instruct (INT4)" FontWeight="SemiBold" FontSize="13" />
+                                        <Border Background="{ThemeResource SystemControlBackgroundAccentBrush}" CornerRadius="4" Padding="6,1,6,2" VerticalAlignment="Center" x:Name="LlamaActiveBadge" Visibility="Collapsed">
+                                            <TextBlock Text="Active" FontSize="9" FontWeight="SemiBold" Foreground="White" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="Lightweight and fast, optimized for standard summaries. Size: ~670 MB" FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="LlamaStatusText" Text="Not Downloaded" FontSize="11" FontWeight="SemiBold" Opacity="0.8" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button x:Name="LlamaDownloadBtn" Content="Download" Click="LlamaDownloadBtn_Click" Style="{ThemeResource AccentButtonStyle}" FontSize="11" Height="28" />
+                                    <Button x:Name="LlamaUseBtn" Content="Select" Click="LlamaUseBtn_Click" Style="{ThemeResource DefaultButtonStyle}" FontSize="11" Height="28" />
+                                    <Button x:Name="LlamaDeleteBtn" Content="Delete" Click="LlamaDeleteBtn_Click" Style="{ThemeResource DefaultButtonStyle}" FontSize="11" Height="28" Foreground="#FFFF4B4B" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Qwen 2.5 1.5B Card -->
+                        <Border x:Name="QwenCard" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="Qwen 2.5 1.5B Instruct (INT4)" FontWeight="SemiBold" FontSize="13" />
+                                        <Border Background="{ThemeResource SystemControlBackgroundAccentBrush}" CornerRadius="4" Padding="6,1,6,2" VerticalAlignment="Center" x:Name="QwenActiveBadge" Visibility="Collapsed">
+                                            <TextBlock Text="Active" FontSize="9" FontWeight="SemiBold" Foreground="White" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="Strong reasoning and text generation balance. Size: ~950 MB" FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="QwenStatusText" Text="Not Downloaded" FontSize="11" FontWeight="SemiBold" Opacity="0.8" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button x:Name="QwenDownloadBtn" Content="Download" Click="QwenDownloadBtn_Click" Style="{ThemeResource AccentButtonStyle}" FontSize="11" Height="28" />
+                                    <Button x:Name="QwenUseBtn" Content="Select" Click="QwenUseBtn_Click" Style="{ThemeResource DefaultButtonStyle}" FontSize="11" Height="28" />
+                                    <Button x:Name="QwenDeleteBtn" Content="Delete" Click="QwenDeleteBtn_Click" Style="{ThemeResource DefaultButtonStyle}" FontSize="11" Height="28" Foreground="#FFFF4B4B" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Gemma 3 1B Card -->
+                        <Border x:Name="GemmaCard" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="Gemma 3 1B Instruct (INT4)" FontWeight="SemiBold" FontSize="13" />
+                                        <Border Background="{ThemeResource SystemControlBackgroundAccentBrush}" CornerRadius="4" Padding="6,1,6,2" VerticalAlignment="Center" x:Name="GemmaActiveBadge" Visibility="Collapsed">
+                                            <TextBlock Text="Active" FontSize="9" FontWeight="SemiBold" Foreground="White" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="State of the art lightweight language model from Google. Size: ~750 MB" FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="GemmaStatusText" Text="Not Downloaded" FontSize="11" FontWeight="SemiBold" Opacity="0.8" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button x:Name="GemmaDownloadBtn" Content="Download" Click="GemmaDownloadBtn_Click" Style="{ThemeResource AccentButtonStyle}" FontSize="11" Height="28" />
+                                    <Button x:Name="GemmaUseBtn" Content="Select" Click="GemmaUseBtn_Click" Style="{ThemeResource DefaultButtonStyle}" FontSize="11" Height="28" />
+                                    <Button x:Name="GemmaDeleteBtn" Content="Delete" Click="GemmaDeleteBtn_Click" Style="{ThemeResource DefaultButtonStyle}" FontSize="11" Height="28" Foreground="#FFFF4B4B" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Phi 3.5 Mini Card -->
+                        <Border x:Name="PhiCard" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="Phi 3.5 Mini Instruct (INT4)" FontWeight="SemiBold" FontSize="13" />
+                                        <Border Background="{ThemeResource SystemControlBackgroundAccentBrush}" CornerRadius="4" Padding="6,1,6,2" VerticalAlignment="Center" x:Name="PhiActiveBadge" Visibility="Collapsed">
+                                            <TextBlock Text="Active" FontSize="9" FontWeight="SemiBold" Foreground="White" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="High quality 3.8B model. Slower on CPU, works best on GPU/NPU. Size: ~2.2 GB" FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="PhiStatusText" Text="Not Downloaded" FontSize="11" FontWeight="SemiBold" Opacity="0.8" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button x:Name="PhiDownloadBtn" Content="Download" Click="PhiDownloadBtn_Click" Style="{ThemeResource AccentButtonStyle}" FontSize="11" Height="28" />
+                                    <Button x:Name="PhiUseBtn" Content="Select" Click="PhiUseBtn_Click" Style="{ThemeResource DefaultButtonStyle}" FontSize="11" Height="28" />
+                                    <Button x:Name="PhiDeleteBtn" Content="Delete" Click="PhiDeleteBtn_Click" Style="{ThemeResource DefaultButtonStyle}" FontSize="11" Height="28" Foreground="#FFFF4B4B" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        
+                    </StackPanel>
+
+                    <!-- Single progress area shared by download events -->
                     <StackPanel x:Name="SettingsDownloadProgressGrid" Visibility="Collapsed" Spacing="4">
                         <ProgressBar x:Name="SettingsDownloadProgressBar" Minimum="0" Maximum="100" Value="0" Height="4" Margin="0,4" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" />
                         <Grid>

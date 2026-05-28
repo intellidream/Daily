@@ -39,7 +39,6 @@ public sealed partial class FeaturesPage : Page
 
             if (downloadManager.IsDownloading)
             {
-                SettingsDownloadModelBtn.Visibility = Visibility.Collapsed;
                 SettingsDownloadProgressGrid.Visibility = Visibility.Visible;
                 if (downloadManager.LastProgress != null)
                 {
@@ -110,7 +109,9 @@ public sealed partial class FeaturesPage : Page
                 }
             }
             SettingsAiAcceleratorCombo.SelectedIndex = selectedIndex;
+            
             UpdateModelStatus();
+            UpdateModelListUi();
 
             // ── SECTION 2: Smart Behavior Analytics ──
             SmartBehaviorSwitch.IsOn = _settings.EnableSmartBehavior;
@@ -211,20 +212,28 @@ public sealed partial class FeaturesPage : Page
         }
         else
         {
-            // For x64 systems, DirectML GPU is the recommended, most stable, and high-performance target.
             bestEngineName = "DirectML GPU Accelerator";
             bestEngineTag = "GPU";
             bestEngineReady = onnxModelReady;
         }
 
+        string selectedModelId = _settings.SelectedLocalAiModel ?? "llama32_1b";
+        string modelName = selectedModelId switch
+        {
+            "llama32_1b" => "Llama 3.2 1B Instruct",
+            "qwen25_15b" => "Qwen 2.5 1.5B Instruct",
+            "gemma3_1b" => "Gemma 3 1B Instruct",
+            "phi35_mini" => "Phi 3.5 Mini Instruct",
+            _ => "Llama 3.2 1B Instruct"
+        };
+
         string recommendedOption = bestEngineName;
         string activeLabel;
         string description = "";
-        bool needsDownload = false;
 
         if (cpuFallbackActive)
         {
-            activeLabel = "DirectML CPU (Llama 3.2 ONNX) (Safe Fallback)";
+            activeLabel = $"DirectML CPU ({modelName}) (Safe Fallback)";
             description = "The system encountered a graphics card driver error or compatibility issue and automatically fell back to CPU mode for stability. You can restart the application or choose a different accelerator to try again.";
         }
         else if (activeDevice == "Auto")
@@ -238,16 +247,14 @@ public sealed partial class FeaturesPage : Page
                 }
                 else
                 {
-                    activeLabel = $"Auto -> {bestEngineName} (Llama 3.2 ONNX) (Active)";
-                    description = $"System automatically resolved execution to the custom Llama 3.2 1B ONNX model running on the {bestEngineName}.";
+                    activeLabel = $"Auto -> {bestEngineName} ({modelName}) (Active)";
+                    description = $"System automatically resolved execution to the custom {modelName} model running on the {bestEngineName}.";
                 }
-                needsDownload = false;
             }
             else
             {
-                activeLabel = $"Auto -> {bestEngineName} (Llama 3.2 ONNX) (Requires Download)";
+                activeLabel = $"Auto -> {bestEngineName} ({modelName}) (Requires Download)";
                 description = $"No local AI engine is currently ready. System resolved target to the {bestEngineName}. The local model files must be downloaded first.";
-                needsDownload = true;
             }
         }
         else if (activeDevice == "NPU")
@@ -304,51 +311,213 @@ public sealed partial class FeaturesPage : Page
             string npuName = (npu != null && (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)))
                 ? "AMD Ryzen AI NPU"
                 : "Intel(R) AI Boost NPU";
-            activeLabel = $"{npuName} (Llama 3.2 ONNX)";
-            description = $"Uses the custom Llama 3.2 1B model running locally on the {npuName} via ONNX Runtime GenAI.";
+            activeLabel = $"{npuName} ({modelName})";
+            description = $"Uses the custom {modelName} model running locally on the {npuName} via ONNX Runtime GenAI.";
             if (!onnxModelReady)
             {
                 description += " (Requires Model Download)";
-                needsDownload = true;
             }
         }
         else if (activeDevice == "GPU")
         {
-            activeLabel = "DirectML GPU (Llama 3.2 ONNX)";
-            description = "Uses the custom Llama 3.2 1B model running locally via DirectML on your graphics card. Offers excellent generation speed.";
+            activeLabel = $"DirectML GPU ({modelName})";
+            description = $"Uses the custom {modelName} model running locally via DirectML on your graphics card. Offers excellent generation speed.";
             if (!onnxModelReady)
             {
                 description += " (Requires Model Download)";
-                needsDownload = true;
             }
         }
         else if (activeDevice == "CPU")
         {
-            activeLabel = "DirectML CPU (Llama 3.2 ONNX)";
-            description = "Uses the custom Llama 3.2 1B model running locally on your processor. Note: CPU generation will be slower and use more battery.";
+            activeLabel = $"DirectML CPU ({modelName})";
+            description = $"Uses the custom {modelName} model running locally on your processor. Note: CPU generation will be slower and use more battery.";
             if (!onnxModelReady)
             {
                 description += " (Requires Model Download)";
-                needsDownload = true;
             }
         }
         else // Fallback
         {
             activeLabel = "Fallback Template Engine";
             description = "Uses procedural templates to generate daily briefings. No local AI model execution is performed.";
-            needsDownload = false;
         }
 
         SettingsAiDeviceStatusText.Text = $"Active Engine: {activeLabel}";
         SettingsAiAcceleratorDescriptionText.Text = description;
+    }
 
-        if (needsDownload)
+    private void UpdateModelListUi()
+    {
+        var downloadManager = App.Current.Services.GetRequiredService<ModelDownloadManager>();
+        bool isDownloading = downloadManager.IsDownloading;
+        string? downloadingModelId = downloadManager.DownloadingModelId;
+        string activeModelId = _settings.SelectedLocalAiModel ?? "llama32_1b";
+        string activeAccelerator = _settings.SelectedAiAccelerator ?? "Auto";
+        bool isNpuActive = activeAccelerator == "NPU";
+
+        // Show/hide Copilot Runtime NPU override banner
+        NpuCopilotRuntimeInfoBar.IsOpen = isNpuActive;
+
+        // Update Llama Card
+        UpdateCardState(
+            "llama32_1b",
+            isNpuActive,
+            isDownloading,
+            downloadingModelId,
+            activeModelId,
+            LlamaActiveBadge,
+            LlamaStatusText,
+            LlamaDownloadBtn,
+            LlamaUseBtn,
+            LlamaDeleteBtn
+        );
+
+        // Update Qwen Card
+        UpdateCardState(
+            "qwen25_15b",
+            isNpuActive,
+            isDownloading,
+            downloadingModelId,
+            activeModelId,
+            QwenActiveBadge,
+            QwenStatusText,
+            QwenDownloadBtn,
+            QwenUseBtn,
+            QwenDeleteBtn
+        );
+
+        // Update Gemma Card
+        UpdateCardState(
+            "gemma3_1b",
+            isNpuActive,
+            isDownloading,
+            downloadingModelId,
+            activeModelId,
+            GemmaActiveBadge,
+            GemmaStatusText,
+            GemmaDownloadBtn,
+            GemmaUseBtn,
+            GemmaDeleteBtn
+        );
+
+        // Update Phi Card
+        UpdateCardState(
+            "phi35_mini",
+            isNpuActive,
+            isDownloading,
+            downloadingModelId,
+            activeModelId,
+            PhiActiveBadge,
+            PhiStatusText,
+            PhiDownloadBtn,
+            PhiUseBtn,
+            PhiDeleteBtn
+        );
+
+        // Update hardware warning InfoBars
+        UpdateHardwareWarning(activeModelId, activeAccelerator);
+    }
+
+    private void UpdateCardState(
+        string modelId,
+        bool isNpuActive,
+        bool isDownloading,
+        string? downloadingModelId,
+        string activeModelId,
+        UIElement activeBadge,
+        TextBlock statusText,
+        Button downloadBtn,
+        Button useBtn,
+        Button deleteBtn)
+    {
+        bool isDownloaded = SettingsService.IsModelDownloaded(modelId);
+        bool isActive = activeModelId == modelId;
+
+        // If Copilot NPU override is active, everything is disabled
+        if (isNpuActive)
         {
-            SettingsDownloadModelBtn.Visibility = Visibility.Visible;
+            activeBadge.Visibility = Visibility.Collapsed;
+            statusText.Text = "Disabled (NPU Mode)";
+            downloadBtn.Visibility = Visibility.Collapsed;
+            useBtn.Visibility = Visibility.Collapsed;
+            deleteBtn.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        // Show/hide active badge
+        activeBadge.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
+
+        if (isActive)
+        {
+            statusText.Text = "Active Model";
+        }
+        else if (isDownloaded)
+        {
+            statusText.Text = "Downloaded & Ready";
         }
         else
         {
-            SettingsDownloadModelBtn.Visibility = Visibility.Collapsed;
+            statusText.Text = "Not Downloaded";
+        }
+
+        // Handle buttons based on download status
+        if (isDownloaded)
+        {
+            downloadBtn.Visibility = Visibility.Collapsed;
+            useBtn.Visibility = Visibility.Visible;
+            useBtn.IsEnabled = !isActive && !isDownloading;
+            deleteBtn.Visibility = Visibility.Visible;
+            deleteBtn.IsEnabled = !isActive && !isDownloading;
+        }
+        else
+        {
+            downloadBtn.Visibility = Visibility.Visible;
+            downloadBtn.IsEnabled = !isDownloading;
+            useBtn.Visibility = Visibility.Collapsed;
+            deleteBtn.Visibility = Visibility.Collapsed;
+        }
+
+        // Special handling if THIS model is downloading
+        if (isDownloading && downloadingModelId == modelId)
+        {
+            statusText.Text = "Downloading...";
+            downloadBtn.Visibility = Visibility.Collapsed;
+            useBtn.Visibility = Visibility.Collapsed;
+            deleteBtn.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void UpdateHardwareWarning(string modelId, string accelerator)
+    {
+        HardwareWarningInfoBar.IsOpen = false;
+
+        // Check if CPU is paired with Phi 3.5 Mini
+        if (modelId == "phi35_mini" && accelerator == "CPU")
+        {
+            HardwareWarningInfoBar.Title = "Performance Warning";
+            HardwareWarningInfoBar.Message = "Phi 3.5 Mini (3.8B parameters) is a relatively heavy model. Running it on CPU will be extremely slow (~2 tokens/sec). We highly recommend using GPU acceleration.";
+            HardwareWarningInfoBar.Severity = InfoBarSeverity.Warning;
+            HardwareWarningInfoBar.IsOpen = true;
+            return;
+        }
+
+        // Check if Qualcomm NPU is selected but system doesn't support it
+        if (accelerator == "NPU")
+        {
+            bool phiSilicaAvailable = false;
+            try
+            {
+                phiSilicaAvailable = LanguageModel.GetReadyState() == AIFeatureReadyState.Ready;
+            }
+            catch { }
+
+            if (!phiSilicaAvailable)
+            {
+                HardwareWarningInfoBar.Title = "Incompatible Configuration";
+                HardwareWarningInfoBar.Message = "Qualcomm NPU mode is selected, but the Windows Copilot Runtime (Phi Silica) is not ready or supported on this system. Please select a different accelerator or ensure your device is a Copilot+ PC.";
+                HardwareWarningInfoBar.Severity = InfoBarSeverity.Error;
+                HardwareWarningInfoBar.IsOpen = true;
+            }
         }
     }
 
@@ -369,6 +538,7 @@ public sealed partial class FeaturesPage : Page
             _settings.SelectedAiAccelerator = tag;
             SettingsService.Save(_settings);
             UpdateModelStatus();
+            UpdateModelListUi();
         }
     }
 
@@ -378,18 +548,81 @@ public sealed partial class FeaturesPage : Page
         downloadManager.CancelDownload();
     }
 
-    private void SettingsDownloadModelBtn_Click(object sender, RoutedEventArgs e)
+    private void StartModelDownload(string modelId)
     {
         var downloadManager = App.Current.Services.GetRequiredService<ModelDownloadManager>();
         if (downloadManager.IsDownloading) return;
 
-        SettingsDownloadModelBtn.Visibility = Visibility.Collapsed;
         SettingsDownloadProgressGrid.Visibility = Visibility.Visible;
         SettingsDownloadProgressBar.Value = 0;
-        SettingsDownloadStatusText.Text = "Connecting to ONNX AI Model Repository...";
+        SettingsDownloadStatusText.Text = "Connecting to repository...";
 
-        downloadManager.StartDownload();
+        downloadManager.StartDownload(modelId);
+        UpdateModelListUi();
     }
+
+    private void LlamaDownloadBtn_Click(object sender, RoutedEventArgs e) => StartModelDownload("llama32_1b");
+    private void QwenDownloadBtn_Click(object sender, RoutedEventArgs e) => StartModelDownload("qwen25_15b");
+    private void GemmaDownloadBtn_Click(object sender, RoutedEventArgs e) => StartModelDownload("gemma3_1b");
+    private void PhiDownloadBtn_Click(object sender, RoutedEventArgs e) => StartModelDownload("phi35_mini");
+
+    private void SelectModel(string modelId)
+    {
+        _settings.SelectedLocalAiModel = modelId;
+        _settings.LocalAiModelDownloaded = true; // Keep legacy check in sync
+        SettingsService.Save(_settings);
+        UpdateModelListUi();
+        UpdateModelStatus();
+    }
+
+    private void LlamaUseBtn_Click(object sender, RoutedEventArgs e) => SelectModel("llama32_1b");
+    private void QwenUseBtn_Click(object sender, RoutedEventArgs e) => SelectModel("qwen25_15b");
+    private void GemmaUseBtn_Click(object sender, RoutedEventArgs e) => SelectModel("gemma3_1b");
+    private void PhiUseBtn_Click(object sender, RoutedEventArgs e) => SelectModel("phi35_mini");
+
+    private async void DeleteModel(string modelId)
+    {
+        ContentDialog dialog = new ContentDialog
+        {
+            Title = "Confirm Delete",
+            Content = "Are you sure you want to delete this model's downloaded files? This will free up disk space.",
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = this.XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            try
+            {
+                string dir = SettingsService.GetModelDirectory(modelId);
+                if (Directory.Exists(dir))
+                {
+                    Directory.Delete(dir, true);
+                }
+                UpdateModelListUi();
+                UpdateModelStatus();
+            }
+            catch (Exception ex)
+            {
+                ContentDialog errDialog = new ContentDialog
+                {
+                    Title = "Delete Failed",
+                    Content = $"Could not delete model files: {ex.Message}",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.XamlRoot
+                };
+                try { await errDialog.ShowAsync(); } catch { }
+            }
+        }
+    }
+
+    private void LlamaDeleteBtn_Click(object sender, RoutedEventArgs e) => DeleteModel("llama32_1b");
+    private void QwenDeleteBtn_Click(object sender, RoutedEventArgs e) => DeleteModel("qwen25_15b");
+    private void GemmaDeleteBtn_Click(object sender, RoutedEventArgs e) => DeleteModel("gemma3_1b");
+    private void PhiDeleteBtn_Click(object sender, RoutedEventArgs e) => DeleteModel("phi35_mini");
 
     private void FeaturesPage_Unloaded(object sender, RoutedEventArgs e)
     {
@@ -427,11 +660,22 @@ public sealed partial class FeaturesPage : Page
         {
             SettingsDownloadProgressGrid.Visibility = Visibility.Collapsed;
             UpdateModelStatus();
+            UpdateModelListUi();
+
+            string selectedModelId = _settings.SelectedLocalAiModel ?? "llama32_1b";
+            string modelName = selectedModelId switch
+            {
+                "llama32_1b" => "Llama 3.2 1B Instruct",
+                "qwen25_15b" => "Qwen 2.5 1.5B Instruct",
+                "gemma3_1b" => "Gemma 3 1B Instruct",
+                "phi35_mini" => "Phi 3.5 Mini Instruct",
+                _ => "Llama 3.2 1B Instruct"
+            };
 
             ContentDialog dialog = new ContentDialog
             {
                 Title = "Model Download Complete",
-                Content = "The local Llama 3.2 1B ONNX model has been successfully downloaded and verified. Local AI accelerator is now active.",
+                Content = $"The local {modelName} model has been successfully downloaded and verified. Local AI accelerator is now active.",
                 CloseButtonText = "OK",
                 XamlRoot = this.XamlRoot
             };
@@ -445,6 +689,7 @@ public sealed partial class FeaturesPage : Page
         {
             SettingsDownloadProgressGrid.Visibility = Visibility.Collapsed;
             UpdateModelStatus();
+            UpdateModelListUi();
 
             if (ex is OperationCanceledException)
             {
