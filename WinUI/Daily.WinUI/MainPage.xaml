@@ -136,6 +136,14 @@
                 </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
         </Storyboard>
+
+        <Storyboard x:Name="RotatingLoadingIconStoryboard">
+            <DoubleAnimation Storyboard.TargetName="LoadingAIIcon"
+                             Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                             From="0" To="360"
+                             Duration="0:0:3.0"
+                             RepeatBehavior="Forever" />
+        </Storyboard>
     </Page.Resources>
 
     <Grid Background="Transparent">
@@ -209,13 +217,23 @@
                     <!-- Loading Panel -->
                     <Grid x:Name="BriefingLoadingPanel" Visibility="Visible" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <ProgressRing IsActive="True" Width="48" Height="48" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
-                            <TextBlock Text="AI is compiling your briefing..." 
+                            <Image x:Name="LoadingAIIcon"
+                                   Source="Assets/GemAIcon.svg"
+                                   Width="64"
+                                   Height="64"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   RenderTransformOrigin="0.5,0.5">
+                                <Image.RenderTransform>
+                                    <RotateTransform Angle="0" />
+                                </Image.RenderTransform>
+                            </Image>
+                            <TextBlock Text="DayOne AI is compiling your briefing..." 
                                        FontSize="18" 
                                        FontWeight="SemiBold" 
                                        Foreground="{ThemeResource AppFgColorBrush}" 
                                        HorizontalAlignment="Center"/>
-                            <TextBlock Text="Gathering news, weather, habits, and health insights..." 
+                            <TextBlock Text="Gathering news, weather, finances, habits, and health insights..." 
                                        FontSize="13" 
                                        Foreground="{ThemeResource AppFgMutedColorBrush}" 
                                        HorizontalAlignment="Center"/>
@@ -296,6 +314,14 @@
                                            FontSize="14" 
                                            Foreground="{ThemeResource AppFgMutedColorBrush}" 
                                            Opacity="0.75"
+                                           TextWrapping="Wrap"/>
+                                           
+                                <!-- Sub-description (Less emphasized) -->
+                                <TextBlock x:Name="BriefingSubDescriptionText" 
+                                           Text="Here's your DayOne AI Smart Briefing..." 
+                                           FontSize="13" 
+                                           Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                           Opacity="0.6"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </Grid>

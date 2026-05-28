@@ -544,6 +544,7 @@ public sealed partial class MainPage : Page
         FadeInBriefingStoryboard.Begin();
 
         BriefingLoadingPanel.Visibility = Visibility.Visible;
+        RotatingLoadingIconStoryboard.Begin();
         BriefingGrid.Visibility = Visibility.Collapsed;
 
         // Update layout based on current actual width
@@ -735,11 +736,13 @@ public sealed partial class MainPage : Page
 
         // Hide loading panel and show briefing content grid
         BriefingLoadingPanel.Visibility = Visibility.Collapsed;
+        RotatingLoadingIconStoryboard.Stop();
         BriefingGrid.Visibility = Visibility.Visible;
 
         // Typewriter Animation
         BriefingGreetingText.Text = data.Greeting;
         BriefingIntroText.Text = data.IntroText;
+        BriefingIntroText.Visibility = string.IsNullOrEmpty(data.IntroText) ? Visibility.Collapsed : Visibility.Visible;
         BriefingOutroText.Text = data.OutroText;
         BriefingOutroText.Opacity = 0.0; // Hide initially
 
@@ -862,7 +865,8 @@ public sealed partial class MainPage : Page
             BriefingCardBorder == null || BriefingOuterScrollViewer == null || 
             BriefingWidgetsGrid == null || BriefingTextScrollViewer == null ||
             BriefingHeaderGrid == null || BriefingIconContainer == null || BriefingHeaderTextPanel == null ||
-            BriefingGreetingText == null || BriefingIntroText == null || AIIconGlow == null || SmartBriefAIIcon == null)
+            BriefingGreetingText == null || BriefingIntroText == null || BriefingSubDescriptionText == null ||
+            AIIconGlow == null || SmartBriefAIIcon == null)
             return;
 
         if (width < 850)
@@ -931,6 +935,10 @@ public sealed partial class MainPage : Page
             BriefingIntroText.FontSize = 12;
             BriefingIntroText.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center;
             BriefingIntroText.TextAlignment = Microsoft.UI.Xaml.TextAlignment.Center;
+
+            BriefingSubDescriptionText.FontSize = 11;
+            BriefingSubDescriptionText.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center;
+            BriefingSubDescriptionText.TextAlignment = Microsoft.UI.Xaml.TextAlignment.Center;
 
             // 4. Re-layout widgets inside BriefingWidgetsGrid to stack in a single column
             BriefingWidgetsGrid.ColumnDefinitions.Clear();
@@ -1032,6 +1040,10 @@ public sealed partial class MainPage : Page
             BriefingIntroText.FontSize = 14;
             BriefingIntroText.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left;
             BriefingIntroText.TextAlignment = Microsoft.UI.Xaml.TextAlignment.Left;
+
+            BriefingSubDescriptionText.FontSize = 13;
+            BriefingSubDescriptionText.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left;
+            BriefingSubDescriptionText.TextAlignment = Microsoft.UI.Xaml.TextAlignment.Left;
 
             // 4. Reset widgets inside BriefingWidgetsGrid to 2-column layout
             BriefingWidgetsGrid.ColumnDefinitions.Clear();
