@@ -568,9 +568,77 @@ namespace Daily_WinUI.Services
             var service = await GetActiveServiceAsync();
             if (service == null)
             {
+                var settings = SettingsService.Load();
+                settings.LastExecutionExplanation = "No local AI service is ready or configured. Procedural Fallback Template Engine was activated.";
+                SettingsService.Save(settings);
                 throw new InvalidOperationException("No local AI service is ready or configured.");
             }
-            return await service.GenerateResponseAsync(systemPrompt, userPrompt, ct);
+
+            if (service is PhiSilicaSmartService)
+            {
+                try
+                {
+                    string response = await service.GenerateResponseAsync(systemPrompt, userPrompt, ct);
+                    
+                    var settings = SettingsService.Load();
+                    settings.LastExecutionExplanation = "Executed successfully using built-in Windows Copilot Runtime (Phi Silica) on Qualcomm Hexagon NPU.";
+                    SettingsService.Save(settings);
+                    
+                    return response;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SmartIntelligenceCoordinator] Phi Silica execution failed: {ex.Message}");
+                    string phiError = ex.Message;
+                    if (ex.InnerException != null)
+                    {
+                        phiError += $" (Inner: {ex.InnerException.Message})";
+                    }
+
+                    // Attempt fallback to custom model if ready
+                    if (await _onnxGenAi.IsModelReadyAsync())
+                    {
+                        try
+                        {
+                            System.Diagnostics.Debug.WriteLine("[SmartIntelligenceCoordinator] Falling back to custom ONNX model...");
+                            string response = await _onnxGenAi.GenerateResponseAsync(systemPrompt, userPrompt, ct);
+                            
+                            var settings = SettingsService.Load();
+                            string modelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+                            string modelName = modelId switch
+                            {
+                                "llama32_1b" => "Llama 3.2 1B Instruct",
+                                "qwen25_15b" => "Qwen 2.5 1.5B Instruct",
+                                "gemma3_1b" => "Gemma 3 1B Instruct",
+                                "phi35_mini" => "Phi 3.5 Mini Instruct",
+                                _ => modelId
+                            };
+                            
+                            settings.LastExecutionExplanation = $"Windows Copilot Runtime (Phi Silica) execution failed ({phiError}). Successfully fell back to custom model: {modelName} on DirectML GPU.";
+                            SettingsService.Save(settings);
+                            
+                            return response;
+                        }
+                        catch (Exception innerEx)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[SmartIntelligenceCoordinator] Resilient ONNX fallback failed: {innerEx.Message}");
+                            phiError += $" | Fallback to custom model failed: {innerEx.Message}";
+                        }
+                    }
+
+                    // Save failure explanation if we couldn't run ONNX either
+                    var settingsFail = SettingsService.Load();
+                    settingsFail.LastExecutionExplanation = $"Windows Copilot Runtime (Phi Silica) failed ({phiError}). Procedural Fallback Template Engine was activated to ensure stability.";
+                    SettingsService.Save(settingsFail);
+                    
+                    throw new InvalidOperationException($"Windows Copilot Runtime (Phi Silica) failed ({phiError})", ex);
+                }
+            }
+            else
+            {
+                // For OnnxGenAiSmartService, it has its own cascading fallbacks and saves its own execution status
+                return await service.GenerateResponseAsync(systemPrompt, userPrompt, ct);
+            }
         }
     }
 }
