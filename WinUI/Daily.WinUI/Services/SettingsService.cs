@@ -159,46 +159,20 @@ public static class SettingsService
         try
         {
             string dir = GetModelDirectory(modelId);
-            string modelPath = Path.Combine(dir, "model.onnx");
-            string configPath = Path.Combine(dir, "config.json");
+            string modelPath = Path.Combine(dir, "model.gguf");
             
-            if (!Directory.Exists(dir) || !File.Exists(modelPath) || !File.Exists(configPath))
+            if (!Directory.Exists(dir) || !File.Exists(modelPath))
             {
                 return false;
             }
 
-            if (modelId == "llama32_1b")
-            {
-                string dataPath = Path.Combine(dir, "model.onnx.data");
-                if (!File.Exists(dataPath)) return false;
-                var dataInfo = new FileInfo(dataPath);
-                return dataInfo.Length > 500000000;
-            }
-            else if (modelId == "phi35_mini")
-            {
-                string dataPath = Path.Combine(dir, "model.onnx.data");
-                if (!File.Exists(dataPath)) return false;
-                var dataInfo = new FileInfo(dataPath);
-                return dataInfo.Length > 1500000000;
-            }
-            else if (modelId == "qwen25_15b")
-            {
-                var modelInfo = new FileInfo(modelPath);
-                return modelInfo.Length > 500000000;
-            }
-            else if (modelId == "gemma3_1b")
-            {
-                string dataPath = Path.Combine(dir, "model_q4.onnx_data");
-                if (!File.Exists(dataPath)) return false;
-                var dataInfo = new FileInfo(dataPath);
-                return dataInfo.Length > 400000000;
-            }
+            var info = new FileInfo(modelPath);
+            return info.Length > 100000000; // Simple size check (>100MB) for valid GGUF download
         }
         catch
         {
             return false;
         }
-        return false;
     }
 
     public static string GetProcessorName()
@@ -228,11 +202,15 @@ public static class SettingsService
                 {
                     return "Qualcomm Hexagon NPU (45 TOPS)";
                 }
-                if (name.Contains("Ultra") || name.Contains("Intel") && (name.Contains("Core(TM) Ultra") || name.Contains("Lunar Lake")))
+                if ((name.Contains("Intel") || name.Contains("Core")) && 
+                    (name.Contains("Ultra") || name.Contains("Lunar Lake") || name.Contains("Arrow Lake") || name.Contains("Meteor Lake")))
                 {
                     return "Intel(R) AI Boost NPU (48 TOPS)";
                 }
-                if (name.Contains("Ryzen") || name.Contains("AMD") && (name.Contains("AI") || name.Contains("Strix Point") || name.Contains("7840") || name.Contains("8840")))
+                if ((name.Contains("AMD") || name.Contains("Ryzen")) && 
+                    (name.Contains("AI") || name.Contains("Strix") || name.Contains("Kraken") || name.Contains("Phoenix") ||
+                     name.Contains("7840") || name.Contains("8840") || name.Contains("8940") ||
+                     name.Contains("370") || name.Contains("365") || name.Contains("350")))
                 {
                     return "AMD Ryzen AI NPU (50 TOPS)";
                 }

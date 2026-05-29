@@ -1,6 +1,6 @@
-# Feature: Local Smart Intelligence (On-Device NPU/GPU AI)
+# Feature: Local Smart Briefing (On-Device NPU/GPU AI)
 
-The Local Smart Intelligence feature integrates lightweight, privacy-first, on-device Small Language Models (SLMs) into the Daily application. It utilizes hardware-accelerated NPUs (Neural Processing Units) and GPUs to power local content summarization, vitals trend analysis, budget recommendations, and daily schedule narrative briefings, all without transmitting personal user data to third-party cloud servers.
+The Local Smart Briefing feature integrates lightweight, privacy-first, on-device Small Language Models (SLMs) into the Daily application. It utilizes hardware-accelerated NPUs (Neural Processing Units) and GPUs to power local content summarization, vitals trend analysis, budget recommendations, and daily schedule narrative briefings, all without transmitting personal user data to third-party cloud servers.
 
 ---
 
@@ -8,10 +8,10 @@ The Local Smart Intelligence feature integrates lightweight, privacy-first, on-d
 
 ### 1.1 Local Intelligence Engine
 - **Hardware-Aware Execution**: The app detects the host machine's hardware capabilities at launch to determine execution strategies:
-  - **Copilot+ NPU Acceleration**: On Copilot+ PCs (e.g., ARM64 Snapdragon X Elite, or Intel Lunar Lake / AMD Strix Point devices with 40+ TOPS NPUs), the app runs workloads on the dedicated NPU.
-  - **GPU Acceleration**: On devices with dedicated GPUs (NVIDIA/AMD/Intel) or capable integrated graphics, the app falls back to GPU execution via DirectML.
+  - **Copilot+ NPU Acceleration**: On Copilot+ PCs (e.g., ARM64 Snapdragon X Elite devices with Qualcomm Hexagon NPUs), the app runs workloads on the dedicated NPU.
+  - **GPU Acceleration**: On devices with dedicated GPUs (NVIDIA/AMD) or capable integrated graphics, the app falls back to GPU execution via LLamaSharp (using Vulkan/CUDA).
   - **CPU Fallback**: For older hardware, workloads run on the CPU (using optimized INT4 quantized weights). If no local model is ready or download is cancelled, the system falls back immediately to a structured C# template to guarantee absolute app stability.
-- **Zero-Installer Bloat (Download-on-Demand)**: To keep the initial application installer small (~80MB), the local AI model is not pre-packaged. Instead, users are prompted in the Settings screen to download a **Local Intelligence Pack** (~670MB) containing optimized INT4 weights for Llama 3.2 1B Instruct. The pack is saved locally in `%LocalAppData%\Daily.WinUI\models\llama1b`.
+- **Zero-Installer Bloat (Download-on-Demand)**: To keep the initial application installer small (~80MB), the local AI model is not pre-packaged. Instead, users are prompted in the Settings screen to download a **Local Intelligence Pack** (~600MB) containing optimized INT4 GGUF weights. The pack is saved locally in `%LocalAppData%\Daily.WinUI\models\<model_folder>\model.gguf`.
 
 ### 1.2 Smart Features Suite
 
@@ -49,18 +49,18 @@ The app implements a **Hybrid AI Provider** model to bridge the gap between plat
 ```mermaid
 graph TD
     A["Initialize AI Engine"] --> B{"Is Copilot+ NPU Available?"}
-    B -- "Yes (Win 11 24H2)" --> C["Use Windows App SDK AI APIs: Phi Silica"]
+    B -- "Yes (Qualcomm NPU)" --> C["Use Windows App SDK AI APIs: Phi Silica Engine"]
     B -- "No" --> D{"Is Local Model Downloaded?"}
-    D -- "Yes" --> E["Use ONNX Runtime GenAI + DirectML/QNN EP"]
-    D -- "No" --> F["Prompt User to Download Model / Fallback to Procedural Template"]
+    D -- "Yes" --> E["Use LLamaSharp GGUF Engine via GPU/CPU"]
+    D -- "No" --> F["Prompt User to Download Model / Fallback to C# Template"]
 ```
 
 1. **Windows Copilot Runtime (Built-in Phi Silica)**
    - Utilizes Windows 11's built-in **Phi Silica** (3.3B parameter SLM) via native Windows App SDK APIs.
    - **Advantage**: Requires zero additional downloads, uses the NPU directly with high energy efficiency, and lifecycle management is handled by the OS.
-2. **ONNX Runtime GenAI (BYOM fallback)**
-   - Executes custom quantized models (specifically Llama-3.2-1B-Instruct-INT4) using `Microsoft.ML.OnnxRuntimeGenAI.DirectML` or the `QNN` Execution Provider.
-   - **Advantage**: Works across all Windows hardware (GPU, Intel/AMD/Qualcomm NPUs, and CPUs).
+2. **LLamaSharp GGUF Engine (BYOM fallback)**
+   - Executes custom quantized models (specifically Llama-3.2-1B, Qwen-2.5-1.5B, Gemma-3-1B, and Phi-3.5-Mini) in GGUF format using Vulkan/CUDA GPU runtimes or CPU instructions.
+   - **Advantage**: Works across all Windows hardware (NVIDIA, AMD, Intel GPU, and CPUs).
 
 ### 2.2 API Blueprint & Implementation
 
@@ -78,16 +78,29 @@ public interface ISmartIntelligenceService
 using Microsoft.Windows.AI;
 using Microsoft.Windows.AI.Text;
 
-public class PhiSilicaSmartService : ISmartIntelligenceService
+public class PhiSilicaNpuEngine : ISmartBriefingEngine
 {
     private LanguageModel? _model;
+    private bool _initialized;
 
-    public async Task<bool> IsModelReadyAsync()
+    public async Task<bool> IsSupportedAsync()
     {
         try
         {
+            // Unlocks Microsoft Limited Access Feature (LAF) prior to query
+            var access = Windows.ApplicationModel.LimitedAccessFeatures.TryUnlockFeature(
+                "com.microsoft.windows.ai.languagemodel",
+                "bm83TtgNO2HbnbBAf79aIQ==",
+                "1z32rh13vfry6 has registered their use of com.microsoft.windows.ai.languagemodel with Microsoft and agrees to the terms of use.");
+
+            if (access.Status != Windows.ApplicationModel.LimitedAccessFeatureStatus.Available &&
+                access.Status != Windows.ApplicationModel.LimitedAccessFeatureStatus.AvailableWithoutToken)
+            {
+                return false;
+            }
+
             var state = LanguageModel.GetReadyState();
-            return state == AIFeatureReadyState.Ready;
+            return state == AIFeatureReadyState.Ready || state == AIFeatureReadyState.NotReady;
         }
         catch
         {
@@ -95,16 +108,16 @@ public class PhiSilicaSmartService : ISmartIntelligenceService
         }
     }
 
-    public async Task<string> GenerateResponseAsync(string systemPrompt, string userPrompt, CancellationToken ct = default)
+    public async Task InitializeAsync()
     {
-        if (_model == null)
-        {
-            _model = await LanguageModel.CreateAsync();
-        }
-        
-        string prompt = $"<|system|>\n{systemPrompt}<|end|>\n<|user|>\n{userPrompt}<|end|>\n<|assistant|>\n";
-        var result = await _model.GenerateResponseAsync(prompt).AsTask(ct);
-        
+        if (_initialized) return;
+        _model = await LanguageModel.CreateAsync();
+        _initialized = true;
+    }
+
+    public async Task<string> GenerateBriefingAsync(string prompt)
+    {
+        var result = await _model.GenerateResponseAsync(prompt);
         if (result.Status == LanguageModelResponseStatus.Complete)
         {
             return result.Text;
@@ -114,60 +127,58 @@ public class PhiSilicaSmartService : ISmartIntelligenceService
 }
 ```
 
-#### 2.2.3 ONNX Runtime GenAI (DirectML/QNN) Integration
-Requires the `Microsoft.ML.OnnxRuntimeGenAI.DirectML` NuGet package.
-
+#### 2.2.3 LLamaSharp GGUF Integration
 ```csharp
-using Microsoft.ML.OnnxRuntimeGenAI;
+using LLama;
+using LLama.Common;
 
-public class OnnxGenAiSmartService : ISmartIntelligenceService
+public class LLamaUniversalEngine : ISmartBriefingEngine, IDisposable
 {
-    private Model? _model;
-    private Tokenizer? _tokenizer;
-    private readonly string _modelPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Daily.WinUI", "models", "llama1b");
+    private readonly bool _allowGpuOffload;
+    private LLamaWeights? _weights;
+    private string? _loadedModelPath;
+    private bool _initialized;
 
-    public Task<bool> IsModelReadyAsync()
+    public async Task InitializeAsync()
     {
-        string filePath = Path.Combine(_modelPath, "model.onnx");
-        return Task.FromResult(Directory.Exists(_modelPath) && File.Exists(filePath));
+        var settings = SettingsService.Load();
+        string selectedModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+        string modelPath = Path.Combine(SettingsService.GetModelDirectory(selectedModelId), "model.gguf");
+
+        if (_initialized && _loadedModelPath == modelPath && _weights != null) return;
+
+        // Clean up previous weights before loading new ones
+        _weights?.Dispose();
+        _weights = null;
+        _initialized = false;
+
+        var parameters = new ModelParams(modelPath)
+        {
+            ContextSize = 4096,
+            GpuLayerCount = _allowGpuOffload ? 99 : 0
+        };
+
+        _weights = await Task.Run(() => LLamaWeights.LoadFromFile(parameters));
+        _loadedModelPath = modelPath;
+        _initialized = true;
     }
 
-    public async Task<string> GenerateResponseAsync(string systemPrompt, string userPrompt, CancellationToken ct = default)
+    public async Task<string> GenerateBriefingAsync(string prompt)
     {
-        if (_model == null)
+        var parameters = new ModelParams(_loadedModelPath)
         {
-            await Task.Run(() =>
-            {
-                _model = new Model(_modelPath);
-                _tokenizer = new Tokenizer(_model);
-            });
-        }
+            ContextSize = 4096,
+            GpuLayerCount = _allowGpuOffload ? 99 : 0
+        };
 
-        // Llama 3 Chat Format
-        string formattedPrompt = $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{userPrompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
-        StringBuilder responseText = new StringBuilder();
-
-        await Task.Run(() =>
-        {
-            using var tokens = _tokenizer.Encode(formattedPrompt);
-            using var generatorParams = new GeneratorParams(_model);
-            generatorParams.SetSearchOption("max_length", 2048);
-
-            using var generator = new Generator(_model, generatorParams);
-            generator.AppendTokenSequences(tokens);
-            using var tokenizerStream = _tokenizer.CreateStream();
-
-            while (!generator.IsDone() && !ct.IsCancellationRequested)
-            {
-                generator.GenerateNextToken();
-                var sequence = generator.GetSequence(0);
-                var newToken = sequence[^1];
-                string chunk = tokenizerStream.Decode(newToken);
-                responseText.Append(chunk);
-            }
-        }, ct);
-
-        return responseText.ToString();
+        using var context = _weights.CreateContext(parameters);
+        var executor = new StatelessExecutor(_weights, parameters);
+        // Execute token generation loop...
+    }
+    
+    public void Dispose()
+    {
+        _weights?.Dispose();
     }
 }
 ```
@@ -175,59 +186,32 @@ public class OnnxGenAiSmartService : ISmartIntelligenceService
 ### 2.3 Local Manifest Data Model (`settings.json` entry)
 ```json
 {
-  "StartupSmartBriefing": true,
-  "SelectedAiAccelerator": "Auto",
-  "AiModelPath": "%LocalAppData%/Daily.WinUI/models/llama1b"
+  "EnableSmartBriefing": true,
+  "SelectedAiAccelerator": "GPU",
+  "SelectedLocalAiModel": "gemma3_1b",
+  "UseWindowsInternalAi": false
 }
 ```
 
-### 2.4 Packaging & DLL Conflict Resolution
+### 2.4 Packaging & Isolated Backend Copying
+When packaging a WinUI 3 application, multiple `LLamaSharp.Backend.*` packages (e.g. Vulkan and CUDA) conflict by copying their custom compile outputs to the same target DLL name (`llama.dll`).
 
-When building a self-contained packaged WinUI 3 application using the Windows App SDK, a conflict arises between the transitive dependency `Microsoft.WindowsAppSDK.ML` (which bundles an older version of `DirectML.dll` and `onnxruntime.dll` for WinML) and `Microsoft.ML.OnnxRuntimeGenAI.DirectML` (which requires newer versions of the same DLLs). 
-
-To resolve this conflict and allow hardware-accelerated execution:
-1. **Exclude Transitive Assets**: We explicitly add a PackageReference to the conflicting package with `ExcludeAssets="all"` in [Daily.WinUI.csproj](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Daily.WinUI.csproj):
+To resolve this conflict, the project targets copy backend runtimes into isolated subfolders and registers them inside the MSIX package layout:
+1. **Isolated Copy Target**: Copies backend DLLs from NuGet packages into `runtimes\win-x64\native\<backend_name>` directories.
+2. **AppX Packaging Target**: Inserts these runtimes into the app payload:
    ```xml
-   <PackageReference Include="Microsoft.WindowsAppSDK.ML" Version="1.8.2141" ExcludeAssets="all" />
-   ```
-2. **Exclude Components from Packaging**: We declare custom targets `RemoveWindowsAppSDKMLFilesFromPayload` and `FilterPackagingOutputs` in [Daily.WinUI.csproj](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Daily.WinUI.csproj) to remove the older, conflicting DLLs (`DirectML.dll`, `onnxruntime.dll`, and `onnxruntime_providers_shared.dll`) that are transitively placed in `MsixContent` by the Windows App SDK. By utilizing clean MSBuild wildcard filters, we bypass static property function limitations:
-   ```xml
-   <Target Name="RemoveWindowsAppSDKMLFilesFromPayload" BeforeTargets="GetCopyToOutputDirectoryItems;CopyFilesToOutputDirectory;_ComputeAppxPackagePayload">
+   <Target Name="AddLLamaBackendsToPayload" BeforeTargets="_ComputeAppxPackagePayload">
      <ItemGroup>
-       <None Remove="**\MsixContent\DirectML.dll" />
-       <None Remove="**\MsixContent\onnxruntime.dll" />
-       <None Remove="**\MsixContent\onnxruntime_providers_shared.dll" />
-       <None Remove="**\MsixContent\DirectML.pdb" />
-       <None Remove="**/MsixContent/DirectML.dll" />
-       <None Remove="**/MsixContent/onnxruntime.dll" />
-       <None Remove="**/MsixContent/onnxruntime_providers_shared.dll" />
-       <None Remove="**/MsixContent/DirectML.pdb" />
-
-       <Content Remove="**\MsixContent\DirectML.dll" />
-       <Content Remove="**\MsixContent\onnxruntime.dll" />
-       <Content Remove="**\MsixContent\onnxruntime_providers_shared.dll" />
-       <Content Remove="**\MsixContent\DirectML.pdb" />
-       <Content Remove="**/MsixContent/DirectML.dll" />
-       <Content Remove="**/MsixContent/onnxruntime.dll" />
-       <Content Remove="**/MsixContent/onnxruntime_providers_shared.dll" />
-       <Content Remove="**/MsixContent/DirectML.pdb" />
-     </ItemGroup>
-   </Target>
-
-   <Target Name="FilterPackagingOutputs" AfterTargets="_ComputeAppxPackagePayload">
-     <ItemGroup>
-       <PackagingOutputs Remove="**\MsixContent\DirectML.dll" />
-       <PackagingOutputs Remove="**\MsixContent\onnxruntime.dll" />
-       <PackagingOutputs Remove="**\MsixContent\onnxruntime_providers_shared.dll" />
-       <PackagingOutputs Remove="**\MsixContent\DirectML.pdb" />
-       <PackagingOutputs Remove="**/MsixContent/DirectML.dll" />
-       <PackagingOutputs Remove="**/MsixContent/onnxruntime.dll" />
-       <PackagingOutputs Remove="**/MsixContent/onnxruntime_providers_shared.dll" />
-       <PackagingOutputs Remove="**/MsixContent/DirectML.pdb" />
+       <BackendFiles Include="$(OutputPath)runtimes\**\*.*" />
+       <PackagingOutputs Include="@(BackendFiles)">
+         <TargetPath>runtimes\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+         <ProjectName>$(MSBuildProjectName)</ProjectName>
+         <OutputGroup>LLamaBackendsGroup</OutputGroup>
+       </PackagingOutputs>
      </ItemGroup>
    </Target>
    ```
-This ensures the final packaged MSIX contains the correct, newer `DirectML.dll` and `onnxruntime.dll` versions required by ONNX Runtime GenAI for GPU/NPU acceleration.
+3. **Dynamic DLL Search Preloading**: At runtime, `AIManager` calls `SetDllDirectory()` pointing to the isolated subdirectory (`cuda12` or `vulkan`) before `LLamaUniversalEngine` loads, ensuring the correct vendor DLL is resolved.
 
 ---
 
@@ -235,21 +219,20 @@ This ensures the final packaged MSIX contains the correct, newer `DirectML.dll` 
 
 ### 3.1 Integrated Views & Interacting Panels
 - **Smart Briefing Overlay**: A premium welcome screen that overlays the main dashboard (frosted glassmorphism, adapting to light/dark themes).
-  - *Dynamic Typing Narrative*: A Samsung Bixby/Assistant-style text typing block displaying time-adapted greetings and summarized daily highlights.
+  - *Dynamic Typing Narrative*: A Bixby/Assistant-style text typing block displaying time-adapted greetings and summarized daily highlights.
   - *Typewriter Animation Milestones*: Visual cards slide up and fade into view sequentially as typing progress metrics are reached:
     - **20% Progress**: Fades in the *Weather Forecast card* (max temp, 3-day preview).
     - **40% Progress**: Fades in the *Health & Vitals card* (steps progress, sleep duration, resting heart rate).
     - **60% Progress**: Fades in the *Finances & Watchlist card* (net worth, ticker changes).
     - **80% Progress**: Fades in the *Habits Tracker card* (completion ratio, circular progress).
     - **92% Progress**: Fades in the *AI News Recommendations card* (embedded `NewsRecommendationsWidgetControl` showing custom feed topics).
-  - *Responsive Layout & Docking*: Listens to window resizing to toggle layouts. Wide window widths display narrative and cards side-by-side (24px margins). When docked or resized under 850px width, panels stack vertically with narrow margins (6px margins) to optimize layout density.
+  - *Responsive Layout & Docking*: Listens to window resizing to toggle layouts. Wide window widths display narrative and cards side-by-side. When docked or resized under 850px width, panels stack vertically with narrow margins to optimize layout density.
   - *Start My Day Centering*: The primary action button and "Show at startup" checkbox are vertically and horizontally centered in the actions panel.
 - **Settings Panel (AI & Accelerator Preferences)**:
   - Toggle switch for "Startup Smart Briefing" which saves state immediately.
-  - Local AI Accelerator combo box to select the hardware device (`Auto`, `NPU`, `GPU (DirectML)`, `CPU`).
+  - Local AI Accelerator combo box to select the hardware device (`Auto`, `NPU`, `GPU`, `CPU`, `Fallback`).
   - NPU/Hardware engine detection displaying dynamic recommendations ("Recommended for your system") based on CPU/NPU hardware capabilities.
-  - "Download AI Pack" button executing a real sequential download from Hugging Face for the ~670MB model weights, displaying real-time speed (MB/s), completion percentage, and estimated time remaining (ETA) with cancellation support.
-
+  - "Download AI Pack" button executing a download from Hugging Face for the optimized model weights, displaying real-time speed (MB/s), completion percentage, and estimated time remaining (ETA).
 
 ---
 
@@ -257,7 +240,7 @@ This ensures the final packaged MSIX contains the correct, newer `DirectML.dll` 
 
 | Characteristic | WinUI Implementation | MAUI / Blazor Hybrid Implementation |
 | :--- | :--- | :--- |
-| **Model Runtime** | Direct access to `ONNX Runtime GenAI` and Windows Copilot Runtime APIs | Integrates via native platform-specific OS runtime bindings |
-| **NPU Interface** | DirectML / QNN Execution Provider (`QnnHtp.dll` for Snapdragon) | iOS: Apple Intelligence / CoreML (Apple Neural Engine). Android: Gemini Nano / Google AICore APIs |
-| **Model Size / Options** | Custom 1.5B–3.8B parameters models (INT4 quantized) | System-managed models (Gemini Nano on Android, Apple intelligence models on iOS) |
+| **Model Runtime** | Direct access to `LLamaSharp` GGUF engine and Windows Copilot Runtime | Integrates via native platform-specific OS runtime bindings |
+| **NPU Interface** | Windows App SDK LanguageModel API (`PhiSilicaNpuEngine`) | iOS: Apple Intelligence / CoreML. Android: Gemini Nano / Google AICore APIs |
+| **Model Size / Options** | Custom 1.0B–3.8B parameters GGUF models | System-managed models (Gemini Nano on Android, Apple intelligence models on iOS) |
 | **User Settings UI** | Custom WinUI Settings panel with download-on-demand progress bars | Platform system settings or Blazor settings configurations |

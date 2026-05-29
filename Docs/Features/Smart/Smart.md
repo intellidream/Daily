@@ -12,32 +12,29 @@ Daily supports two parallel local AI executing backends depending on the host ma
 * **Hardware Target**: Qualcomm Hexagon NPU (45 TOPS) on Snapdragon X Elite/Plus processors (Copilot+ PCs).
 * **Integration**: Utilizes the native Windows `LanguageModel` WinRT API.
 * **Benefits**: Extremely fast generation speeds and zero-download configuration (the weights are pre-provisioned by Windows Update and kept warm in memory by the OS).
-* **Toggles & Fallbacks**: The UI includes a "Use Windows built-in AI engine (Phi Silica)" checkbox for Snapdragon devices. When checked, the app prioritizes Phi Silica. When unchecked, it bypasses the built-in runtime and utilizes DirectML custom downloaded models (e.g., Llama 3.2 1B), allowing full developer customization and offline model usage even on NPU-equipped machines.
+* **LAF Token Access**: Requires Microsoft Limited Access Feature (LAF) unlock token to instantiate the engine.
 
-### B. ONNX Runtime Generative AI (DirectML Backend)
-* **Underlying Models**: Downloadable custom models (Llama 3.2 1B, Qwen 2.5 1.5B, Gemma 3 1B, Phi 3.5 Mini 3.8B).
-* **Hardware Target**: Graphics Cards (GPUs) and Processors (CPUs) via Microsoft **DirectML**.
-* **Integration**: Utilizes `Microsoft.ML.OnnxRuntimeGenAI` for model loading, tokenization, and auto-regressive generation.
-* **Benefits**: Runs on any Windows 11 hardware setup (Intel, AMD, NVIDIA) with fallback capability.
+### B. LLamaSharp GGUF Engine (GPU/CPU Backend)
+* **Underlying Models**: Downloadable custom GGUF models (Llama 3.2 1B, Qwen 2.5 1.5B, Gemma 3 1B, Phi 3.5 Mini 3.8B).
+* **Hardware Target**: Dedicated Graphics Cards (GPUs) and Central Processors (CPUs) via **LLamaSharp** utilizing Cuda12 or Vulkan backends.
+* **Integration**: Utilizes runtime-loaded `llama.dll` backends to support dynamic GPU layer offloading (`GpuLayerCount = 99`).
+* **Benefits**: Broad cross-compatibility with fallback capability on non-NPU hardware.
 
 ---
 
-## 2. Dynamic Model Downloads & Configuration Patching
-For the DirectML backend, the application dynamically downloads model weights from Hugging Face and applies local patches:
+## 2. Dynamic Model Downloads & Weights Management
+For the LLamaSharp backend, the application dynamically downloads GGUF model weights from Hugging Face:
 
 ### Download Targets
-* **Llama 3.2 1B Instruct (INT4)**: `onnx-community/Llama-3.2-1B-Instruct-GENAI-ONNX` inside `cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/`.
-* **Qwen 2.5 1.5B Instruct (INT4)**: `onnx-community/Qwen2.5-1.5B-Instruct` inside `onnx/`.
-* **Gemma 3 1B Instruct (INT4)**: `onnx-community/gemma-3-1b-it-ONNX` inside `onnx/`.
-* **Phi 3.5 Mini Instruct (INT4)**: `microsoft/Phi-3.5-mini-instruct-onnx` inside `cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/`.
+* **Llama 3.2 1B Instruct (GGUF)**: Saved to `%LocalAppData%\Daily.WinUI\models\llama1b\model.gguf`.
+* **Qwen 2.5 1.5B Instruct (GGUF)**: Saved to `%LocalAppData%\Daily.WinUI\models\qwen15b\model.gguf`.
+* **Gemma 3 1B Instruct (GGUF)**: Saved to `%LocalAppData%\Daily.WinUI\models\gemma1b\model.gguf`.
+* **Phi 3.5 Mini Instruct (GGUF)**: Saved to `%LocalAppData%\Daily.WinUI\models\phi35\model.gguf`.
 
-### Post-Download Patching
-Custom ONNX web-conversions lack standard GenAI metadata files. The `ModelDownloadManager` applies the following patching steps on download completion:
-1. **ONNX Filename Normalization**: Renames the quantized model file (e.g., `model_q4.onnx` or `phi-3.5...onnx`) to `model.onnx`.
-2. **GenAI Configuration Generation**: Programmatically writes a default `genai_config.json` that sets parameters missing from web-bound configurations:
-   * **Context Length**: Enforces `"context_length": 2048` to avoid runtime memory limits.
-   * **Vocabulary Size**: Supplies `"vocab_size": 151936` (Qwen) or `"vocab_size": 262144` (Gemma) to prevent initialization failures.
-   * **Buffer Sharing**: Configures `"past_present_share_buffer": true` inside `"search"` block. This allows **DirectML Graph Capture** (which speed ups GPU dispatch) and prevents KV cache shape mismatch exceptions during execution.
+### Memory Cleanup & Re-initialization
+To support dynamic settings switches without application memory bloat or driver crashes:
+1. **Dynamic Model Reloading**: The `LLamaUniversalEngine` tracks the path of the loaded weights (`_loadedModelPath`). If a user changes models in Settings, the previous weights are disposed (`_weights?.Dispose()`) and the new GGUF file is loaded on the next execution.
+2. **Accelerator Switching**: When the active accelerator changes, the `AIManager` calls `SetActiveEngine()`, which disposes the previously selected engine to cleanly release system memory and VRAM before initializing the new target backend.
 
 ---
 
@@ -79,58 +76,61 @@ To extract clean narrative summaries and structured JSON widgets, input prompts 
 
 ---
 
-## 4. Calibration Memory & Cascading Fallbacks
-To provide maximum stability across diverse hardware setups, the `OnnxGenAiSmartService` implements a self-calibrating execution memory.
+## 4. Hardware Routing Strategy & Cascading Fallbacks
+To provide maximum stability across diverse hardware setups, the `AIManager` implements the Strategy Pattern to orchestrate cascading fallbacks.
 
 ```mermaid
 graph TD
-    A[Start Smart Generation] --> B{Resolve Accelerator}
-    B -- Auto --> C{Check Failure Memory}
-    C -- GPU Failed Before --> D[Select CPU Mode]
-    C -- GPU Clean --> E[Select GPU Mode]
-    B -- Explicit Selection --> F[Select User Custom Device]
+    A[Start Smart Generation] --> B{Check Selected Accelerator}
+    B -- Auto/NPU --> C{Is Windows Internal AI enabled?}
+    C -- Yes --> D{Try Qualcomm Hexagon NPU}
+    D -- Supported & LAF Unlocked --> E[PhiSilicaNpuEngine]
+    D -- Unsupported/Failed --> F{Try GPU Acceleration}
     
-    D --> G[Attempt Load & Execute]
-    E --> G
-    F --> G
+    B -- GPU --> F
+    F -- Loadable & Verified --> G[LLamaUniversalEngine - GPU Mode]
+    F -- Failed --> H[LLamaUniversalEngine - CPU Mode]
     
-    G -- Success --> H[Record 'Working' in Settings]
-    G -- Failure --> I[Record 'Failed' in Settings]
-    I --> J{Fallback Options Available?}
-    J -- Yes: CPU Fallback / Other Models --> B
-    J -- No: All Failed --> K[Default to Procedural Template Engine]
+    B -- CPU --> H
+    B -- Fallback --> I[Default C# Template Engine]
 ```
 
-### Key Elements
+### Key Components
 
-#### A. Calibration Memory (`ModelExecutionHistory`)
-We store the execution history for each `(ModelId, Accelerator)` pair inside `settings.json`. If a model fails to initialize or execute (e.g. driver parameter crashes), it is marked as `Failed` along with a user-friendly error description. Successful executions are marked as `Working`.
+#### A. WMI Device Detection & In-Process Load Checks
+Rather than executing a separate child process for dry-running DLLs, `AIManager` performs an in-process verification check. It detects GPU hardware vendor properties via WMI queries and uses safe `LoadLibraryEx` Win32 API calls to verify if the native `llama.dll` and its backend runtime dependencies (such as CUDA or Vulkan) are loadable before attempting initialization.
 
-#### B. The Execution Fallback Cascade
-When a generation is requested, the system attempts the following chain:
-1. **User's Choice**: Try to run the selected model on the selected hardware.
-2. **CPU Safe Fallback**: If it was running on GPU/NPU and fails, it immediately attempts to load the same model on CPU.
-3. **Cross-Model Fallback**: If the model fails entirely, the service scans other downloaded models on disk, prioritizing models with a recorded `Working` status (e.g. defaulting back to a verified Llama 3.2 configuration).
-4. **Basic Engine Fallback**: If all local models fail, it falls back to the rule-based procedural template engine.
-
-#### C. Smart `Auto` Resolution
-The `Auto` accelerator setting dynamically reads the calibration history. If DirectML GPU is recommended but has a recorded `Failed` history on this machine, `Auto` bypasses GPU and maps execution straight to the CPU, avoiding application stalls.
-
-#### D. Calibration Warning Panel
-The Settings Page reads `LastExecutionExplanation` from settings to display a system status warning in the UI:
-* Displays a detailed step-by-step description of any fallbacks or redirections that occurred during the last briefing run.
-* Keeps the user informed in natural, non-technical language (or detailed exception descriptions when debugging runtime features) about why the app chose the active backend.
-
-#### E. Windows Copilot Runtime (Phi Silica) Diagnostics & Fallback
-Because Phi Silica is restricted to packaged (MSIX) applications and requires Microsoft's Limited Access Feature (LAF) authorization, it can fail to load (throwing `System.UnauthorizedAccessException` with Status `3` / `Unknown` if the developer unlock token is missing or if OS builds are mismatched). 
-To handle and debug this:
-* **Resilient Fallback**: If Phi Silica fails to initialize or run, the system catches the exception and immediately attempts to redirect execution to the custom ONNX model (e.g. Llama 3.2) if downloaded and verified on disk.
-* **Detailed Diagnostic Logging**: The specific exception and error status are saved to `settings.LastExecutionExplanation`. This propagates directly to the **System Calibration Memory** panel in Settings, showing the exact error (such as `Access Denied. Limited access feature is not available. com.microsoft.windows.ai.languagemodel. Status: 3`) to help developers and users diagnose licensing or OS configuration issues.
+#### B. The Strategy Router (`AIManager.cs`)
+1. **Qualcomm NPU Check**: If `UseWindowsInternalAi` is checked and the device features Qualcomm NPU architecture, the engine attempts to boot `PhiSilicaNpuEngine`.
+2. **GPU Acceleration**: Attempts to load the GPU version of `llama.dll` (utilizing `cuda12` for NVIDIA and `vulkan` for AMD).
+3. **CPU Mode**: If GPU loading checks fail, it falls back to the CPU engine using optimized `ggml-cpu.dll` libraries (auto-detecting `avx2`, `avx`, or `noavx` CPU instruction support).
+4. **Basic Template Fallback**: If no engines are loadable or the user selects "Fallback Template Engine" in settings, the briefing defaults immediately to C# procedural narrative generation.
 
 ---
 
-## 5. Desktop vs. Mobile Performance Benchmarks
-From our initial research, desktop NPUs (Intel AI Boost / AMD Ryzen AI) experience initial performance bottlenecks due to differences in software frameworks compared to mobile systems:
+## 5. Windows Copilot Runtime (Phi Silica) Limited Access Feature (LAF) Unlock
+To utilize the native on-device Snapdragon NPU LanguageModel API, the application must register and unlock Microsoft's Limited Access Feature (LAF) at process startup.
 
-1. **System Service Architectures**: Mobile OS flagships (e.g., Android AICore) load model weights once during device boot and keep them warm. Desktop applications load models into RAM/VRAM on-demand, causing a 2-5 second delay during first run. (We bypass this in Daily by pre-loading and pre-generating the briefing asynchronously at application launch).
-2. **DirectML Driver Mapping**: While DirectML is highly optimized for GPUs, it lacks vendor-optimized pipelines for NPUs. Targeting Intel/AMD NPUs directly requires compiler-specific runtimes (Intel OpenVINO / AMD Vitis AI). Phi Silica bypasses this on Qualcomm NPUs by communicating directly via native QNN drivers.
+### Unlock Details
+- **Feature Name**: `com.microsoft.windows.ai.languagemodel`
+- **LAF Token Value**: `bm83TtgNO2HbnbBAf79aIQ==`
+- **Registration Attribution**: `"1z32rh13vfry6 has registered their use of com.microsoft.windows.ai.languagemodel with Microsoft and agrees to the terms of use."`
+
+### C# Implementation
+In `App.xaml.cs` (application constructor), the feature is unlocked:
+```csharp
+try
+{
+    var access = Windows.ApplicationModel.LimitedAccessFeatures.TryUnlockFeature(
+        "com.microsoft.windows.ai.languagemodel",
+        "bm83TtgNO2HbnbBAf79aIQ==",
+        "1z32rh13vfry6 has registered their use of com.microsoft.windows.ai.languagemodel with Microsoft and agrees to the terms of use.");
+    Console.WriteLine($"[App] Phi Silica LAF unlock status: {access.Status}");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[App] Phi Silica LAF unlock exception: {ex.Message}");
+}
+```
+
+This token ensures that when running on Snapdragon processors, the Windows App SDK generative APIs are authorized and ready.

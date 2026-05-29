@@ -77,17 +77,11 @@ namespace Daily_WinUI.Services
             {
                 "llama32_1b", new ModelDownloadInfo(
                     "llama32_1b",
-                    "https://huggingface.co/onnx-community/Llama-3.2-1B-Instruct-GENAI-ONNX/resolve/main/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/",
+                    "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/",
                     "llama1b",
                     new()
                     {
-                        new("config.json", "config.json", 50000),
-                        new("genai_config.json", "genai_config.json", 1000),
-                        new("special_tokens_map.json", "special_tokens_map.json", 100000),
-                        new("tokenizer.json", "tokenizer.json", 9100000),
-                        new("tokenizer_config.json", "tokenizer_config.json", 100000),
-                        new("model.onnx", "model.onnx", 16000000),
-                        new("model.onnx.data", "model.onnx.data", 1750000000)
+                        new("Llama-3.2-1B-Instruct-Q4_K_M.gguf", "model.gguf", 700000000)
                     },
                     false,
                     "llama"
@@ -96,52 +90,37 @@ namespace Daily_WinUI.Services
             {
                 "qwen25_15b", new ModelDownloadInfo(
                     "qwen25_15b",
-                    "https://huggingface.co/onnx-community/Qwen2.5-1.5B-Instruct/resolve/main/",
+                    "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/",
                     "qwen15b",
                     new()
                     {
-                        new("config.json", "config.json", 1000),
-                        new("special_tokens_map.json", "special_tokens_map.json", 1000),
-                        new("tokenizer.json", "tokenizer.json", 7100000),
-                        new("tokenizer_config.json", "tokenizer_config.json", 1000),
-                        new("onnx/model_q4.onnx", "model.onnx", 950000000)
+                        new("qwen2.5-1.5b-instruct-q4_k_m.gguf", "model.gguf", 950000000)
                     },
-                    true,
+                    false,
                     "qwen2"
                 )
             },
             {
                 "gemma3_1b", new ModelDownloadInfo(
                     "gemma3_1b",
-                    "https://huggingface.co/onnx-community/gemma-3-1b-it-ONNX/resolve/main/",
+                    "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/",
                     "gemma1b",
                     new()
                     {
-                        new("config.json", "config.json", 1000),
-                        new("special_tokens_map.json", "special_tokens_map.json", 1000),
-                        new("tokenizer.json", "tokenizer.json", 8100000),
-                        new("tokenizer_config.json", "tokenizer_config.json", 1000),
-                        new("onnx/model_q4.onnx", "model.onnx", 500000),
-                        new("onnx/model_q4.onnx_data", "model_q4.onnx_data", 750000000)
+                        new("google_gemma-3-1b-it-Q4_K_M.gguf", "model.gguf", 750000000)
                     },
-                    true,
+                    false,
                     "gemma2"
                 )
             },
             {
                 "phi35_mini", new ModelDownloadInfo(
                     "phi35_mini",
-                    "https://huggingface.co/microsoft/Phi-3.5-mini-instruct-onnx/resolve/main/cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/",
+                    "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/",
                     "phi35",
                     new()
                     {
-                        new("config.json", "config.json", 50000),
-                        new("genai_config.json", "genai_config.json", 1000),
-                        new("special_tokens_map.json", "special_tokens_map.json", 100000),
-                        new("tokenizer.json", "tokenizer.json", 9100000),
-                        new("tokenizer_config.json", "tokenizer_config.json", 100000),
-                        new("phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", "model.onnx", 55000000),
-                        new("phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data", "model.onnx.data", 2730000000)
+                        new("Phi-3.5-mini-instruct-Q4_K_M.gguf", "model.gguf", 2700000000)
                     },
                     false,
                     "phi"
@@ -396,67 +375,6 @@ namespace Daily_WinUI.Services
             }
 
             stopwatch.Stop();
-
-            // 3. Generate genai_config.json if requested
-            if (info.GenerateGenAiConfig)
-            {
-                UpdateStatus("Generating GenAI configuration...");
-                string genaiConfigPath = Path.Combine(targetDir, "genai_config.json");
-                string json;
-                if (info.ModelId == "qwen25_15b")
-                {
-                    json = @"{
-  ""model"": {
-    ""type"": ""qwen2"",
-    ""context_length"": 2048,
-    ""vocab_size"": 151936,
-    ""bos_token_id"": 151643,
-    ""eos_token_id"": 151645,
-    ""pad_token_id"": 151643,
-    ""decoder"": {
-      ""filename"": ""model.onnx""
-    }
-  },
-  ""search"": {
-    ""max_length"": 2048,
-    ""past_present_share_buffer"": true
-  }
-}";
-                }
-                else // gemma3_1b
-                {
-                    json = @"{
-  ""model"": {
-    ""type"": ""gemma2"",
-    ""context_length"": 2048,
-    ""vocab_size"": 262144,
-    ""bos_token_id"": 2,
-    ""eos_token_id"": 106,
-    ""pad_token_id"": 0,
-    ""decoder"": {
-      ""filename"": ""model.onnx""
-    }
-  },
-  ""search"": {
-    ""max_length"": 2048,
-    ""past_present_share_buffer"": true
-  }
-}";
-                }
-                await File.WriteAllTextAsync(genaiConfigPath, json, ct);
-            }
-            else if (info.ModelId == "phi35_mini")
-            {
-                // Patch the downloaded genai_config.json to reference model.onnx instead of the long original filename
-                string genaiConfigPath = Path.Combine(targetDir, "genai_config.json");
-                if (File.Exists(genaiConfigPath))
-                {
-                    UpdateStatus("Patching Phi 3.5 config...");
-                    string content = await File.ReadAllTextAsync(genaiConfigPath, ct);
-                    content = content.Replace("phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", "model.onnx");
-                    await File.WriteAllTextAsync(genaiConfigPath, content, ct);
-                }
-            }
 
             UpdateStatus("Verifying model files...");
         }

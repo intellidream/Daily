@@ -113,7 +113,7 @@ namespace Daily_WinUI.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Init Error: {ex.Message}");
+                Console.WriteLine($"[SmartBriefingService] Init Error: {ex.Message}");
             }
         }
 
@@ -162,7 +162,7 @@ namespace Daily_WinUI.Services
                 if (!coords.HasValue && settings.LastLatitude.HasValue && settings.LastLongitude.HasValue)
                 {
                     coords = (settings.LastLatitude.Value, settings.LastLongitude.Value);
-                    System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Location detection timed out/failed. Falling back to cached coords: {coords.Value.Latitude}, {coords.Value.Longitude}");
+                    Console.WriteLine($"[SmartBriefingService] Location detection timed out/failed. Falling back to cached coords: {coords.Value.Latitude}, {coords.Value.Longitude}");
                 }
 
                 if (coords.HasValue)
@@ -248,7 +248,7 @@ namespace Daily_WinUI.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Weather Fetch Error: {ex.Message}");
+                Console.WriteLine($"[SmartBriefingService] Weather Fetch Error: {ex.Message}");
             }
 
             // Fallback weather forecast if empty
@@ -311,7 +311,7 @@ namespace Daily_WinUI.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Health Fetch Error: {ex.Message}");
+                Console.WriteLine($"[SmartBriefingService] Health Fetch Error: {ex.Message}");
             }
             
             data.HealthSteps = steps;
@@ -383,7 +383,7 @@ namespace Daily_WinUI.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Finance Error: {ex.Message}");
+                Console.WriteLine($"[SmartBriefingService] Finance Error: {ex.Message}");
             }
 
             // Fallback stocks if empty
@@ -427,7 +427,7 @@ namespace Daily_WinUI.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Habits Error: {ex.Message}");
+                Console.WriteLine($"[SmartBriefingService] Habits Error: {ex.Message}");
             }
 
             // Calculate completed/total habits dynamically
@@ -500,7 +500,7 @@ namespace Daily_WinUI.Services
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Parallel feed fetch error: {ex.Message}");
+                        Console.WriteLine($"[SmartBriefingService] Parallel feed fetch error: {ex.Message}");
                     }
                 }
 
@@ -754,15 +754,40 @@ namespace Daily_WinUI.Services
                         $"--- RECENT USER BEHAVIOR TELEMETRY (Last 7 Days) ---\n" +
                         $"{behaviorSummary}";
 
+                    Console.WriteLine($"[SmartBriefingService] Calling GenerateResponseAsync...");
                     string responseText = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                    Console.WriteLine($"[SmartBriefingService] Response received. Length: {responseText?.Length ?? 0}");
+                    Console.WriteLine($"[SmartBriefingService] Raw Response:\n{responseText}\n[End Raw Response]");
                     
                     // Parse insights tag
                     string cleanBriefingText = responseText;
                     int startIndex = responseText.IndexOf("<insights>");
                     int endIndex = responseText.IndexOf("</insights>");
-                    if (startIndex >= 0 && endIndex > startIndex)
+                    string jsonContent = "";
+                    
+                    if (startIndex >= 0)
                     {
-                        string jsonContent = responseText.Substring(startIndex + 10, endIndex - (startIndex + 10)).Trim();
+                        if (endIndex > startIndex)
+                        {
+                            jsonContent = responseText.Substring(startIndex + 10, endIndex - (startIndex + 10)).Trim();
+                        }
+                        else
+                        {
+                            jsonContent = responseText.Substring(startIndex + 10).Trim();
+                        }
+                        
+                        // Strip any potential trailing tag if it was partially generated or present
+                        if (jsonContent.EndsWith("</insights>"))
+                        {
+                            jsonContent = jsonContent.Substring(0, jsonContent.Length - 11).Trim();
+                        }
+                        else if (jsonContent.Contains("</insights>"))
+                        {
+                            int idx = jsonContent.IndexOf("</insights>");
+                            jsonContent = jsonContent.Substring(0, idx).Trim();
+                        }
+
+                        Console.WriteLine($"[SmartBriefingService] Extracted JSON content:\n{jsonContent}\n[End JSON content]");
                         cleanBriefingText = responseText.Substring(0, startIndex).Trim();
                         
                         // Clean up trailing metadata transition lines (e.g. "Here is the JSON block...", "Below are the insights...")
@@ -791,6 +816,7 @@ namespace Daily_WinUI.Services
                         }
                         cleanBriefingText = string.Join("\n", lines).Trim();
                         
+                        bool parsed = false;
                         try
                         {
                             using var doc = System.Text.Json.JsonDocument.Parse(jsonContent);
@@ -799,10 +825,37 @@ namespace Daily_WinUI.Services
                             if (root.TryGetProperty("healthAdvice", out var h)) healthAdvice = h.GetString() ?? "";
                             if (root.TryGetProperty("financeAdvice", out var f)) financeAdvice = f.GetString() ?? "";
                             if (root.TryGetProperty("habitsAdvice", out var hb)) habitsAdvice = hb.GetString() ?? "";
+                            parsed = true;
                         }
-                        catch (Exception ex)
+                        catch
                         {
-                            System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] Failed to parse AI insights JSON: {ex.Message}");
+                            Console.WriteLine("[SmartBriefingService] JSON parsing failed. Attempting robust line-based key-value extraction for insights.");
+                        }
+
+                        if (!parsed)
+                        {
+                            try
+                            {
+                                var jsonLines = jsonContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                                foreach (var line in jsonLines)
+                                {
+                                    int colonIdx = line.IndexOf(':');
+                                    if (colonIdx > 0)
+                                    {
+                                        string key = line.Substring(0, colonIdx).Trim(' ', '"', '\'', '{', '}', ',', '\t');
+                                        string val = line.Substring(colonIdx + 1).Trim(' ', '"', '\'', '{', '}', ',', '\t');
+                                        
+                                        if (key.Equals("weatherAdvice", StringComparison.OrdinalIgnoreCase)) weatherAdvice = val;
+                                        else if (key.Equals("healthAdvice", StringComparison.OrdinalIgnoreCase)) healthAdvice = val;
+                                        else if (key.Equals("financeAdvice", StringComparison.OrdinalIgnoreCase)) financeAdvice = val;
+                                        else if (key.Equals("habitsAdvice", StringComparison.OrdinalIgnoreCase)) habitsAdvice = val;
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"[SmartBriefingService] Robust parsing also failed: {ex.Message}");
+                            }
                         }
                     }
                     
@@ -812,7 +865,15 @@ namespace Daily_WinUI.Services
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[SmartBriefingService] AI Generation failed: {ex.Message}. Falling back to template.");
+                    Console.WriteLine($"[SmartBriefingService] AI Generation failed: {ex.Message}. Falling back to template.");
+                    try
+                    {
+                        var settings = SettingsService.Load();
+                        settings.LastExecutionExplanation = $"AI Generation failed: {ex.Message}\n{ex.StackTrace}";
+                        SettingsService.Save(settings);
+                    }
+                    catch { }
+
                     data.IntroText = "";
                     data.BriefingText = fallbackBriefing;
                     data.OutroText = "Have a highly productive day!";

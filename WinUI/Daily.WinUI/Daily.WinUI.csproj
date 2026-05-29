@@ -168,10 +168,13 @@
     <PackageReference Include="Supabase" Version="1.1.1" />
     <PackageReference Include="postgrest-csharp" Version="3.5.1" />
     <PackageReference Include="YahooFinanceApi" Version="2.3.3" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.DirectML" Version="0.13.2" />
+    <PackageReference Include="LLamaSharp" Version="0.27.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" GeneratePathProperty="true" />
+    <PackageReference Include="LLamaSharp.Backend.Cuda12" Version="0.27.0" GeneratePathProperty="true" />
+    <PackageReference Include="LLamaSharp.Backend.Vulkan" Version="0.27.0" GeneratePathProperty="true" />
+    <PackageReference Include="System.Management" Version="9.0.0" />
   </ItemGroup>
-  <ItemGroup>
-  </ItemGroup>
+
 
   <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
@@ -190,14 +193,36 @@
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
   </PropertyGroup>
 
-  <!-- Remove older DirectML and ONNX Runtime DLLs from the MSIX packaging payload before it is computed -->
+  <!-- Add native backend DLLs to AppX Packaging payload -->
+  <Target Name="AddLLamaBackendsToPayload" BeforeTargets="_ComputeAppxPackagePayload">
+    <ItemGroup>
+      <NativeDllPayloadX64 Include="$(OutputPath)runtimes\win-x64\native\**\*.*" />
+      <NativeDllPayloadArm64 Include="$(OutputPath)runtimes\win-arm64\native\**\*.*" />
+      
+      <PackagingOutputs Include="@(NativeDllPayloadX64)">
+        <TargetPath>runtimes\win-x64\native\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+        <ProjectName>$(MSBuildProjectName)</ProjectName>
+        <OutputGroup>LLamaNativeBackends</OutputGroup>
+      </PackagingOutputs>
+      <PackagingOutputs Include="@(NativeDllPayloadArm64)">
+        <TargetPath>runtimes\win-arm64\native\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+        <ProjectName>$(MSBuildProjectName)</ProjectName>
+        <OutputGroup>LLamaNativeBackends</OutputGroup>
+      </PackagingOutputs>
+    </ItemGroup>
+  </Target>
+
+  <!-- Remove older DirectML, ONNX, and root llama/ggml DLLs from default packaging payload -->
   <Target Name="FilterPackagingOutputs" BeforeTargets="_ComputeAppxPackagePayload">
     <ItemGroup>
       <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\DirectML.dll" />
       <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\onnxruntime.dll" />
       <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\onnxruntime_providers_shared.dll" />
       <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\DirectML.pdb" />
+      <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\llama.dll" />
+      <PackagingOutputs Remove="$(MSBuildProjectDirectory)\obj\**\MsixContent\ggml.dll" />
     </ItemGroup>
   </Target>
+
 </Project>
 

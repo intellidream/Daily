@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 using Daily.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,8 +20,7 @@ public partial class App : Application
     ///  1. Registers the protocol for the current unpackaged exe.
     ///  2. Single-instance gate – a second process redirects and returns immediately.
     ///  3. Subscribes to Activated so the running instance receives the callback.
-    /// </summary>
-    [System.STAThreadAttribute]
+    /// </summary>    [System.STAThreadAttribute]
     static void Main(string[] args)
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
@@ -140,7 +142,7 @@ public partial class App : Application
                         }
                         else
                         {
-                            LogDebug($"Pipe server failed to parse URI: {line}");
+                            LogDebug($"Pipe server failed to parse URI: line");
                         }
                     }
                 }
@@ -181,6 +183,20 @@ public partial class App : Application
         };
 
         Syncfusion.Licensing.SyncfusionLicenseProvider.RegisterLicense(Secrets.SyncfusionLicenseKey);
+
+        try
+        {
+            var access = Windows.ApplicationModel.LimitedAccessFeatures.TryUnlockFeature(
+                "com.microsoft.windows.ai.languagemodel",
+                "bm83TtgNO2HbnbBAf79aIQ==",
+                "1z32rh13vfry6 has registered their use of com.microsoft.windows.ai.languagemodel with Microsoft and agrees to the terms of use.");
+            Console.WriteLine($"[App] Phi Silica LAF unlock status: {access.Status}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[App] Phi Silica LAF unlock exception: {ex.Message}");
+        }
+
         this.InitializeComponent();
     }
 
@@ -242,7 +258,7 @@ public partial class App : Application
         services.AddSingleton<Daily.Services.Health.IHealthService, Daily.Services.Health.SupabaseHealthService>();
 
         // Local AI Services
-        services.AddSingleton<Daily_WinUI.Services.PhiSilicaSmartService>();
+        services.AddSingleton<Daily_WinUI.Services.AIManager>();
         services.AddSingleton<Daily_WinUI.Services.OnnxGenAiSmartService>();
         services.AddSingleton<Daily_WinUI.Services.ISmartIntelligenceService, Daily_WinUI.Services.SmartIntelligenceCoordinator>();
         services.AddHttpClient<Daily_WinUI.Services.ModelDownloadManager>();

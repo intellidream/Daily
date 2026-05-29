@@ -2,4 +2,6 @@
   <Project Path="Daily.WinUI/Daily.WinUI.csproj">
     <Deploy Solution="Debug|*" />
   </Project>
+
 </Solution>
+
