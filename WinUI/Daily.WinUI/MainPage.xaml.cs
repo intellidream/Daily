@@ -24,6 +24,7 @@ public sealed partial class MainPage : Page
     private readonly List<System.Threading.Tasks.Task> _loadingTasks = new();
     private readonly object _lock = new object();
     private bool _isTrackingLoads = false;
+    private bool _isBriefingActive = false;
 
     // Smart Briefing backing states
     private DispatcherTimer? _typewriterTimer;
@@ -538,6 +539,7 @@ public sealed partial class MainPage : Page
 
     public async void ShowSmartBriefing()
     {
+        _isBriefingActive = true;
         // Show overlay and loading panel immediately with fade-in animation
         SmartBriefingOverlay.Opacity = 0.0;
         SmartBriefingOverlay.Visibility = Visibility.Visible;
@@ -554,7 +556,6 @@ public sealed partial class MainPage : Page
         _typewriterTimer?.Stop();
 
         var settings = SettingsService.Load();
-        ShowBriefingStartupCheck.IsChecked = settings.EnableSmartBriefing;
 
         // Fetch dynamic data from services (using pre-generated task if available)
         string userName = _authService.CurrentUserDisplayName ?? "Explorer";
@@ -588,6 +589,8 @@ public sealed partial class MainPage : Page
             var briefingService = App.Current.Services.GetRequiredService<SmartBriefingService>();
             data = await briefingService.GenerateBriefingDataAsync(userName);
         }
+
+        if (!_isBriefingActive) return;
 
         // Bind Weather Card
         BriefingWeatherTempText.Text = $"{data.WeatherTemp:F0}°C";
@@ -836,6 +839,7 @@ public sealed partial class MainPage : Page
 
     private void CloseBriefing_Click(object sender, RoutedEventArgs e)
     {
+        _isBriefingActive = false;
         _typewriterTimer?.Stop();
         FadeOutBriefingStoryboard.Begin();
     }
@@ -845,12 +849,7 @@ public sealed partial class MainPage : Page
         SmartBriefingOverlay.Visibility = Visibility.Collapsed;
     }
 
-    private void ShowBriefingStartupCheck_Changed(object sender, RoutedEventArgs e)
-    {
-        var settings = SettingsService.Load();
-        settings.EnableSmartBriefing = ShowBriefingStartupCheck.IsChecked ?? false;
-        SettingsService.Save(settings);
-    }
+
 
     private void MainPage_SizeChanged(object sender, SizeChangedEventArgs e)
     {

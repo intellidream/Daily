@@ -207,32 +207,6 @@
                 </Border.Shadow>
                 
                 <Grid>
-                    <!-- Loading Panel -->
-                    <Grid x:Name="BriefingLoadingPanel" Visibility="Visible" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Image x:Name="LoadingAIIcon"
-                                   Source="Assets/GemAIcon.svg"
-                                   Width="64"
-                                   Height="64"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   RenderTransformOrigin="0.5,0.5">
-                                <Image.RenderTransform>
-                                    <RotateTransform Angle="0" />
-                                </Image.RenderTransform>
-                            </Image>
-                            <TextBlock Text="DayOne AI is compiling your briefing..." 
-                                       FontSize="18" 
-                                       FontWeight="SemiBold" 
-                                       Foreground="{ThemeResource AppFgColorBrush}" 
-                                       HorizontalAlignment="Center"/>
-                            <TextBlock Text="Gathering news, weather, finances, habits, and health insights." 
-                                       FontSize="13" 
-                                       Foreground="{ThemeResource AppFgMutedColorBrush}" 
-                                       HorizontalAlignment="Center"/>
-                        </StackPanel>
-                    </Grid>
-
                     <ScrollViewer x:Name="BriefingOuterScrollViewer" 
                                   VerticalScrollBarVisibility="Disabled" 
                                   HorizontalScrollBarVisibility="Disabled" 
@@ -336,7 +310,6 @@
                         <!-- Actions / Close (Centered Layout) -->
                         <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="8" Margin="0,8,0,0">
                             <Button Content="Start My Day" Click="CloseBriefing_Click" Style="{ThemeResource AccentButtonStyle}" Padding="32,10" CornerRadius="8" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                            <CheckBox x:Name="ShowBriefingStartupCheck" Content="Show at startup" IsChecked="True" Checked="ShowBriefingStartupCheck_Changed" Unchecked="ShowBriefingStartupCheck_Changed" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Grid>
                     
@@ -595,6 +568,41 @@
                     </ScrollViewer>
                 </Grid>
                 </ScrollViewer>
+
+                <!-- Loading Panel -->
+                <Grid x:Name="BriefingLoadingPanel" Visibility="Visible" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Image x:Name="LoadingAIIcon"
+                               Source="Assets/GemAIcon.svg"
+                               Width="64"
+                               Height="64"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Margin="0,0,0,24"
+                               RenderTransformOrigin="0.5,0.5">
+                            <Image.RenderTransform>
+                                <RotateTransform Angle="0" />
+                            </Image.RenderTransform>
+                        </Image>
+                        <TextBlock Text="DayOne AI is compiling your briefing..." 
+                                   FontSize="18" 
+                                   FontWeight="SemiBold" 
+                                   Foreground="{ThemeResource AppFgColorBrush}" 
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="Gathering news, weather, finances, habits, and health insights." 
+                                   FontSize="13" 
+                                   Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                   HorizontalAlignment="Center"/>
+                        <Button Content="Dismiss"
+                                Click="CloseBriefing_Click"
+                                Style="{ThemeResource DefaultButtonStyle}"
+                                Padding="24,8"
+                                CornerRadius="6"
+                                FontSize="13"
+                                Margin="0,24,0,0"
+                                HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
                 </Grid>
             </Border>
             

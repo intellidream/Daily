@@ -113,3 +113,33 @@ graph TD
 | **Recommendations UI** | Horizontal `ScrollViewer` + `ItemsControl` with manual scroll fade-out calculations | Standard MudBlazor list layout wrapped in a `<MudSwipeArea>` |
 | **Navigation Flows** | Multi-level frame navigation inside `MainWindow.xaml` | Detail navigation service mapping URLs to Blazor components (`NavService`) |
 | **Gestures** | Mouse-hover and scroll-wheel drag behaviors | Touch gestures: Swiping left-to-right on a MudSwipeArea closes the reader |
+
+---
+
+## 5. Desktop WebView2 Packaged MSIX & Lifecycle Requirements (WinUI)
+
+When running the application in a packaged MSIX context (or under unpackaged distribution mode), the native XAML `WebView2` control is subject to strict security, lifecycle, and threading requirements:
+
+### 5.1 Outbound Network Access (Internet Capability)
+Because the application runs in a sandboxed container, WebView2's sandboxed Chromium processes cannot access external websites unless the manifest explicitly enables network access.
+- **Requirement**: [Package.appxmanifest](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Package.appxmanifest) must contain `<Capability Name="internetClient" />` to allow outbound HTTP requests and webpage rendering.
+
+### 5.2 Single-Threaded Apartment (STA) COM Model
+WebView2 and WinUI components require the calling UI thread to run in Single-Threaded Apartment (STA) mode. 
+- **Gotcha**: If `[System.STAThreadAttribute]` is placed on the same line as an XML documentation comment closing tag (e.g. `/// </summary>    [System.STAThreadAttribute]`), the compiler parses it as comment text and ignores it. This starts the app's main thread in MTA mode, causing all subsequent `EnsureCoreWebView2Async` calls to fail with `System.InvalidOperationException: Cannot change thread mode after it is set` (`RPC_E_CHANGED_MODE`).
+- **Requirement**: Always place the `[System.STAThreadAttribute]` attribute on its own line immediately above the `Main` entry point in [App.xaml.cs](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/App.xaml.cs).
+
+### 5.3 Visual Tree / Visibility Constraint
+WinUI 3's WebView2 control will refuse to initialize its underlying browser engine if the control's `Visibility` property is `Collapsed`, or if its parent container is collapsed.
+- **Requirement**: Set `ReaderWebView.Visibility = Visibility.Visible;` and `ReaderWebView.Opacity = 0.0;` to place the control into the active visual tree before calling `EnsureCoreWebView2Async()`. Once initialized and loaded, transition `Opacity` to `1.0`. Avoid pre-initializing WebView2 controls during page load if they are collapsed by default.
+
+### 5.4 Concurrent Initialization Shielding
+Calling `EnsureCoreWebView2Async()` concurrently on the same WebView2 instance before the first call completes causes deadlocks, crashes, or runtime hangs.
+- **Requirement**: Shield WebView2 initialization using a shared, stateful `Task` reference (`_webViewInitTask`) to ensure multiple navigations or loaded event triggers safely await the exact same task. If the initialization task enters a faulted or canceled state, reset the task reference to `null` to allow automatic retry recovery.
+
+### 5.5 Null Core Guard & Native UI Fallback
+If the client machine lacks the Evergreen WebView2 Runtime or if initialization fails, calling `NavigateToString()` on a null `CoreWebView2` will crash the application process.
+- **Requirement**: Always verify `ReaderWebView.CoreWebView2 != null` before invoking `NavigateToString`. If the core is null, use a native XAML fallback (e.g., stop the progress ring and update a status `TextBlock` natively) to show a friendly error instead of crashing.
+
+### 5.6 Parallel Recommendations Retrieval Protection
+When retrieving recommendation feed items concurrently in the briefing engine or page UI, individual feed loading tasks must be wrapped in local try-catch blocks. This prevents a single network or feed-parse exception from aborting the entire parallel `Task.WhenAll` batch operations, ensuring that the remaining feeds load successfully.

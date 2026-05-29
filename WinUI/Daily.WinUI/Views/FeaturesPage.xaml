@@ -220,8 +220,8 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="4" VerticalAlignment="Center">
-                            <TextBlock Text="Startup Smart Briefing" FontWeight="SemiBold" FontSize="14" />
-                            <TextBlock Text="Show a personalized AI welcome briefing summary of your day upon launching the application." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                            <TextBlock Text="Smart Briefing Summary" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Show a personalized on-device AI briefing summary based on your activity." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
                         </StackPanel>
                         <ToggleSwitch Grid.Column="1" x:Name="SmartBriefingSwitch" IsOn="True" Toggled="SmartBriefingSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
                     </Grid>
