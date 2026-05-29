@@ -424,8 +424,8 @@
 
             <!-- Reader Loading State -->
             <StackPanel Grid.Row="2" x:Name="ReaderLoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-                <ProgressRing IsActive="True" Width="56" Height="56"/>
-                <TextBlock Text="Extracting article..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
+                <ProgressRing x:Name="ReaderProgressRing" IsActive="True" Width="56" Height="56"/>
+                <TextBlock x:Name="ReaderLoadingText" Text="Extracting article..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
             </StackPanel>
 
             <!-- WebView2 for Reader Content -->

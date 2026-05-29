@@ -172,174 +172,167 @@ namespace Daily.Services
 
         public async Task<List<RssItem>> FetchFeedItemsAsync(FeedSource feed)
         {
-            try
+            if (feed.Type == FeedType.Rss)
             {
-                if (feed.Type == FeedType.Rss)
+                var xml = await _httpClient.GetStringAsync(feed.Url);
+                var doc = XDocument.Parse(xml);
+                XNamespace media = "http://search.yahoo.com/mrss/";
+                XNamespace contentNs = "http://purl.org/rss/1.0/modules/content/";
+                XNamespace dc = "http://purl.org/dc/elements/1.1/";
+
+                var channelImage = doc.Descendants().FirstOrDefault(e => e.Name.LocalName == "channel" || e.Name.LocalName == "feed")
+                    ?.Elements().FirstOrDefault(e => e.Name.LocalName == "image" || e.Name.LocalName == "logo" || e.Name.LocalName == "icon")
+                    ?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value
+                    ?? doc.Descendants().FirstOrDefault(e => e.Name.LocalName == "logo" || e.Name.LocalName == "icon")?.Value;
+
+                return doc.Descendants().Where(e => e.Name.LocalName == "item" || e.Name.LocalName == "entry").Select(item =>
                 {
-                    var xml = await _httpClient.GetStringAsync(feed.Url);
-                    var doc = XDocument.Parse(xml);
-                    XNamespace media = "http://search.yahoo.com/mrss/";
-                    XNamespace contentNs = "http://purl.org/rss/1.0/modules/content/";
-                    XNamespace dc = "http://purl.org/dc/elements/1.1/";
+                    var title = item.Elements().FirstOrDefault(e => e.Name.LocalName == "title")?.Value ?? "No Title";
 
-                    var channelImage = doc.Descendants().FirstOrDefault(e => e.Name.LocalName == "channel" || e.Name.LocalName == "feed")
-                        ?.Elements().FirstOrDefault(e => e.Name.LocalName == "image" || e.Name.LocalName == "logo" || e.Name.LocalName == "icon")
-                        ?.Elements().FirstOrDefault(e => e.Name.LocalName == "url")?.Value
-                        ?? doc.Descendants().FirstOrDefault(e => e.Name.LocalName == "logo" || e.Name.LocalName == "icon")?.Value;
+                    var linkEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "link");
+                    var link = linkEl?.Attribute("href")?.Value;
+                    if (string.IsNullOrEmpty(link)) link = linkEl?.Value ?? "";
 
-                    return doc.Descendants().Where(e => e.Name.LocalName == "item" || e.Name.LocalName == "entry").Select(item =>
+                    var description = item.Elements().FirstOrDefault(e => e.Name.LocalName == "description" || e.Name.LocalName == "summary")?.Value;
+                    var pubDateStr = item.Elements().FirstOrDefault(e => e.Name.LocalName == "pubDate" || e.Name.LocalName == "published" || e.Name.LocalName == "updated" || e.Name == dc + "date")?.Value;
+                    var contentEncoded = item.Elements().FirstOrDefault(e => e.Name == contentNs + "encoded" || e.Name.LocalName == "content")?.Value;
+
+                    string? imageUrl = null;
+
+                    // 1. Media Content
+                    var mediaContent = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "content" && e.Name.Namespace == media);
+                    if (mediaContent != null)
                     {
-                        var title = item.Elements().FirstOrDefault(e => e.Name.LocalName == "title")?.Value ?? "No Title";
-
-                        var linkEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "link");
-                        var link = linkEl?.Attribute("href")?.Value;
-                        if (string.IsNullOrEmpty(link)) link = linkEl?.Value ?? "";
-
-                        var description = item.Elements().FirstOrDefault(e => e.Name.LocalName == "description" || e.Name.LocalName == "summary")?.Value;
-                        var pubDateStr = item.Elements().FirstOrDefault(e => e.Name.LocalName == "pubDate" || e.Name.LocalName == "published" || e.Name.LocalName == "updated" || e.Name == dc + "date")?.Value;
-                        var contentEncoded = item.Elements().FirstOrDefault(e => e.Name == contentNs + "encoded" || e.Name.LocalName == "content")?.Value;
-
-                        string? imageUrl = null;
-
-                        // 1. Media Content
-                        var mediaContent = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "content" && e.Name.Namespace == media);
-                        if (mediaContent != null)
-                        {
-                            imageUrl = mediaContent.Attribute("url")?.Value;
-                        }
-
-                        // 2. Media Thumbnail
-                        if (string.IsNullOrEmpty(imageUrl))
-                        {
-                            var mediaThumbnail = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "thumbnail");
-                            imageUrl = mediaThumbnail?.Attribute("url")?.Value;
-                        }
-
-                        // 3. Enclosure or Atom Rel=Enclosure
-                        if (string.IsNullOrEmpty(imageUrl))
-                        {
-                            var enclosure = item.Elements().FirstOrDefault(e => e.Name.LocalName == "enclosure" || (e.Name.LocalName == "link" && e.Attribute("rel")?.Value == "enclosure"));
-                            if (enclosure != null)
-                            {
-                                var type = enclosure.Attribute("type")?.Value;
-                                if (string.IsNullOrEmpty(type) || type.StartsWith("image/"))
-                                {
-                                    imageUrl = enclosure.Attribute("url")?.Value ?? enclosure.Attribute("href")?.Value;
-                                }
-                            }
-                        }
-
-                        // 4. Regex in Description
-                        if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(description))
-                        {
-                            var match = Regex.Match(description, @"<img.+?src=[""']([^""']+)[""']");
-                            if (match.Success)
-                            {
-                                imageUrl = match.Groups[1].Value;
-                            }
-                        }
-
-                        // 5. Regex in Content Encoded
-                        if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(contentEncoded))
-                        {
-                            var match = Regex.Match(contentEncoded, @"<img.+?src=[""']([^""']+)[""']");
-                            if (match.Success)
-                            {
-                                imageUrl = match.Groups[1].Value;
-                            }
-                        }
-
-                        // 6. Author Extraction
-                        var author = item.Elements().FirstOrDefault(e => e.Name == dc + "creator")?.Value;
-                        if (string.IsNullOrEmpty(author))
-                        {
-                            var authorEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "author");
-                            author = authorEl?.Elements().FirstOrDefault(e => e.Name.LocalName == "name")?.Value ?? authorEl?.Value;
-                        }
-
-                        return new RssItem
-                        {
-                            Title = title,
-                            Link = link,
-                            PublishDate = DateTime.TryParse(pubDateStr, out var date) ? date : DateTime.Now,
-                            ImageUrl = imageUrl ?? channelImage ?? feed.IconUrl,
-                            Description = description,
-                            Content = contentEncoded,
-                            Author = author,
-                            PublicationName = feed.Name,
-                            PublicationIconUrl = feed.IconUrl
-                        };
-                    }).ToList();
-                }
-                else if (feed.Type == FeedType.WpJson)
-                {
-                    var json = await _httpClient.GetStringAsync(feed.Url);
-                    var node = JsonNode.Parse(json);
-                    var posts = node?.AsArray();
-
-                    if (posts == null) 
-                    {
-                        return new List<RssItem>();
+                        imageUrl = mediaContent.Attribute("url")?.Value;
                     }
 
-                    var newList = new List<RssItem>();
-
-                    foreach (var post in posts)
+                    // 2. Media Thumbnail
+                    if (string.IsNullOrEmpty(imageUrl))
                     {
-                        var title = post["title"]?["rendered"]?.ToString();
-                        if (!string.IsNullOrEmpty(title))
-                        {
-                            title = System.Net.WebUtility.HtmlDecode(title);
-                        }
-                        
-                        var link = post["link"]?.ToString() ?? "";
-                        var dateStr = post["date"]?.ToString();
-                        var date = DateTime.TryParse(dateStr, out var d) ? d : DateTime.Now;
-                        var content = post["content"]?["rendered"]?.ToString();
-                        var excerpt = post["excerpt"]?["rendered"]?.ToString();
-
-                        string? author = null;
-                        var embedded = post["_embedded"];
-                        
-                        string? imageUrl = null;
-                        if (embedded != null)
-                        {
-                            var media = embedded["wp:featuredmedia"]?.AsArray()?.FirstOrDefault();
-                            if (media != null)
-                            {
-                                imageUrl = media["source_url"]?.ToString();
-                                 if (media["media_details"]?["sizes"]?["medium"]?["source_url"] != null)
-                                {
-                                    imageUrl = media["media_details"]?["sizes"]?["medium"]?["source_url"]?.ToString();
-                                }
-                            }
-                            
-                            var authorObj = embedded["author"]?.AsArray()?.FirstOrDefault();
-                            if (authorObj != null)
-                            {
-                                author = authorObj["name"]?.ToString();
-                            }
-                        }
-                        
-                        newList.Add(new RssItem
-                        {
-                             Title = title ?? "No Title",
-                             Link = link,
-                             PublishDate = date,
-                             ImageUrl = imageUrl ?? feed.IconUrl,
-                             Description = excerpt,
-                             Content = content,
-                             Author = author,
-                             PublicationName = feed.Name,
-                             PublicationIconUrl = feed.IconUrl
-                        });
+                        var mediaThumbnail = item.Descendants().FirstOrDefault(e => e.Name.LocalName == "thumbnail");
+                        imageUrl = mediaThumbnail?.Attribute("url")?.Value;
                     }
-                    return newList;
-                }
+
+                    // 3. Enclosure or Atom Rel=Enclosure
+                    if (string.IsNullOrEmpty(imageUrl))
+                    {
+                        var enclosure = item.Elements().FirstOrDefault(e => e.Name.LocalName == "enclosure" || (e.Name.LocalName == "link" && e.Attribute("rel")?.Value == "enclosure"));
+                        if (enclosure != null)
+                        {
+                            var type = enclosure.Attribute("type")?.Value;
+                            if (string.IsNullOrEmpty(type) || type.StartsWith("image/"))
+                            {
+                                imageUrl = enclosure.Attribute("url")?.Value ?? enclosure.Attribute("href")?.Value;
+                            }
+                        }
+                    }
+
+                    // 4. Regex in Description
+                    if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(description))
+                    {
+                        var match = Regex.Match(description, @"<img.+?src=[""']([^""']+)[""']");
+                        if (match.Success)
+                        {
+                            imageUrl = match.Groups[1].Value;
+                        }
+                    }
+
+                    // 5. Regex in Content Encoded
+                    if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(contentEncoded))
+                    {
+                        var match = Regex.Match(contentEncoded, @"<img.+?src=[""']([^""']+)[""']");
+                        if (match.Success)
+                        {
+                            imageUrl = match.Groups[1].Value;
+                        }
+                    }
+
+                    // 6. Author Extraction
+                    var author = item.Elements().FirstOrDefault(e => e.Name == dc + "creator")?.Value;
+                    if (string.IsNullOrEmpty(author))
+                    {
+                        var authorEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "author");
+                        author = authorEl?.Elements().FirstOrDefault(e => e.Name.LocalName == "name")?.Value ?? authorEl?.Value;
+                    }
+
+                    return new RssItem
+                    {
+                        Title = title,
+                        Link = link,
+                        PublishDate = DateTime.TryParse(pubDateStr, out var date) ? date : DateTime.Now,
+                        ImageUrl = imageUrl ?? channelImage ?? feed.IconUrl,
+                        Description = description,
+                        Content = contentEncoded,
+                        Author = author,
+                        PublicationName = feed.Name,
+                        PublicationIconUrl = feed.IconUrl
+                    };
+                }).ToList();
             }
-            catch (Exception ex)
+            else if (feed.Type == FeedType.WpJson)
             {
-                Console.WriteLine($"[RssFeedService] Error fetching feed {feed.Name}: {ex.Message}");
+                var json = await _httpClient.GetStringAsync(feed.Url);
+                var node = JsonNode.Parse(json);
+                var posts = node?.AsArray();
+
+                if (posts == null) 
+                {
+                    return new List<RssItem>();
+                }
+
+                var newList = new List<RssItem>();
+
+                foreach (var post in posts)
+                {
+                    var title = post["title"]?["rendered"]?.ToString();
+                    if (!string.IsNullOrEmpty(title))
+                    {
+                        title = System.Net.WebUtility.HtmlDecode(title);
+                    }
+                    
+                    var link = post["link"]?.ToString() ?? "";
+                    var dateStr = post["date"]?.ToString();
+                    var date = DateTime.TryParse(dateStr, out var d) ? d : DateTime.Now;
+                    var content = post["content"]?["rendered"]?.ToString();
+                    var excerpt = post["excerpt"]?["rendered"]?.ToString();
+
+                    string? author = null;
+                    var embedded = post["_embedded"];
+                    
+                    string? imageUrl = null;
+                    if (embedded != null)
+                    {
+                        var media = embedded["wp:featuredmedia"]?.AsArray()?.FirstOrDefault();
+                        if (media != null)
+                        {
+                            imageUrl = media["source_url"]?.ToString();
+                             if (media["media_details"]?["sizes"]?["medium"]?["source_url"] != null)
+                            {
+                                imageUrl = media["media_details"]?["sizes"]?["medium"]?["source_url"]?.ToString();
+                            }
+                        }
+                        
+                        var authorObj = embedded["author"]?.AsArray()?.FirstOrDefault();
+                        if (authorObj != null)
+                        {
+                            author = authorObj["name"]?.ToString();
+                        }
+                    }
+                    
+                    newList.Add(new RssItem
+                    {
+                         Title = title ?? "No Title",
+                         Link = link,
+                         PublishDate = date,
+                         ImageUrl = imageUrl ?? feed.IconUrl,
+                         Description = excerpt,
+                         Content = content,
+                         Author = author,
+                         PublicationName = feed.Name,
+                         PublicationIconUrl = feed.IconUrl
+                    });
+                }
+                return newList;
             }
             return new List<RssItem>();
         }

@@ -25,6 +25,7 @@ public sealed partial class RssFeedDetailPage : Page
     private RssItem? _selectedItem;
     private RssItem? _currentRenderedArticle;
     private bool _isHeaderIconsMode;
+    private Task? _webViewInitTask;
 
     public RssFeedDetailPage()
     {
@@ -43,19 +44,18 @@ public sealed partial class RssFeedDetailPage : Page
         UpdateWebViewBackground();
     }
 
-    protected override async void OnNavigatedTo(NavigationEventArgs e)
+    protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
 
         if (e.Parameter is RssItem preSelectedItem)
         {
-            // The user clicked an item from the widget. Open Reader View directly.
+            // The user clicked an item from the widget. Store it to open on Loaded.
             _selectedItem = preSelectedItem;
-            await OpenReaderViewAsync(_selectedItem);
         }
     }
 
-    private void RssFeedDetailPage_Loaded(object sender, RoutedEventArgs e)
+    private async void RssFeedDetailPage_Loaded(object sender, RoutedEventArgs e)
     {
         _rssService.OnFeedChanged += RssService_OnFeedChanged;
         _rssService.OnItemsUpdated += RssService_OnItemsUpdated;
@@ -71,6 +71,9 @@ public sealed partial class RssFeedDetailPage : Page
                 _rssService.SelectFeed(feed);
                 UpdateSelectedFeedUI(feed);
             }
+            
+            // Open Reader View after the page is fully loaded and in the visual tree
+            await OpenReaderViewAsync(_selectedItem);
         }
         else
         {
@@ -78,7 +81,6 @@ public sealed partial class RssFeedDetailPage : Page
         }
         
         UpdateArticles();
-        EnsureWebViewCoreInitialized();
         RecommendationsScrollViewer.LayoutUpdated += RecommendationsScrollViewer_LayoutUpdated;
     }
 
@@ -156,11 +158,35 @@ public sealed partial class RssFeedDetailPage : Page
         }
     }
 
-    private async void EnsureWebViewCoreInitialized()
+    private Task EnsureWebViewInitializedAsync()
     {
-        await ReaderWebView.EnsureCoreWebView2Async();
+        if (_webViewInitTask == null || _webViewInitTask.IsFaulted || _webViewInitTask.IsCanceled)
+        {
+            _webViewInitTask = InitWebViewInternalAsync();
+        }
+        return _webViewInitTask;
+    }
+
+    private async Task InitWebViewInternalAsync()
+    {
+        try
+        {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string userDataFolder = System.IO.Path.Combine(localAppData, "Daily.WinUI", "WebView2");
+            System.IO.Directory.CreateDirectory(userDataFolder);
+
+            var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
+            var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
+            await ReaderWebView.EnsureCoreWebView2Async(env);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"WebView2 initialization failed: {ex.Message}");
+            throw;
+        }
         UpdateWebViewBackground();
     }
+
 
     internal bool TryGoBack()
     {
@@ -209,6 +235,9 @@ public sealed partial class RssFeedDetailPage : Page
         ListViewContainer.Visibility = Visibility.Collapsed;
         ReaderViewContainer.Visibility = Visibility.Visible;
         ReaderLoadingPanel.Visibility = Visibility.Visible;
+        ReaderProgressRing.IsActive = true;
+        ReaderProgressRing.Visibility = Visibility.Visible;
+        ReaderLoadingText.Text = "Extracting article...";
         ReaderWebView.Visibility = Visibility.Collapsed;
         ReaderWebView.Opacity = 1;
 
@@ -239,19 +268,35 @@ public sealed partial class RssFeedDetailPage : Page
         // Step 2: If the fast path succeeded, render it
         if (!needsWebViewFallback && fullArticle != null)
         {
-            // Preserve correct publication name/icon from the clicked item
-            fullArticle.PublicationName = item.PublicationName;
-            fullArticle.PublicationIconUrl = item.PublicationIconUrl;
+            try
+            {
+                // Preserve correct publication name/icon from the clicked item
+                fullArticle.PublicationName = item.PublicationName;
+                fullArticle.PublicationIconUrl = item.PublicationIconUrl;
 
-            _currentRenderedArticle = fullArticle;
-            string html = GenerateReaderHtml(fullArticle);
-            await ReaderWebView.EnsureCoreWebView2Async();
-            UpdateWebViewBackground();
-            SetupWebViewVirtualHost();
-            ReaderWebView.NavigateToString(html);
-            ReaderLoadingPanel.Visibility = Visibility.Collapsed;
-            ReaderWebView.Visibility = Visibility.Visible;
-            return;
+                _currentRenderedArticle = fullArticle;
+                string html = GenerateReaderHtml(fullArticle);
+                
+                // Set visibility to Visible with Opacity 0 to allow WebView2 to initialize
+                ReaderWebView.Visibility = Visibility.Visible;
+                ReaderWebView.Opacity = 0.0;
+
+                await EnsureWebViewInitializedAsync();
+                if (ReaderWebView.CoreWebView2 == null)
+                    throw new InvalidOperationException("CoreWebView2 is null after initialization.");
+
+                UpdateWebViewBackground();
+                SetupWebViewVirtualHost();
+                ReaderWebView.NavigateToString(html);
+                ReaderLoadingPanel.Visibility = Visibility.Collapsed;
+                ReaderWebView.Opacity = 1.0;
+                return;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Reader] Fast path rendering failed: {ex.Message}. Falling back to WebView2 navigation...");
+                needsWebViewFallback = true;
+            }
         }
 
         // Step 3: WebView2 fallback — navigate a real browser to the URL,
@@ -264,7 +309,10 @@ public sealed partial class RssFeedDetailPage : Page
             ReaderWebView.Visibility = Visibility.Visible;
             ReaderWebView.Opacity = 0.0;
             
-            await ReaderWebView.EnsureCoreWebView2Async();
+            await EnsureWebViewInitializedAsync();
+            if (ReaderWebView.CoreWebView2 == null)
+                throw new InvalidOperationException("CoreWebView2 failed to initialize in fallback path.");
+
             UpdateWebViewBackground();
             SetupWebViewVirtualHost();
 
@@ -407,15 +455,36 @@ public sealed partial class RssFeedDetailPage : Page
         catch (Exception fallbackEx)
         {
             System.Diagnostics.Debug.WriteLine($"WebView2 fallback failed: {fallbackEx.Message}");
-            await ReaderWebView.EnsureCoreWebView2Async();
-            UpdateWebViewBackground();
-            ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: {fallbackText}; background: {fallbackBg}; }}</style></head><body><h2>Error loading article</h2><p>{fallbackEx.Message}</p></body></html>");
+            
+            if (ReaderWebView.CoreWebView2 != null)
+            {
+                try
+                {
+                    UpdateWebViewBackground();
+                    ReaderWebView.NavigateToString($"<html><head><style>body {{ font-family: 'Segoe UI', sans-serif; padding: 40px; color: {fallbackText}; background: {fallbackBg}; }}</style></head><body><h2>Error loading article</h2><p>{fallbackEx.Message}</p></body></html>");
+                }
+                catch { }
+            }
+            else
+            {
+                ReaderProgressRing.IsActive = false;
+                ReaderProgressRing.Visibility = Visibility.Collapsed;
+                ReaderLoadingText.Text = $"Failed to load article: {fallbackEx.Message}";
+            }
         }
         finally
         {
-            ReaderLoadingPanel.Visibility = Visibility.Collapsed;
-            ReaderWebView.Visibility = Visibility.Visible;
-            ReaderWebView.Opacity = 1.0;
+            if (ReaderWebView.CoreWebView2 != null)
+            {
+                ReaderLoadingPanel.Visibility = Visibility.Collapsed;
+                ReaderWebView.Visibility = Visibility.Visible;
+                ReaderWebView.Opacity = 1.0;
+            }
+            else
+            {
+                ReaderLoadingPanel.Visibility = Visibility.Visible;
+                ReaderWebView.Visibility = Visibility.Collapsed;
+            }
         }
     }
 

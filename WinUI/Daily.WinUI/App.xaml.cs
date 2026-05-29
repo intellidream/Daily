@@ -20,7 +20,8 @@ public partial class App : Application
     ///  1. Registers the protocol for the current unpackaged exe.
     ///  2. Single-instance gate – a second process redirects and returns immediately.
     ///  3. Subscribes to Activated so the running instance receives the callback.
-    /// </summary>    [System.STAThreadAttribute]
+    /// </summary>
+    [System.STAThreadAttribute]
     static void Main(string[] args)
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();

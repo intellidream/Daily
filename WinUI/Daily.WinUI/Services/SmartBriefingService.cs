@@ -488,7 +488,18 @@ namespace Daily_WinUI.Services
                 {
                     try
                     {
-                        var tasks = otherFeeds.Select(feed => _rssFeedService.FetchFeedItemsAsync(feed));
+                        var tasks = otherFeeds.Select(async feed =>
+                        {
+                            try
+                            {
+                                return await _rssFeedService.FetchFeedItemsAsync(feed);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"[SmartBriefingService] Feed fetch error for {feed.Name}: {ex.Message}");
+                                return new List<RssItem>();
+                            }
+                        });
                         var results = await Task.WhenAll(tasks);
                         foreach (var list in results)
                         {
