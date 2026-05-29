@@ -229,6 +229,21 @@
                 <Pivot.RightHeader>
                     <!-- Spin-Wheel Selection Control -->
                     <StackPanel x:Name="FeedSelectorContainer" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,12,20,12">
+                        <!-- Article Search Box -->
+                        <AutoSuggestBox x:Name="ArticleSearchBox"
+                                        PlaceholderText="Search articles..."
+                                        Width="200"
+                                        QueryIcon="Find"
+                                        Height="36"
+                                        CornerRadius="18"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,8,0"
+                                        Background="{ThemeResource AppGlassColorBrush}"
+                                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                        BorderThickness="1"
+                                        TextChanged="ArticleSearchBox_TextChanged"
+                                        QuerySubmitted="ArticleSearchBox_QuerySubmitted"/>
+
                         <!-- Cycle Left Button -->
                         <Button x:Name="CycleLeftButton" 
                                 Click="CycleLeftButton_Click"
@@ -247,9 +262,12 @@
                                 Height="36" Padding="12,0"
                                 ToolTipService.ToolTip="Select Feed">
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <Border Width="18" Height="18" CornerRadius="9" Background="White" Padding="1" VerticalAlignment="Center">
-                                    <Image x:Name="SelectedFeedIcon" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
+                                <Grid Width="18" Height="18" VerticalAlignment="Center">
+                                    <Border x:Name="SelectedFeedIconBorder" Width="18" Height="18" CornerRadius="9" Background="White" Padding="1">
+                                        <Image x:Name="SelectedFeedIcon" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <FontIcon x:Name="SelectedFeedFontIcon" Glyph="&#xE909;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                </Grid>
                                 <TextBlock x:Name="SelectedFeedText" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                             

@@ -26,6 +26,13 @@ public sealed partial class RssFeedDetailPage : Page
     private RssItem? _currentRenderedArticle;
     private bool _isHeaderIconsMode;
     private Task? _webViewInitTask;
+    private readonly FeedSource _allNewsFeedSource = new FeedSource
+    {
+        Name = "All News",
+        Url = "all_news",
+        IconUrl = ""
+    };
+    private FeedSource? _currentLocalFeed;
 
     public RssFeedDetailPage()
     {
@@ -63,11 +70,22 @@ public sealed partial class RssFeedDetailPage : Page
 
         PopulateFeedMenu();
         PreFetchAllFeedsInBackground();
+        
+        // Put current feed items in cache if already loaded
+        if (_rssService.CurrentFeed != null && _rssService.Items != null && _rssService.Items.Count > 0)
+        {
+            lock (_allFeedsCache)
+            {
+                _allFeedsCache[_rssService.CurrentFeed.Url] = _rssService.Items;
+            }
+        }
+
         if (_selectedItem != null)
         {
             var feed = _rssService.Feeds?.FirstOrDefault(f => f.Name == _selectedItem.PublicationName);
             if (feed != null)
             {
+                _currentLocalFeed = feed;
                 _rssService.SelectFeed(feed);
                 UpdateSelectedFeedUI(feed);
             }
@@ -77,10 +95,18 @@ public sealed partial class RssFeedDetailPage : Page
         }
         else
         {
-            UpdateSelectedFeedUI(_rssService.CurrentFeed);
+            _currentLocalFeed = _rssService.CurrentFeed;
+            UpdateSelectedFeedUI(_currentLocalFeed);
         }
         
-        UpdateArticles();
+        if (_currentLocalFeed != null && _currentLocalFeed.Url == "all_news")
+        {
+            await LoadAllNewsFeedAsync();
+        }
+        else
+        {
+            UpdateArticles();
+        }
         RecommendationsScrollViewer.LayoutUpdated += RecommendationsScrollViewer_LayoutUpdated;
     }
 
@@ -108,7 +134,12 @@ public sealed partial class RssFeedDetailPage : Page
         DispatcherQueue.TryEnqueue(() =>
         {
             PopulateFeedMenu();
-            UpdateSelectedFeedUI(_rssService.CurrentFeed);
+            var feeds = GetFeedsListWithAllNews();
+            if (_currentLocalFeed == null || !feeds.Any(f => f.Url == _currentLocalFeed.Url))
+            {
+                _currentLocalFeed = _rssService.CurrentFeed;
+            }
+            UpdateSelectedFeedUI(_currentLocalFeed);
         });
     }
 
@@ -116,16 +147,36 @@ public sealed partial class RssFeedDetailPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (_rssService.CurrentFeed != null && _rssService.Items != null)
+            {
+                lock (_allFeedsCache)
+                {
+                    _allFeedsCache[_rssService.CurrentFeed.Url] = _rssService.Items;
+                }
+            }
             UpdateArticles();
         });
     }
 
     private void UpdateArticles()
     {
-        _articles.Clear();
-        foreach (var item in _rssService.Items)
+        if (_currentLocalFeed != null && _currentLocalFeed.Url == "all_news")
         {
-            _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(item));
+            return;
+        }
+
+        string query = ArticleSearchBox?.Text ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            FilterArticles(query);
+        }
+        else
+        {
+            _articles.Clear();
+            foreach (var item in _rssService.Items)
+            {
+                _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(item));
+            }
         }
 
         if (_rssService.IsLoading)
@@ -150,11 +201,22 @@ public sealed partial class RssFeedDetailPage : Page
             return;
         }
 
-        if (_rssService.CurrentFeed != null)
+        if (_currentLocalFeed != null)
         {
-            LoadingPanel.Visibility = Visibility.Visible;
-            ArticlesListView.Visibility = Visibility.Collapsed;
-            await _rssService.LoadFeedAsync(_rssService.CurrentFeed);
+            if (_currentLocalFeed.Url == "all_news")
+            {
+                lock (_allFeedsCache)
+                {
+                    _allFeedsCache.Clear();
+                }
+                await LoadAllNewsFeedAsync(forceRefresh: true);
+            }
+            else
+            {
+                LoadingPanel.Visibility = Visibility.Visible;
+                ArticlesListView.Visibility = Visibility.Collapsed;
+                await _rssService.LoadFeedAsync(_currentLocalFeed, forceRefresh: true);
+            }
         }
     }
 
@@ -198,9 +260,16 @@ public sealed partial class RssFeedDetailPage : Page
             ListViewContainer.Visibility = Visibility.Visible;
             
             // If we don't have articles loaded (e.g., navigated directly to an article from widget), load the selected feed
-            if (_articles.Count == 0 && _rssService.CurrentFeed != null)
+            if (_articles.Count == 0 && _currentLocalFeed != null)
             {
-                _ = _rssService.LoadFeedAsync(_rssService.CurrentFeed);
+                if (_currentLocalFeed.Url == "all_news")
+                {
+                    _ = LoadAllNewsFeedAsync();
+                }
+                else
+                {
+                    _ = _rssService.LoadFeedAsync(_currentLocalFeed);
+                }
             }
             return true;
         }
@@ -496,9 +565,16 @@ public sealed partial class RssFeedDetailPage : Page
         ListViewContainer.Visibility = Visibility.Visible;
         
         // If we don't have articles loaded (e.g., navigated directly to an article from widget), load the selected feed
-        if (_articles.Count == 0 && _rssService.CurrentFeed != null)
+        if (_articles.Count == 0 && _currentLocalFeed != null)
         {
-            _ = _rssService.LoadFeedAsync(_rssService.CurrentFeed);
+            if (_currentLocalFeed.Url == "all_news")
+            {
+                _ = LoadAllNewsFeedAsync();
+            }
+            else
+            {
+                _ = _rssService.LoadFeedAsync(_currentLocalFeed);
+            }
         }
     }
 
@@ -805,6 +881,17 @@ public sealed partial class RssFeedDetailPage : Page
         }
     }
 
+    private List<FeedSource> GetFeedsListWithAllNews()
+    {
+        var list = new List<FeedSource>();
+        if (_rssService.Feeds != null)
+        {
+            list.AddRange(_rssService.Feeds);
+        }
+        list.Add(_allNewsFeedSource);
+        return list;
+    }
+
     private void PopulateFeedMenu()
     {
         FeedMenuFlyout.Items.Clear();
@@ -831,6 +918,16 @@ public sealed partial class RssFeedDetailPage : Page
             menuItem.Click += FeedMenuItem_Click;
             FeedMenuFlyout.Items.Add(menuItem);
         }
+
+        // Add "All News" as the LAST entry always
+        var allNewsMenuItem = new MenuFlyoutItem
+        {
+            Text = "All News",
+            DataContext = _allNewsFeedSource,
+            Icon = new FontIcon { Glyph = "\uE909", FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons") }
+        };
+        allNewsMenuItem.Click += FeedMenuItem_Click;
+        FeedMenuFlyout.Items.Add(allNewsMenuItem);
     }
 
     private async void FeedMenuItem_Click(object sender, RoutedEventArgs e)
@@ -843,13 +940,13 @@ public sealed partial class RssFeedDetailPage : Page
 
     private async void CycleLeftButton_Click(object sender, RoutedEventArgs e)
     {
-        var feeds = _rssService.Feeds;
+        var feeds = GetFeedsListWithAllNews();
         if (feeds == null || feeds.Count == 0) return;
 
         int currentIndex = 0;
-        if (_rssService.CurrentFeed != null)
+        if (_currentLocalFeed != null)
         {
-            currentIndex = feeds.FindIndex(f => f.Url == _rssService.CurrentFeed.Url);
+            currentIndex = feeds.FindIndex(f => f.Url == _currentLocalFeed.Url);
             if (currentIndex < 0) currentIndex = 0;
         }
 
@@ -860,13 +957,13 @@ public sealed partial class RssFeedDetailPage : Page
 
     private async void CycleRightButton_Click(object sender, RoutedEventArgs e)
     {
-        var feeds = _rssService.Feeds;
+        var feeds = GetFeedsListWithAllNews();
         if (feeds == null || feeds.Count == 0) return;
 
         int currentIndex = 0;
-        if (_rssService.CurrentFeed != null)
+        if (_currentLocalFeed != null)
         {
-            currentIndex = feeds.FindIndex(f => f.Url == _rssService.CurrentFeed.Url);
+            currentIndex = feeds.FindIndex(f => f.Url == _currentLocalFeed.Url);
             if (currentIndex < 0) currentIndex = 0;
         }
 
@@ -879,14 +976,31 @@ public sealed partial class RssFeedDetailPage : Page
     {
         if (feed == null) return;
 
-        UpdateSelectedFeedUI(feed);
-
-        if (_rssService.CurrentFeed == null || feed.Url != _rssService.CurrentFeed.Url)
+        if (ArticleSearchBox != null)
         {
-            LoadingPanel.Visibility = Visibility.Visible;
-            ArticlesListView.Visibility = Visibility.Collapsed;
-            _rssService.SelectFeed(feed);
-            await _rssService.LoadFeedAsync(feed);
+            ArticleSearchBox.Text = string.Empty;
+        }
+
+        UpdateSelectedFeedUI(feed);
+        _currentLocalFeed = feed;
+
+        if (feed.Url == "all_news")
+        {
+            await LoadAllNewsFeedAsync();
+        }
+        else
+        {
+            if (_rssService.CurrentFeed == null || feed.Url != _rssService.CurrentFeed.Url)
+            {
+                LoadingPanel.Visibility = Visibility.Visible;
+                ArticlesListView.Visibility = Visibility.Collapsed;
+                _rssService.SelectFeed(feed);
+                await _rssService.LoadFeedAsync(feed);
+            }
+            else
+            {
+                UpdateArticles();
+            }
         }
     }
 
@@ -895,19 +1009,34 @@ public sealed partial class RssFeedDetailPage : Page
         if (feed == null)
         {
             SelectedFeedText.Text = "Select Feed";
-            SelectedFeedIcon.Source = null;
+            if (SelectedFeedIconBorder != null) SelectedFeedIconBorder.Visibility = Visibility.Collapsed;
+            if (SelectedFeedFontIcon != null) SelectedFeedFontIcon.Visibility = Visibility.Collapsed;
             return;
         }
 
         SelectedFeedText.Text = feed.Name;
-        try
+        if (feed.Url == "all_news")
         {
-            SelectedFeedIcon.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(feed.IconUrl));
+            if (SelectedFeedIconBorder != null) SelectedFeedIconBorder.Visibility = Visibility.Collapsed;
+            if (SelectedFeedFontIcon != null)
+            {
+                SelectedFeedFontIcon.Glyph = "\uE909";
+                SelectedFeedFontIcon.Visibility = Visibility.Visible;
+            }
         }
-        catch (Exception ex)
+        else
         {
-            System.Diagnostics.Debug.WriteLine($"[RssFeedDetailPage] Error loading icon: {ex.Message}");
-            SelectedFeedIcon.Source = null;
+            if (SelectedFeedFontIcon != null) SelectedFeedFontIcon.Visibility = Visibility.Collapsed;
+            if (SelectedFeedIconBorder != null) SelectedFeedIconBorder.Visibility = Visibility.Visible;
+            try
+            {
+                SelectedFeedIcon.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(feed.IconUrl));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RssFeedDetailPage] Error loading icon: {ex.Message}");
+                SelectedFeedIcon.Source = null;
+            }
         }
     }
 
@@ -915,10 +1044,15 @@ public sealed partial class RssFeedDetailPage : Page
     {
         double width = e.NewSize.Width;
 
-        // Hide description text sooner to avoid collision
+        // Hide description text and search box sooner to avoid collision
         if (RssSubtitleTextBlock != null)
         {
             RssSubtitleTextBlock.Visibility = width < 880 ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        if (ArticleSearchBox != null)
+        {
+            ArticleSearchBox.Visibility = width < 880 ? Visibility.Collapsed : Visibility.Visible;
         }
 
         // Switch Pivot headers to icons later
@@ -1365,5 +1499,189 @@ public sealed partial class RssFeedDetailPage : Page
         }
 
         return selected;
+    }
+
+    private async Task LoadAllNewsFeedAsync(bool forceRefresh = false)
+    {
+        LoadingPanel.Visibility = Visibility.Visible;
+        ArticlesListView.Visibility = Visibility.Collapsed;
+
+        var feeds = _rssService.Feeds;
+        if (feeds == null || feeds.Count == 0)
+        {
+            LoadingPanel.Visibility = Visibility.Collapsed;
+            ArticlesListView.Visibility = Visibility.Visible;
+            _articles.Clear();
+            return;
+        }
+
+        try
+        {
+            var tasks = feeds.Select(async feed =>
+            {
+                List<RssItem>? items = null;
+                if (!forceRefresh)
+                {
+                    lock (_allFeedsCache)
+                    {
+                        _allFeedsCache.TryGetValue(feed.Url, out items);
+                    }
+                }
+
+                if (items == null || items.Count == 0)
+                {
+                    try
+                    {
+                        items = await _rssService.FetchFeedItemsAsync(feed);
+                        lock (_allFeedsCache)
+                        {
+                            _allFeedsCache[feed.Url] = items;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[RssFeedDetailPage] Error fetching {feed.Name}: {ex.Message}");
+                        items = new List<RssItem>();
+                    }
+                }
+                return new { Feed = feed, Items = items };
+            }).ToList();
+
+            await Task.WhenAll(tasks);
+
+            // Populate from cache in selector order
+            var displayItems = new List<RssItem>();
+            foreach (var feed in feeds)
+            {
+                List<RssItem>? items = null;
+                lock (_allFeedsCache)
+                {
+                    _allFeedsCache.TryGetValue(feed.Url, out items);
+                }
+                if (items != null)
+                {
+                    displayItems.AddRange(items.Take(2));
+                }
+            }
+
+            // Only update UI if we are still on the "All News" feed!
+            if (_currentLocalFeed != null && _currentLocalFeed.Url == "all_news")
+            {
+                string query = ArticleSearchBox.Text.Trim();
+                if (string.IsNullOrEmpty(query))
+                {
+                    _articles.Clear();
+                    foreach (var item in displayItems)
+                    {
+                        _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(item));
+                    }
+                    LoadingPanel.Visibility = Visibility.Collapsed;
+                    ArticlesListView.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    FilterArticles(query);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[RssFeedDetailPage] Error loading All News: {ex.Message}");
+        }
+        finally
+        {
+            if (_currentLocalFeed != null && _currentLocalFeed.Url == "all_news")
+            {
+                LoadingPanel.Visibility = Visibility.Collapsed;
+                ArticlesListView.Visibility = Visibility.Visible;
+            }
+        }
+    }
+
+    private void FilterArticles(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            if (_currentLocalFeed != null && _currentLocalFeed.Url == "all_news")
+            {
+                var displayItems = new List<RssItem>();
+                if (_rssService.Feeds != null)
+                {
+                    foreach (var feed in _rssService.Feeds)
+                    {
+                        List<RssItem>? items = null;
+                        lock (_allFeedsCache)
+                        {
+                            _allFeedsCache.TryGetValue(feed.Url, out items);
+                        }
+                        if (items != null)
+                        {
+                            displayItems.AddRange(items.Take(2));
+                        }
+                    }
+                }
+                _articles.Clear();
+                foreach (var item in displayItems)
+                {
+                    _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(item));
+                }
+            }
+            else
+            {
+                _articles.Clear();
+                foreach (var item in _rssService.Items)
+                {
+                    _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(item));
+                }
+            }
+            return;
+        }
+
+        var lowerQuery = query.ToLowerInvariant();
+        List<RssItem> filtered;
+
+        if (_currentLocalFeed != null && _currentLocalFeed.Url == "all_news")
+        {
+            var allItems = new List<RssItem>();
+            lock (_allFeedsCache)
+            {
+                foreach (var list in _allFeedsCache.Values)
+                {
+                    allItems.AddRange(list);
+                }
+            }
+            filtered = allItems
+                .Where(item => (item.Title != null && item.Title.Contains(lowerQuery, StringComparison.OrdinalIgnoreCase)) ||
+                               (item.Description != null && item.Description.Contains(lowerQuery, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(item => item.PublishDate)
+                .ToList();
+        }
+        else
+        {
+            filtered = _rssService.Items
+                .Where(item => (item.Title != null && item.Title.Contains(lowerQuery, StringComparison.OrdinalIgnoreCase)) ||
+                               (item.Description != null && item.Description.Contains(lowerQuery, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(item => item.PublishDate)
+                .ToList();
+        }
+
+        _articles.Clear();
+        foreach (var item in filtered)
+        {
+            _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(item));
+        }
+    }
+
+    private void ArticleSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput || string.IsNullOrEmpty(sender.Text))
+        {
+            FilterArticles(sender.Text);
+        }
+    }
+
+    private void ArticleSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        FilterArticles(sender.Text);
     }
 }
