@@ -3,8 +3,10 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Daily_WinUI.Services;
+using Daily_WinUI.Views;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Daily_WinUI.Controls
@@ -21,24 +23,17 @@ namespace Daily_WinUI.Controls
 
         public void Populate(List<NewsRecommendationData> recs)
         {
-            _recs = recs;
-            if (_recs != null && _recs.Count >= 2)
+            _recs = recs ?? new List<NewsRecommendationData>();
+            if (_recs.Count > 0)
             {
-                Rec1Title.Text = _recs[0].Title;
-                Rec1Reason.Text = _recs[0].Reason;
-                Rec1Source.Text = _recs[0].Source;
-
-                Rec2Title.Text = _recs[1].Title;
-                Rec2Reason.Text = _recs[1].Reason;
-                Rec2Source.Text = _recs[1].Source;
-
-                ContentPanel.Visibility = Visibility.Visible;
+                RecommendationsItemsControl.ItemsSource = _recs.Take(4).ToList();
+                RecommendationsItemsControl.Visibility = Visibility.Visible;
                 NoDataText.Visibility = Visibility.Collapsed;
             }
             else
             {
                 NoDataText.Visibility = Visibility.Visible;
-                ContentPanel.Visibility = Visibility.Collapsed;
+                RecommendationsItemsControl.Visibility = Visibility.Collapsed;
             }
             LoadingRing.IsActive = false;
             LoadingRing.Visibility = Visibility.Collapsed;
@@ -46,7 +41,7 @@ namespace Daily_WinUI.Controls
 
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
-            if (_recs != null && _recs.Count >= 2)
+            if (_recs != null && _recs.Count > 0)
             {
                 // Already populated by parent overlay
                 return;
@@ -95,14 +90,12 @@ namespace Daily_WinUI.Controls
 
         private void RecGrid_Tapped(object sender, TappedRoutedEventArgs e)
         {
-            // Standard action: open the RSS feed list
-            if (App.Current.MainWindow is MainWindow mw)
+            if (sender is FrameworkElement element && element.DataContext is NewsRecommendationData rec)
             {
-                mw.DispatcherQueue.TryEnqueue(() =>
+                if (rec.RssItem != null)
                 {
-                    // If we want to navigate or alert, we can.
-                    // For now, it behaves as a visual recommendations widget.
-                });
+                    MainPage.Current?.OpenDetailWindow(typeof(RssFeedDetailPage), rec.RssItem);
+                }
             }
         }
     }

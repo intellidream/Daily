@@ -13,6 +13,7 @@ namespace Daily_WinUI.Services
     {
         Task TrackEventAsync(string feature, string actionType, string metadataJson);
         Task SyncEventsAsync();
+        Task PullEventsAsync();
         Task<string> GetWeeklyBehaviorSummaryAsync();
         Task ClearHistoryAsync();
     }
@@ -116,6 +117,88 @@ namespace Daily_WinUI.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[BehaviorService] SyncEventsAsync Error: {ex.Message}");
+            }
+        }
+
+        public async Task PullEventsAsync()
+        {
+            try
+            {
+                var settings = SettingsService.Load();
+                if (!settings.EnableSmartBehavior) return;
+
+                string userId = _supabase.Auth?.CurrentUser?.Id;
+                if (string.IsNullOrEmpty(userId)) return;
+
+                await _db.InitializeAsync();
+
+                DateTime pullCutoff;
+                bool isInitial = !settings.HasCompletedInitialBehaviorPull;
+
+                if (isInitial)
+                {
+                    // Full remote pull just once after sign-in: pull up to 30 days
+                    pullCutoff = DateTime.UtcNow.AddDays(-30);
+                }
+                else
+                {
+                    // Afterwards, only pull deltas since our latest local event.
+                    // Fallback to 1 day if we have no local events but initial pull was done.
+                    var localMaxEvent = await _db.Connection.Table<SmartBehaviorEvent>()
+                        .Where(e => e.UserId == userId)
+                        .OrderByDescending(e => e.Timestamp)
+                        .FirstOrDefaultAsync();
+
+                    pullCutoff = localMaxEvent != null ? localMaxEvent.Timestamp : DateTime.UtcNow.AddDays(-1);
+                }
+
+                // Fetch remote events since our cutoff
+                var response = await _supabase.From<SmartBehaviorEventRemote>()
+                    .Where(e => e.UserId == userId && e.Timestamp > pullCutoff)
+                    .Get();
+
+                var remoteEvents = response.Models;
+                if (remoteEvents != null && remoteEvents.Count > 0)
+                {
+                    var localEventsToInsert = new List<SmartBehaviorEvent>();
+                    foreach (var remote in remoteEvents)
+                    {
+                        // Check if we already have this event locally to avoid duplicate primary key errors
+                        var exists = await _db.Connection.Table<SmartBehaviorEvent>()
+                            .Where(e => e.Id == remote.Id)
+                            .CountAsync() > 0;
+
+                        if (!exists)
+                        {
+                            localEventsToInsert.Add(new SmartBehaviorEvent
+                            {
+                                Id = remote.Id,
+                                UserId = remote.UserId,
+                                Feature = remote.Feature,
+                                ActionType = remote.ActionType,
+                                Metadata = remote.Metadata,
+                                Timestamp = remote.Timestamp,
+                                IsSynced = true // Mark as synced since it came from cloud
+                            });
+                        }
+                    }
+
+                    if (localEventsToInsert.Count > 0)
+                    {
+                        await _db.Connection.InsertAllAsync(localEventsToInsert);
+                        System.Diagnostics.Debug.WriteLine($"[BehaviorService] Pulled {localEventsToInsert.Count} behavior events from Supabase.");
+                    }
+                }
+
+                if (isInitial)
+                {
+                    settings.HasCompletedInitialBehaviorPull = true;
+                    SettingsService.Save(settings);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BehaviorService] PullEventsAsync Error: {ex.Message}");
             }
         }
 

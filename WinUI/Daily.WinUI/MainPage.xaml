@@ -233,17 +233,18 @@
                             </Grid.ColumnDefinitions>
                             
                             <!-- GemAIcon SVG Image & Pulsating Glow Container -->
-                            <Grid x:Name="BriefingIconContainer" Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center" Width="96" Height="96">
+                            <Grid x:Name="BriefingIconContainer" Grid.Column="0" Margin="-12,0,4,0" VerticalAlignment="Center" Width="120" Height="120">
                                 <Ellipse x:Name="AIIconGlow"
-                                         Width="64"
-                                         Height="64"
-                                         Opacity="0.3"
+                                         Width="120"
+                                         Height="120"
+                                         Opacity="0.4"
                                          HorizontalAlignment="Center"
                                          VerticalAlignment="Center"
                                          RenderTransformOrigin="0.5,0.5">
                                     <Ellipse.Fill>
                                         <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
-                                            <GradientStop Color="{ThemeResource AppBriefingIconGlowColor}" Offset="0" />
+                                            <GradientStop Color="#FF7C4DFF" Offset="0" />
+                                            <GradientStop Color="#50FF00E5" Offset="0.6" />
                                             <GradientStop Color="Transparent" Offset="1" />
                                         </RadialGradientBrush>
                                     </Ellipse.Fill>
@@ -530,7 +531,7 @@
                                     </Grid.ColumnDefinitions>
                                     <!-- Radial progress -->
                                     <Grid Width="50" Height="50" VerticalAlignment="Center" Margin="0,0,12,0">
-                                        <ProgressRing x:Name="BriefingHabitsProgress" Minimum="0" Maximum="4" Value="1" Width="50" Height="50" Foreground="#FF9800" Background="#33FFFFFF"/>
+                                        <ProgressRing x:Name="BriefingHabitsProgress" IsIndeterminate="False" Minimum="0" Maximum="4" Value="1" Width="50" Height="50" Foreground="#FF9800" Background="#33FFFFFF"/>
                                         <TextBlock x:Name="BriefingHabitsProgressText" Text="1/4" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}"/>
                                     </Grid>
                                     <!-- Dynamic text bullet checklist -->

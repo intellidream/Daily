@@ -256,4 +256,13 @@ namespace Daily.Models
         [Indexed]
         public bool IsSynced { get; set; } = false;
     }
+
+    [Table("smart_briefing_cache")]
+    public class CachedSmartBriefing
+    {
+        [PrimaryKey]
+        public string UserId { get; set; } = string.Empty;
+        public string SerializedData { get; set; } = string.Empty; // JSON-serialized SmartBriefingData
+        public DateTime Timestamp { get; set; }
+    }
 }

@@ -213,6 +213,18 @@ To resolve this conflict, the project targets copy backend runtimes into isolate
    ```
 3. **Dynamic DLL Search Preloading**: At runtime, `AIManager` calls `SetDllDirectory()` pointing to the isolated subdirectory (`cuda12` or `vulkan`) before `LLamaUniversalEngine` loads, ensuring the correct vendor DLL is resolved.
 
+### 2.5 Briefing Cache & Prefetching Engine
+To reduce unnecessary local hardware power consumption (NPU/GPU/CPU) and optimize remote Supabase database egress, the daily briefing narrative utilizes a robust caching and prefetching manager (`SmartBriefingCacheManager`):
+1. **Local & Cloud Storage**: Briefing payloads are saved as serialized JSON in the local SQLite table `smart_briefing_cache` and in `AppSettings` (for fast memory access). The cache is automatically synced to the remote `smart_briefings` table in Supabase.
+2. **15-Minute Age Gate**: If a briefing is requested within 15 minutes of creation, it is served instantly from the cache, bypassing database scans and AI execution entirely.
+3. **Telemetry Delta Evaluation**: After 15 minutes, the manager compares fresh raw telemetry against the cached data. If variations are beneath specific thresholds:
+   - Weather Temperature change $\leq$ 1.5°C
+   - Steps progress delta $\leq$ 1000 steps
+   - Habit totals and completions remain identical
+   - Top news recommendation titles are unchanged
+   The engine re-uses the existing AI narrative text but updates the numeric widgets with fresh metrics, avoiding costly SLM model generation.
+4. **Silent Prefetching**: Triggered in the background during app startup or window restoration from system tray to ensure the briefing is ready when the user opens the overlay.
+
 ---
 
 ## 3. UI/UX & Layout
@@ -220,16 +232,17 @@ To resolve this conflict, the project targets copy backend runtimes into isolate
 ### 3.1 Integrated Views & Interacting Panels
 - **Smart Briefing Overlay**: A premium welcome screen that overlays the main dashboard (frosted glassmorphism, adapting to light/dark themes).
   - *Dynamic Typing Narrative*: A Bixby/Assistant-style text typing block displaying time-adapted greetings and summarized daily highlights.
+  - *Premium Glowing Halo*: A large `120x120px` ambient pulsing glow behind the AI icon utilizing a radial gradient blending Deep Violet (`#FF7C4DFF`), translucent Magenta (`#50FF00E5`), and transparency.
   - *Typewriter Animation Milestones*: Visual cards slide up and fade into view sequentially as typing progress metrics are reached:
-    - **20% Progress**: Fades in the *Weather Forecast card* (max temp, 3-day preview).
+    - **20% Progress**: Fades in the *Weather Forecast card* (max temp, 3-day preview with icon codes mapped to Segoe Fluent Icons).
     - **40% Progress**: Fades in the *Health & Vitals card* (steps progress, sleep duration, resting heart rate).
     - **60% Progress**: Fades in the *Finances & Watchlist card* (net worth, ticker changes).
-    - **80% Progress**: Fades in the *Habits Tracker card* (completion ratio, circular progress).
-    - **92% Progress**: Fades in the *AI News Recommendations card* (embedded `NewsRecommendationsWidgetControl` showing custom feed topics).
+    - **80% Progress**: Fades in the *Habits Tracker card* (completion ratio, circular progress ring with `IsIndeterminate="False"`).
+    - **92% Progress**: Fades in the *AI News Recommendations card* (embedded `NewsRecommendationsWidgetControl` showing custom feed topics from up to 4 recommendations). Cards are interactive; tapping them navigates directly to the reader view (`RssFeedDetailPage`).
   - *Responsive Layout & Docking*: Listens to window resizing to toggle layouts. Wide window widths display narrative and cards side-by-side. When docked or resized under 850px width, panels stack vertically with narrow margins to optimize layout density.
-  - *Start My Day Centering*: The primary action button and "Show at startup" checkbox are vertically and horizontally centered in the actions panel.
+  - *Dismiss Button*: An early-dismiss action button allows bypassing the loading state immediately.
 - **Settings Panel (AI & Accelerator Preferences)**:
-  - Toggle switch for "Startup Smart Briefing" which saves state immediately.
+  - Toggle switch for "Smart Briefing Summary" (replaces the legacy Startup checkbox inside the overlay) which saves state immediately.
   - Local AI Accelerator combo box to select the hardware device (`Auto`, `NPU`, `GPU`, `CPU`, `Fallback`).
   - NPU/Hardware engine detection displaying dynamic recommendations ("Recommended for your system") based on CPU/NPU hardware capabilities.
   - "Download AI Pack" button executing a download from Hugging Face for the optimized model weights, displaying real-time speed (MB/s), completion percentage, and estimated time remaining (ETA).

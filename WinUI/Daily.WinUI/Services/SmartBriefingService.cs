@@ -35,6 +35,7 @@ namespace Daily_WinUI.Services
         public string Title { get; set; } = string.Empty;
         public string Source { get; set; } = string.Empty;
         public string Reason { get; set; } = string.Empty;
+        public RssItem? RssItem { get; set; }
     }
 
     public sealed class SmartBriefingData
@@ -82,6 +83,10 @@ namespace Daily_WinUI.Services
 
         // News Recommendations
         public List<NewsRecommendationData> NewsRecommendations { get; set; } = new();
+
+        // Weather Details
+        public string WeatherHourlyDetails { get; set; } = string.Empty;
+        public string WeatherFiveDayDetails { get; set; } = string.Empty;
     }
 
     public sealed class SmartBriefingService
@@ -118,6 +123,12 @@ namespace Daily_WinUI.Services
         }
 
         public async Task<SmartBriefingData> GenerateBriefingDataAsync(string userName)
+        {
+            var data = await LoadBriefingMetricsAsync(userName);
+            return await GenerateAiNarrativeAsync(data, userName);
+        }
+
+        public async Task<SmartBriefingData> LoadBriefingMetricsAsync(string userName)
         {
             var data = new SmartBriefingData();
             
@@ -213,21 +224,50 @@ namespace Daily_WinUI.Services
                         {
                             string iconGlyph = "\uE706"; // default sun
                             string colorHex = "#FF9800"; // sunny orange
-                            string cond = day.Description;
-                            if (cond.Contains("Rain", StringComparison.OrdinalIgnoreCase) || cond.Contains("Drizzle", StringComparison.OrdinalIgnoreCase))
+                            string iconCode = day.IconCode ?? "";
+                            
+                            if (iconCode.StartsWith("01"))
                             {
-                                iconGlyph = "\uE774"; // rain
-                                colorHex = "#2196F3"; // blue
+                                if (iconCode.EndsWith("n"))
+                                {
+                                    iconGlyph = "\uE708"; // Moon
+                                    colorHex = "#90CAF9"; // light blue
+                                }
+                                else
+                                {
+                                    iconGlyph = "\uE706"; // Sun
+                                    colorHex = "#FF9800"; // orange
+                                }
                             }
-                            else if (cond.Contains("Cloud", StringComparison.OrdinalIgnoreCase))
+                            else if (iconCode.StartsWith("02"))
                             {
-                                iconGlyph = "\uE753"; // cloudy
-                                colorHex = "#B0BEC5"; // grey-blue
+                                iconGlyph = "\uE7C3"; // Cloud/Sun
+                                colorHex = "#B0BEC5";
                             }
-                            else if (cond.Contains("Snow", StringComparison.OrdinalIgnoreCase))
+                            else if (iconCode.StartsWith("03") || iconCode.StartsWith("04"))
                             {
-                                iconGlyph = "\uE77C"; // snow
-                                colorHex = "#90CAF9"; // light blue
+                                iconGlyph = "\uE753"; // Cloud
+                                colorHex = "#B0BEC5";
+                            }
+                            else if (iconCode.StartsWith("09") || iconCode.StartsWith("10"))
+                            {
+                                iconGlyph = "\uE774"; // Rain
+                                colorHex = "#2196F3";
+                            }
+                            else if (iconCode.StartsWith("11"))
+                            {
+                                iconGlyph = "\uEA09"; // Lightning
+                                colorHex = "#7C4DFF";
+                            }
+                            else if (iconCode.StartsWith("13"))
+                            {
+                                iconGlyph = "\uE77C"; // Snowflake
+                                colorHex = "#90CAF9";
+                            }
+                            else if (iconCode.StartsWith("50"))
+                            {
+                                iconGlyph = "\uE705"; // Haze
+                                colorHex = "#B0BEC5";
                             }
                             
                             data.WeatherForecast.Add(new ForecastDayData
@@ -668,7 +708,8 @@ namespace Daily_WinUI.Services
                     {
                         Title = sel.Item.Title,
                         Source = sel.Item.PublicationName ?? "RSS Feed",
-                        Reason = sel.Reason
+                        Reason = sel.Reason,
+                        RssItem = sel.Item
                     });
                 }
             }
@@ -690,7 +731,19 @@ namespace Daily_WinUI.Services
             }
 
             // 7. Generate AI narrative or fallback
-            string fallbackBriefing = $"{weatherSentence} {healthSentence}\n\n{financeSentence} {habitsSentence}\n\nLastly, we found a couple of interesting articles in your feed you might like: \"{data.NewsRecommendations[0].Title}\" from {data.NewsRecommendations[0].Source}, and \"{data.NewsRecommendations[1].Title}\" from {data.NewsRecommendations[1].Source}.";
+            data.WeatherHourlyDetails = hourlyWeatherDetails;
+            data.WeatherFiveDayDetails = fiveDayWeatherDetails;
+
+            string fallbackBriefing = $"{weatherSentence} {healthSentence}\n\n{financeSentence} {habitsSentence}\n\nLastly, we found a couple of interesting articles in your feed you might like: \"{(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Source : "N/A")}, and \"{(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Source : "N/A")}.";
+            data.BriefingText = fallbackBriefing;
+            data.IntroText = "";
+            data.OutroText = "Have a highly productive day!";
+            return data;
+        }
+
+        public async Task<SmartBriefingData> GenerateAiNarrativeAsync(SmartBriefingData data, string userName)
+        {
+            string fallbackBriefing = data.BriefingText ?? string.Empty;
 
             bool useAi = false;
             try
@@ -722,8 +775,8 @@ namespace Daily_WinUI.Services
                         "Generate a concise, natural, and friendly daily briefing narrative based on the user's data. " +
                         "Analyze their weather, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.\n" +
                         "Rules:\n" +
-                        "- Jump straight into the greeting and the narrative briefing. Do NOT write introductory filler like 'Here is your briefing tailored for you' or 'Based on your data'.\n" +
-                        "- Keep the briefing structured in 2-3 short paragraphs of conversational flowing text. Do not use markdown headers or lists.\n" +
+                        "- Jump straight into the greeting and the narrative briefing. Do NOT write introductory filler like 'Here is your briefing' or 'Based on your data'.\n" +
+                        "- Keep the briefing structured in 2-3 short, focused paragraphs of conversational flowing text. Keep descriptions extremely concise and direct to stay on point and avoid hallucinating details. Do not use markdown headers or lists.\n" +
                         "- Format your paragraphs clearly, using double newlines (\n\n) to separate them.\n" +
                         "- If finance data is marked as UNINITIALIZED, do not congratulate the user on net worth or mention a $0 net worth. Suggest setting up their ledger or adding an account instead.\n" +
                         "- If smoking habit data is present, treat it as a negative target (reduction/cessation). Do NOT congratulate the user for smoking or logging smokes; instead, encourage reduction or praise staying under limit.\n" +
@@ -742,8 +795,8 @@ namespace Daily_WinUI.Services
                         $"Current Time: {DateTime.Now:f}\n\n" +
                         $"--- WEATHER DATA ---\n" +
                         $"Condition: {data.WeatherCondition} (Temp: {data.WeatherTemp}°C)\n" +
-                        $"Hourly Forecast (next 8 hours):\n{hourlyWeatherDetails}\n" +
-                        $"5-Day Forecast:\n{fiveDayWeatherDetails}\n\n" +
+                        $"Hourly Forecast (next 8 hours):\n{data.WeatherHourlyDetails}\n" +
+                        $"5-Day Forecast:\n{data.WeatherFiveDayDetails}\n\n" +
                         $"--- HEALTH DATA ---\n" +
                         $"Steps Today: {data.HealthSteps}\n" +
                         $"Sleep Last Night: {data.HealthSleepHours:F1} hours\n" +

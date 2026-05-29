@@ -240,6 +240,7 @@ public partial class App : Application
         services.AddSingleton<Daily_WinUI.Services.WinUIAuthService>();
         services.AddSingleton<Daily_WinUI.Services.WinUIWidgetService>();
         services.AddSingleton<Daily_WinUI.Services.SmartBriefingService>();
+        services.AddSingleton<Daily_WinUI.Services.SmartBriefingCacheManager>();
         services.AddSingleton<Daily_WinUI.Services.IBehaviorService, Daily_WinUI.Services.BehaviorService>();
         services.AddSingleton<Daily.Services.IHabitsRepository, Daily.Services.HabitsRepository>();
         services.AddSingleton<Daily.Services.IHabitsService, Daily.Services.HabitsService>();

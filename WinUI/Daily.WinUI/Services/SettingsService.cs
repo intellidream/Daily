@@ -45,6 +45,8 @@ public sealed class AppSettings
     public bool HasWindowPosition { get; set; }
     public bool CloseToTray { get; set; } = false;
     public bool EnableSmartBriefing { get; set; } = true;
+    public string? CachedBriefingJson { get; set; }
+    public DateTime? CachedBriefingTime { get; set; }
     public bool LocalAiModelDownloaded { get; set; } = false;
     public string SelectedLocalAiModel { get; set; } = "llama32_1b";
     public string SelectedAiAccelerator { get; set; } = "Auto";
@@ -55,6 +57,7 @@ public sealed class AppSettings
     // ── Smart Behavior Configurations ──
     public bool EnableSmartBehavior { get; set; } = true;
     public bool SyncSmartBehaviorToCloud { get; set; } = true;
+    public bool HasCompletedInitialBehaviorPull { get; set; } = false;
 
     // ── News Configurations ──
     public bool AutoRefreshNewsOnStartup { get; set; } = true;

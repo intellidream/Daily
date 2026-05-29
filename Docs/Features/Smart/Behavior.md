@@ -29,6 +29,12 @@ To avoid flooding Supabase with direct HTTP requests on every single user intera
 2. If cloud sync is enabled, a background thread is spawned to batch upsert new events to Supabase.
 3. Failed updates fail silently and are retried during the next sync event.
 
+#### 2.1.1 Bidirectional Delta Sync (Egress Minimization)
+To support multi-device user profile persistence without incurring high network egress fees, behavior events are synced bidirectionally using a strict delta strategy:
+1. **Initial Full Pull (Once)**: On fresh sign-in or first boot, the app performs a one-time remote history pull covering the last 30 days. It then sets the `HasCompletedInitialBehaviorPull` setting to `true`.
+2. **Delta-Only Pulls**: On subsequent launches, the app retrieves only new events logged since the latest local event's timestamp. If the local database is clean but the initial pull was already completed, it falls back to a very tight 1-day check window.
+3. **Table Schema**: Remote events are synchronized with the `behavior_events` table in Supabase, matching the local `smart_behavior_events` SQLite schema.
+
 ```mermaid
 sequenceDiagram
     participant User as User Interaction

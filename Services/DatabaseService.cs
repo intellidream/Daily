@@ -69,6 +69,9 @@ namespace Daily.Services
 
                 // Smart Behavior
                 await _connection.CreateTableAsync<SmartBehaviorEvent>().ConfigureAwait(false);
+
+                // Smart Briefing Cache
+                await _connection.CreateTableAsync<CachedSmartBriefing>().ConfigureAwait(false);
                 
                 // FORCE MIGRATION: Ensure UpdatedAt exists (sqlite-net-pcl upgrade glitch protection)
                 await AddColumnIfNotExists("user_preferences", "UpdatedAt", "varchar").ConfigureAwait(false);

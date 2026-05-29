@@ -136,13 +136,30 @@ public sealed partial class MainPage : Page
             }
         }
 
+        // 4.1 Sync behavior events and briefing cache from remote (Supabase)
+        try
+        {
+            var behaviorSvc = App.Current.Services.GetRequiredService<IBehaviorService>();
+            var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
+            
+            // Run pulls concurrently
+            await Task.WhenAll(
+                behaviorSvc.PullEventsAsync(),
+                cacheManager.PullRemoteCacheAsync()
+            );
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainPage] Remote pulls failed: {ex.Message}");
+        }
+
         // Pre-generate Smart Briefing data in background as soon as data loading is complete
         var settingsForPreGen = SettingsService.Load();
         _pregeneratedAccelerator = settingsForPreGen.SelectedAiAccelerator ?? "Auto";
         _pregeneratedModelId = settingsForPreGen.SelectedLocalAiModel ?? "llama32_1b";
         string currentUserName = _authService.CurrentUserDisplayName ?? "Explorer";
-        var briefingSvc = App.Current.Services.GetRequiredService<SmartBriefingService>();
-        _pregeneratedBriefingTask = briefingSvc.GenerateBriefingDataAsync(currentUserName);
+        var cacheMgr = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
+        _pregeneratedBriefingTask = cacheMgr.GetOrGenerateBriefingAsync(currentUserName);
 
         if (isInitialBoot && mainWindow != null)
         {
@@ -182,8 +199,8 @@ public sealed partial class MainPage : Page
         _pregeneratedAccelerator = settingsForRefresh.SelectedAiAccelerator ?? "Auto";
         _pregeneratedModelId = settingsForRefresh.SelectedLocalAiModel ?? "llama32_1b";
         string userName = _authService.CurrentUserDisplayName ?? "Explorer";
-        var briefingSvc = App.Current.Services.GetRequiredService<SmartBriefingService>();
-        _pregeneratedBriefingTask = briefingSvc.GenerateBriefingDataAsync(userName);
+        var cacheMgr = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
+        _pregeneratedBriefingTask = cacheMgr.GetOrGenerateBriefingAsync(userName, forceRefresh: true);
     }
 
     public void TriggerRefresh() => RefreshLiveWidgets();
@@ -474,7 +491,7 @@ public sealed partial class MainPage : Page
     {
         OpenDetailWindow(typeof(RssFeedDetailPage), e);
     }
-    private void OpenDetailWindow(System.Type pageType, object parameter = null)
+    public void OpenDetailWindow(System.Type pageType, object parameter = null)
     {
         if (_openWindows.TryGetValue(pageType, out var existingWindow))
         {
@@ -570,6 +587,7 @@ public sealed partial class MainPage : Page
             _pregeneratedBriefingTask = null;
         }
 
+        var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
         if (_pregeneratedBriefingTask != null)
         {
             try
@@ -579,15 +597,13 @@ public sealed partial class MainPage : Page
             catch (System.Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[MainPage] Pregenerated briefing task failed: {ex.Message}");
-                var briefingService = App.Current.Services.GetRequiredService<SmartBriefingService>();
-                data = await briefingService.GenerateBriefingDataAsync(userName);
+                data = await cacheManager.GetOrGenerateBriefingAsync(userName);
             }
             _pregeneratedBriefingTask = null; // Consume the task
         }
         else
         {
-            var briefingService = App.Current.Services.GetRequiredService<SmartBriefingService>();
-            data = await briefingService.GenerateBriefingDataAsync(userName);
+            data = await cacheManager.GetOrGenerateBriefingAsync(userName);
         }
 
         if (!_isBriefingActive) return;
