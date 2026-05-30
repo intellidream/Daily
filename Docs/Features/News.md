@@ -30,6 +30,14 @@ The News Reader is a core feature that provides users with a distraction-free, f
 - Suggests up to 20 related articles while the user is reading.
 - Uses term-frequency heuristics, category matching, and a round-robin fairness strategy to build the recommendation set (see Technical Architecture).
 
+### 1.5 Global Aggregation ("All News")
+- **Unified Feed View**: Users can select "All News" from the feed menu to view a consolidated list of articles aggregated from all active feed subscriptions.
+- **Fairness Distribution**: The "All News" view takes the top 2 articles from each subscribed feed (ordered by the subscription feed list) to present a balanced initial briefing.
+
+### 1.6 Inline Article Search
+- **Instant Search**: An interactive search box allows users to filter articles in real-time by typing keywords that match article titles or descriptions.
+- **Context-Aware Scoping**: The search dynamically adjusts its scope: when viewing a specific RSS feed, it filters items within that feed; when in the "All News" view, it runs a global search across all cached articles from all feeds.
+
 ---
 
 ## 2. Technical Architecture & Data Model
@@ -87,6 +95,20 @@ graph TD
 - **Fairness Guarantee**: The Round-Robin selection rotates through distinct publication names (e.g. taking one TechCrunch article, then one Wired article, then one VentureBeat article) to prevent a single source from filling the entire list.
 - **Background Pre-fetching**: On startup, a background task (`PreFetchAllFeedsInBackground`) loops through all inactive feeds and downloads their feed items, caching them in `_allFeedsCache` so recommendation candidates are available instantly.
 
+### 2.4 "All News" Parallel Fetching & Caching
+- **Parallel Loading**: When the "All News" view is selected, the application fetches articles from all subscribed feeds in parallel using `Task.WhenAll`.
+- **In-Memory Caching (`_allFeedsCache`)**:
+  - To prevent excessive network requests, fetched feed items are cached in a thread-safe dictionary `Dictionary<string, List<RssItem>> _allFeedsCache`.
+  - Reads and writes to `_allFeedsCache` are protected by a `lock` statement.
+  - When loading "All News" (without a force refresh), cached items are preferred. If cache misses occur, the feeds are fetched and cached.
+  - Selecting "Refresh" clears the cache and refetches all feeds from the source.
+
+### 2.5 Article Search & Filtering Logic
+- **Real-Time Filtering**: The UI binds to the search box's text change events (`ArticleSearchBox_TextChanged` and `ArticleSearchBox_QuerySubmitted`), running a case-insensitive filtering lookup.
+- **Search Execution**:
+  - Filters articles matching `lowerQuery = query.ToLowerInvariant()` against `item.Title` or `item.Description` using `Contains(..., StringComparison.OrdinalIgnoreCase)`.
+  - In "All News" mode, it aggregates and searches across all lists inside `_allFeedsCache.Values`, returning matching articles sorted in descending order of their `PublishDate`.
+
 ---
 
 ## 3. UI/UX & Styling
@@ -99,6 +121,11 @@ graph TD
 - The smart recommendations list is a horizontally scrollable container.
 - An event listener (`RecommendationsScrollViewer_ViewChanged`) calculates the position of each item relative to the scroll viewport bounds using `container.TransformToVisual(RecommendationsScrollViewer)`.
 - It dynamically applies a linear opacity fade-out to items entering the left and right edges (fade zone = 36px), creating a smooth, premium glass-like visual edge transition.
+
+### 3.3 Search Bar Styling & Responsiveness
+- **Glassmorphic Design**: The `ArticleSearchBox` utilizes standard app theme brushes (`AppGlassColorBrush` and `AppGlassBorderColorBrush`) with a 1px border and custom corner radius (`CornerRadius="18"`) for a modern, rounded pill design.
+- **Responsive Viewport Collapse**: In the page size change handler (`RssFeedDetailPage_SizeChanged`), the `ArticleSearchBox` is set to `Visibility.Collapsed` when the viewport width is less than 880px to prevent layout collision with the feed headers and cycle controls.
+- **All News Visual Treatment**: When "All News" is selected, the custom favicon image border (`SelectedFeedIconBorder`) is collapsed, and a standard Segoe Fluent Icon glyph (`&#xE909;`) is displayed within `SelectedFeedFontIcon` to represent the global feed context.
 
 ---
 
@@ -113,6 +140,8 @@ graph TD
 | **Recommendations UI** | Horizontal `ScrollViewer` + `ItemsControl` with manual scroll fade-out calculations | Standard MudBlazor list layout wrapped in a `<MudSwipeArea>` |
 | **Navigation Flows** | Multi-level frame navigation inside `MainWindow.xaml` | Detail navigation service mapping URLs to Blazor components (`NavService`) |
 | **Gestures** | Mouse-hover and scroll-wheel drag behaviors | Touch gestures: Swiping left-to-right on a MudSwipeArea closes the reader |
+| **Article Search** | Native `AutoSuggestBox` filtering items locally or from cache | Not implemented / uses standard list |
+| **All News Feed** | Consolidates all feeds in parallel with thread-safe dictionary caching (`_allFeedsCache`) | Not implemented |
 
 ---
 
