@@ -87,6 +87,9 @@ namespace Daily_WinUI.Services
         // Weather Details
         public string WeatherHourlyDetails { get; set; } = string.Empty;
         public string WeatherFiveDayDetails { get; set; } = string.Empty;
+
+        // Caching metadata
+        public bool WasRegenerated { get; set; }
     }
 
     public sealed class SmartBriefingService
@@ -128,7 +131,7 @@ namespace Daily_WinUI.Services
             return await GenerateAiNarrativeAsync(data, userName);
         }
 
-        public async Task<SmartBriefingData> LoadBriefingMetricsAsync(string userName)
+        public async Task<SmartBriefingData> LoadBriefingMetricsAsync(string userName, bool onlyLocal = false)
         {
             var data = new SmartBriefingData();
             
@@ -141,7 +144,7 @@ namespace Daily_WinUI.Services
             data.Greeting = $"{greetingBase}, {userName}!";
 
             // Kick off all background operations in parallel tasks
-            var coordsTask = _locationService.GetCurrentCoordinatesAsync();
+            var coordsTask = !onlyLocal ? _locationService.GetCurrentCoordinatesAsync() : Task.FromResult<(double Latitude, double Longitude)?>(null);
             var stepsTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.Steps) : Task.FromResult<VitalMetric?>(null);
             var sleepTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.SleepDuration) : Task.FromResult<VitalMetric?>(null);
             var hrTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.HeartRate) : Task.FromResult<VitalMetric?>(null);
@@ -166,144 +169,150 @@ namespace Daily_WinUI.Services
             string hourlyWeatherDetails = "No hourly data available.";
             string fiveDayWeatherDetails = "No 5-day forecast available.";
             
-            try
+            if (!onlyLocal)
             {
-                var coords = await coordsTask;
-                var settings = SettingsService.Load();
-                if (!coords.HasValue && settings.LastLatitude.HasValue && settings.LastLongitude.HasValue)
+                try
                 {
-                    coords = (settings.LastLatitude.Value, settings.LastLongitude.Value);
-                    Console.WriteLine($"[SmartBriefingService] Location detection timed out/failed. Falling back to cached coords: {coords.Value.Latitude}, {coords.Value.Longitude}");
-                }
-
-                if (coords.HasValue)
-                {
-                    var weatherTask = _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
-                    var forecastTask = _weatherClient.GetFiveDayForecastAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
-                    var hourlyTask = _weatherClient.GetHourlyForecastAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem, 8);
-                    
-                    await Task.WhenAll(weatherTask, forecastTask, hourlyTask);
-                    
-                    var snapshot = weatherTask.Result;
-                    if (snapshot != null)
+                    var coords = await coordsTask;
+                    var settings = SettingsService.Load();
+                    if (!coords.HasValue && settings.LastLatitude.HasValue && settings.LastLongitude.HasValue)
                     {
-                        temp = snapshot.Temperature;
-                        condition = snapshot.Description;
+                        coords = (settings.LastLatitude.Value, settings.LastLongitude.Value);
+                        Console.WriteLine($"[SmartBriefingService] Location detection timed out/failed. Falling back to cached coords: {coords.Value.Latitude}, {coords.Value.Longitude}");
+                    }
+
+                    if (coords.HasValue)
+                    {
+                        var weatherTask = _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
+                        var forecastTask = _weatherClient.GetFiveDayForecastAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem);
+                        var hourlyTask = _weatherClient.GetHourlyForecastAsync(coords.Value.Latitude, coords.Value.Longitude, settings.UnitSystem, 8);
                         
-                        if (condition.Contains("rain", StringComparison.OrdinalIgnoreCase) || condition.Contains("drizzle", StringComparison.OrdinalIgnoreCase))
+                        await Task.WhenAll(weatherTask, forecastTask, hourlyTask);
+                        
+                        var snapshot = weatherTask.Result;
+                        if (snapshot != null)
                         {
-                            weatherSentence = $"The weather today is rainy ({temp:F1}°C), so we recommend keeping your habits and workouts indoors.";
+                            temp = snapshot.Temperature;
+                            condition = snapshot.Description;
+                            
+                            if (condition.Contains("rain", StringComparison.OrdinalIgnoreCase) || condition.Contains("drizzle", StringComparison.OrdinalIgnoreCase))
+                            {
+                                weatherSentence = $"The weather today is rainy ({temp:F1}°C), so we recommend keeping your habits and workouts indoors.";
+                            }
+                            else if (temp < 10)
+                            {
+                                weatherSentence = $"It's quite cold outside ({temp:F1}°C) with {condition} skies. Layer up if you're heading out.";
+                            }
+                            else
+                            {
+                                weatherSentence = $"Expect a pleasant day today with {condition} skies and a temperature of {temp:F1}°C.";
+                            }
                         }
-                        else if (temp < 10)
-                        {
-                            weatherSentence = $"It's quite cold outside ({temp:F1}°C) with {condition} skies. Layer up if you're heading out.";
-                        }
-                        else
-                        {
-                            weatherSentence = $"Expect a pleasant day today with {condition} skies and a temperature of {temp:F1}°C.";
-                        }
-                    }
 
-                    var hourlyList = hourlyTask.Result;
-                    if (hourlyList != null && hourlyList.Count > 0)
-                    {
-                        var sb = new StringBuilder();
-                        foreach (var hourData in hourlyList)
+                        var hourlyList = hourlyTask.Result;
+                        if (hourlyList != null && hourlyList.Count > 0)
                         {
-                            sb.AppendLine($"- {hourData.HourLabel}: {hourData.Temperature}°C (Feels like {hourData.FeelsLike}°C, Precip: {hourData.PrecipitationChance}%)");
+                            var sb = new StringBuilder();
+                            foreach (var hourData in hourlyList)
+                            {
+                                sb.AppendLine($"- {hourData.HourLabel}: {hourData.Temperature}°C (Feels like {hourData.FeelsLike}°C, Precip: {hourData.PrecipitationChance}%)");
+                            }
+                            hourlyWeatherDetails = sb.ToString();
                         }
-                        hourlyWeatherDetails = sb.ToString();
-                    }
 
-                    var forecastList = forecastTask.Result;
-                    if (forecastList != null && forecastList.Count > 0)
-                    {
-                        var sb = new StringBuilder();
-                        int added = 0;
-                        foreach (var day in forecastList)
+                        var forecastList = forecastTask.Result;
+                        if (forecastList != null && forecastList.Count > 0)
                         {
-                            string iconGlyph = "\uE706"; // default sun
-                            string colorHex = "#FF9800"; // sunny orange
-                            string iconCode = day.IconCode ?? "";
-                            
-                            if (iconCode.StartsWith("01"))
+                            var sb = new StringBuilder();
+                            int added = 0;
+                            foreach (var day in forecastList)
                             {
-                                if (iconCode.EndsWith("n"))
+                                string iconGlyph = "\uE706"; // default sun
+                                string colorHex = "#FF9800"; // sunny orange
+                                string iconCode = day.IconCode ?? "";
+                                
+                                if (iconCode.StartsWith("01"))
                                 {
-                                    iconGlyph = "\uE708"; // Moon
-                                    colorHex = "#90CAF9"; // light blue
+                                    if (iconCode.EndsWith("n"))
+                                    {
+                                        iconGlyph = "\uE708"; // Moon
+                                        colorHex = "#90CAF9"; // light blue
+                                    }
+                                    else
+                                    {
+                                        iconGlyph = "\uE706"; // Sun
+                                        colorHex = "#FF9800"; // orange
+                                    }
                                 }
-                                else
+                                else if (iconCode.StartsWith("02"))
                                 {
-                                    iconGlyph = "\uE706"; // Sun
-                                    colorHex = "#FF9800"; // orange
+                                    iconGlyph = "\uE7C3"; // Cloud/Sun
+                                    colorHex = "#B0BEC5";
                                 }
+                                else if (iconCode.StartsWith("03") || iconCode.StartsWith("04"))
+                                {
+                                    iconGlyph = "\uE753"; // Cloud
+                                    colorHex = "#B0BEC5";
+                                }
+                                else if (iconCode.StartsWith("09") || iconCode.StartsWith("10"))
+                                {
+                                    iconGlyph = "\uE774"; // Rain
+                                    colorHex = "#2196F3";
+                                }
+                                else if (iconCode.StartsWith("11"))
+                                {
+                                    iconGlyph = "\uEA09"; // Lightning
+                                    colorHex = "#7C4DFF";
+                                }
+                                else if (iconCode.StartsWith("13"))
+                                {
+                                    iconGlyph = "\uE77C"; // Snowflake
+                                    colorHex = "#90CAF9";
+                                }
+                                else if (iconCode.StartsWith("50"))
+                                {
+                                    iconGlyph = "\uE705"; // Haze
+                                    colorHex = "#B0BEC5";
+                                }
+                                
+                                data.WeatherForecast.Add(new ForecastDayData
+                                {
+                                    DayName = day.DayLabel,
+                                    Temp = day.MaxTemp,
+                                    Icon = iconGlyph,
+                                    ColorHex = colorHex
+                                });
+                                
+                                sb.AppendLine($"- {day.DayLabel}: Max {day.MaxTemp:F0}°C, Min {day.MinTemp:F0}°C, {day.Description} (Precip: {day.PrecipitationChance}%)");
+                                added++;
+                                if (added >= 5) break;
                             }
-                            else if (iconCode.StartsWith("02"))
-                            {
-                                iconGlyph = "\uE7C3"; // Cloud/Sun
-                                colorHex = "#B0BEC5";
-                            }
-                            else if (iconCode.StartsWith("03") || iconCode.StartsWith("04"))
-                            {
-                                iconGlyph = "\uE753"; // Cloud
-                                colorHex = "#B0BEC5";
-                            }
-                            else if (iconCode.StartsWith("09") || iconCode.StartsWith("10"))
-                            {
-                                iconGlyph = "\uE774"; // Rain
-                                colorHex = "#2196F3";
-                            }
-                            else if (iconCode.StartsWith("11"))
-                            {
-                                iconGlyph = "\uEA09"; // Lightning
-                                colorHex = "#7C4DFF";
-                            }
-                            else if (iconCode.StartsWith("13"))
-                            {
-                                iconGlyph = "\uE77C"; // Snowflake
-                                colorHex = "#90CAF9";
-                            }
-                            else if (iconCode.StartsWith("50"))
-                            {
-                                iconGlyph = "\uE705"; // Haze
-                                colorHex = "#B0BEC5";
-                            }
-                            
-                            data.WeatherForecast.Add(new ForecastDayData
-                            {
-                                DayName = day.DayLabel,
-                                Temp = day.MaxTemp,
-                                Icon = iconGlyph,
-                                ColorHex = colorHex
-                            });
-                            
-                            sb.AppendLine($"- {day.DayLabel}: Max {day.MaxTemp:F0}°C, Min {day.MinTemp:F0}°C, {day.Description} (Precip: {day.PrecipitationChance}%)");
-                            added++;
-                            if (added >= 5) break;
+                            fiveDayWeatherDetails = sb.ToString();
                         }
-                        fiveDayWeatherDetails = sb.ToString();
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[SmartBriefingService] Weather Fetch Error: {ex.Message}");
-            }
-
-            // Fallback weather forecast if empty
-            if (data.WeatherForecast.Count == 0)
-            {
-                data.WeatherForecast.Add(new ForecastDayData { DayName = "Tomorrow", Temp = temp + 1, Icon = "\uE706", ColorHex = "#FF9800" });
-                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(2).ToString("dddd"), Temp = temp - 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
-                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(3).ToString("dddd"), Temp = temp, Icon = "\uE774", ColorHex = "#2196F3" });
-                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(4).ToString("dddd"), Temp = temp + 2, Icon = "\uE706", ColorHex = "#FF9800" });
-                data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(5).ToString("dddd"), Temp = temp + 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SmartBriefingService] Weather Fetch Error: {ex.Message}");
+                }
             }
 
-            data.WeatherTemp = temp;
-            data.WeatherCondition = condition;
-            data.WeatherSummary = weatherSentence;
+            if (!onlyLocal)
+            {
+                // Fallback weather forecast if empty
+                if (data.WeatherForecast.Count == 0)
+                {
+                    data.WeatherForecast.Add(new ForecastDayData { DayName = "Tomorrow", Temp = temp + 1, Icon = "\uE706", ColorHex = "#FF9800" });
+                    data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(2).ToString("dddd"), Temp = temp - 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
+                    data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(3).ToString("dddd"), Temp = temp, Icon = "\uE774", ColorHex = "#2196F3" });
+                    data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(4).ToString("dddd"), Temp = temp + 2, Icon = "\uE706", ColorHex = "#FF9800" });
+                    data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(5).ToString("dddd"), Temp = temp + 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
+                }
+
+                data.WeatherTemp = temp;
+                data.WeatherCondition = condition;
+                data.WeatherSummary = weatherSentence;
+            }
 
 
             // 3. Health Aggregation
@@ -401,7 +410,7 @@ namespace Daily_WinUI.Services
                 data.HasLedgerData = hasLedgerData;
 
                 var symbols = symbolsTask.Result;
-                if (symbols != null && symbols.Count > 0)
+                if (!onlyLocal && symbols != null && symbols.Count > 0)
                 {
                     var quotes = await _financesService.GetStockQuotesAsync(symbols);
                     if (quotes != null)
@@ -426,11 +435,14 @@ namespace Daily_WinUI.Services
                 Console.WriteLine($"[SmartBriefingService] Finance Error: {ex.Message}");
             }
 
-            // Fallback stocks if empty
-            if (data.WatchlistStocks.Count == 0)
+            if (!onlyLocal)
             {
-                data.WatchlistStocks.Add(new StockBriefingData { Symbol = "MSFT", Price = 421.90m, PercentChange = 1.45m });
-                data.WatchlistStocks.Add(new StockBriefingData { Symbol = "AAPL", Price = 189.84m, PercentChange = -0.32m });
+                // Fallback stocks if empty
+                if (data.WatchlistStocks.Count == 0)
+                {
+                    data.WatchlistStocks.Add(new StockBriefingData { Symbol = "MSFT", Price = 421.90m, PercentChange = 1.45m });
+                    data.WatchlistStocks.Add(new StockBriefingData { Symbol = "AAPL", Price = 189.84m, PercentChange = -0.32m });
+                }
             }
 
             if (hasLedgerData)
@@ -508,8 +520,7 @@ namespace Daily_WinUI.Services
 
 
             // 6. News AI Recommendations with Source Diversity & Interest Matching
-            // 6. News AI Recommendations with Source Diversity & Interest Matching
-            if (_rssFeedService != null && _rssFeedService.Feeds != null && _rssFeedService.Feeds.Count > 0)
+            if (!onlyLocal && _rssFeedService != null && _rssFeedService.Feeds != null && _rssFeedService.Feeds.Count > 0)
             {
                 var allFeedItems = new List<RssItem>();
                 
@@ -714,20 +725,23 @@ namespace Daily_WinUI.Services
                 }
             }
 
-            if (data.NewsRecommendations.Count == 0)
+            if (!onlyLocal)
             {
-                data.NewsRecommendations.Add(new NewsRecommendationData
+                if (data.NewsRecommendations.Count == 0)
                 {
-                    Title = "The Rise of On-Device AI: NPUs and Privacy",
-                    Source = "Wired",
-                    Reason = "Top story in Technology"
-                });
-                data.NewsRecommendations.Add(new NewsRecommendationData
-                {
-                    Title = "Global Markets Rally Amid Economic Forecasts",
-                    Source = "Bloomberg",
-                    Reason = "Based on your Finance watchlist interest"
-                });
+                    data.NewsRecommendations.Add(new NewsRecommendationData
+                    {
+                        Title = "The Rise of On-Device AI: NPUs and Privacy",
+                        Source = "Wired",
+                        Reason = "Top story in Technology"
+                    });
+                    data.NewsRecommendations.Add(new NewsRecommendationData
+                    {
+                        Title = "Global Markets Rally Amid Economic Forecasts",
+                        Source = "Bloomberg",
+                        Reason = "Based on your Finance watchlist interest"
+                    });
+                }
             }
 
             // 7. Generate AI narrative or fallback

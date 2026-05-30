@@ -11,6 +11,14 @@ using System.Linq;
 
 namespace Daily_WinUI.Services
 {
+    public enum DayTimeSlot
+    {
+        Morning,      // 5:00 - 11:59
+        MidDay,       // 12:00 - 16:59
+        Evening,      // 17:00 - 21:59
+        Night         // 22:00 - 4:59
+    }
+
     public sealed class SmartBriefingCacheManager
     {
         private readonly IDatabaseService _db;
@@ -25,6 +33,16 @@ namespace Daily_WinUI.Services
             _db = db;
             _supabase = supabase;
             _briefingService = briefingService;
+        }
+
+        private DayTimeSlot GetDayTimeSlot(DateTime utcDateTime)
+        {
+            // Convert to local time to align with user's day
+            int hour = utcDateTime.ToLocalTime().Hour;
+            if (hour >= 5 && hour < 12) return DayTimeSlot.Morning;
+            if (hour >= 12 && hour < 17) return DayTimeSlot.MidDay;
+            if (hour >= 17 && hour < 22) return DayTimeSlot.Evening;
+            return DayTimeSlot.Night;
         }
 
         // Retrieves from cache if fresh and metrics didn't change significantly, or regenerates
@@ -74,42 +92,94 @@ namespace Daily_WinUI.Services
 
             DateTime now = DateTime.UtcNow;
 
+            // 1.1 Load local metrics first (cheap query)
+            Debug.WriteLine("[SmartBriefingCacheManager] Loading current local telemetry metrics...");
+            var currentMetrics = await _briefingService.LoadBriefingMetricsAsync(userName, onlyLocal: true);
+
             // Check if we can use the cached version directly (Age < 15 minutes)
             if (!forceRefresh && cachedData != null && cacheTime.HasValue && (now - cacheTime.Value).TotalMinutes < 15)
             {
-                Debug.WriteLine("[SmartBriefingCacheManager] Serving briefing from local cache (under 15 min age gate).");
-                return cachedData;
+                if (GetDayTimeSlot(cacheTime.Value) != GetDayTimeSlot(now))
+                {
+                    Debug.WriteLine("[SmartBriefingCacheManager] Day time slot changed since cache generation. Resetting cache for new context.");
+                    forceRefresh = true;
+                }
+                else
+                {
+                    bool hasChanged = ShouldRegenerate(cachedData, currentMetrics, onlyLocal: true);
+                    if (!hasChanged)
+                    {
+                        Debug.WriteLine("[SmartBriefingCacheManager] Serving briefing from local cache (under 15 min age gate) with updated local metrics.");
+                        // Merge cached narrative, advice, and network-bound telemetry into currentMetrics
+                        currentMetrics.BriefingText = cachedData.BriefingText;
+                        currentMetrics.IntroText = cachedData.IntroText;
+                        currentMetrics.OutroText = cachedData.OutroText;
+                        currentMetrics.WeatherAdvice = cachedData.WeatherAdvice;
+                        currentMetrics.HealthAdvice = cachedData.HealthAdvice;
+                        currentMetrics.FinanceAdvice = cachedData.FinanceAdvice;
+                        currentMetrics.HabitsAdvice = cachedData.HabitsAdvice;
+
+                        // Network-bound telemetry
+                        currentMetrics.WeatherTemp = cachedData.WeatherTemp;
+                        currentMetrics.WeatherCondition = cachedData.WeatherCondition;
+                        currentMetrics.WeatherSummary = cachedData.WeatherSummary;
+                        currentMetrics.WeatherForecast = cachedData.WeatherForecast;
+                        currentMetrics.WeatherHourlyDetails = cachedData.WeatherHourlyDetails;
+                        currentMetrics.WeatherFiveDayDetails = cachedData.WeatherFiveDayDetails;
+                        currentMetrics.WatchlistStocks = cachedData.WatchlistStocks;
+                        currentMetrics.NewsRecommendations = cachedData.NewsRecommendations;
+
+                        currentMetrics.WasRegenerated = false; // Served from cache
+                        return currentMetrics;
+                    }
+                    else
+                    {
+                        Debug.WriteLine("[SmartBriefingCacheManager] Local metrics changed significantly under the 15-minute gate. Forcing refresh to regenerate narrative.");
+                        forceRefresh = true;
+                    }
+                }
             }
 
-            // Load fresh metrics
-            Debug.WriteLine("[SmartBriefingCacheManager] Loading current telemetry metrics...");
-            var currentMetrics = await _briefingService.LoadBriefingMetricsAsync(userName);
+            // Load fresh metrics (full query with network calls)
+            Debug.WriteLine("[SmartBriefingCacheManager] Loading current full telemetry metrics...");
+            currentMetrics = await _briefingService.LoadBriefingMetricsAsync(userName, onlyLocal: false);
 
             // 2. Perform Telemetry Change Check (if cache exists but is older than 15 mins)
             if (!forceRefresh && cachedData != null)
             {
-                bool hasChanged = ShouldRegenerate(cachedData, currentMetrics);
-                if (!hasChanged)
+                if (cacheTime.HasValue && GetDayTimeSlot(cacheTime.Value) != GetDayTimeSlot(now))
                 {
-                    Debug.WriteLine("[SmartBriefingCacheManager] Telemetry metrics unchanged. Serving cached briefing with updated metrics.");
-                    // Update the numeric metrics of the cached briefing to the latest ones, but preserve the AI narrative
-                    currentMetrics.BriefingText = cachedData.BriefingText;
-                    currentMetrics.IntroText = cachedData.IntroText;
-                    currentMetrics.OutroText = cachedData.OutroText;
-                    currentMetrics.WeatherAdvice = cachedData.WeatherAdvice;
-                    currentMetrics.HealthAdvice = cachedData.HealthAdvice;
-                    currentMetrics.FinanceAdvice = cachedData.FinanceAdvice;
-                    currentMetrics.HabitsAdvice = cachedData.HabitsAdvice;
+                    Debug.WriteLine("[SmartBriefingCacheManager] Day time slot changed since cache generation (past 15 mins). Resetting cache for new context.");
+                    forceRefresh = true;
+                }
+                else
+                {
+                    bool hasChanged = ShouldRegenerate(cachedData, currentMetrics, onlyLocal: false);
+                    if (!hasChanged)
+                    {
+                        Debug.WriteLine("[SmartBriefingCacheManager] Telemetry metrics unchanged. Serving cached briefing with updated metrics.");
+                        // Update the numeric metrics of the cached briefing to the latest ones, but preserve the AI narrative
+                        currentMetrics.BriefingText = cachedData.BriefingText;
+                        currentMetrics.IntroText = cachedData.IntroText;
+                        currentMetrics.OutroText = cachedData.OutroText;
+                        currentMetrics.WeatherAdvice = cachedData.WeatherAdvice;
+                        currentMetrics.HealthAdvice = cachedData.HealthAdvice;
+                        currentMetrics.FinanceAdvice = cachedData.FinanceAdvice;
+                        currentMetrics.HabitsAdvice = cachedData.HabitsAdvice;
 
-                    // Save the updated model (updates timestamp to extend the cache lease)
-                    await SaveBriefingToCacheAsync(userId, currentMetrics);
-                    return currentMetrics;
+                        currentMetrics.WasRegenerated = false; // Served from cache
+
+                        // Save the updated model (updates timestamp to extend the cache lease)
+                        await SaveBriefingToCacheAsync(userId, currentMetrics);
+                        return currentMetrics;
+                    }
                 }
             }
 
             // 3. Generate new narrative via AI (either forced refresh, stale age, or changed metrics)
             Debug.WriteLine("[SmartBriefingCacheManager] Telemetry metrics changed or cache is stale. Regenerating AI narrative...");
             var regeneratedBriefing = await _briefingService.GenerateAiNarrativeAsync(currentMetrics, userName);
+            regeneratedBriefing.WasRegenerated = true; // Mark as regenerated
 
             // Save to local SQLite, settings, and push to Supabase
             await SaveBriefingToCacheAsync(userId, regeneratedBriefing);
@@ -249,10 +319,10 @@ namespace Daily_WinUI.Services
         }
 
         // Checks if metrics changed significantly enough to warrant AI regeneration
-        private bool ShouldRegenerate(SmartBriefingData cached, SmartBriefingData current)
+        private bool ShouldRegenerate(SmartBriefingData cached, SmartBriefingData current, bool onlyLocal = false)
         {
-            // 1. Weather temperature delta > 1.5 degrees
-            if (Math.Abs(cached.WeatherTemp - current.WeatherTemp) > 1.5)
+            // 1. Weather temperature delta > 1.5 degrees (only check if we retrieved weather)
+            if (!onlyLocal && Math.Abs(cached.WeatherTemp - current.WeatherTemp) > 1.5)
             {
                 Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Weather Temp delta = {Math.Abs(cached.WeatherTemp - current.WeatherTemp):F1}°C");
                 return true;
@@ -272,19 +342,22 @@ namespace Daily_WinUI.Services
                 return true;
             }
 
-            // 4. News recommendations change
-            if (cached.NewsRecommendations.Count != current.NewsRecommendations.Count)
+            // 4. News recommendations change (only check if we retrieved news)
+            if (!onlyLocal)
             {
-                Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: News Recommendation count changed");
-                return true;
-            }
-
-            for (int i = 0; i < cached.NewsRecommendations.Count; i++)
-            {
-                if (cached.NewsRecommendations[i].Title != current.NewsRecommendations[i].Title)
+                if (cached.NewsRecommendations.Count != current.NewsRecommendations.Count)
                 {
-                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: News Recommendation item changed");
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: News Recommendation count changed");
                     return true;
+                }
+
+                for (int i = 0; i < Math.Min(cached.NewsRecommendations.Count, current.NewsRecommendations.Count); i++)
+                {
+                    if (cached.NewsRecommendations[i].Title != current.NewsRecommendations[i].Title)
+                    {
+                        Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: News Recommendation item changed");
+                        return true;
+                    }
                 }
             }
 

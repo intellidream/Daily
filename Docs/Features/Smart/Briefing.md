@@ -216,14 +216,24 @@ To resolve this conflict, the project targets copy backend runtimes into isolate
 ### 2.5 Briefing Cache & Prefetching Engine
 To reduce unnecessary local hardware power consumption (NPU/GPU/CPU) and optimize remote Supabase database egress, the daily briefing narrative utilizes a robust caching and prefetching manager (`SmartBriefingCacheManager`):
 1. **Local & Cloud Storage**: Briefing payloads are saved as serialized JSON in the local SQLite table `smart_briefing_cache` and in `AppSettings` (for fast memory access). The cache is automatically synced to the remote `smart_briefings` table in Supabase.
-2. **15-Minute Age Gate**: If a briefing is requested within 15 minutes of creation, it is served instantly from the cache, bypassing database scans and AI execution entirely.
-3. **Telemetry Delta Evaluation**: After 15 minutes, the manager compares fresh raw telemetry against the cached data. If variations are beneath specific thresholds:
-   - Weather Temperature change $\leq$ 1.5°C
+2. **15-Minute Age Gate & Fast-Path Telemetry Merging**: If a briefing is requested within 15 minutes of creation, the UI launches with a cheap local-only query (`onlyLocal: true`) for instant responsiveness (~10ms). The cached narrative is served, and the fresh telemetry metrics are merged into the display cards.
+3. **Telemetry Delta Evaluation (Time-Slot Aware)**: When evaluating the cache, the system compares fresh metrics against the cached data. To prevent false positive invalidations when using local-only metrics, the manager bypasses weather and news comparisons in fast-path mode. If variations are beneath specific thresholds:
+   - Weather Temperature change $\leq$ 1.5°C (ignored in local-only check)
    - Steps progress delta $\leq$ 1000 steps
    - Habit totals and completions remain identical
-   - Top news recommendation titles are unchanged
+   - Top news recommendation titles are unchanged (ignored in local-only check)
    The engine re-uses the existing AI narrative text but updates the numeric widgets with fresh metrics, avoiding costly SLM model generation.
-4. **Silent Prefetching**: Triggered in the background during app startup or window restoration from system tray to ensure the briefing is ready when the user opens the overlay.
+4. **Contextual Time-Slot Cache Validation**: The cache is divided into four local time slots:
+   - **Morning** (5:00 AM - 11:59 AM)
+   - **Mid-Day** (12:00 PM - 4:59 PM)
+   - **Evening** (5:00 PM - 9:59 PM)
+   - **Night** (10:00 PM - 4:59 AM)
+   If the user transitions into a different time slot compared to when the cache was generated (e.g. logging in at 1:00 PM when the cache was built at 10:00 AM), the cache is automatically bypassed and a fresh contextual narrative is generated to ensure appropriate greetings and time-sensitive recommendations.
+5. **Smart Automatic Presentation Schedule**: The briefing overlay only automatically pops up on boot/startup if:
+   - The user opens the app during a key contextual slot (**Morning**, **Mid-Day**, or **Evening**).
+   - And a fresh briefing was actually generated during the startup load (telemetry changed significantly or the time slot changed).
+   If the briefing is served from the cache, the overlay remains collapsed to minimize disruption. The user can manually open the overlay at any time via the TitleBar icon to view the cached briefing.
+6. **Silent Prefetching**: Triggered in the background during app startup or window restoration from system tray to ensure the briefing is ready when the user opens the overlay.
 
 ---
 

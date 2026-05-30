@@ -136,16 +136,18 @@ public sealed partial class MainPage : Page
             }
         }
 
-        // 4.1 Sync behavior events and briefing cache from remote (Supabase)
+        // 4.1 Sync behavior events, briefing cache, and habits logs from remote (Supabase)
         try
         {
             var behaviorSvc = App.Current.Services.GetRequiredService<IBehaviorService>();
             var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
+            var syncService = App.Current.Services.GetRequiredService<Daily.Services.ISyncService>();
             
-            // Run pulls concurrently
+            // Run pulls concurrently (including Habits sync pull!)
             await Task.WhenAll(
                 behaviorSvc.PullEventsAsync(),
-                cacheManager.PullRemoteCacheAsync()
+                cacheManager.PullRemoteCacheAsync(),
+                syncService.PullAsync(Daily.Services.SyncScope.Habits)
             );
         }
         catch (Exception ex)
@@ -185,7 +187,7 @@ public sealed partial class MainPage : Page
         var settings = SettingsService.Load();
         if (settings.EnableSmartBriefing && isInitialBoot)
         {
-            ShowSmartBriefing();
+            ShowSmartBriefing(isAutomatic: true);
         }
     }
 
@@ -554,32 +556,30 @@ public sealed partial class MainPage : Page
 
     // ── Smart Briefing Overlay & Local AI Engine ──────────────────────────────
 
-    public async void ShowSmartBriefing()
+    public async void ShowSmartBriefing(bool isAutomatic = false)
     {
-        _isBriefingActive = true;
-        // Show overlay and loading panel immediately with fade-in animation
-        SmartBriefingOverlay.Opacity = 0.0;
-        SmartBriefingOverlay.Visibility = Visibility.Visible;
-        FadeInBriefingStoryboard.Begin();
-
-        BriefingLoadingPanel.Visibility = Visibility.Visible;
-        RotatingLoadingIconStoryboard.Begin();
-        BriefingGrid.Visibility = Visibility.Collapsed;
-
-        // Update layout based on current actual width
-        UpdateBriefingLayout(ActualWidth);
-
-        // Cancel any active typewriter or download timers
-        _typewriterTimer?.Stop();
-
         var settings = SettingsService.Load();
-
-        // Fetch dynamic data from services (using pre-generated task if available)
         string userName = _authService.CurrentUserDisplayName ?? "Explorer";
-        SmartBriefingData data;
-        
+
+        // If automatic startup presentation, check contextual time slot
+        if (isAutomatic)
+        {
+            int hour = DateTime.Now.Hour;
+            bool isImportantMoment = (hour >= 5 && hour < 12) ||  // Morning
+                                     (hour >= 12 && hour < 15) || // Mid-Day
+                                     (hour >= 17 && hour < 22);   // Evening / End of work day
+
+            if (!isImportantMoment)
+            {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Skipping automatic smart briefing: Not an important moment of the day.");
+                return;
+            }
+        }
+
+        SmartBriefingData? data = null;
         string currentAcc = settings.SelectedAiAccelerator ?? "Auto";
         string currentModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+        
         if (_pregeneratedBriefingTask != null &&
             (_pregeneratedAccelerator != currentAcc || _pregeneratedModelId != currentModelId))
         {
@@ -588,22 +588,76 @@ public sealed partial class MainPage : Page
         }
 
         var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
-        if (_pregeneratedBriefingTask != null)
+
+        // For automatic show, load data first to check if cache was refreshed
+        if (isAutomatic)
         {
             try
             {
-                data = await _pregeneratedBriefingTask;
+                if (_pregeneratedBriefingTask != null)
+                {
+                    data = await _pregeneratedBriefingTask;
+                    _pregeneratedBriefingTask = null;
+                }
+                else
+                {
+                    data = await cacheManager.GetOrGenerateBriefingAsync(userName);
+                }
             }
             catch (System.Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[MainPage] Pregenerated briefing task failed: {ex.Message}");
-                data = await cacheManager.GetOrGenerateBriefingAsync(userName);
+                System.Diagnostics.Debug.WriteLine($"[MainPage] Automatic briefing load failed: {ex.Message}");
+                return;
             }
-            _pregeneratedBriefingTask = null; // Consume the task
+
+            if (data == null || !data.WasRegenerated)
+            {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Skipping automatic smart briefing: Cached narrative is unchanged.");
+                return;
+            }
+        }
+
+        _isBriefingActive = true;
+        // Show overlay with fade-in animation
+        SmartBriefingOverlay.Opacity = 0.0;
+        SmartBriefingOverlay.Visibility = Visibility.Visible;
+        FadeInBriefingStoryboard.Begin();
+
+        // Update layout based on current actual width
+        UpdateBriefingLayout(ActualWidth);
+
+        // Cancel any active typewriter or download timers
+        _typewriterTimer?.Stop();
+
+        if (data == null)
+        {
+            BriefingLoadingPanel.Visibility = Visibility.Visible;
+            RotatingLoadingIconStoryboard.Begin();
+            BriefingGrid.Visibility = Visibility.Collapsed;
+
+            try
+            {
+                if (_pregeneratedBriefingTask != null)
+                {
+                    data = await _pregeneratedBriefingTask;
+                    _pregeneratedBriefingTask = null;
+                }
+                else
+                {
+                    data = await cacheManager.GetOrGenerateBriefingAsync(userName);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainPage] Briefing generation failed: {ex.Message}");
+                CloseBriefing_Click(this, new RoutedEventArgs());
+                return;
+            }
         }
         else
         {
-            data = await cacheManager.GetOrGenerateBriefingAsync(userName);
+            BriefingLoadingPanel.Visibility = Visibility.Collapsed;
+            BriefingGrid.Visibility = Visibility.Visible;
         }
 
         if (!_isBriefingActive) return;
