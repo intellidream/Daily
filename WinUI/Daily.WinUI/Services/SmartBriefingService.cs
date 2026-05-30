@@ -235,44 +235,51 @@ namespace Daily_WinUI.Services
                                 {
                                     if (iconCode.EndsWith("n"))
                                     {
-                                        iconGlyph = "\uE708"; // Moon
-                                        colorHex = "#90CAF9"; // light blue
+                                        iconGlyph = "\uE708"; // Moon (QuietHours)
+                                        colorHex = "#90CAF9"; // soft blue
                                     }
                                     else
                                     {
-                                        iconGlyph = "\uE706"; // Sun
+                                        iconGlyph = "\uE706"; // Sun (Brightness)
                                         colorHex = "#FF9800"; // orange
                                     }
                                 }
                                 else if (iconCode.StartsWith("02"))
                                 {
-                                    iconGlyph = "\uE7C3"; // Cloud/Sun
-                                    colorHex = "#B0BEC5";
+                                    iconGlyph = "\uE753"; // Cloud (using color to differentiate partly cloudy)
+                                    if (iconCode.EndsWith("n"))
+                                    {
+                                        colorHex = "#90CAF9"; // dim blue-grey night cloud
+                                    }
+                                    else
+                                    {
+                                        colorHex = "#FFE082"; // warm amber sun-kissed day cloud
+                                    }
                                 }
                                 else if (iconCode.StartsWith("03") || iconCode.StartsWith("04"))
                                 {
                                     iconGlyph = "\uE753"; // Cloud
-                                    colorHex = "#B0BEC5";
+                                    colorHex = "#B0BEC5"; // grey-blue
                                 }
                                 else if (iconCode.StartsWith("09") || iconCode.StartsWith("10"))
                                 {
-                                    iconGlyph = "\uE774"; // Rain
-                                    colorHex = "#2196F3";
+                                    iconGlyph = "\uEB42"; // Drop (Rain/Showers)
+                                    colorHex = "#2196F3"; // blue
                                 }
                                 else if (iconCode.StartsWith("11"))
                                 {
-                                    iconGlyph = "\uEA09"; // Lightning
-                                    colorHex = "#7C4DFF";
+                                    iconGlyph = "\uE945"; // LightningBolt
+                                    colorHex = "#FFEB3B"; // bright yellow
                                 }
                                 else if (iconCode.StartsWith("13"))
                                 {
-                                    iconGlyph = "\uE77C"; // Snowflake
-                                    colorHex = "#90CAF9";
+                                    iconGlyph = "\uEA38"; // Asterisk (Snowflake)
+                                    colorHex = "#80DEEA"; // ice blue
                                 }
                                 else if (iconCode.StartsWith("50"))
                                 {
-                                    iconGlyph = "\uE705"; // Haze
-                                    colorHex = "#B0BEC5";
+                                    iconGlyph = "\uE81E"; // MapLayers (Mist/Fog/Haze)
+                                    colorHex = "#CFD8DC"; // misty grey
                                 }
                                 
                                 data.WeatherForecast.Add(new ForecastDayData
@@ -304,7 +311,7 @@ namespace Daily_WinUI.Services
                 {
                     data.WeatherForecast.Add(new ForecastDayData { DayName = "Tomorrow", Temp = temp + 1, Icon = "\uE706", ColorHex = "#FF9800" });
                     data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(2).ToString("dddd"), Temp = temp - 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
-                    data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(3).ToString("dddd"), Temp = temp, Icon = "\uE774", ColorHex = "#2196F3" });
+                    data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(3).ToString("dddd"), Temp = temp, Icon = "\uEB42", ColorHex = "#2196F3" });
                     data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(4).ToString("dddd"), Temp = temp + 2, Icon = "\uE706", ColorHex = "#FF9800" });
                     data.WeatherForecast.Add(new ForecastDayData { DayName = DateTime.Today.AddDays(5).ToString("dddd"), Temp = temp + 1, Icon = "\uE753", ColorHex = "#B0BEC5" });
                 }
