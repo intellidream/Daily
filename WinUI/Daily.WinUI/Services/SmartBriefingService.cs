@@ -796,7 +796,7 @@ namespace Daily_WinUI.Services
                         "Generate a concise, natural, and friendly daily briefing narrative based on the user's data. " +
                         "Analyze their weather, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.\n" +
                         "Rules:\n" +
-                        "- Jump straight into the greeting and the narrative briefing. Do NOT write introductory filler like 'Here is your briefing' or 'Based on your data'.\n" +
+                        "- Do NOT write any greeting (like 'Good morning', 'Good evening', 'Hello', etc.) or introductory filler (like 'Here is your briefing' or 'Based on your data'). Start directly with the weather analysis.\n" +
                         "- Keep the briefing structured in 2-3 short, focused paragraphs of conversational flowing text. Keep descriptions extremely concise and direct to stay on point and avoid hallucinating details. Do not use markdown headers or lists.\n" +
                         "- Format your paragraphs clearly, using double newlines (\n\n) to separate them.\n" +
                         "- If finance data is marked as UNINITIALIZED, do not congratulate the user on net worth or mention a $0 net worth. Suggest setting up their ledger or adding an account instead.\n" +

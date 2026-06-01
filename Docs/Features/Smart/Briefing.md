@@ -33,7 +33,7 @@ The Local Smart Briefing feature integrates lightweight, privacy-first, on-devic
 
 #### 1.2.5 Weather & Daily Narrative Briefing
 - **Dynamic Morning Narrative**: Merges weather forecast, calendar events, high-priority tasks, and habits into a cohesive "Daily Briefing".
-- **Example output**: *"Good morning, Mihai! It's going to be rainy (18°C) today, so we recommend doing your daily cardio habit indoors. You have 3 high-priority tasks due today, and a meeting at 2 PM. Let's make it a great day!"*
+- **Example output**: *"It's going to be rainy (18°C) today, so we recommend doing your daily cardio habit indoors. You have 3 high-priority tasks due today, and a meeting at 2 PM. Let's make it a productive day!"*
 
 #### 1.2.6 Smart Behavior Personalization
 - **Behavior-Aware Narrative**: Integrates aggregated 7-day semantic behavior profile statistics (e.g., hydration trends, preferred news topics) to personalize the daily narrative.
@@ -267,3 +267,162 @@ To reduce unnecessary local hardware power consumption (NPU/GPU/CPU) and optimiz
 | **NPU Interface** | Windows App SDK LanguageModel API (`PhiSilicaNpuEngine`) | iOS: Apple Intelligence / CoreML. Android: Gemini Nano / Google AICore APIs |
 | **Model Size / Options** | Custom 1.0B–3.8B parameters GGUF models | System-managed models (Gemini Nano on Android, Apple intelligence models on iOS) |
 | **User Settings UI** | Custom WinUI Settings panel with download-on-demand progress bars | Platform system settings or Blazor settings configurations |
+
+---
+
+## 5. Detailed Overall Functionality as of June 2nd, 2026
+
+### 5.1 Presentation Gating & Trigger Points
+The presentation of the Smart Briefing is governed by a combination of startup states, time-slot configurations, age gates, and telemetry variance thresholds.
+
+#### 5.1.1 Automatic Startup Presentation
+During the application boot process, [MainPage.xaml.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/MainPage.xaml.cs) launches two parallel pipelines:
+1. It asynchronously queries Supabase to pull down the user's remote briefing cache via `PullRemoteCacheAsync()`.
+2. It initiates background pre-generation of the briefing task (`_pregeneratedBriefingTask`) by calling `cacheMgr.GetOrGenerateBriefingAsync(currentUserName)` to avoid blocking the thread when the UI transitions.
+
+At the very end of startup, the app checks if it should display the briefing overlay:
+```csharp
+// MainPage.xaml.cs
+var settings = SettingsService.Load();
+if (settings.EnableSmartBriefing && isInitialBoot)
+{
+    ShowSmartBriefing(isAutomatic: true);
+}
+```
+
+When `ShowSmartBriefing(isAutomatic: true)` is called, it evaluates the following gating conditions:
+1. **Contextual Time-Slot Filter**: The app reads local time and checks if the user is launching the app during an active productivity slot:
+   - **Morning**: 5:00 AM - 11:59 AM
+   - **Mid-Day**: 12:00 PM - 2:59 PM
+   - **Evening**: 5:00 PM - 9:59 PM
+   If the local hour is outside these windows (e.g. 4:00 PM), the automatic pop-up is **skipped** to avoid disruption.
+2. **The `WasRegenerated` Egress/UX Gate**: To prevent annoying the user with the same narrative pop-up repeatedly on every app open, the manager uses this gate:
+   ```csharp
+   if (data == null || !data.WasRegenerated)
+   {
+       System.Diagnostics.Debug.WriteLine("[MainPage] Skipping automatic smart briefing: Cached narrative is unchanged.");
+       return;
+   }
+   ```
+   If the briefing data is returned from the cache because the time slot has not changed and telemetry variation is below the threshold, `WasRegenerated` is `false`, and the automatic pop-up is **skipped**. It only shows automatically if a new AI narrative is generated.
+
+#### 5.1.2 Manual Presentation
+When a user clicks the **Briefing icon in the TitleBar** of the [MainWindow.xaml.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/MainWindow.xaml.cs) (handled by `TitleBarBriefing_Click` calling `ShowSmartBriefing(isAutomatic: false)`), **all automatic gates (Time-Slot and `WasRegenerated` cache check) are bypassed**. The overlay will always fade in and display either the cached narrative or trigger a forced refresh.
+
+---
+
+### 5.2 Caching & Sync Manager (`SmartBriefingCacheManager`)
+The briefing uses [SmartBriefingCacheManager.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Services/SmartBriefingCacheManager.cs) to manage caching, SQLite persistence, and Supabase synchronization:
+
+```mermaid
+flowchart TD
+    A[GetOrGenerateBriefingAsync] --> B{Cache Exists?}
+    B -- No --> C[Full Metric Load & AI Generation]
+    B -- Yes --> D{Age < 15 Minutes?}
+    
+    D -- Yes --> E{Time Slot Changed?}
+    E -- Yes --> C
+    E -- No --> F[Load Cheap Local Metrics]
+    F --> G{ShouldRegenerate Local?}
+    G -- Yes --> C
+    G -- No --> H[Serve Cached Text + Merge Fresh Metrics]
+    
+    D -- No --> I{Time Slot Changed?}
+    I -- Yes --> C
+    I -- No --> J[Load Full Metrics with API/Network]
+    J --> K{ShouldRegenerate Full?}
+    K -- Yes --> C
+    K -- No --> L[Update Cache Lease & Serve Cached Text]
+```
+
+1. **Under 15-Minute "Fast Path"**:
+   - **Behavior**: Minimizes network overhead by querying only local SQLite metrics (Steps and Habits).
+   - **Check**: Calls `ShouldRegenerate(..., onlyLocal: true)`:
+     - If Steps changed by $> 1000$ or habits completed count changed, it forces an AI refresh.
+     - Otherwise, it merges the fresh step/habit progress into the cached narrative structure and displays it immediately (returns with `WasRegenerated = false`).
+2. **Stale (> 15-Minute) Path**:
+   - **Behavior**: Triggers full queries including Weather APIs, Stock Quotes, and News recommendations.
+   - **Check**: Calls `ShouldRegenerate(..., onlyLocal: false)`:
+     - If Weather Temp changed by $> 1.5^\circ\text{C}$, Steps changed by $> 1000$, Habits completions changed, or the News recommendation titles changed, it invalidates the cache and generates a new AI narrative.
+     - If they are beneath these limits, it preserves the narrative, updates the cached numbers on the widgets, pushes a renewed lease timestamp to SQLite and Supabase, and returns `WasRegenerated = false`.
+
+---
+
+### 5.3 Prompting Structures & Constraints
+If the system decides to regenerate the briefing and the AI engine is ready, the system compiles data from multiple services and prompts the model inside [SmartBriefingService.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Services/SmartBriefingService.cs).
+
+#### 5.3.1 System Prompt
+```text
+You are DayOne, a helpful personal assistant AI running locally on the user's device. 
+Generate a concise, natural, and friendly daily briefing narrative based on the user's data. 
+Analyze their weather, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.
+
+Rules:
+- Do NOT write any greeting (like 'Good morning', 'Good evening', 'Hello', etc.) or introductory filler (like 'Here is your briefing' or 'Based on your data'). Start directly with the weather analysis.
+- Keep the briefing structured in 2-3 short, focused paragraphs of conversational flowing text. Keep descriptions extremely concise and direct to stay on point and avoid hallucinating details. Do not use markdown headers or lists.
+- Format your paragraphs clearly, using double newlines (\n\n) to separate them.
+- If finance data is marked as UNINITIALIZED, do not congratulate the user on net worth or mention a $0 net worth. Suggest setting up their ledger or adding an account instead.
+- If smoking habit data is present, treat it as a negative target (reduction/cessation). Do NOT congratulate the user for smoking or logging smokes; instead, encourage reduction or praise staying under limit.
+- Evaluate the weather forecast over the next hours and next 5 days, highlighting key transitions (e.g. if it will rain later, recommend taking an umbrella or exercising indoors).
+
+At the very end of your response, you MUST append a JSON block enclosed in <insights> and </insights> tags. The JSON must contain short advice strings (1 sentence each) for the widgets: 
+{
+  "weatherAdvice": "short advice based on weather forecast",
+  "healthAdvice": "short advice based on vitals/sleep",
+  "financeAdvice": "short advice based on ledger/watchlist",
+  "habitsAdvice": "short advice based on water/smoking"
+}
+Do not write any introductory or transition text before or after the JSON block. Go directly from the end of your narrative text to the <insights> tag. Do not write any text after the </insights> tag.
+```
+
+#### 5.3.2 User Prompt Structure
+The user prompt aggregates the data payload dynamically:
+```text
+User Name: [Name]
+Current Time: [Local Time]
+
+--- WEATHER DATA ---
+Condition: [Condition] (Temp: [Temp]°C)
+Hourly Forecast (next 8 hours): [List of hourly labels, temp, feels like, precipitation %]
+5-Day Forecast: [List of days, max/min temps, conditions]
+
+--- HEALTH DATA ---
+Steps Today: [Count]
+Sleep Last Night: [Hours]
+Average Heart Rate: [BPM]
+[Optional: Weight, Active Energy Burned, HRV, Blood Pressure, SpO2]
+
+--- FINANCE DATA ---
+[If HasLedgerData]: Net Worth: [Amount] | Watchlist Stocks: [Ticker: Price (Change)]
+[If Uninitialized]: Ledger status: UNINITIALIZED (No accounts or transactions logged yet...)
+
+--- HABITS DATA ---
+Water target: [Goal] ml, Drank today: [Progress] ml
+[Optional]: Cigarettes limit/baseline: [Goal] today, Smoked today: [Progress]
+
+--- RECENT USER BEHAVIOR TELEMETRY (Last 7 Days) ---
+[Aggregated event frequency strings from BehaviorService, e.g., "Feature: News * ReadArticle: 5 times"]
+```
+
+#### 5.3.3 Parsing & Extraction
+The response is parsed by finding the index of `<insights>` and `</insights>` tags. The text prior to the tags is cleaned of trailing metadata filler and used for the main briefing text, while the block inside is parsed via `JsonDocument.Parse` (or falls back to a robust line-based key-value regex-like parser if JSON syntax is broken) to populate the widget advice properties.
+
+---
+
+### 5.4 Code Map: Production & UI Animation
+1. **AI Engine Resolution**: `SmartIntelligenceService` coordinates the dynamic loading. If NPU is enabled, it uses `PhiSilicaNpuEngine` (handling the Microsoft Limited Access Features token registration). Otherwise, it delegates to `LLamaUniversalEngine` using local GGUF models.
+2. **C# Template Fallback**: If `IsModelReadyAsync()` is false or generation throws an exception, `SmartBriefingService` constructs a rich, rule-based text template merging the coordinates, weather metrics, vitals, ledger balance, and habit checklists.
+3. **UI Sequencing (Typewriter Milestones)**: Inside [MainPage.xaml.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/MainPage.xaml.cs), a `DispatcherTimer` runs at a rapid 20ms interval, outputting the narrative word-by-word. As specific milestones are reached, the corresponding UI cards fade and slide up:
+   - **20% Progress**: Weather card fades in.
+   - **40% Progress**: Health Vitals card fades in.
+   - **60% Progress**: Finances & Stock Watchlist card fades in.
+   - **80% Progress**: Habits completion list card fades in.
+   - **92% Progress**: News Recommendations widget fades in.
+
+---
+
+### 5.5 Common Failure Points & Debugging Guidance
+- **Automatic Pop-up Skip**: If testing automatic presentation, ensure `WasRegenerated = true` or use manual TitleBar click to bypass the gating logic.
+- **Model Truncation**: Under-sized models might fail to output the closing `</insights>` tags. The custom C# parser performs robust line-based regex-like key-value extractions to recover the advice strings, but a complete cutoff of the response will trigger fallback templates.
+- **Slow Warm Startup**: API delays (e.g., weather coordinates or RSS feed loading timeouts) can prolong the briefing pre-generation loader panel.
+
