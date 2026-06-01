@@ -222,8 +222,15 @@ namespace Daily_WinUI.Services
         {
             try
             {
-                string? userId = _supabase.Auth?.CurrentUser?.Id;
+                var auth = _supabase.Auth;
+                if (auth == null) return;
+                string? userId = auth.CurrentUser?.Id;
                 if (string.IsNullOrEmpty(userId)) return;
+
+                if (auth.CurrentSession != null && auth.CurrentSession.Expired())
+                {
+                    try { await auth.RefreshSession(); } catch { }
+                }
 
                 Debug.WriteLine("[SmartBriefingCacheManager] Fetching remote briefing cache from Supabase...");
                 var response = await _supabase.From<Daily.Models.SmartBriefingRemote>()
@@ -296,6 +303,12 @@ namespace Daily_WinUI.Services
                     {
                         try
                         {
+                            var auth = _supabase.Auth;
+                            if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
+                            {
+                                try { await auth.RefreshSession(); } catch { }
+                            }
+
                             var remoteObj = new Daily.Models.SmartBriefingRemote
                             {
                                 UserId = userId,

@@ -42,8 +42,8 @@ namespace Daily.Services
             LastSyncError = ex.Message;
             var root = ex.GetBaseException();
             var sessionUser = _supabase.Auth.CurrentUser?.Id ?? "<no-user>";
-            Debug.WriteLine($"[SyncService] {context}: {ex.GetType().Name}: {ex.Message} | Root: {root.GetType().Name}: {root.Message} | User: {sessionUser}");
-            Console.WriteLine($"[SyncService] {context}: {ex.GetType().Name}: {ex.Message}");
+            string msg = $"{context}: {ex.GetType().Name}: {ex.Message} | Root: {root.GetType().Name}: {root.Message} | User: {sessionUser}";
+            LogDebug($"[SyncService] EXCEPTION: {msg}");
         }
 
         private Task<int> EnqueueRequestAsync(SyncAction action, SyncScope scope)
@@ -128,7 +128,25 @@ namespace Daily.Services
         {
             LastSyncError = null;
             LastSyncMessage = "";
-            if (_supabase.Auth.CurrentSession == null) return 0;
+            var auth = _supabase.Auth;
+            if (auth?.CurrentSession == null) return 0;
+
+            try
+            {
+                if (auth.CurrentSession.Expired())
+                {
+                    LogDebug("[SyncService] Session token is expired. Proactively refreshing session...");
+                    var refreshedSession = await auth.RefreshSession();
+                    if (refreshedSession != null)
+                    {
+                        LogDebug("[SyncService] Proactive session refresh succeeded.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogSyncException("Proactive Refresh Session Exception", ex);
+            }
 
             int totalItems = 0;
             try

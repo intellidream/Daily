@@ -125,6 +125,12 @@ namespace Daily.Services
 
             try 
             {
+                var auth = _supabase.Auth;
+                if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
+                {
+                    try { await auth.RefreshSession(); } catch { }
+                }
+
                 // Check if user already has feeds in Supabase (logged into a new device)
                 var remoteFeeds = await _supabase.From<RssSubscription>().Select("id").Limit(1).Get();
                 if (remoteFeeds.Models.Count > 0)

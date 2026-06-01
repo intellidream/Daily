@@ -80,8 +80,15 @@ namespace Daily_WinUI.Services
                 var settings = SettingsService.Load();
                 if (!settings.EnableSmartBehavior || !settings.SyncSmartBehaviorToCloud) return;
 
-                string userId = _supabase.Auth?.CurrentUser?.Id;
+                var auth = _supabase.Auth;
+                if (auth == null) return;
+                string? userId = auth.CurrentUser?.Id;
                 if (string.IsNullOrEmpty(userId)) return;
+
+                if (auth.CurrentSession != null && auth.CurrentSession.Expired())
+                {
+                    try { await auth.RefreshSession(); } catch { }
+                }
 
                 await _db.InitializeAsync();
 
@@ -127,8 +134,15 @@ namespace Daily_WinUI.Services
                 var settings = SettingsService.Load();
                 if (!settings.EnableSmartBehavior) return;
 
-                string userId = _supabase.Auth?.CurrentUser?.Id;
+                var auth = _supabase.Auth;
+                if (auth == null) return;
+                string? userId = auth.CurrentUser?.Id;
                 if (string.IsNullOrEmpty(userId)) return;
+
+                if (auth.CurrentSession != null && auth.CurrentSession.Expired())
+                {
+                    try { await auth.RefreshSession(); } catch { }
+                }
 
                 await _db.InitializeAsync();
 

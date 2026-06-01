@@ -53,6 +53,7 @@ Aggregates and organizes 35+ metrics into structured categories:
 - **Cumulative Metrics** (e.g., Steps, Calories, Water): **Max Wins** — preserves the higher value between the local device total and the remote database total to prevent double-counting.
 - **Spot Metrics** (e.g., Heart Rate, Weight, Blood Pressure): **Last Write Wins** — updates the value using the most recent timestamp.
 - **Backfill**: Sync routines scan and upload data for both `Today` and `Yesterday` to account for offline logging.
+- **Cache Resilience & Throttling**: Queries check for local cache staleness every 15 minutes before running remote updates. On wake/network reconnection, the service locks duplicate execution using semaphores and stamps `_lastDeltaPullTime = DateTime.UtcNow` immediately upon entry to block redundant delta requests. Expired JWT leases trigger `EnsureFreshSessionAsync()` to proactively restore authorization prior to making any Postgrest request.
 
 ### 2.3 Database Schema (Supabase `vitals` table)
 ```sql

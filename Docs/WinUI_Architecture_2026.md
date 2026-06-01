@@ -54,6 +54,14 @@ The application relies on an offline-first SQLite database that syncs in the bac
 * When an update occurs on another device (e.g., another WinUI desktop), Supabase broadcasts the row change.
 * `SettingsService.OnPreferencesReceived` intercepts this payload, writes it to the local SQLite database, and silently updates `_currentSettings`. While the UI does not aggressively redraw automatically (to prevent disrupting the user), the new layout is securely cached and will be applied on the next app launch or page refresh.
 
+### Auto-Refresh Session Maintenance & Sync Resilience
+* **The Problem**: When the application runs continuously for hours or overnight, the Supabase JWT access token expires (typically 1 hour). Because direct API calls to Supabase bypass the standard sync services (such as pulling remote briefing caches or seeding default RSS feeds), expired sessions would return `PostgrestException` 401 Unauthorized errors, permanently halting data synchronization and breaking local SQLite cache updates until the application was restarted.
+* **The Solution**: We implemented a multi-layered session recovery design:
+  1. **Background Session Thread**: In [App.xaml.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/App.xaml.cs), `AutoRefreshToken = true` is configured in `SupabaseOptions` to activate Gotrue's native background token renewal thread.
+  2. **Proactive Session Verification Gates**: Prior to any remote query in `SyncService`, `SupabaseHealthService`, `SmartBriefingCacheManager`, `BehaviorService`, and `SeederService`, the application evaluates `auth.CurrentSession.Expired()`. If expired, it triggers a proactive `await auth.RefreshSession()` token exchange, healing the session before executing Postgrest queries.
+  3. **Wakeup / Offline Delta Throttling**: On system wakeup from sleep or when recovering from an offline state, background database operations can repeatedly fire delta pulls. To prevent logging loops and network egress spikes, `_lastDeltaPullTime = DateTime.UtcNow` is updated at the very start of `PullDeltasAsync()`. This prevents concurrent re-entry from cascading multiple network queries.
+  4. **Log Flood Mitigation**: To avoid bloating the debug log `%LocalAppData%\DailyApp\Cache\sync_debug.log` with duplicate read statements during high-frequency UI/layout passes, standard SQLite read operations are bypassed from the debug logger, ensuring only connection changes, refreshes, and warnings are captured.
+
 ---
 
 ## 5. XAML Compiler Stability & UI Components

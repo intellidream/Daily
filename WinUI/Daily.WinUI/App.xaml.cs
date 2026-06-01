@@ -224,6 +224,7 @@ public partial class App : Application
     {
         var options = new Supabase.SupabaseOptions
         {
+            AutoRefreshToken = true,
             AutoConnectRealtime = true,
             SessionHandler = new Daily_WinUI.Services.WinUISessionPersistence()
         };

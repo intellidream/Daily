@@ -24,6 +24,24 @@ namespace Daily.Services.Health
 
         private bool IsAuthenticated => _supabase.Auth.CurrentSession != null && _supabase.Auth.CurrentUser != null;
 
+        private async Task EnsureFreshSessionAsync()
+        {
+            var auth = _supabase.Auth;
+            if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
+            {
+                try
+                {
+                    var sync = _serviceProvider.GetService<ISyncService>();
+                    sync?.Log("[SupabaseHealthService] Session token is expired. Proactively refreshing session...");
+                    await auth.RefreshSession();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SupabaseHealthService] Proactive session refresh failed: {ex.Message}");
+                }
+            }
+        }
+
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
         private readonly System.Threading.SemaphoreSlim _syncSemaphore = new(1, 1);
         private CancellationTokenSource? _reconnectCts;
@@ -196,6 +214,7 @@ namespace Daily.Services.Health
             await _realtimeSemaphore.WaitAsync();
             try
             {
+                await EnsureFreshSessionAsync();
                 var token = _supabase.Auth.CurrentSession?.AccessToken;
                 if (!string.IsNullOrEmpty(token))
                 {
@@ -344,6 +363,8 @@ namespace Daily.Services.Health
             await _syncSemaphore.WaitAsync();
             try
             {
+                _lastDeltaPullTime = DateTime.UtcNow;
+                await EnsureFreshSessionAsync();
                 var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
                 if (user == null || !Guid.TryParse(user.Id, out var uid))
                 {
@@ -422,8 +443,6 @@ namespace Daily.Services.Health
                     }).ConfigureAwait(false);
                 }
 
-                _lastDeltaPullTime = DateTime.UtcNow;
-                
                 // Trigger UI refresh
                 await _refreshService.TriggerHealthRefreshAsync();
             }
@@ -547,7 +566,7 @@ namespace Daily.Services.Health
                         .ToList();
 
                     var sync = _serviceProvider.GetService<ISyncService>();
-                    sync?.Log($"[Read] Found {latestMetrics.Count} recent metrics from local DB (Window: -30 days).");
+                    // sync?.Log($"[Read] Found {latestMetrics.Count} recent metrics from local DB (Window: -30 days).");
                     return latestMetrics;
                 }
 
@@ -599,7 +618,7 @@ namespace Daily.Services.Health
                 
                 log($"[Fetch] Today: {countToday} items, Yesterday: {countYesterday} items.");
                 
-                if (countToday > 0)
+                if (metricsToday != null && metricsToday.Any())
                 {
                     var types = string.Join(", ", metricsToday.Select(x => x.TypeString).Distinct());
                     log($"[Fetch] Today's Types: {types}");
@@ -631,6 +650,7 @@ namespace Daily.Services.Health
 
                 try 
                 {
+                    await EnsureFreshSessionAsync();
                     var minDate = metrics.Min(m => m.Date);
                     var maxDate = metrics.Max(m => m.Date);
 
