@@ -499,7 +499,14 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
     /// <summary>Called by the dashboard refresh button: runs full sync (push + pull), then reloads the UI.</summary>
     public async Task RefreshAsync()
     {
-        await _syncService.SyncAsync(SyncScope.Habits);
+        try
+        {
+            await _syncService.SyncAsync(SyncScope.Habits);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[HabitsWidgetControl] Sync failed on refresh: {ex.Message}");
+        }
         await LoadDataAsync();
     }
 

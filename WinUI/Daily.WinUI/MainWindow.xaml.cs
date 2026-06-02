@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.IO;
 using System.Diagnostics;
 using H.NotifyIcon;
+using Microsoft.Extensions.DependencyInjection;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -711,6 +712,48 @@ public sealed partial class MainWindow : Window
             ShowWindow(hwnd, 9); // SW_RESTORE
             SetForegroundWindow(hwnd);
         }
+
+        // Run background session refresh and catch-up pulls on restoration
+        System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                var supabase = App.Current.Services.GetService<Supabase.Client>();
+                if (supabase != null)
+                {
+                    var auth = supabase.Auth;
+                    if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
+                    {
+                        System.Diagnostics.Debug.WriteLine("[MainWindow] Restore: Session expired. Refreshing session...");
+                        try { await auth.RefreshSession(); } catch { }
+                    }
+                }
+
+                var habitsService = App.Current.Services.GetService<Daily.Services.IHabitsService>();
+                if (habitsService != null)
+                {
+                    await habitsService.InitializeAsync();
+                }
+
+                var healthService = App.Current.Services.GetService<Daily.Services.Health.IHealthService>();
+                if (healthService != null)
+                {
+                    await healthService.InitializeAsync();
+                }
+
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (RootFrame.Content is MainPage mainPage)
+                    {
+                        mainPage.TriggerRefresh();
+                    }
+                });
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] Restore background sync failed: {ex.Message}");
+            }
+        });
     }
 
     private void ExitApp()

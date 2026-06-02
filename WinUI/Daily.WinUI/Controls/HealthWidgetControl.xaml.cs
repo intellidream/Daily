@@ -64,6 +64,20 @@ namespace Daily_WinUI.Controls
             return Task.CompletedTask;
         }
 
+        public async Task RefreshAsync()
+        {
+            if (_healthService == null) return;
+            try
+            {
+                await _healthService.PullDeltasAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HealthWidgetControl] Sync/Pull deltas failed on refresh: {ex.Message}");
+            }
+            await LoadDataAsync();
+        }
+
         public async Task LoadDataAsync()
         {
             if (_healthService == null) return;

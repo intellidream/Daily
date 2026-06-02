@@ -38,7 +38,7 @@ namespace Daily.Services
         /// </summary>
         Task<(double TotalSmoked, int DaysTracked)> GetSmokesFinancialsAsync(DateTime sinceDate);
         
-        Task InitializeAsync();
+        Task InitializeAsync(bool forceRecreateRealtime = false);
         
         Task<Dictionary<string, int>> GetSmokesBreakdownAsync(DateTime sinceDate);
     }

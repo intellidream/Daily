@@ -58,13 +58,16 @@ namespace Daily.Services
                 _supabase.Auth.AddStateChangedListener((sender, state) =>
                 {
                     Console.WriteLine($"[HabitsService] Auth State Changed: {state}");
-                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || state == Supabase.Gotrue.Constants.AuthState.SignedOut)
+                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || 
+                        state == Supabase.Gotrue.Constants.AuthState.SignedOut ||
+                        state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
                     {
                         Task.Run(async () =>
                         {
                             try
                             {
-                                await InitializeAsync();
+                                bool forceRecreate = (state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed);
+                                await InitializeAsync(forceRecreate);
                             }
                             catch (Exception ex)
                             {
@@ -269,7 +272,7 @@ namespace Daily.Services
             return await _repository.GetDailyTotalsAsync(habitType, startDate, endDate, CurrentUserIdString);
         }
 
-        public async Task InitializeAsync()
+        public async Task InitializeAsync(bool forceRecreateRealtime = false)
         {
              // Force check auth state and sync if needed
              if (IsAuthenticated)
@@ -287,7 +290,7 @@ namespace Daily.Services
                  await _rssFeedService.InitializeCustomFeedsAsync();
                  
                  await _syncService.SyncAsync();
-                 await SetupRealtimeAsync();
+                 await SetupRealtimeAsync(forceRecreateRealtime);
              }
              else
              {
@@ -297,7 +300,7 @@ namespace Daily.Services
 
 
 
-        private async Task SetupRealtimeAsync()
+        private async Task SetupRealtimeAsync(bool forceRecreate = false)
         {
             if (!IsAuthenticated)
             {
@@ -323,6 +326,25 @@ namespace Daily.Services
                     Console.WriteLine("[HabitsService] Propagating current session token to Realtime.");
                     _supabase.Realtime.SetAuth(token);
                 }
+                
+                if (forceRecreate)
+                {
+                    if (_habitsLogsChannel != null)
+                    {
+                        Console.WriteLine("[HabitsService] Force recreating realtime habits_logs channel due to token refresh.");
+                        try { _habitsLogsChannel.Unsubscribe(); } catch { }
+                        try { _supabase.Realtime.Remove(_habitsLogsChannel); } catch { }
+                        _habitsLogsChannel = null;
+                    }
+                    if (_habitsGoalsChannel != null)
+                    {
+                        Console.WriteLine("[HabitsService] Force recreating realtime habits_goals channel due to token refresh.");
+                        try { _habitsGoalsChannel.Unsubscribe(); } catch { }
+                        try { _supabase.Realtime.Remove(_habitsGoalsChannel); } catch { }
+                        _habitsGoalsChannel = null;
+                    }
+                }
+
                 if (_habitsLogsChannel != null && !_habitsLogsChannel.IsJoined)
                 {
                     Console.WriteLine("[HabitsService] Realtime habits_logs channel exists but is not joined. Removing to recreate...");

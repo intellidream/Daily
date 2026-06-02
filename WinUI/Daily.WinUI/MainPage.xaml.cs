@@ -227,7 +227,7 @@ public sealed partial class MainPage : Page
             else if (border?.Child is RssFeedWidgetControl rss)
                 _ = rss.RefreshAsync();
             else if (border?.Child is HealthWidgetControl health)
-                _ = health.LoadDataAsync();
+                _ = health.RefreshAsync();
             else if (border?.Child is FinancesWidgetControl finances)
                 _ = finances.LoadDataAsync();
         }

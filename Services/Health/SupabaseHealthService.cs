@@ -71,19 +71,22 @@ namespace Daily.Services.Health
                 _supabase.Auth.AddStateChangedListener((sender, state) => 
                 {
                     Console.WriteLine($"[SupabaseHealthService] Auth State Changed: {state}");
-                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || state == Supabase.Gotrue.Constants.AuthState.SignedOut)
+                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || 
+                        state == Supabase.Gotrue.Constants.AuthState.SignedOut ||
+                        state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
                     {
-                         Task.Run(async () => 
-                         {
-                             try 
-                             {
-                                 await InitializeAsync();
-                             }
-                             catch(Exception ex)
-                             {
-                                 Console.WriteLine($"[SupabaseHealthService] Post-Auth Init Failed: {ex}");
-                             }
-                         });
+                          Task.Run(async () => 
+                          {
+                              try 
+                              {
+                                  bool forceRecreate = (state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed);
+                                  await InitializeAsync(forceRecreate);
+                              }
+                              catch(Exception ex)
+                              {
+                                  Console.WriteLine($"[SupabaseHealthService] Post-Auth Init Failed: {ex}");
+                              }
+                          });
                     }
                 });
 
@@ -120,7 +123,7 @@ namespace Daily.Services.Health
             }
         }
 
-        public async Task InitializeAsync()
+        public async Task InitializeAsync(bool forceRecreateRealtime = false)
         {
             if (IsAuthenticated)
             {
@@ -131,7 +134,7 @@ namespace Daily.Services.Health
                     _migrationRun = true;
                 }
 
-                await SetupRealtimeAsync();
+                await SetupRealtimeAsync(forceRecreateRealtime);
                 CheckCacheStalenessAndPullAsync();
             }
             else
@@ -207,7 +210,7 @@ namespace Daily.Services.Health
             }
         }
 
-        private async Task SetupRealtimeAsync()
+        private async Task SetupRealtimeAsync(bool forceRecreate = false)
         {
             if (!IsAuthenticated) return;
 
@@ -221,6 +224,15 @@ namespace Daily.Services.Health
                     Console.WriteLine("[SupabaseHealthService] Propagating current session token to Realtime.");
                     _supabase.Realtime.SetAuth(token);
                 }
+                
+                if (forceRecreate && _vitalsChannel != null)
+                {
+                    Console.WriteLine("[SupabaseHealthService] Force recreating realtime vitals channel due to token refresh.");
+                    try { _vitalsChannel.Unsubscribe(); } catch { }
+                    try { _supabase.Realtime.Remove(_vitalsChannel); } catch { }
+                    _vitalsChannel = null;
+                }
+
                 if (_vitalsChannel != null && !_vitalsChannel.IsJoined)
                 {
                     Console.WriteLine("[SupabaseHealthService] Realtime vitals channel exists but is not joined. Removing to recreate...");

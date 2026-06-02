@@ -61,9 +61,10 @@ The SQLite database stores logs locally and synchronizes them with Supabase when
 - **`GetConsistencyAsync(habitType, startDate, endDate)`**: Queries the server for daily aggregated totals over a date range. It falls back to local SQLite grouping queries if offline.
 - **`GetSmokesFinancialsAsync(sinceDate)`**: Executes a database RPC function to calculate total smokes and days tracked since the tracking date. Falls back to local counting queries if offline.
 
-### 2.3 Background Sync & Session Recovery
+### 2.3 Background Sync, Session Recovery & Realtime Update
 - **Automatic Sync Cycle**: The application initiates background synchronization of local habit logs to Supabase every 15 minutes.
-- **Proactive Token Refresh**: Prior to pushing or pulling logs in `SyncService`, the service verifies the session validity using `Expired()`. If the lease has expired, it proactively refreshes the JWT token using `RefreshSession()`, allowing the client to self-heal and successfully sync habits data even after long overnight idle periods.
+- **Proactive Token Refresh & Realtime Re-auth**: Prior to pushing or pulling logs in `SyncService`, the service verifies the session validity using `Expired()`. If the lease has expired, it proactively refreshes the JWT token using `RefreshSession()`. The service listens to the `TokenRefreshed` auth state to update the Realtime client authentication and force-recreate its channels (`habits_logs` and `habits_goals`), keeping database subscription listeners alive overnight.
+- **Graceful Refresh Exception Handlers**: Dashboard refresh clicks run full pushes and pulls. The refresh tasks capture any sync exceptions to ensure the UI successfully updates using the latest local database values even if the backend is temporarily unreachable. App window restoration (`ShowAndActivate()`) automatically initiates background sync catch-ups.
 
 ---
 
