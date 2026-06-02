@@ -91,5 +91,5 @@ Habit tracking telemetry is integrated directly into the **Local Smart Briefing*
 
 * **Habit Completion Status Change**: If the total count of completed habits (`HabitsCompleted`) changes (e.g. crossing your daily water target or exceeding your daily smokes baseline limit).
 * **Significant Progress Delta (10% Threshold)**: Even if the completion status doesn't change, the briefing cache will be invalidated if:
-  * **Water Intake (Bubbles)**: Progress changes by **10% or more** of the target goal (e.g. logging $\ge 200\text{ ml}$ of water towards a $2000\text{ ml}$ goal).
-  * **Smokes (Tobacco)**: Progress changes by **10% or more** of the daily baseline limit (e.g. logging $\ge 2$ cigarettes towards a baseline of $20$).
+  * **Water Intake (Bubbles)**: Progress *increases* by **10% or more** of the target goal relative to the last cached value (e.g. going from $400\text{ ml}$ to $\ge 600\text{ ml}$ under a $2000\text{ ml}$ goal).
+  * **Smokes (Tobacco)**: Progress *increases* by **10% or more** of the daily baseline limit relative to the last cached value (e.g. going from $11$ smokes to $\ge 15$ smokes under a $40$ daily baseline).

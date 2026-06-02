@@ -355,26 +355,26 @@ namespace Daily_WinUI.Services
                 return true;
             }
 
-            // 3.1 Water progress delta >= 10% of water goal
-            if (cached.HabitsWaterGoal > 0)
+            // 3.1 Water progress increased by 10% or more of the goal relative to the last cached value
+            if (current.HabitsWaterProgress > cached.HabitsWaterProgress && cached.HabitsWaterGoal > 0)
             {
-                double waterDelta = Math.Abs(cached.HabitsWaterProgress - current.HabitsWaterProgress);
+                double waterIncrease = current.HabitsWaterProgress - cached.HabitsWaterProgress;
                 double threshold = 0.10 * cached.HabitsWaterGoal;
-                if (waterDelta >= threshold)
+                if (waterIncrease >= threshold)
                 {
-                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Water progress delta = {waterDelta:F0} ml (>= 10% of goal: {threshold:F0} ml)");
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Water progress increased by {waterIncrease:F0} ml (>= 10% of goal: {threshold:F0} ml)");
                     return true;
                 }
             }
 
-            // 3.2 Smokes progress delta >= 10% of smokes goal (baseline)
-            if (cached.HabitsSmokesGoal > 0)
+            // 3.2 Smokes progress increased by 10% or more of the goal (baseline limit) relative to the last cached value
+            if (current.HabitsSmokesProgress > cached.HabitsSmokesProgress && cached.HabitsSmokesGoal > 0)
             {
-                double smokesDelta = Math.Abs(cached.HabitsSmokesProgress - current.HabitsSmokesProgress);
+                double smokesIncrease = current.HabitsSmokesProgress - cached.HabitsSmokesProgress;
                 double threshold = 0.10 * cached.HabitsSmokesGoal;
-                if (smokesDelta >= threshold)
+                if (smokesIncrease >= threshold)
                 {
-                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Smokes progress delta = {smokesDelta:F1} (>= 10% of goal: {threshold:F1})");
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Smokes progress increased by {smokesIncrease:F1} (>= 10% of goal/baseline: {threshold:F1})");
                     return true;
                 }
             }
