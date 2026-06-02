@@ -331,7 +331,7 @@ namespace Daily_WinUI.Services
             }
         }
 
-        // Checks if metrics changed significantly enough to warrant AI regeneration
+        // Checks if telemetry metrics changed significantly enough to warrant AI regeneration
         private bool ShouldRegenerate(SmartBriefingData cached, SmartBriefingData current, bool onlyLocal = false)
         {
             // 1. Weather temperature delta > 1.5 degrees (only check if we retrieved weather)
@@ -353,6 +353,30 @@ namespace Daily_WinUI.Services
             {
                 Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Habits Count changed ({cached.HabitsCompleted}/{cached.HabitsTotal} vs {current.HabitsCompleted}/{current.HabitsTotal})");
                 return true;
+            }
+
+            // 3.1 Water progress delta >= 10% of water goal
+            if (cached.HabitsWaterGoal > 0)
+            {
+                double waterDelta = Math.Abs(cached.HabitsWaterProgress - current.HabitsWaterProgress);
+                double threshold = 0.10 * cached.HabitsWaterGoal;
+                if (waterDelta >= threshold)
+                {
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Water progress delta = {waterDelta:F0} ml (>= 10% of goal: {threshold:F0} ml)");
+                    return true;
+                }
+            }
+
+            // 3.2 Smokes progress delta >= 10% of smokes goal (baseline)
+            if (cached.HabitsSmokesGoal > 0)
+            {
+                double smokesDelta = Math.Abs(cached.HabitsSmokesProgress - current.HabitsSmokesProgress);
+                double threshold = 0.10 * cached.HabitsSmokesGoal;
+                if (smokesDelta >= threshold)
+                {
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Smokes progress delta = {smokesDelta:F1} (>= 10% of goal: {threshold:F1})");
+                    return true;
+                }
             }
 
             // 4. News recommendations change (only check if we retrieved news)

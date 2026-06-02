@@ -221,6 +221,7 @@ To reduce unnecessary local hardware power consumption (NPU/GPU/CPU) and optimiz
    - Weather Temperature change $\leq$ 1.5°C (ignored in local-only check)
    - Steps progress delta $\leq$ 1000 steps
    - Habit totals and completions remain identical
+   - Habit progress deltas (water intake and smoked tobacco count) remain below a 10% change relative to their respective goals/baselines
    - Top news recommendation titles are unchanged (ignored in local-only check)
    The engine re-uses the existing AI narrative text but updates the numeric widgets with fresh metrics, avoiding costly SLM model generation.
 4. **Contextual Time-Slot Cache Validation**: The cache is divided into four local time slots:
@@ -338,12 +339,12 @@ flowchart TD
 1. **Under 15-Minute "Fast Path"**:
    - **Behavior**: Minimizes network overhead by querying only local SQLite metrics (Steps and Habits).
    - **Check**: Calls `ShouldRegenerate(..., onlyLocal: true)`:
-     - If Steps changed by $> 1000$ or habits completed count changed, it forces an AI refresh.
+     - If Steps changed by $> 1000$, or habits completed count changed, or either water progress or smokes progress changed by $\ge 10\%$ of their respective goal/baseline, it forces an AI refresh.
      - Otherwise, it merges the fresh step/habit progress into the cached narrative structure and displays it immediately (returns with `WasRegenerated = false`).
 2. **Stale (> 15-Minute) Path**:
    - **Behavior**: Triggers full queries including Weather APIs, Stock Quotes, and News recommendations.
    - **Check**: Calls `ShouldRegenerate(..., onlyLocal: false)`:
-     - If Weather Temp changed by $> 1.5^\circ\text{C}$, Steps changed by $> 1000$, Habits completions changed, or the News recommendation titles changed, it invalidates the cache and generates a new AI narrative.
+     - If Weather Temp changed by $> 1.5^\circ\text{C}$, Steps changed by $> 1000$, Habits completions changed, either water progress or smokes progress changed by $\ge 10\%$ of their respective goal/baseline, or the News recommendation titles changed, it invalidates the cache and generates a new AI narrative.
      - If they are beneath these limits, it preserves the narrative, updates the cached numbers on the widgets, pushes a renewed lease timestamp to SQLite and Supabase, and returns `WasRegenerated = false`.
 
 ---
