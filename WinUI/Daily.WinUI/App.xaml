@@ -3,7 +3,8 @@
     x:Class="Daily_WinUI.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:Daily_WinUI">
+    xmlns:local="using:Daily_WinUI"
+    xmlns:controls="using:Daily_WinUI.Controls">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -20,6 +21,11 @@
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FFFFFFFF"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BBFFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#20FFFFFF"/>
+                    <ImageBrush x:Key="WidgetDirtBrush" Stretch="Fill">
+                        <ImageBrush.ImageSource>
+                            <SvgImageSource UriSource="ms-appx:///Assets/glass_smudges_dark.svg" RasterizePixelWidth="500" RasterizePixelHeight="400" />
+                        </ImageBrush.ImageSource>
+                    </ImageBrush>
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#44FFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#16FFFFFF"/>
                     <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#C8000000"/>
@@ -93,6 +99,11 @@
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FF1A1A1A"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BB1A1A1A"/>
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#25000000"/>
+                    <ImageBrush x:Key="WidgetDirtBrush" Stretch="Fill">
+                        <ImageBrush.ImageSource>
+                            <SvgImageSource UriSource="ms-appx:///Assets/glass_smudges_light.svg" RasterizePixelWidth="500" RasterizePixelHeight="400" />
+                        </ImageBrush.ImageSource>
+                    </ImageBrush>
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#40000000"/>
                     <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#18000000"/>
                     <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#C8D4C9B0"/>
@@ -164,6 +175,51 @@
                 <Setter Property="Shadow">
                     <Setter.Value>
                         <ThemeShadow />
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Default style and template for GlassWidgetContainer -->
+            <Style x:Key="GlassWidgetContainerStyle" TargetType="controls:GlassWidgetContainer">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="controls:GlassWidgetContainer">
+                            <Grid x:Name="RootGrid" Background="Transparent">
+                                <!-- The wrapped child widget content -->
+                                <ContentPresenter Content="{TemplateBinding Content}" 
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" 
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+
+                                <!-- Dirt Overlay Layer -->
+                                <Border x:Name="DirtOverlay" IsHitTestVisible="False" Opacity="0.0" Background="{ThemeResource WidgetDirtBrush}" CornerRadius="{TemplateBinding CornerRadius}" />
+
+                                <!-- Squeegee / Wipe Animation Overlay Grid -->
+                                <Grid x:Name="WipeClipGrid" IsHitTestVisible="False" CornerRadius="{TemplateBinding CornerRadius}">
+                                    <!-- Wipe Glare element: diagonal bar sweeping left-to-right -->
+                                    <Border x:Name="WipeElement"
+                                            Width="100"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Stretch"
+                                            Opacity="0.0">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                <GradientStop Color="#00FFFFFF" Offset="0.0" />
+                                                <GradientStop Color="#2580D0FF" Offset="0.3" />
+                                                <GradientStop Color="#C0FFFFFF" Offset="0.5" />
+                                                <GradientStop Color="#2580D0FF" Offset="0.7" />
+                                                <GradientStop Color="#00FFFFFF" Offset="1.0" />
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <Border.RenderTransform>
+                                            <CompositeTransform x:Name="WipeTransform" TranslateX="-250" Rotation="20" ScaleY="2.0" />
+                                        </Border.RenderTransform>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </ControlTemplate>
                     </Setter.Value>
                 </Setter>
             </Style>

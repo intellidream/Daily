@@ -160,6 +160,10 @@ public sealed partial class FeaturesPage : Page
             }
             FinancesCurrencyCombo.SelectedIndex = currIdx;
             FinancesShowBadgesSwitch.IsOn = _settings.ShowFinanceStockChangeBadges;
+
+            // Testing
+            WidgetAgingSlider.Value = _settings.WidgetAgingDurationSeconds;
+            WidgetAgingLabel.Text = $"{_settings.WidgetAgingDurationSeconds}s";
         }
         catch (Exception ex)
         {
@@ -994,5 +998,14 @@ public sealed partial class FeaturesPage : Page
         SettingsService.Save(_settings);
         UpdateModelStatus();
         UpdateModelListUi();
+    }
+
+    private void WidgetAgingSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_isInitializing || _settings == null || WidgetAgingSlider == null || WidgetAgingLabel == null) return;
+        int value = (int)WidgetAgingSlider.Value;
+        _settings.WidgetAgingDurationSeconds = value;
+        WidgetAgingLabel.Text = $"{value}s";
+        SettingsService.Save(_settings);
     }
 }

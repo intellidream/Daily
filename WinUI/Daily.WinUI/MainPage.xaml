@@ -22,47 +22,65 @@
 
         <DataTemplate x:Key="WeatherWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <controls:WeatherWidgetControl x:Name="WeatherWidget" />
+                <controls:GlassWidgetContainer CornerRadius="16">
+                    <controls:WeatherWidgetControl x:Name="WeatherWidget" />
+                </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="FinancesWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <controls:FinancesWidgetControl x:Name="FinancesWidget" />
+                <controls:GlassWidgetContainer CornerRadius="16">
+                    <controls:FinancesWidgetControl x:Name="FinancesWidget" />
+                </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="HabitsWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <controls:HabitsWidgetControl x:Name="HabitsWidget" />
+                <controls:GlassWidgetContainer CornerRadius="16">
+                    <controls:HabitsWidgetControl x:Name="HabitsWidget" />
+                </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="HealthWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <controls:HealthWidgetControl x:Name="HealthWidget" />
+                <controls:GlassWidgetContainer CornerRadius="16">
+                    <controls:HealthWidgetControl x:Name="HealthWidget" />
+                </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="CalendarWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <TextBlock Text="Calendar Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <controls:GlassWidgetContainer CornerRadius="16">
+                    <TextBlock Text="Calendar Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="RssFeedWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <controls:RssFeedWidgetControl x:Name="RssFeedWidget" ArticleTapped="RssFeedWidget_ArticleTapped" />
+                <controls:GlassWidgetContainer CornerRadius="16">
+                    <controls:RssFeedWidgetControl x:Name="RssFeedWidget" ArticleTapped="RssFeedWidget_ArticleTapped" />
+                </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="NotesWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <TextBlock Text="Notes Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <controls:GlassWidgetContainer CornerRadius="16">
+                    <TextBlock Text="Notes Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="MediaWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <TextBlock Text="Media Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <controls:GlassWidgetContainer CornerRadius="16">
+                    <TextBlock Text="Media Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="SystemInfoWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
-                <TextBlock Text="System Info Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <controls:GlassWidgetContainer CornerRadius="16">
+                    <TextBlock Text="System Info Widget Coming Soon" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
 

@@ -220,16 +220,21 @@ public sealed partial class MainPage : Page
             if (container == null) continue;
 
             var border = container.ContentTemplateRoot as Border;
-            if (border?.Child is WeatherWidgetControl weather)
-                _ = weather.RefreshAsync();
-            else if (border?.Child is HabitsWidgetControl habits)
-                _ = habits.RefreshAsync();
-            else if (border?.Child is RssFeedWidgetControl rss)
-                _ = rss.RefreshAsync();
-            else if (border?.Child is HealthWidgetControl health)
-                _ = health.RefreshAsync();
-            else if (border?.Child is FinancesWidgetControl finances)
-                _ = finances.LoadDataAsync();
+            if (border?.Child is GlassWidgetContainer glassContainer)
+            {
+                if (glassContainer.Content is WeatherWidgetControl weather)
+                    glassContainer.RefreshWithAnimation(() => weather.RefreshAsync());
+                else if (glassContainer.Content is HabitsWidgetControl habits)
+                    glassContainer.RefreshWithAnimation(() => habits.RefreshAsync());
+                else if (glassContainer.Content is RssFeedWidgetControl rss)
+                    glassContainer.RefreshWithAnimation(() => rss.RefreshAsync());
+                else if (glassContainer.Content is HealthWidgetControl health)
+                    glassContainer.RefreshWithAnimation(() => health.RefreshAsync());
+                else if (glassContainer.Content is FinancesWidgetControl finances)
+                    glassContainer.RefreshWithAnimation(() => finances.LoadDataAsync());
+                else
+                    glassContainer.RefreshWithAnimation(() => System.Threading.Tasks.Task.CompletedTask);
+            }
         }
     }
 

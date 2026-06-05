@@ -74,6 +74,9 @@ public sealed class AppSettings
     // ── Finances Configurations ──
     public string DefaultCurrency { get; set; } = "USD";
     public bool ShowFinanceStockChangeBadges { get; set; } = true;
+
+    // ── Glass Widget Aging Configurations ──
+    public int WidgetAgingDurationSeconds { get; set; } = 30;
 }
 
 public sealed class SavedLocation

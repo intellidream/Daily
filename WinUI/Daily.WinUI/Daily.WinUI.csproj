@@ -77,6 +77,8 @@
     <Content Include="Assets\apptopbar.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
     <Content Include="Assets\Fonts\tabler-icons.ttf" />
+    <Content Include="Assets\glass_smudges_dark.svg" />
+    <Content Include="Assets\glass_smudges_light.svg" />
   </ItemGroup>
 
   <ItemGroup>
