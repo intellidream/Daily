@@ -14,6 +14,7 @@ public partial class App : Application
     public static Supabase.Client SupabaseClient { get; private set; } = null!;
     public IServiceProvider Services { get; private set; } = null!;
     public static new App Current => (App)Application.Current;
+    private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _centralAuthListener;
 
     /// <summary>
     /// Custom entry point. Runs BEFORE the WinUI Application is created.
@@ -210,6 +211,9 @@ public partial class App : Application
         // Start initialization FIRST so the task is available to be awaited
         InitializationTask = InitializeAsync();
 
+        // Listen for Windows network connectivity changes
+        Windows.Networking.Connectivity.NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
+
         _window = new MainWindow();
         _window.Activate();
 
@@ -229,6 +233,28 @@ public partial class App : Application
             SessionHandler = new Daily_WinUI.Services.WinUISessionPersistence()
         };
         SupabaseClient = new Supabase.Client(Secrets.SupabaseUrl, Secrets.SupabaseKey, options);
+
+        // Keep central listener alive to propagate token refreshes and prevent garbage collection
+        _centralAuthListener = (sender, state) =>
+        {
+            if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || 
+                state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
+            {
+                var session = SupabaseClient.Auth.CurrentSession;
+                if (session != null && !string.IsNullOrEmpty(session.AccessToken))
+                {
+                    System.Diagnostics.Debug.WriteLine("[App] Central Auth: Propagating access token to Realtime client.");
+                    SupabaseClient.Realtime.SetAuth(session.AccessToken);
+                }
+            }
+            else if (state == Supabase.Gotrue.Constants.AuthState.SignedOut)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Central Auth: Clearing access token from Realtime client.");
+                SupabaseClient.Realtime.SetAuth(null);
+            }
+        };
+        SupabaseClient.Auth.AddStateChangedListener(_centralAuthListener);
+
         services.AddSingleton(SupabaseClient);
 
         // Core Services
@@ -510,6 +536,52 @@ public partial class App : Application
             System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{System.Environment.NewLine}");
         }
         catch { }
+    }
+
+    private void OnNetworkStatusChanged(object sender)
+    {
+        try
+        {
+            var profile = Windows.Networking.Connectivity.NetworkInformation.GetInternetConnectionProfile();
+            if (profile != null && profile.GetNetworkConnectivityLevel() == Windows.Networking.Connectivity.NetworkConnectivityLevel.InternetAccess)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Windows internet connectivity restored. Connecting Realtime and syncing...");
+                System.Threading.Tasks.Task.Run(async () =>
+                {
+                    try
+                    {
+                        var auth = SupabaseClient.Auth;
+                        if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
+                        {
+                            System.Diagnostics.Debug.WriteLine("[App] Reconnect: Session expired. Refreshing token...");
+                            try { await auth.RefreshSession(); } catch { }
+                        }
+
+                        await SupabaseClient.Realtime.ConnectAsync();
+
+                        var syncService = Services.GetService<Daily.Services.ISyncService>();
+                        if (syncService != null)
+                        {
+                            await syncService.PullAsync(Daily.Services.SyncScope.All);
+                        }
+
+                        var healthService = Services.GetService<Daily.Services.Health.IHealthService>();
+                        if (healthService != null)
+                        {
+                            await healthService.PullDeltasAsync();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[App] Reconnect/sync on connectivity change failed: {ex.Message}");
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Error handling network status change: {ex.Message}");
+        }
     }
 }
 

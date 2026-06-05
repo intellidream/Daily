@@ -11,6 +11,7 @@ namespace Daily.Services
         private readonly IDatabaseService _databaseService;
         private readonly ISyncService _syncService; // To trigger sync on save
         private UserPreferences _currentSettings = new UserPreferences();
+        private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _authListener;
         
         public UserPreferences Settings => _currentSettings;
         public bool IsAuthenticated => _supabase.Auth.CurrentSession != null;
@@ -52,8 +53,8 @@ namespace Daily.Services
                 };
 
                 // Setup Auth Listener ONCE in Constructor
-                 _supabase.Auth.AddStateChangedListener((sender, state) => 
-                 {
+                _authListener = (sender, state) => 
+                {
                      Console.WriteLine($"[SettingsService] Auth State Changed: {state}");
                      if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || state == Supabase.Gotrue.Constants.AuthState.SignedOut)
                      {
@@ -71,7 +72,8 @@ namespace Daily.Services
                               }
                           });
                      }
-                 });
+                };
+                _supabase.Auth.AddStateChangedListener(_authListener);
             }
             catch (Exception ex)
             {

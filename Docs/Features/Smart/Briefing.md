@@ -8,9 +8,9 @@ The Local Smart Briefing feature integrates lightweight, privacy-first, on-devic
 
 ### 1.1 Local Intelligence Engine
 - **Hardware-Aware Execution**: The app detects the host machine's hardware capabilities at launch to determine execution strategies:
-  - **Copilot+ NPU Acceleration**: On Copilot+ PCs (e.g., ARM64 Snapdragon X Elite devices with Qualcomm Hexagon NPUs), the app runs workloads on the dedicated NPU.
+  - **Copilot+ NPU Acceleration**: On Copilot+ PCs (e.g., ARM64 Snapdragon X Elite devices with Qualcomm Hexagon NPUs), the app runs workloads on the dedicated NPU. Intel AI Boost and AMD Ryzen AI NPUs are currently unsupported directly for custom GGUF models and will fall back to CPU or GPU execution.
   - **GPU Acceleration**: On devices with dedicated GPUs (NVIDIA/AMD) or capable integrated graphics, the app falls back to GPU execution via LLamaSharp (using Vulkan/CUDA).
-  - **CPU Fallback**: For older hardware, workloads run on the CPU (using optimized INT4 quantized weights). If no local model is ready or download is cancelled, the system falls back immediately to a structured C# template to guarantee absolute app stability.
+  - **CPU Fallback**: For unsupported NPUs or older hardware, workloads run on the CPU (using optimized INT4 quantized weights). If no local model is ready or download is cancelled, the system falls back immediately to a structured C# template to guarantee absolute app stability.
 - **Zero-Installer Bloat (Download-on-Demand)**: To keep the initial application installer small (~80MB), the local AI model is not pre-packaged. Instead, users are prompted in the Settings screen to download a **Local Intelligence Pack** (~600MB) containing optimized INT4 GGUF weights. The pack is saved locally in `%LocalAppData%\Daily.WinUI\models\<model_folder>\model.gguf`.
 
 ### 1.2 Smart Features Suite

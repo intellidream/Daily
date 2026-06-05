@@ -102,9 +102,10 @@ Rather than executing a separate child process for dry-running DLLs, `AIManager`
 
 #### B. The Strategy Router (`AIManager.cs`)
 1. **Qualcomm NPU Check**: If `UseWindowsInternalAi` is checked and the device features Qualcomm NPU architecture, the engine attempts to boot `PhiSilicaNpuEngine`.
-2. **GPU Acceleration**: Attempts to load the GPU version of `llama.dll` (utilizing `cuda12` for NVIDIA and `vulkan` for AMD).
-3. **CPU Mode**: If GPU loading checks fail, it falls back to the CPU engine using optimized `ggml-cpu.dll` libraries (auto-detecting `avx2`, `avx`, or `noavx` CPU instruction support).
-4. **Basic Template Fallback**: If no engines are loadable or the user selects "Fallback Template Engine" in settings, the briefing defaults immediately to C# procedural narrative generation.
+2. **Intel/AMD NPU Fallback**: Intel AI Boost and AMD Ryzen AI NPUs are **not directly supported** by the underlying `llama.cpp` wrappers (`LLamaSharp`) for custom GGUF models. If selected (or detected), they are marked as **Unsupported** in the Settings UI, and execution automatically routes to **CPU Mode** (or **GPU Acceleration** if using the `Auto` strategy).
+3. **GPU Acceleration**: Attempts to load the GPU version of `llama.dll` (utilizing `cuda12` for NVIDIA and `vulkan` for AMD/fallback).
+4. **CPU Mode**: If NPU and GPU checks fail or are bypassed, the system falls back to the CPU engine using optimized `ggml-cpu.dll` libraries (auto-detecting `avx2`, `avx`, or `noavx` CPU instruction support).
+5. **Basic Template Fallback**: If no engines are loadable or the user selects "Fallback Template Engine" in settings, the briefing defaults immediately to C# procedural narrative generation.
 
 ---
 

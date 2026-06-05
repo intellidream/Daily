@@ -21,6 +21,8 @@ namespace Daily.Services.Health
         private readonly IRefreshService _refreshService;
         private readonly IDatabaseService _databaseService;
         private Supabase.Realtime.RealtimeChannel? _vitalsChannel;
+        private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _authStateChangedHandler;
+        private Supabase.Realtime.Interfaces.IRealtimeClient<Supabase.Realtime.RealtimeSocket, Supabase.Realtime.RealtimeChannel>.SocketStateEventHandler? _realtimeStateChangedHandler;
 
         private bool IsAuthenticated => _supabase.Auth.CurrentSession != null && _supabase.Auth.CurrentUser != null;
 
@@ -68,19 +70,17 @@ namespace Daily.Services.Health
                 _databaseService = databaseService;
 
                 // Setup Auth Listener ONCE in Constructor
-                _supabase.Auth.AddStateChangedListener((sender, state) => 
+                _authStateChangedHandler = (sender, state) => 
                 {
                     Console.WriteLine($"[SupabaseHealthService] Auth State Changed: {state}");
                     if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || 
-                        state == Supabase.Gotrue.Constants.AuthState.SignedOut ||
-                        state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
+                        state == Supabase.Gotrue.Constants.AuthState.SignedOut)
                     {
                           Task.Run(async () => 
                           {
                               try 
                               {
-                                  bool forceRecreate = (state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed);
-                                  await InitializeAsync(forceRecreate);
+                                  await InitializeAsync(forceRecreateRealtime: false);
                               }
                               catch(Exception ex)
                               {
@@ -88,9 +88,10 @@ namespace Daily.Services.Health
                               }
                           });
                     }
-                });
+                };
+                _supabase.Auth.AddStateChangedListener(_authStateChangedHandler);
 
-                _supabase.Realtime.AddStateChangedHandler((sender, state) =>
+                _realtimeStateChangedHandler = (sender, state) =>
                 {
                     Console.WriteLine($"[SupabaseHealthService] Realtime Socket State Changed: {state}");
                     if (state == Supabase.Realtime.Constants.SocketState.Open)
@@ -115,7 +116,8 @@ namespace Daily.Services.Health
                             catch (Exception ex) { Console.WriteLine($"[SupabaseHealthService] Debounced reconnect error: {ex.Message}"); }
                         });
                     }
-                });
+                };
+                _supabase.Realtime.AddStateChangedHandler(_realtimeStateChangedHandler);
             }
             catch(Exception ex)
             {

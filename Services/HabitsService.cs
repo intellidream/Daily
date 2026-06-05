@@ -24,6 +24,8 @@ namespace Daily.Services
         private Supabase.Realtime.RealtimeChannel? _habitsGoalsChannel;
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
         private CancellationTokenSource? _reconnectCts;
+        private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _authStateChangedHandler;
+        private Supabase.Realtime.Interfaces.IRealtimeClient<Supabase.Realtime.RealtimeSocket, Supabase.Realtime.RealtimeChannel>.SocketStateEventHandler? _realtimeStateChangedHandler;
 
         private string _currentViewType = "water"; // Default to "water"
         public string CurrentViewType
@@ -55,19 +57,17 @@ namespace Daily.Services
                 _rssFeedService = rssFeedService;
 
                 // Setup Auth Listener ONCE in Constructor
-                _supabase.Auth.AddStateChangedListener((sender, state) =>
+                _authStateChangedHandler = (sender, state) =>
                 {
                     Console.WriteLine($"[HabitsService] Auth State Changed: {state}");
                     if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || 
-                        state == Supabase.Gotrue.Constants.AuthState.SignedOut ||
-                        state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
+                        state == Supabase.Gotrue.Constants.AuthState.SignedOut)
                     {
                         Task.Run(async () =>
                         {
                             try
                             {
-                                bool forceRecreate = (state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed);
-                                await InitializeAsync(forceRecreate);
+                                await InitializeAsync(forceRecreateRealtime: false);
                             }
                             catch (Exception ex)
                             {
@@ -75,7 +75,8 @@ namespace Daily.Services
                             }
                         });
                     }
-                });
+                };
+                _supabase.Auth.AddStateChangedListener(_authStateChangedHandler);
 
                 if (_supabase.Auth.CurrentSession != null)
                 {
@@ -93,7 +94,7 @@ namespace Daily.Services
                     OnHabitsUpdated?.Invoke();
                 };
 
-                _supabase.Realtime.AddStateChangedHandler((sender, state) =>
+                _realtimeStateChangedHandler = (sender, state) =>
                 {
                     Console.WriteLine($"[HabitsService] Realtime Socket State Changed: {state}");
                     if (state == Supabase.Realtime.Constants.SocketState.Open)
@@ -118,7 +119,8 @@ namespace Daily.Services
                             catch (Exception ex) { Console.WriteLine($"[HabitsService] Debounced reconnect error: {ex.Message}"); }
                         });
                     }
-                });
+                };
+                _supabase.Realtime.AddStateChangedHandler(_realtimeStateChangedHandler);
             }
             catch (Exception ex)
             {
@@ -295,6 +297,7 @@ namespace Daily.Services
              else
              {
                  Console.WriteLine("[HabitsService] Initialize: Guest mode.");
+                 await SetupRealtimeAsync(forceRecreateRealtime);
              }
         }
 

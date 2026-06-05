@@ -85,11 +85,11 @@ public sealed partial class FeaturesPage : Page
                 }
                 else if (npu.Contains("Intel", StringComparison.OrdinalIgnoreCase))
                 {
-                    SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "Intel AI Boost NPU", Tag = "NPU_IntelAmd" });
+                    SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "Intel AI Boost NPU (Unsupported)", Tag = "NPU_IntelAmd", IsEnabled = false });
                 }
                 else if (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase))
                 {
-                    SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "AMD Ryzen AI NPU", Tag = "NPU_IntelAmd" });
+                    SettingsAiAcceleratorCombo.Items.Add(new ComboBoxItem { Content = "AMD Ryzen AI NPU (Unsupported)", Tag = "NPU_IntelAmd", IsEnabled = false });
                 }
             }
 
@@ -252,28 +252,25 @@ public sealed partial class FeaturesPage : Page
         string bestEngineTag;
         bool bestEngineReady;
 
+        var aiManager = App.Current.Services.GetRequiredService<Daily_WinUI.Services.AIManager>();
+        bool hasGpu = aiManager.HasDedicatedGpu;
+
         if (useInternalAi && !string.IsNullOrEmpty(npu) && npu.Contains("Qualcomm", StringComparison.OrdinalIgnoreCase))
         {
             bestEngineName = "Qualcomm Hexagon NPU";
             bestEngineTag = "NPU";
             bestEngineReady = true;
         }
-        else if (!string.IsNullOrEmpty(npu) && (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)))
+        else if (hasGpu)
         {
-            bestEngineName = "AMD Ryzen AI NPU";
-            bestEngineTag = "NPU_IntelAmd";
-            bestEngineReady = onnxModelReady;
-        }
-        else if (!string.IsNullOrEmpty(npu) && npu.Contains("Intel", StringComparison.OrdinalIgnoreCase))
-        {
-            bestEngineName = "Intel(R) AI Boost NPU";
-            bestEngineTag = "NPU_IntelAmd";
+            bestEngineName = "DirectML GPU Accelerator";
+            bestEngineTag = "GPU";
             bestEngineReady = onnxModelReady;
         }
         else
         {
-            bestEngineName = "DirectML GPU Accelerator";
-            bestEngineTag = "GPU";
+            bestEngineName = "DirectML CPU";
+            bestEngineTag = "CPU";
             bestEngineReady = onnxModelReady;
         }
 
@@ -394,8 +391,8 @@ public sealed partial class FeaturesPage : Page
             string npuName = (npu != null && (npu.Contains("AMD", StringComparison.OrdinalIgnoreCase) || npu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)))
                 ? "AMD Ryzen AI NPU"
                 : "Intel(R) AI Boost NPU";
-            activeLabel = $"{npuName} ({modelName})";
-            description = $"Uses the custom {modelName} model running locally on the {npuName} via ONNX Runtime GenAI.";
+            activeLabel = $"{npuName} ({modelName}) (Unsupported)";
+            description = $"Intel/AMD NPUs are not directly supported for custom local models yet. Under Route 4, execution falls back to DirectML CPU mode. We recommend using 'Auto (Recommended)' or 'DirectML GPU Accelerator'.";
             if (!onnxModelReady)
             {
                 description += " (Requires Model Download)";
@@ -612,6 +609,17 @@ public sealed partial class FeaturesPage : Page
     {
         HardwareWarningInfoBar.IsOpen = false;
         HardwareWarningInfoBar.Visibility = Visibility.Collapsed;
+
+        // Check if Intel/AMD NPU is selected
+        if (accelerator == "NPU_IntelAmd")
+        {
+            HardwareWarningInfoBar.Title = "Intel/AMD NPU Unsupported";
+            HardwareWarningInfoBar.Message = "Intel and AMD NPUs are not directly supported for custom local models yet. Your execution will automatically fall back to DirectML CPU mode. We recommend using 'Auto (Recommended)' or 'DirectML GPU Accelerator'.";
+            HardwareWarningInfoBar.Severity = InfoBarSeverity.Warning;
+            HardwareWarningInfoBar.IsOpen = true;
+            HardwareWarningInfoBar.Visibility = Visibility.Visible;
+            return;
+        }
 
         // Check if CPU is paired with Phi 3.5 Mini
         if (modelId == "phi35_mini" && accelerator == "CPU")

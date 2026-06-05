@@ -29,6 +29,7 @@ namespace Daily_WinUI.Services
 
         public ISmartBriefingEngine? ActiveEngine => _activeEngine;
         public string ActiveEngineName => _activeEngineName;
+        public bool HasDedicatedGpu => DetectDedicatedGpu(out _);
 
         public AIManager()
         {
