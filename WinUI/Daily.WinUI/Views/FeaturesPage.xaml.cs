@@ -164,6 +164,8 @@ public sealed partial class FeaturesPage : Page
             // Testing
             WidgetAgingSlider.Value = _settings.WidgetAgingDurationSeconds;
             WidgetAgingLabel.Text = $"{_settings.WidgetAgingDurationSeconds}s";
+            WidgetGrainIntensitySlider.Value = _settings.WidgetAgingGrainIntensity;
+            WidgetGrainIntensityLabel.Text = $"{_settings.WidgetAgingGrainIntensity:F0}%";
         }
         catch (Exception ex)
         {
@@ -1006,6 +1008,15 @@ public sealed partial class FeaturesPage : Page
         int value = (int)WidgetAgingSlider.Value;
         _settings.WidgetAgingDurationSeconds = value;
         WidgetAgingLabel.Text = $"{value}s";
+        SettingsService.Save(_settings);
+    }
+
+    private void WidgetGrainIntensitySlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_isInitializing || _settings == null || WidgetGrainIntensitySlider == null || WidgetGrainIntensityLabel == null) return;
+        double value = WidgetGrainIntensitySlider.Value;
+        _settings.WidgetAgingGrainIntensity = value;
+        WidgetGrainIntensityLabel.Text = $"{value:F0}%";
         SettingsService.Save(_settings);
     }
 }

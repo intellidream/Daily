@@ -77,6 +77,7 @@ public sealed class AppSettings
 
     // ── Glass Widget Aging Configurations ──
     public int WidgetAgingDurationSeconds { get; set; } = 30;
+    public double WidgetAgingGrainIntensity { get; set; } = 50.0;
 }
 
 public sealed class SavedLocation

@@ -40,33 +40,41 @@
   <!-- Center palm/hand drag -->
   <ellipse cx="270" cy="220" rx="70" ry="70" fill="url(#smudge3)" />
 
-  <!-- Fingerprints (using concentric thin circles with very high transparency) -->
-  <g stroke="white" stroke-width="1.2" fill="none" opacity="0.15">
-    <!-- Fingerprint 1 -->
-    <g transform="translate(250, 130) rotate(-12)">
-      <ellipse cx="0" cy="0" rx="14" ry="22" />
-      <ellipse cx="0" cy="0" rx="11" ry="17" />
-      <ellipse cx="0" cy="0" rx="8" ry="12" />
-      <ellipse cx="0" cy="0" rx="5" ry="8" />
-      <ellipse cx="0" cy="0" rx="2" ry="3" />
-    </g>
+  <!-- Fingerprints (Thin concentric ellipses representing whorls) -->
+  <!-- Fingerprint 1 (Index Finger) -->
+  <g transform="translate(250, 130) rotate(-12)" stroke="white" stroke-width="0.75" fill="none" opacity="0.18">
+    <ellipse cx="0" cy="0" rx="14" ry="22" />
+    <ellipse cx="-0.5" cy="0" rx="12" ry="19" />
+    <ellipse cx="-1.0" cy="0" rx="10" ry="16" />
+    <ellipse cx="-1.5" cy="0" rx="8" ry="13" />
+    <ellipse cx="-2.0" cy="0" rx="6" ry="10" />
+    <ellipse cx="-2.5" cy="0" rx="4" ry="7" />
+    <ellipse cx="-3.0" cy="0" rx="2" ry="4" />
+  </g>
 
-    <!-- Fingerprint 2 -->
-    <g transform="translate(285, 105) rotate(-6)">
-      <ellipse cx="0" cy="0" rx="15" ry="24" />
-      <ellipse cx="0" cy="0" rx="12" ry="19" />
-      <ellipse cx="0" cy="0" rx="9" ry="14" />
-      <ellipse cx="0" cy="0" rx="6" ry="9" />
-      <ellipse cx="0" cy="0" rx="3" ry="4" />
-    </g>
+  <!-- Fingerprint 2 (Middle Finger) -->
+  <g transform="translate(285, 105) rotate(-6)" stroke="white" stroke-width="0.75" fill="none" opacity="0.18">
+    <ellipse cx="0" cy="0" rx="16" ry="25" />
+    <ellipse cx="-0.6" cy="0" rx="14" ry="22" />
+    <ellipse cx="-1.2" cy="0" rx="12" ry="19" />
+    <ellipse cx="-1.8" cy="0" rx="10" ry="16" />
+    <ellipse cx="-2.4" cy="0" rx="8" ry="13" />
+    <ellipse cx="-3.0" cy="0" rx="6" ry="10" />
+    <ellipse cx="-3.6" cy="0" rx="4" ry="7" />
+    <ellipse cx="-4.2" cy="0" rx="2" ry="4" />
+  </g>
 
-    <!-- Fingerprint 3 -->
-    <g transform="translate(180, 230) rotate(-35)">
-      <ellipse cx="0" cy="0" rx="18" ry="28" />
-      <ellipse cx="0" cy="0" rx="14" ry="22" />
-      <ellipse cx="0" cy="0" rx="10" ry="16" />
-      <ellipse cx="0" cy="0" rx="6" ry="10" />
-      <ellipse cx="0" cy="0" rx="3" ry="5" />
-    </g>
+  <!-- Fingerprint 3 (Thumb) -->
+  <g transform="translate(180, 230) rotate(-35)" stroke="white" stroke-width="0.85" fill="none" opacity="0.20">
+    <ellipse cx="0" cy="0" rx="20" ry="30" />
+    <ellipse cx="-0.8" cy="0" rx="18" ry="27" />
+    <ellipse cx="-1.6" cy="0" rx="16" ry="24" />
+    <ellipse cx="-2.4" cy="0" rx="14" ry="21" />
+    <ellipse cx="-3.2" cy="0" rx="12" ry="18" />
+    <ellipse cx="-4.0" cy="0" rx="10" ry="15" />
+    <ellipse cx="-4.8" cy="0" rx="8" ry="12" />
+    <ellipse cx="-5.6" cy="0" rx="6" ry="9" />
+    <ellipse cx="-6.4" cy="0" rx="4" ry="6" />
+    <ellipse cx="-7.2" cy="0" rx="2" ry="3" />
   </g>
 </svg>

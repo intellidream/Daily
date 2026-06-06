@@ -116,3 +116,8 @@ We implemented a custom, premium windows layout control system to support flexib
 ### 7.4 Standardized Widget Headers
 * **Visual Weight Uniformity**: The dashboard widgets utilize native vector `FontIcon` elements. To ensure equal visual weight, header icons were standardized across widgets (Vitals, News, Habits, Finances) to a uniform `FontSize="20"`, correcting the visually smaller footprint of the Finances and Habits glyphs.
 
+### 7.5 Widget Glass Panel Aging & Squeegee Cleaning Animations
+* **タクタイル (Tactile) Glassmorphism**: To visually represent data staleness, widgets are wrapped in a custom `GlassWidgetContainer` control. Over time, the container layers vector-based fingerprint smudges (`glass_smudges_dark.svg`, `glass_smudges_light.svg`) and dust/grain overlays (`glass_noise_dark.svg`, `glass_noise_light.svg`) over the content. The grain opacity dynamically scales with a user-configured intensity setting (0% to 100%).
+* **Composition InsetClip Wipe Sync**: To simulate a physical wipe, a diagonal squeegee bar (`WipeElement`) glides across the widget using a cubic-ease transition. Instead of a global fade-out, the smudges and dust overlays are wiped from left to right using a composition `InsetClip`. A mathematical cubic solver `SolveCubicEaseInOut` calculates the exact interval (`tStart` to `tEnd`) when the trailing edge of the diagonal squeegee sweeps across the widget boundaries. The clip's `LeftInset` is animated to match, making the dirt disappear exactly at the squeegee's trailing edge. On completion, the clips are cleared (`visual.Clip = null`) and opacities are reset to `0.0` to start the next aging cycle.
+
+

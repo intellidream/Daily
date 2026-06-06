@@ -2,6 +2,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Composition;
 using System;
 using System.Threading.Tasks;
 using Daily_WinUI.Services;
@@ -9,21 +11,25 @@ using Daily_WinUI.Services;
 namespace Daily_WinUI.Controls;
 
 [TemplatePart(Name = DirtOverlayPart, Type = typeof(Border))]
+[TemplatePart(Name = NoiseOverlayPart, Type = typeof(Border))]
 [TemplatePart(Name = WipeElementPart, Type = typeof(Border))]
 [TemplatePart(Name = WipeTransformPart, Type = typeof(CompositeTransform))]
 public sealed class GlassWidgetContainer : ContentControl
 {
     private const string DirtOverlayPart = "DirtOverlay";
+    private const string NoiseOverlayPart = "NoiseOverlay";
     private const string WipeElementPart = "WipeElement";
     private const string WipeTransformPart = "WipeTransform";
 
     private Border? _dirtOverlay;
+    private Border? _noiseOverlay;
     private Border? _wipeElement;
     private CompositeTransform? _wipeTransform;
 
     private DispatcherTimer _agingTimer;
     private DateTime _lastRefreshedTime;
     private static readonly double MaxDirtOpacity = 0.75;
+    private static readonly double MaxNoiseOpacity = 0.55;
 
     private static void LogToFile(string message)
     {
@@ -76,15 +82,20 @@ public sealed class GlassWidgetContainer : ContentControl
     {
         base.OnApplyTemplate();
         _dirtOverlay = GetTemplateChild(DirtOverlayPart) as Border;
+        _noiseOverlay = GetTemplateChild(NoiseOverlayPart) as Border;
         _wipeElement = GetTemplateChild(WipeElementPart) as Border;
         _wipeTransform = GetTemplateChild(WipeTransformPart) as CompositeTransform;
 
-        LogToFile($"OnApplyTemplate called. DirtOverlay: {_dirtOverlay != null}, WipeElement: {_wipeElement != null}, WipeTransform: {_wipeTransform != null}");
+        LogToFile($"OnApplyTemplate called. DirtOverlay: {_dirtOverlay != null}, NoiseOverlay: {_noiseOverlay != null}, WipeElement: {_wipeElement != null}, WipeTransform: {_wipeTransform != null}");
 
         // Initialize state
         if (_dirtOverlay != null)
         {
             _dirtOverlay.Opacity = 0.0;
+        }
+        if (_noiseOverlay != null)
+        {
+            _noiseOverlay.Opacity = 0.0;
         }
         if (_wipeElement != null)
         {
@@ -107,6 +118,7 @@ public sealed class GlassWidgetContainer : ContentControl
         var settings = SettingsService.Load();
         int durationSeconds = settings.WidgetAgingDurationSeconds;
         if (durationSeconds <= 0) durationSeconds = 30; // Fallback to 30s default
+        double grainIntensity = settings.WidgetAgingGrainIntensity;
 
         var elapsed = DateTime.Now - _lastRefreshedTime;
         double ratio = Math.Min(1.0, elapsed.TotalSeconds / durationSeconds);
@@ -116,7 +128,12 @@ public sealed class GlassWidgetContainer : ContentControl
 
         _dirtOverlay.Opacity = dirtiness * MaxDirtOpacity;
 
-        LogToFile($"Timer tick. Elapsed: {elapsed.TotalSeconds:F1}s / {durationSeconds}s. Ratio: {ratio:F2}. Opacity: {_dirtOverlay.Opacity:F3}. Container Size: {ActualWidth}x{ActualHeight}. DirtOverlay Size: {_dirtOverlay.ActualWidth}x{_dirtOverlay.ActualHeight}");
+        if (_noiseOverlay != null)
+        {
+            _noiseOverlay.Opacity = dirtiness * MaxNoiseOpacity * (grainIntensity / 100.0);
+        }
+
+        LogToFile($"Timer tick. Elapsed: {elapsed.TotalSeconds:F1}s / {durationSeconds}s. Ratio: {ratio:F2}. Opacity: {_dirtOverlay.Opacity:F3}. GrainOpacity: {_noiseOverlay?.Opacity ?? 0.0:F3}. Container Size: {ActualWidth}x{ActualHeight}. DirtOverlay Size: {_dirtOverlay.ActualWidth}x{_dirtOverlay.ActualHeight}");
     }
 
     public async void RefreshWithAnimation(Func<Task> refreshAction)
@@ -133,6 +150,22 @@ public sealed class GlassWidgetContainer : ContentControl
         {
             System.Diagnostics.Debug.WriteLine($"[GlassWidgetContainer] Refresh failed: {ex}");
         }
+    }
+
+    private static float SolveCubicEaseInOut(double targetY)
+    {
+        double low = 0.0;
+        double high = 1.0;
+        for (int i = 0; i < 20; i++)
+        {
+            double mid = (low + high) / 2.0;
+            double y = mid < 0.5 ? 4.0 * mid * mid * mid : 1.0 - 4.0 * Math.Pow(1.0 - mid, 3);
+            if (y < targetY)
+                low = mid;
+            else
+                high = mid;
+        }
+        return (float)((low + high) / 2.0);
     }
 
     private void StartWipeAnimation()
@@ -167,20 +200,66 @@ public sealed class GlassWidgetContainer : ContentControl
         wipeFade.KeyFrames.Add(new LinearDoubleKeyFrame { Value = 1.0, KeyTime = KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.95)) });
         wipeFade.KeyFrames.Add(new LinearDoubleKeyFrame { Value = 0.0, KeyTime = KeyTime.FromTimeSpan(TimeSpan.FromSeconds(1.2)) });
 
-        // Fade out the dirt layer over the sweep duration
-        var dirtFade = new DoubleAnimation
-        {
-            To = 0.0,
-            Duration = new Duration(TimeSpan.FromSeconds(1.0)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-        };
-        Storyboard.SetTarget(dirtFade, _dirtOverlay);
-        Storyboard.SetTargetProperty(dirtFade, "Opacity");
-
         var sb = new Storyboard();
         sb.Children.Add(translateAnim);
         sb.Children.Add(wipeFade);
-        sb.Children.Add(dirtFade);
+
+        // Retrieve Composition Visuals for the overlays and apply InsetClip to them
+        Visual? dirtVisual = ElementCompositionPreview.GetElementVisual(_dirtOverlay);
+        Visual? noiseVisual = _noiseOverlay != null ? ElementCompositionPreview.GetElementVisual(_noiseOverlay) : null;
+
+        InsetClip? dirtClip = null;
+        InsetClip? noiseClip = null;
+
+        if (dirtVisual != null)
+        {
+            var compositor = dirtVisual.Compositor;
+            dirtClip = compositor.CreateInsetClip();
+            dirtClip.LeftInset = 0.0f;
+            dirtVisual.Clip = dirtClip;
+        }
+
+        if (noiseVisual != null)
+        {
+            var compositor = noiseVisual.Compositor;
+            noiseClip = compositor.CreateInsetClip();
+            noiseClip.LeftInset = 0.0f;
+            noiseVisual.Clip = noiseClip;
+        }
+
+        if (dirtClip != null || noiseClip != null)
+        {
+            var compositor = (dirtVisual ?? noiseVisual)!.Compositor;
+            
+            // Calculate keyframe timings dynamically based on the width
+            double totalDistance = width + 500.0;
+            double fractionStart = 250.0 / totalDistance;
+            double fractionEnd = (width + 250.0) / totalDistance;
+
+            float tStart = SolveCubicEaseInOut(fractionStart);
+            float tEnd = SolveCubicEaseInOut(fractionEnd);
+
+            var cubicEase = compositor.CreateCubicBezierEasingFunction(
+                new System.Numerics.Vector2(0.42f, 0.0f),
+                new System.Numerics.Vector2(0.58f, 1.0f)
+            ); // EaseInOut
+
+            var clipAnim = compositor.CreateScalarKeyFrameAnimation();
+            clipAnim.Duration = TimeSpan.FromSeconds(1.2);
+            clipAnim.InsertKeyFrame(0.0f, 0.0f);
+            clipAnim.InsertKeyFrame(tStart, 0.0f);
+            clipAnim.InsertKeyFrame(tEnd, (float)width, cubicEase);
+            clipAnim.InsertKeyFrame(1.0f, (float)width);
+
+            if (dirtClip != null)
+            {
+                dirtClip.StartAnimation("LeftInset", clipAnim);
+            }
+            if (noiseClip != null)
+            {
+                noiseClip.StartAnimation("LeftInset", clipAnim);
+            }
+        }
 
         // When animation finishes, reset last refresh time to clear the dirt logic
         sb.Completed += (s, e) =>
@@ -190,6 +269,22 @@ public sealed class GlassWidgetContainer : ContentControl
             {
                 _dirtOverlay.Opacity = 0.0;
             }
+            if (_noiseOverlay != null)
+            {
+                _noiseOverlay.Opacity = 0.0;
+            }
+
+            // Remove the clips so that the overlays are fully visible when the widget ages again
+            if (dirtVisual != null)
+            {
+                dirtVisual.Clip = null;
+            }
+            if (noiseVisual != null)
+            {
+                noiseVisual.Clip = null;
+            }
+
+            sb.Stop();
         };
 
         sb.Begin();

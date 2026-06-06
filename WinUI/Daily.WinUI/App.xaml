@@ -26,6 +26,11 @@
                             <SvgImageSource UriSource="ms-appx:///Assets/glass_smudges_dark.svg" RasterizePixelWidth="500" RasterizePixelHeight="400" />
                         </ImageBrush.ImageSource>
                     </ImageBrush>
+                    <ImageBrush x:Key="WidgetNoiseBrush" Stretch="Fill">
+                        <ImageBrush.ImageSource>
+                            <SvgImageSource UriSource="ms-appx:///Assets/glass_noise_dark.svg" RasterizePixelWidth="500" RasterizePixelHeight="400" />
+                        </ImageBrush.ImageSource>
+                    </ImageBrush>
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#44FFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassSubColorBrush" Color="#16FFFFFF"/>
                     <SolidColorBrush x:Key="AppBriefingOverlayBackgroundBrush" Color="#C8000000"/>
@@ -102,6 +107,11 @@
                     <ImageBrush x:Key="WidgetDirtBrush" Stretch="Fill">
                         <ImageBrush.ImageSource>
                             <SvgImageSource UriSource="ms-appx:///Assets/glass_smudges_light.svg" RasterizePixelWidth="500" RasterizePixelHeight="400" />
+                        </ImageBrush.ImageSource>
+                    </ImageBrush>
+                    <ImageBrush x:Key="WidgetNoiseBrush" Stretch="Fill">
+                        <ImageBrush.ImageSource>
+                            <SvgImageSource UriSource="ms-appx:///Assets/glass_noise_light.svg" RasterizePixelWidth="500" RasterizePixelHeight="400" />
                         </ImageBrush.ImageSource>
                     </ImageBrush>
                     <SolidColorBrush x:Key="AppGlassBorderColorBrush" Color="#40000000"/>
@@ -195,6 +205,9 @@
 
                                 <!-- Dirt Overlay Layer -->
                                 <Border x:Name="DirtOverlay" IsHitTestVisible="False" Opacity="0.0" Background="{ThemeResource WidgetDirtBrush}" CornerRadius="{TemplateBinding CornerRadius}" />
+
+                                <!-- Noise / Grain Overlay Layer -->
+                                <Border x:Name="NoiseOverlay" IsHitTestVisible="False" Opacity="0.0" Background="{ThemeResource WidgetNoiseBrush}" CornerRadius="{TemplateBinding CornerRadius}" />
 
                                 <!-- Squeegee / Wipe Animation Overlay Grid -->
                                 <Grid x:Name="WipeClipGrid" IsHitTestVisible="False" CornerRadius="{TemplateBinding CornerRadius}">

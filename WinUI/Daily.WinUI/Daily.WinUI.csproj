@@ -79,6 +79,8 @@
     <Content Include="Assets\Fonts\tabler-icons.ttf" />
     <Content Include="Assets\glass_smudges_dark.svg" />
     <Content Include="Assets\glass_smudges_light.svg" />
+    <Content Include="Assets\glass_noise_dark.svg" />
+    <Content Include="Assets\glass_noise_light.svg" />
   </ItemGroup>
 
   <ItemGroup>
