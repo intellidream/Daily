@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Composition;
@@ -28,6 +29,7 @@ public sealed class GlassWidgetContainer : ContentControl
 
     private DispatcherTimer _agingTimer;
     private DateTime _lastRefreshedTime;
+    private int _dirtIndex;
     private static readonly double MaxDirtOpacity = 0.75;
     private static readonly double MaxNoiseOpacity = 0.55;
 
@@ -46,6 +48,17 @@ public sealed class GlassWidgetContainer : ContentControl
     public GlassWidgetContainer()
     {
         LogToFile("Constructor starting.");
+        _dirtIndex = Random.Shared.Next(1, 5);
+        this.ActualThemeChanged += (s, e) => UpdateDirtBrush();
+        this.SizeChanged += (s, e) =>
+        {
+            bool wasLarge = e.PreviousSize.Width > 320 || e.PreviousSize.Height > 240;
+            bool isLarge = e.NewSize.Width > 320 || e.NewSize.Height > 240;
+            if (wasLarge != isLarge || e.PreviousSize.Width == 0)
+            {
+                UpdateDirtBrush();
+            }
+        };
 
         // Explicitly resolve and apply the style from global resources to ensure 
         // the ControlTemplate is applied even outside Themes/Generic.xaml search paths.
@@ -92,6 +105,7 @@ public sealed class GlassWidgetContainer : ContentControl
         if (_dirtOverlay != null)
         {
             _dirtOverlay.Opacity = 0.0;
+            UpdateDirtBrush();
         }
         if (_noiseOverlay != null)
         {
@@ -104,6 +118,40 @@ public sealed class GlassWidgetContainer : ContentControl
         if (_wipeTransform != null)
         {
             _wipeTransform.TranslateX = -250;
+        }
+    }
+
+    private void UpdateDirtBrush()
+    {
+        if (_dirtOverlay == null)
+        {
+            LogToFile("UpdateDirtBrush skipped: _dirtOverlay is null.");
+            return;
+        }
+
+        string themeStr = this.ActualTheme == ElementTheme.Light ? "light" : "dark";
+        bool isLarge = ActualWidth > 320 || ActualHeight > 240;
+        string largeStr = isLarge ? "_large" : "";
+        string uriStr = $"ms-appx:///Assets/glass_smudges_{themeStr}{largeStr}_{_dirtIndex}.svg";
+
+        try
+        {
+            var source = new SvgImageSource(new Uri(uriStr))
+            {
+                RasterizePixelWidth = isLarge ? 800 : 500,
+                RasterizePixelHeight = isLarge ? 600 : 400
+            };
+            var brush = new ImageBrush
+            {
+                ImageSource = source,
+                Stretch = Stretch.Fill
+            };
+            _dirtOverlay.Background = brush;
+            LogToFile($"UpdateDirtBrush: theme={themeStr}, index={_dirtIndex}, isLarge={isLarge}, uri={uriStr}");
+        }
+        catch (Exception ex)
+        {
+            LogToFile($"ERROR updating dirt brush: {ex.Message}");
         }
     }
 
@@ -168,6 +216,11 @@ public sealed class GlassWidgetContainer : ContentControl
         return (float)((low + high) / 2.0);
     }
 
+    private static double CubicEaseInOut(double t)
+    {
+        return t < 0.5 ? 4.0 * t * t * t : 1.0 - 4.0 * Math.Pow(1.0 - t, 3);
+    }
+
     private void StartWipeAnimation()
     {
         double width = ActualWidth;
@@ -196,8 +249,8 @@ public sealed class GlassWidgetContainer : ContentControl
         Storyboard.SetTarget(wipeFade, _wipeElement);
         Storyboard.SetTargetProperty(wipeFade, "Opacity");
         wipeFade.KeyFrames.Add(new LinearDoubleKeyFrame { Value = 0.0, KeyTime = KeyTime.FromTimeSpan(TimeSpan.Zero) });
-        wipeFade.KeyFrames.Add(new LinearDoubleKeyFrame { Value = 1.0, KeyTime = KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.25)) });
-        wipeFade.KeyFrames.Add(new LinearDoubleKeyFrame { Value = 1.0, KeyTime = KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.95)) });
+        wipeFade.KeyFrames.Add(new LinearDoubleKeyFrame { Value = 0.45, KeyTime = KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.25)) });
+        wipeFade.KeyFrames.Add(new LinearDoubleKeyFrame { Value = 0.45, KeyTime = KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.95)) });
         wipeFade.KeyFrames.Add(new LinearDoubleKeyFrame { Value = 0.0, KeyTime = KeyTime.FromTimeSpan(TimeSpan.FromSeconds(1.2)) });
 
         var sb = new Storyboard();
@@ -230,26 +283,19 @@ public sealed class GlassWidgetContainer : ContentControl
         if (dirtClip != null || noiseClip != null)
         {
             var compositor = (dirtVisual ?? noiseVisual)!.Compositor;
-            
-            // Calculate keyframe timings dynamically based on the width
             double totalDistance = width + 500.0;
-            double fractionStart = 250.0 / totalDistance;
-            double fractionEnd = (width + 250.0) / totalDistance;
-
-            float tStart = SolveCubicEaseInOut(fractionStart);
-            float tEnd = SolveCubicEaseInOut(fractionEnd);
-
-            var cubicEase = compositor.CreateCubicBezierEasingFunction(
-                new System.Numerics.Vector2(0.42f, 0.0f),
-                new System.Numerics.Vector2(0.58f, 1.0f)
-            ); // EaseInOut
-
+            var linearEase = compositor.CreateLinearEasingFunction();
             var clipAnim = compositor.CreateScalarKeyFrameAnimation();
             clipAnim.Duration = TimeSpan.FromSeconds(1.2);
-            clipAnim.InsertKeyFrame(0.0f, 0.0f);
-            clipAnim.InsertKeyFrame(tStart, 0.0f);
-            clipAnim.InsertKeyFrame(tEnd, (float)width, cubicEase);
-            clipAnim.InsertKeyFrame(1.0f, (float)width);
+
+            for (int i = 0; i <= 20; i++)
+            {
+                float t = i / 20.0f;
+                double eased = CubicEaseInOut(t);
+                double posX = -250.0 + eased * totalDistance;
+                double clampedX = Math.Clamp(posX, 0.0, width);
+                clipAnim.InsertKeyFrame(t, (float)clampedX, linearEase);
+            }
 
             if (dirtClip != null)
             {

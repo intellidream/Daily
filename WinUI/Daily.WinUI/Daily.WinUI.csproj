@@ -78,7 +78,25 @@
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
     <Content Include="Assets\Fonts\tabler-icons.ttf" />
     <Content Include="Assets\glass_smudges_dark.svg" />
+    <Content Include="Assets\glass_smudges_dark_1.svg" />
+    <Content Include="Assets\glass_smudges_dark_2.svg" />
+    <Content Include="Assets\glass_smudges_dark_3.svg" />
+    <Content Include="Assets\glass_smudges_dark_4.svg" />
+    <Content Include="Assets\glass_smudges_dark_large.svg" />
+    <Content Include="Assets\glass_smudges_dark_large_1.svg" />
+    <Content Include="Assets\glass_smudges_dark_large_2.svg" />
+    <Content Include="Assets\glass_smudges_dark_large_3.svg" />
+    <Content Include="Assets\glass_smudges_dark_large_4.svg" />
     <Content Include="Assets\glass_smudges_light.svg" />
+    <Content Include="Assets\glass_smudges_light_1.svg" />
+    <Content Include="Assets\glass_smudges_light_2.svg" />
+    <Content Include="Assets\glass_smudges_light_3.svg" />
+    <Content Include="Assets\glass_smudges_light_4.svg" />
+    <Content Include="Assets\glass_smudges_light_large.svg" />
+    <Content Include="Assets\glass_smudges_light_large_1.svg" />
+    <Content Include="Assets\glass_smudges_light_large_2.svg" />
+    <Content Include="Assets\glass_smudges_light_large_3.svg" />
+    <Content Include="Assets\glass_smudges_light_large_4.svg" />
     <Content Include="Assets\glass_noise_dark.svg" />
     <Content Include="Assets\glass_noise_light.svg" />
   </ItemGroup>

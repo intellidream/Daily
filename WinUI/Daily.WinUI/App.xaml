@@ -93,6 +93,13 @@
                         <GradientStop Color="#C0030609" Offset="0.7" />
                         <GradientStop Color="#FF030609" Offset="1.0" />
                     </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="WipeElementBrush" StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#00FFFFFF" Offset="0.0" />
+                        <GradientStop Color="#08FFFFFF" Offset="0.3" />
+                        <GradientStop Color="#2CFFFFFF" Offset="0.5" />
+                        <GradientStop Color="#08FFFFFF" Offset="0.7" />
+                        <GradientStop Color="#00FFFFFF" Offset="1.0" />
+                    </LinearGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <x:String x:Key="AppIconSource">ms-appx:///Assets/appicon.theme-light.svg</x:String>
@@ -176,6 +183,13 @@
                         <GradientStop Color="#C0D4C9B0" Offset="0.7" />
                         <GradientStop Color="#FFD4C9B0" Offset="1.0" />
                     </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="WipeElementBrush" StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#00554D45" Offset="0.0" />
+                        <GradientStop Color="#06554D45" Offset="0.3" />
+                        <GradientStop Color="#18554D45" Offset="0.5" />
+                        <GradientStop Color="#06554D45" Offset="0.7" />
+                        <GradientStop Color="#00554D45" Offset="1.0" />
+                    </LinearGradientBrush>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <FontFamily x:Key="TablerIconsFont">ms-appx:///Assets/Fonts/tabler-icons.ttf#tabler-icons</FontFamily>
@@ -211,23 +225,15 @@
 
                                 <!-- Squeegee / Wipe Animation Overlay Grid -->
                                 <Grid x:Name="WipeClipGrid" IsHitTestVisible="False" CornerRadius="{TemplateBinding CornerRadius}">
-                                    <!-- Wipe Glare element: diagonal bar sweeping left-to-right -->
+                                    <!-- Wipe element: vertical bar sweeping left-to-right -->
                                     <Border x:Name="WipeElement"
-                                            Width="100"
+                                            Width="200"
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Stretch"
-                                            Opacity="0.0">
-                                        <Border.Background>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                <GradientStop Color="#00FFFFFF" Offset="0.0" />
-                                                <GradientStop Color="#2580D0FF" Offset="0.3" />
-                                                <GradientStop Color="#C0FFFFFF" Offset="0.5" />
-                                                <GradientStop Color="#2580D0FF" Offset="0.7" />
-                                                <GradientStop Color="#00FFFFFF" Offset="1.0" />
-                                            </LinearGradientBrush>
-                                        </Border.Background>
+                                            Opacity="0.0"
+                                            Background="{ThemeResource WipeElementBrush}">
                                         <Border.RenderTransform>
-                                            <CompositeTransform x:Name="WipeTransform" TranslateX="-250" Rotation="20" ScaleY="2.0" />
+                                            <CompositeTransform x:Name="WipeTransform" TranslateX="-250" Rotation="0" />
                                         </Border.RenderTransform>
                                     </Border>
                                 </Grid>
