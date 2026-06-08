@@ -177,7 +177,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         set { _smokesBreakdown = value; OnPropertyChanged(); }
     }
 
-    public string CurrentViewLabel => HabitsFlipView?.SelectedIndex == 0 ? "Hydration" : "Smoking";
+    public string CurrentViewLabel => HabitsFlipView?.SelectedIndex == 0 ? "Bubbles" : "Smokes";
 
     public event EventHandler? WidgetTapped;
 

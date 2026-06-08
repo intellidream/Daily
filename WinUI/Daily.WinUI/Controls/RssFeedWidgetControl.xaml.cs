@@ -31,15 +31,19 @@ public sealed partial class RssFeedWidgetControl : UserControl
         
         Loaded += RssFeedWidgetControl_Loaded;
         Unloaded += RssFeedWidgetControl_Unloaded;
+        SizeChanged += OnSizeChanged;
         ArticlesListView.ItemsSource = _widgetArticles;
         ReadLaterListView.ItemsSource = _readLaterArticles;
         FavoritesListView.ItemsSource = _favoriteArticles;
     }
 
+
     private async void RssFeedWidgetControl_Loaded(object sender, RoutedEventArgs e)
     {
         PopulateFeedMenu();
         UpdateSelectedFeedUI(_rssService.CurrentFeed);
+        UpdateAdaptiveLayout(ActualWidth);
+
         
         _rssService.OnFeedChanged += RssService_OnFeedChanged;
         _rssService.OnItemsUpdated += RssService_OnItemsUpdated;
@@ -342,4 +346,21 @@ public sealed partial class RssFeedWidgetControl : UserControl
     {
         WidgetTapped?.Invoke(this, EventArgs.Empty);
     }
+
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateAdaptiveLayout(e.NewSize.Width);
+    }
+
+    private void UpdateAdaptiveLayout(double width)
+    {
+        if (width <= 0 || SelectedFeedText == null) return;
+
+        // Calculate available text width: widget width minus tabs (approx 140) and right-header buttons/spacing (approx 134)
+        double available = width - 280; // Safety margin
+        double newMaxWidth = Math.Max(55, Math.Min(120, available));
+
+        SelectedFeedText.MaxWidth = newMaxWidth;
+    }
 }
+

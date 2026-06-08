@@ -85,7 +85,8 @@
         <!-- The Pivot handles the header tab headers and the tab pages -->
         <Pivot x:Name="WidgetPivot" SelectionChanged="WidgetPivot_SelectionChanged" Margin="0,0,0,0" Tapped="WidgetPivot_Tapped">
             <Pivot.RightHeader>
-                <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,16,0">
+                <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,8,0">
+
                     <!-- Spin-Wheel Selection Control -->
                     <StackPanel x:Name="FeedSelectorContainer" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                         <!-- Cycle Left Button -->
@@ -103,13 +104,13 @@
                                 BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
                                 BorderThickness="1" 
                                 CornerRadius="14"
-                                Height="32" Padding="10,0"
+                                Height="32" Padding="6,0"
                                 ToolTipService.ToolTip="Select Feed">
-                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" HorizontalAlignment="Center">
                                 <Border Width="16" Height="16" CornerRadius="8" Background="White" Padding="0.5" VerticalAlignment="Center">
                                     <Image x:Name="SelectedFeedIcon" Width="14" Height="14" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <TextBlock x:Name="SelectedFeedText" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" MaxWidth="100" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="SelectedFeedText" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" MaxWidth="55" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                             
                             <Button.Flyout>
