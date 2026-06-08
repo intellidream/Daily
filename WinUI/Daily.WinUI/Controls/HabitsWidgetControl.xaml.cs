@@ -5,10 +5,12 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+
 using Daily.Services;
 using Windows.UI;
 using System.Linq;
@@ -198,6 +200,8 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                 HideFlipViewNavigationButtons();
             });
         };
+
+        this.PointerWheelChanged += HabitsWidgetControl_PointerWheelChanged;
     }
 
     private void HabitsWidgetControl_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -1002,6 +1006,34 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         await _habitsService.AddLogAsync("smokes", 1, "unit", DateTime.Now, "{\"type\":\"Cigarillo\"}");
     }
 
+    private void HabitsWidgetControl_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (e.Handled) return;
+
+        var properties = e.GetCurrentPoint(this).Properties;
+        int delta = properties.MouseWheelDelta;
+        if (delta == 0) return;
+
+        if (HabitsFlipView != null && HabitsFlipView.Items.Count > 1)
+        {
+            e.Handled = true;
+            if (delta < 0) // Scroll down -> Next
+            {
+                if (HabitsFlipView.SelectedIndex < HabitsFlipView.Items.Count - 1)
+                    HabitsFlipView.SelectedIndex++;
+                else
+                    HabitsFlipView.SelectedIndex = 0;
+            }
+            else // Scroll up -> Prev
+            {
+                if (HabitsFlipView.SelectedIndex > 0)
+                    HabitsFlipView.SelectedIndex--;
+                else
+                    HabitsFlipView.SelectedIndex = HabitsFlipView.Items.Count - 1;
+            }
+        }
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -1009,3 +1041,4 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
+

@@ -1,6 +1,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Input;
 using Microsoft.Extensions.DependencyInjection;
+
 using Daily.Services.Finances;
 using Daily.Models.Finances;
 using System.Collections.ObjectModel;
@@ -10,6 +13,7 @@ using Microsoft.UI.Xaml.Input;
 using Windows.System;
 using System.Threading;
 using System.Threading.Tasks;
+
 
 namespace Daily_WinUI.Controls;
 
@@ -107,8 +111,20 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             this.Loaded += OnLoaded;
             this.Unloaded += OnUnloaded;
             this.SizeChanged += OnSizeChanged;
+
+            FinancesFlipView.Loaded += (s, e) =>
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    HideFlipViewNavigationButtons();
+                });
+            };
+
+            this.PointerWheelChanged += FinancesWidgetControl_PointerWheelChanged;
         }
     }
+
+
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -297,10 +313,77 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         else
             FinancesFlipView.SelectedIndex = 0;
     }
+    private void HideFlipViewNavigationButtons()
+    {
+        if (FinancesFlipView == null) return;
 
+        var buttonsToHide = new[] { "PreviousButtonHorizontal", "NextButtonHorizontal", "PreviousButtonVertical", "NextButtonVertical" };
+        foreach (var name in buttonsToHide)
+        {
+            var btn = FindVisualChildByName<Button>(FinancesFlipView, name);
+            if (btn != null)
+            {
+                btn.Visibility = Visibility.Collapsed;
+                btn.Opacity = 0;
+                btn.Width = 0;
+                btn.Height = 0;
+                btn.IsEnabled = false;
+            }
+        }
+    }
 
+    private T? FindVisualChildByName<T>(DependencyObject parent, string name) where T : DependencyObject
+    {
+        int childCount = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < childCount; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T tChild && child is FrameworkElement fe && fe.Name == name)
+            {
+                return tChild;
+            }
+
+            var result = FindVisualChildByName<T>(child, name);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+        return null;
+    }
+
+    private void FinancesWidgetControl_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+
+        if (e.Handled) return;
+
+        var properties = e.GetCurrentPoint(this).Properties;
+        int delta = properties.MouseWheelDelta;
+        if (delta == 0) return;
+
+        if (FinancesFlipView != null && FinancesFlipView.Items.Count > 1)
+        {
+            e.Handled = true;
+            if (delta < 0) // Scroll down -> Next
+            {
+                if (FinancesFlipView.SelectedIndex < FinancesFlipView.Items.Count - 1)
+                    FinancesFlipView.SelectedIndex++;
+                else
+                    FinancesFlipView.SelectedIndex = 0;
+            }
+            else // Scroll up -> Prev
+            {
+                if (FinancesFlipView.SelectedIndex > 0)
+                    FinancesFlipView.SelectedIndex--;
+                else
+                    FinancesFlipView.SelectedIndex = FinancesFlipView.Items.Count - 1;
+            }
+        }
+    }
 
     private void Header_PointerEntered(object sender, PointerRoutedEventArgs e)
+
+
     {
         HeaderGrid.Opacity = 0.8;
     }
