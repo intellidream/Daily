@@ -164,7 +164,7 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
     {
         if (width <= 0 || height <= 0) return;
 
-        bool isWide = width >= 250;
+        bool isWide = width >= 450;
         bool isTall = height >= 250;
 
         if (isWide && isTall)

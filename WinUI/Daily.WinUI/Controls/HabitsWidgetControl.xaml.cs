@@ -206,36 +206,44 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
     {
         string state = "NormalState";
 
+        double width = ActualWidth;
+        double height = ActualHeight;
+
+        if (width == 0 || height == 0)
+        {
+            width = Width;
+            height = Height;
+        }
+
         if (DataContext is WidgetModel widget)
         {
-            if (widget.ColumnSpan == 1 && widget.RowSpan == 1)
+            int colSpan = widget.ColumnSpan;
+            int rowSpan = widget.RowSpan;
+
+            if (width > 0 && width < 450)
+            {
+                colSpan = 1;
+            }
+
+            if (colSpan == 1 && rowSpan == 1)
             {
                 state = "SmallState";
             }
-            else if (widget.ColumnSpan == 2 && widget.RowSpan == 1)
+            else if (colSpan == 2 && rowSpan == 1)
             {
                 state = "NormalState";
             }
-            else if (widget.ColumnSpan == 1 && widget.RowSpan == 2)
+            else if (colSpan == 1 && rowSpan == 2)
             {
                 state = "TallState";
             }
-            else if (widget.ColumnSpan == 2 && widget.RowSpan == 2)
+            else if (colSpan == 2 && rowSpan == 2)
             {
                 state = "LargeState";
             }
         }
         else
         {
-            double width = ActualWidth;
-            double height = ActualHeight;
-
-            if (width == 0 || height == 0)
-            {
-                width = Width;
-                height = Height;
-            }
-
             if (width > 0 && height > 0)
             {
                 if (width < 450 && height < 350)
