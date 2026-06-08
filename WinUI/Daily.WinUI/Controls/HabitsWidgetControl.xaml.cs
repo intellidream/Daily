@@ -72,6 +72,13 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         set { _goalDisplay = value; OnPropertyChanged(); }
     }
 
+    private string _goalValueDisplay = "";
+    public string GoalValueDisplay
+    {
+        get => _goalValueDisplay;
+        set { _goalValueDisplay = value; OnPropertyChanged(); }
+    }
+
     private string _moneySavedDisplay = "";
     public string MoneySavedDisplay
     {
@@ -546,6 +553,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             GoalValue = waterGoal?.TargetValue > 0 ? waterGoal.TargetValue : 2000;
             CurrentProgress = await _habitsService.GetDailyProgressAsync("water", DateTime.Now);
             GoalDisplay = $"/ {GoalValue:0}";
+            GoalValueDisplay = $"{GoalValue:0}";
 
             ProgressPercentageText = GoalValue > 0 ? $"{(CurrentProgress / GoalValue * 100):0}%" : "0%";
             RemainingWaterText = $"{(Math.Max(0, GoalValue - CurrentProgress)):0} ml";
@@ -562,6 +570,8 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             {
                 if (kvp.Value <= 0) continue;
                 string label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(kvp.Key);
+                if (label == "Large Water") label = "Large";
+                else if (label == "Heated Tobacco") label = "Heated";
                 string colorHex = GetColorForDrinkOrSmoke(kvp.Key);
                 string icon = kvp.Key.ToLowerInvariant() switch
                 {
@@ -589,6 +599,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             GoalValue = _settingsService.Settings.SmokesBaselineDaily > 0 ? _settingsService.Settings.SmokesBaselineDaily : 20;
             CurrentProgress = await _habitsService.GetDailyProgressAsync("smokes", DateTime.Now);
             GoalDisplay = $"/ {GoalValue:0}";
+            GoalValueDisplay = $"{GoalValue:0}";
 
             ProgressPercentageText = "-";
             RemainingWaterText = "-";
@@ -636,11 +647,13 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             {
                 if (kvp.Value <= 0) continue;
                 string label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(kvp.Key);
+                if (label == "Large Water") label = "Large";
+                else if (label == "Heated Tobacco") label = "Heated";
                 string colorHex = GetColorForDrinkOrSmoke(kvp.Key);
                 string icon = kvp.Key.ToLowerInvariant() switch
                 {
                     var s when s.Contains("heated")     => "\xec2c",
-                    var s when s.Contains("rolled")     => "\x100bd",
+                    var s when s.Contains("rolled")     => "\xec2b",
                     var s when s.Contains("cigarillo")  => "\xeed2",
                     _                                   => "\xecc4"
                 };
@@ -717,7 +730,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                 ? drinkOrType switch
                 {
                     var s when s.Contains("heated")     => "\xec2c",  // heated
-                    var s when s.Contains("rolled")     => "\x100bd",  // rolled
+                    var s when s.Contains("rolled")     => "\xec2b",  // rolled
                     var s when s.Contains("cigarillo")  => "\xeed2",  // cigarillo
                     _                                   => "\xecc4"   // cigarette
                 }
@@ -732,12 +745,17 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                 };
 
 
-            widgetLogs.Add(new WidgetLogEntryViewModel
+             widgetLogs.Add(new WidgetLogEntryViewModel
             {
                 Log = log,
                 Icon = icon,
                 ColorHex = colorHex,
-                Label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType),
+                Label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType) switch
+                {
+                    "Large Water" => "Large",
+                    "Heated Tobacco" => "Heated",
+                    var other => other
+                },
                 Amount = isWater ? $"{(int)log.Value} ml" : $"{(int)log.Value} unit",
                 TimeText = log.LoggedAt.ToLocalTime().ToString("HH:mm")
             });

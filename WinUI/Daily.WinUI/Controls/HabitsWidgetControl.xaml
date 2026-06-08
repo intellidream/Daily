@@ -241,12 +241,16 @@
                 <!-- LargeState: 2x2, Left splits Gauge/Legend/Buttons vertically, Right gets Extended vertical layout. -->
                 <VisualState x:Name="LargeState">
                     <VisualState.Setters>
+                        <Setter Target="RootGrid.Padding" Value="16,4,16,4" />
+                        <Setter Target="HeaderGrid.Margin" Value="0,0,0,4" />
                         <Setter Target="WaterSimpleCenterPanel.Visibility" Value="Collapsed" />
                         <Setter Target="WaterDetailedCenterPanel.Visibility" Value="Visible" />
                         <Setter Target="WaterControlsStack.Orientation" Value="Vertical" />
                         <Setter Target="WaterControlsStack.VerticalAlignment" Value="Top" />
                         <Setter Target="WaterControlsStack.HorizontalAlignment" Value="Stretch" />
-                        <Setter Target="WaterControlsStack.Margin" Value="0,0,0,16" />
+                        <Setter Target="WaterControlsStack.Margin" Value="0" />
+                        <Setter Target="WaterControlsStack.Spacing" Value="4" />
+                        <Setter Target="WaterLegendAndButtons.Spacing" Value="4" />
                         <Setter Target="WaterLegend.Visibility" Value="Collapsed" />
                         <Setter Target="WaterLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="WaterExtendedPanel.Visibility" Value="Visible" />
@@ -286,7 +290,9 @@
                         <Setter Target="SmokesControlsStack.Orientation" Value="Vertical" />
                         <Setter Target="SmokesControlsStack.VerticalAlignment" Value="Top" />
                         <Setter Target="SmokesControlsStack.HorizontalAlignment" Value="Stretch" />
-                        <Setter Target="SmokesControlsStack.Margin" Value="0,0,0,16" />
+                        <Setter Target="SmokesControlsStack.Margin" Value="0" />
+                        <Setter Target="SmokesControlsStack.Spacing" Value="4" />
+                        <Setter Target="SmokesLegendAndButtons.Spacing" Value="4" />
                         <Setter Target="SmokesLegend.Visibility" Value="Collapsed" />
                         <Setter Target="SmokesLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="SmokesExtendedPanel.Visibility" Value="Visible" />
@@ -398,14 +404,18 @@
                                                             </StackPanel>
 
                                                             <!-- Detailed Center Panel (visible in LargeState only) -->
-                                                            <ScrollViewer x:Name="WaterDetailedCenterPanel" Visibility="Collapsed" MaxWidth="115" MaxHeight="115" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                                            <ScrollViewer x:Name="WaterDetailedCenterPanel" Visibility="Collapsed" MaxWidth="115" MaxHeight="115" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                                                                 <StackPanel Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center" Width="105">
-                                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="2" VerticalAlignment="Bottom">
-                                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="18" FontWeight="Bold" VerticalAlignment="Bottom" />
-                                                                        <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="11" Opacity="0.5" Margin="0,0,0,1" VerticalAlignment="Bottom" />
+                                                                    <StackPanel Spacing="0" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" />
+                                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="3" Opacity="0.6">
+                                                                            <TextBlock Text="of" FontSize="11" VerticalAlignment="Center" />
+                                                                            <TextBlock Text="{x:Bind GoalValueDisplay, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                            <TextBlock Text="ml" FontSize="11" VerticalAlignment="Center" />
+                                                                        </StackPanel>
                                                                     </StackPanel>
                                                                     <Border BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
-                                                                    <ItemsControl ItemsSource="{x:Bind WaterBreakdown, Mode=OneWay}" HorizontalAlignment="Stretch">
+                                                                    <ItemsControl ItemsSource="{x:Bind WaterBreakdown, Mode=OneWay}" HorizontalAlignment="Stretch" Margin="8,0,8,8">
                                                                         <ItemsControl.ItemTemplate>
                                                                             <DataTemplate x:DataType="local:WidgetBreakdownItem">
                                                                                 <Grid Margin="0,2,0,2" HorizontalAlignment="Stretch">
@@ -637,14 +647,18 @@
                                                             </StackPanel>
 
                                                             <!-- Detailed Center Panel (visible in LargeState only) -->
-                                                            <ScrollViewer x:Name="SmokesDetailedCenterPanel" Visibility="Collapsed" MaxWidth="115" MaxHeight="115" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                                            <ScrollViewer x:Name="SmokesDetailedCenterPanel" Visibility="Collapsed" MaxWidth="115" MaxHeight="115" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                                                                 <StackPanel Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center" Width="105">
-                                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="2" VerticalAlignment="Bottom">
-                                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="18" FontWeight="Bold" Foreground="{x:Bind GaugeColor, Mode=OneWay}" VerticalAlignment="Bottom" />
-                                                                        <TextBlock Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="11" Opacity="0.5" Margin="0,0,0,1" VerticalAlignment="Bottom" />
+                                                                    <StackPanel Spacing="0" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{x:Bind GaugeColor, Mode=OneWay}" />
+                                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="3" Opacity="0.6">
+                                                                            <TextBlock Text="of" FontSize="11" VerticalAlignment="Center" />
+                                                                            <TextBlock Text="{x:Bind GoalValueDisplay, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                            <TextBlock Text="smokes" FontSize="11" VerticalAlignment="Center" />
+                                                                        </StackPanel>
                                                                     </StackPanel>
                                                                     <Border BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
-                                                                    <ItemsControl ItemsSource="{x:Bind SmokesBreakdown, Mode=OneWay}" HorizontalAlignment="Stretch">
+                                                                    <ItemsControl ItemsSource="{x:Bind SmokesBreakdown, Mode=OneWay}" HorizontalAlignment="Stretch" Margin="8,0,8,8">
                                                                         <ItemsControl.ItemTemplate>
                                                                             <DataTemplate x:DataType="local:WidgetBreakdownItem">
                                                                                 <Grid Margin="0,2,0,2" HorizontalAlignment="Stretch">
@@ -709,7 +723,7 @@
                                     
                                     <Button x:Name="SmokesBtnRolled" Grid.Row="1" Grid.Column="0" Click="AddRolled_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AEF6C00" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <FontIcon Glyph="&#x100bd;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFEF6C00" />
+                                            <FontIcon Glyph="&#xec2b;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFEF6C00" />
                                             <TextBlock x:Name="SmokesBtnRolledText" Text="Rolled" FontSize="11" FontWeight="SemiBold" Foreground="#FFEF6C00" />
                                         </StackPanel>
                                     </Button>

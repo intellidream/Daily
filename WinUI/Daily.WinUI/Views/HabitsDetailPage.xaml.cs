@@ -160,7 +160,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                 ? drinkOrType switch
                 {
                     var s when s.Contains("heated")     => "\xec2c",  // heated
-                    var s when s.Contains("rolled")     => "\x100bd",  // rolled
+                    var s when s.Contains("rolled")     => "\xec2b",  // rolled
                     var s when s.Contains("cigarillo")  => "\xeed2",  // cigarillo
                     _                                   => "\xecc4"   // cigarette
                 }
@@ -174,9 +174,12 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                     _                                   => "\xea97"   // water
                 };
 
-            string label = _currentType == "smokes"
-                ? System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType)
-                : System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType);
+            string label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType) switch
+            {
+                "Large Water" => "Large",
+                "Heated Tobacco" => "Heated",
+                var other => other
+            };
 
             string amount = _currentType == "smokes"
                 ? $"{(int)log.Value} unit"
