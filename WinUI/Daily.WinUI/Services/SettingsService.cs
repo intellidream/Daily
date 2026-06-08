@@ -76,6 +76,7 @@ public sealed class AppSettings
     public bool ShowFinanceStockChangeBadges { get; set; } = true;
 
     // ── Glass Widget Aging Configurations ──
+    public bool WidgetAgingEnabled { get; set; } = true;
     public int WidgetAgingDurationSeconds { get; set; } = 30;
     public double WidgetAgingGrainIntensity { get; set; } = 50.0;
 }

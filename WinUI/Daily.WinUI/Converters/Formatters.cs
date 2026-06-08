@@ -42,3 +42,23 @@ public class StringToVisibilityConverter : IValueConverter
 
     public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
 }
+
+public class WidgetAgingDurationTooltipConverter : IValueConverter
+{
+    private static readonly string[] AgingLabels = { "10s", "30s", "1m", "2m", "5m", "10m", "30m", "1h", "2h", "3h" };
+
+    public object Convert(object value, Type targetType, object parameter, string language)
+    {
+        if (value is double d)
+        {
+            int idx = (int)Math.Round(d);
+            if (idx >= 0 && idx < AgingLabels.Length)
+            {
+                return AgingLabels[idx];
+            }
+        }
+        return value?.ToString() ?? "";
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+}

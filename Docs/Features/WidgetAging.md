@@ -8,7 +8,8 @@ The Dashboard Widget Glass Panel Aging and Squeegee Cleaning feature adds an imm
 
 ### 1.1 Data-Driven Panel Aging
 * **Behavior**: As time passes since the last data refresh, the widget accumulates visual "dirt" (fingerprint smudges) and "dust" (procedural grain) to simulate data aging.
-* **Duration Configuration**: The duration for a panel to reach maximum dirtiness is configurable via settings. Under **Settings -> Features -> Traditional Features -> Testing**, users can adjust the `Widget glass aging duration` slider (range: 10s to 300s).
+* **Enable / Disable Toggle**: The visual aging feature can be toggled on or off via the `Widget glass aging` ToggleSwitch under settings. When disabled, overlays remain completely clean (opacity `0.0`), and configuration sliders are disabled in the UI.
+* **Duration Timeline Configuration**: The duration for a panel to reach maximum dirtiness is configurable via settings under **Settings -> Features -> Traditional Features -> Widget Glass Aging Settings**. The `Widget glass aging duration` slider provides a 10-step timeline from 10 seconds to 3 hours (10s, 30s, 1m, 2m, 5m, 10m, 30m, 1h, 2h, 3h).
 * **Grain Intensity Configuration**: Users can control the visibility of the dust layer independently via the `Widget glass grain intensity` slider (range: 0% to 100%).
 * **Opacity Progression**:
   - Aging calculates a ratio based on elapsed time:
@@ -136,12 +137,17 @@ To apply the glass-aging effect, widget templates declared inside [MainPage.xaml
 
 ### 4.1 Manual Verification Protocol
 1. Open the application and navigate to **Settings -> Features -> Traditional Features**.
-2. Scroll to the **Testing** section and configure:
-   - **Widget glass aging duration**: Set to **10 seconds**.
-   - **Widget glass grain intensity**: Set to **70%**.
-3. Return to the dashboard.
-4. Watch the widget panels. Over the course of 10 seconds, thin, concentric fingerprint smudges and a fine vector dust overlay will fade onto the widgets.
-5. Click **Refresh** in the TitleBar.
-6. Verify that a diagonal glowing blue/white bar sweeps smoothly from left to right.
-7. Observe that the fingerprints and dust/grain remain visible ahead of the squeegee, and are clipped away exactly behind its trailing edge as it sweeps.
-8. Click, scroll, and interact with the widgets while they are aged/clean to verify that `IsHitTestVisible="False"` allows mouse/touch events to pass through the overlay.
+2. Locate the **Widget Glass Aging Settings** section.
+3. Verify that the **Widget glass aging** ToggleSwitch is visible, text wrapped, and not clipped.
+4. Toggle the **Widget glass aging** switch off. Verify that:
+   - The aging duration and grain intensity sliders become disabled (greyed out).
+   - Go back to the dashboard. Observe that the widgets remain 100% clean and do not age.
+5. Toggle the **Widget glass aging** switch on. Verify that:
+   - Both sliders become enabled again.
+   - Adjust the **Widget glass aging duration** slider to **10s** (step index 0).
+   - Adjust the **Widget glass grain intensity** slider to **70%**.
+6. Return to the dashboard. Watch the widget panels. Over the course of 10 seconds, fingerprints and dust grain fade onto the widgets.
+7. Click **Refresh** in the TitleBar.
+8. Verify that the squeegee sweeps from left to right, clipping the overlays behind its trailing edge.
+9. Verify that the sliders' labels (e.g. `10s`, `30s`, `1m`, `2m`, `5m`, `10m`, `30m`, `1h`, `2h`, `3h`) display correctly and do not get clipped.
+10. Click, scroll, and interact with the widgets while they are aged/clean to verify that `IsHitTestVisible="False"` allows mouse/touch events to pass through the overlay.

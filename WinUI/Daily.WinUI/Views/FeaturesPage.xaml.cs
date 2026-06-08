@@ -17,6 +17,9 @@ public sealed partial class FeaturesPage : Page
     private readonly IBehaviorService _behaviorService;
     private bool _isInitializing = false;
 
+    private static readonly int[] AgingIntervals = { 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 10800 };
+    private static readonly string[] AgingLabels = { "10s", "30s", "1m", "2m", "5m", "10m", "30m", "1h", "2h", "3h" };
+
     public FeaturesPage()
     {
         InitializeComponent();
@@ -161,9 +164,25 @@ public sealed partial class FeaturesPage : Page
             FinancesCurrencyCombo.SelectedIndex = currIdx;
             FinancesShowBadgesSwitch.IsOn = _settings.ShowFinanceStockChangeBadges;
 
-            // Testing
-            WidgetAgingSlider.Value = _settings.WidgetAgingDurationSeconds;
-            WidgetAgingLabel.Text = $"{_settings.WidgetAgingDurationSeconds}s";
+            // Widget Glass Aging Settings
+            WidgetAgingSwitch.IsOn = _settings.WidgetAgingEnabled;
+            WidgetAgingSlider.IsEnabled = _settings.WidgetAgingEnabled;
+            WidgetGrainIntensitySlider.IsEnabled = _settings.WidgetAgingEnabled;
+
+            int closestIdx = 0;
+            int minDiff = int.MaxValue;
+            for (int i = 0; i < AgingIntervals.Length; i++)
+            {
+                int diff = Math.Abs(_settings.WidgetAgingDurationSeconds - AgingIntervals[i]);
+                if (diff < minDiff)
+                {
+                    minDiff = diff;
+                    closestIdx = i;
+                }
+            }
+            WidgetAgingSlider.Value = closestIdx;
+            WidgetAgingLabel.Text = AgingLabels[closestIdx];
+
             WidgetGrainIntensitySlider.Value = _settings.WidgetAgingGrainIntensity;
             WidgetGrainIntensityLabel.Text = $"{_settings.WidgetAgingGrainIntensity:F0}%";
         }
@@ -1002,13 +1021,27 @@ public sealed partial class FeaturesPage : Page
         UpdateModelListUi();
     }
 
+    private void WidgetAgingSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing || _settings == null || WidgetAgingSwitch == null) return;
+        bool isOn = WidgetAgingSwitch.IsOn;
+        _settings.WidgetAgingEnabled = isOn;
+        SettingsService.Save(_settings);
+        if (WidgetAgingSlider != null) WidgetAgingSlider.IsEnabled = isOn;
+        if (WidgetGrainIntensitySlider != null) WidgetGrainIntensitySlider.IsEnabled = isOn;
+    }
+
     private void WidgetAgingSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
         if (_isInitializing || _settings == null || WidgetAgingSlider == null || WidgetAgingLabel == null) return;
-        int value = (int)WidgetAgingSlider.Value;
-        _settings.WidgetAgingDurationSeconds = value;
-        WidgetAgingLabel.Text = $"{value}s";
-        SettingsService.Save(_settings);
+        int idx = (int)WidgetAgingSlider.Value;
+        if (idx >= 0 && idx < AgingIntervals.Length)
+        {
+            int duration = AgingIntervals[idx];
+            _settings.WidgetAgingDurationSeconds = duration;
+            WidgetAgingLabel.Text = AgingLabels[idx];
+            SettingsService.Save(_settings);
+        }
     }
 
     private void WidgetGrainIntensitySlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)

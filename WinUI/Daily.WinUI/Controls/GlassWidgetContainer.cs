@@ -164,6 +164,16 @@ public sealed class GlassWidgetContainer : ContentControl
         }
 
         var settings = SettingsService.Load();
+        if (!settings.WidgetAgingEnabled)
+        {
+            _dirtOverlay.Opacity = 0.0;
+            if (_noiseOverlay != null)
+            {
+                _noiseOverlay.Opacity = 0.0;
+            }
+            return;
+        }
+
         int durationSeconds = settings.WidgetAgingDurationSeconds;
         if (durationSeconds <= 0) durationSeconds = 30; // Fallback to 30s default
         double grainIntensity = settings.WidgetAgingGrainIntensity;
