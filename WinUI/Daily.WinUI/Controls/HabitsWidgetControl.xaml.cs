@@ -93,6 +93,14 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         set { _gaugeColor = value; OnPropertyChanged(); }
     }
 
+    private SolidColorBrush _waterProgressColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 33, 150, 243));
+    public SolidColorBrush WaterProgressColor
+    {
+        get => _waterProgressColor;
+        set { _waterProgressColor = value; OnPropertyChanged(); }
+    }
+
+
     private string _daysSinceQuitShort = "-";
     public string DaysSinceQuitShort
     {
@@ -572,6 +580,26 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
             var breakdown = await _habitsService.GetDailyBreakdownAsync("water", DateTime.Now);
             UpdateGaugeSegments(WaterRadialAxis, breakdown);
+
+            // Find the liquid with the highest amount to color the current total text
+            string maxLiquidKey = null;
+            double maxAmount = 0;
+            foreach (var kvp in breakdown)
+            {
+                if (kvp.Value > maxAmount)
+                {
+                    maxAmount = kvp.Value;
+                    maxLiquidKey = kvp.Key;
+                }
+            }
+
+            string targetColorHex = "#FF2196F3"; // Default water color
+            if (maxLiquidKey != null)
+            {
+                targetColorHex = GetColorForDrinkOrSmoke(maxLiquidKey);
+            }
+            WaterProgressColor = new SolidColorBrush(GetColorFromHex(targetColorHex));
+
 
             var waterItems = new List<WidgetBreakdownItem>();
             foreach (var kvp in breakdown)
