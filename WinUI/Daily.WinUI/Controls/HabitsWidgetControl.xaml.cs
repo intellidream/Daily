@@ -27,6 +27,14 @@ public class WidgetLogEntryViewModel
     public string TimeText { get; set; }
 }
 
+public class WidgetBreakdownItem
+{
+    public string Label { get; set; }
+    public string Amount { get; set; }
+    public string Icon { get; set; }
+    public string ColorHex { get; set; }
+}
+
 public class WidgetChartData
 {
     public string Label { get; set; }
@@ -137,6 +145,20 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
     public bool HasLogs => _logs != null && _logs.Count > 0;
     public bool HasNoLogs => !HasLogs;
+
+    private ObservableCollection<WidgetBreakdownItem> _waterBreakdown = new();
+    public ObservableCollection<WidgetBreakdownItem> WaterBreakdown
+    {
+        get => _waterBreakdown;
+        set { _waterBreakdown = value; OnPropertyChanged(); }
+    }
+
+    private ObservableCollection<WidgetBreakdownItem> _smokesBreakdown = new();
+    public ObservableCollection<WidgetBreakdownItem> SmokesBreakdown
+    {
+        get => _smokesBreakdown;
+        set { _smokesBreakdown = value; OnPropertyChanged(); }
+    }
 
     public string CurrentViewLabel => HabitsFlipView?.SelectedIndex == 0 ? "Hydration" : "Smoking";
 
@@ -535,6 +557,31 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             var breakdown = await _habitsService.GetDailyBreakdownAsync("water", DateTime.Now);
             UpdateGaugeSegments(WaterRadialAxis, breakdown);
 
+            var waterItems = new List<WidgetBreakdownItem>();
+            foreach (var kvp in breakdown)
+            {
+                if (kvp.Value <= 0) continue;
+                string label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(kvp.Key);
+                string colorHex = GetColorForDrinkOrSmoke(kvp.Key);
+                string icon = kvp.Key.ToLowerInvariant() switch
+                {
+                    var s when s.Contains("coffee")     => "\xef0e",
+                    var s when s.Contains("tea")        => "\xf552",
+                    var s when s.Contains("juice")      => "\xef28",
+                    var s when s.Contains("beer")       => "\xefa1",
+                    var s when s.Contains("wine")       => "\xeab7",
+                    _                                   => "\xea97"
+                };
+                waterItems.Add(new WidgetBreakdownItem
+                {
+                    Label = label,
+                    Amount = $"{(int)kvp.Value} ml",
+                    Icon = icon,
+                    ColorHex = colorHex
+                });
+            }
+            WaterBreakdown = new ObservableCollection<WidgetBreakdownItem>(waterItems);
+
             MoneySavedDisplay = string.Empty;
         }
         else
@@ -582,6 +629,30 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                 Background = GaugeColor
             };
             SmokesRadialAxis.Ranges.Add(progressRange);
+
+            var smokesBreakdown = await _habitsService.GetDailyBreakdownAsync("smokes", DateTime.Now);
+            var smokesItems = new List<WidgetBreakdownItem>();
+            foreach (var kvp in smokesBreakdown)
+            {
+                if (kvp.Value <= 0) continue;
+                string label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(kvp.Key);
+                string colorHex = GetColorForDrinkOrSmoke(kvp.Key);
+                string icon = kvp.Key.ToLowerInvariant() switch
+                {
+                    var s when s.Contains("heated")     => "\xec2c",
+                    var s when s.Contains("rolled")     => "\x100bd",
+                    var s when s.Contains("cigarillo")  => "\xeed2",
+                    _                                   => "\xecc4"
+                };
+                smokesItems.Add(new WidgetBreakdownItem
+                {
+                    Label = label,
+                    Amount = $"{(int)kvp.Value}",
+                    Icon = icon,
+                    ColorHex = colorHex
+                });
+            }
+            SmokesBreakdown = new ObservableCollection<WidgetBreakdownItem>(smokesItems);
 
             var quitDate = _settingsService.Settings.SmokesQuitDate;
             if (quitDate.HasValue)

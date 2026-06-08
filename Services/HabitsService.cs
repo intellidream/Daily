@@ -244,26 +244,27 @@ namespace Daily.Services
 
             foreach (var log in logs)
             {
-                string drinkName = "Water";
+                string keyName = habitType == "smokes" ? "cigarette" : "water";
                 if (!string.IsNullOrEmpty(log.Metadata))
                 {
                     try
                     {
-                        if (log.Metadata.Contains("\"drink\":"))
+                        using var doc = JsonDocument.Parse(log.Metadata);
+                        if (doc.RootElement.TryGetProperty("drink", out var d))
                         {
-                            var parts = log.Metadata.Split(new[] { "\"drink\":" }, StringSplitOptions.RemoveEmptyEntries);
-                            if (parts.Length > 1)
-                            {
-                                var val = parts[1].Trim().Trim(new[] { ' ', '}', '"' });
-                                if (!string.IsNullOrEmpty(val)) drinkName = val;
-                            }
+                            keyName = d.GetString() ?? keyName;
+                        }
+                        else if (doc.RootElement.TryGetProperty("type", out var t))
+                        {
+                            keyName = t.GetString() ?? keyName;
                         }
                     }
                     catch { }
                 }
 
-                if (!breakdown.ContainsKey(drinkName)) breakdown[drinkName] = 0;
-                breakdown[drinkName] += log.Value;
+                keyName = keyName.ToLowerInvariant();
+                if (!breakdown.ContainsKey(keyName)) breakdown[keyName] = 0;
+                breakdown[keyName] += log.Value;
             }
 
             return breakdown;
