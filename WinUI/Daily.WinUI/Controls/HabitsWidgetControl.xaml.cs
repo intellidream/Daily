@@ -389,16 +389,16 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                 break;
 
             case "TallState":
-                // Outer layouts: left column only, 2 rows stacked (top 1.3*, bottom 1*)
+                // Outer layouts: left column only, top row only
                 WaterMainCol0.Width = new GridLength(1, GridUnitType.Star);
                 WaterMainCol1.Width = new GridLength(0, GridUnitType.Pixel);
-                WaterMainRow0.Height = new GridLength(1.3, GridUnitType.Star);
-                WaterMainRow1.Height = new GridLength(1, GridUnitType.Star);
+                WaterMainRow0.Height = new GridLength(1, GridUnitType.Star);
+                WaterMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
 
                 SmokesMainCol0.Width = new GridLength(1, GridUnitType.Star);
                 SmokesMainCol1.Width = new GridLength(0, GridUnitType.Pixel);
-                SmokesMainRow0.Height = new GridLength(1.3, GridUnitType.Star);
-                SmokesMainRow1.Height = new GridLength(1, GridUnitType.Star);
+                SmokesMainRow0.Height = new GridLength(1, GridUnitType.Star);
+                SmokesMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
 
                 // Extended panels grid: Col 0 only, all 3 rows active
                 WaterExtCol0.Width = new GridLength(1, GridUnitType.Star);
