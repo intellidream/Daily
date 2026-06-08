@@ -9,7 +9,6 @@
     mc:Ignorable="d"
     d:DesignHeight="320"
     d:DesignWidth="420"
-    Tapped="Widget_Tapped"
     Background="Transparent">
 
     <Grid x:Name="RootGrid" Padding="16,12,16,14">
@@ -33,14 +32,14 @@
                         <Setter Target="WaterButtonsStack.RowSpacing" Value="10" />
                         
                         <!-- Water Buttons size & layout (2x2 icon-only) -->
-                        <Setter Target="WaterBtnWater.Width" Value="44" />
-                        <Setter Target="WaterBtnWater.Height" Value="44" />
-                        <Setter Target="WaterBtnWater.CornerRadius" Value="22" />
-                        <Setter Target="WaterBtnWaterText.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterBtnJuice.Width" Value="44" />
-                        <Setter Target="WaterBtnJuice.Height" Value="44" />
-                        <Setter Target="WaterBtnJuice.CornerRadius" Value="22" />
-                        <Setter Target="WaterBtnJuiceText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnLarge.Width" Value="44" />
+                        <Setter Target="WaterBtnLarge.Height" Value="44" />
+                        <Setter Target="WaterBtnLarge.CornerRadius" Value="22" />
+                        <Setter Target="WaterBtnLargeText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnSmall.Width" Value="44" />
+                        <Setter Target="WaterBtnSmall.Height" Value="44" />
+                        <Setter Target="WaterBtnSmall.CornerRadius" Value="22" />
+                        <Setter Target="WaterBtnSmallText.Visibility" Value="Collapsed" />
                         <Setter Target="WaterBtnCoffee.Width" Value="44" />
                         <Setter Target="WaterBtnCoffee.Height" Value="44" />
                         <Setter Target="WaterBtnCoffee.CornerRadius" Value="22" />
@@ -103,12 +102,12 @@
                         <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         
                         <!-- Water Buttons size & layout (2x2 text) -->
-                        <Setter Target="WaterBtnWater.Width" Value="72" />
-                        <Setter Target="WaterBtnWater.Height" Value="36" />
-                        <Setter Target="WaterBtnWaterText.Visibility" Value="Visible" />
-                        <Setter Target="WaterBtnJuice.Width" Value="72" />
-                        <Setter Target="WaterBtnJuice.Height" Value="36" />
-                        <Setter Target="WaterBtnJuiceText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnLarge.Width" Value="72" />
+                        <Setter Target="WaterBtnLarge.Height" Value="36" />
+                        <Setter Target="WaterBtnLargeText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnSmall.Width" Value="72" />
+                        <Setter Target="WaterBtnSmall.Height" Value="36" />
+                        <Setter Target="WaterBtnSmallText.Visibility" Value="Visible" />
                         <Setter Target="WaterBtnCoffee.Width" Value="72" />
                         <Setter Target="WaterBtnCoffee.Height" Value="36" />
                         <Setter Target="WaterBtnCoffeeText.Visibility" Value="Visible" />
@@ -173,14 +172,14 @@
                         <Setter Target="WaterLegendAndButtons.Spacing" Value="0" />
                         
                         <!-- Water Buttons size & layout (2x2 icon-only) -->
-                        <Setter Target="WaterBtnWater.Width" Value="36" />
-                        <Setter Target="WaterBtnWater.Height" Value="36" />
-                        <Setter Target="WaterBtnWater.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnWaterText.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterBtnJuice.Width" Value="36" />
-                        <Setter Target="WaterBtnJuice.Height" Value="36" />
-                        <Setter Target="WaterBtnJuice.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnJuiceText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnLarge.Width" Value="36" />
+                        <Setter Target="WaterBtnLarge.Height" Value="36" />
+                        <Setter Target="WaterBtnLarge.CornerRadius" Value="18" />
+                        <Setter Target="WaterBtnLargeText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnSmall.Width" Value="36" />
+                        <Setter Target="WaterBtnSmall.Height" Value="36" />
+                        <Setter Target="WaterBtnSmall.CornerRadius" Value="18" />
+                        <Setter Target="WaterBtnSmallText.Visibility" Value="Collapsed" />
                         <Setter Target="WaterBtnCoffee.Width" Value="36" />
                         <Setter Target="WaterBtnCoffee.Height" Value="36" />
                         <Setter Target="WaterBtnCoffee.CornerRadius" Value="18" />
@@ -265,12 +264,12 @@
                         <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Auto" />
                         
                         <!-- Water Buttons size & layout (2x2 text) -->
-                        <Setter Target="WaterBtnWater.Width" Value="72" />
-                        <Setter Target="WaterBtnWater.Height" Value="36" />
-                        <Setter Target="WaterBtnWaterText.Visibility" Value="Visible" />
-                        <Setter Target="WaterBtnJuice.Width" Value="72" />
-                        <Setter Target="WaterBtnJuice.Height" Value="36" />
-                        <Setter Target="WaterBtnJuiceText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnLarge.Width" Value="72" />
+                        <Setter Target="WaterBtnLarge.Height" Value="36" />
+                        <Setter Target="WaterBtnLargeText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnSmall.Width" Value="72" />
+                        <Setter Target="WaterBtnSmall.Height" Value="36" />
+                        <Setter Target="WaterBtnSmallText.Visibility" Value="Visible" />
                         <Setter Target="WaterBtnCoffee.Width" Value="72" />
                         <Setter Target="WaterBtnCoffee.Height" Value="36" />
                         <Setter Target="WaterBtnCoffeeText.Visibility" Value="Visible" />
@@ -342,7 +341,6 @@
               Background="Transparent"
               PointerEntered="Header_PointerEntered"
               PointerExited="Header_PointerExited"
-              Tapped="Header_Tapped"
               Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -500,17 +498,17 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     
-                                    <Button x:Name="WaterBtnWater" Grid.Row="0" Grid.Column="0" Click="AddWater_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A0288D1" BorderThickness="0">
+                                    <Button x:Name="WaterBtnLarge" Grid.Row="0" Grid.Column="0" Click="AddWaterLarge_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A0288D1" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF0288D1" />
-                                            <TextBlock x:Name="WaterBtnWaterText" Text="Water" FontSize="11" FontWeight="SemiBold" Foreground="#FF0288D1" />
+                                            <FontIcon Glyph="&#xfc12;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF0288D1" />
+                                            <TextBlock x:Name="WaterBtnLargeText" Text="Large" FontSize="11" FontWeight="SemiBold" Foreground="#FF0288D1" />
                                         </StackPanel>
                                     </Button>
                                     
-                                    <Button x:Name="WaterBtnJuice" Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1AE91E63" BorderThickness="0">
+                                    <Button x:Name="WaterBtnSmall" Grid.Row="0" Grid.Column="1" Click="AddWater_Click" CornerRadius="18" Width="72" Height="36" Padding="0" Background="#1A0288D1" BorderThickness="0">
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFE91E63" />
-                                            <TextBlock x:Name="WaterBtnJuiceText" Text="Juice" FontSize="11" FontWeight="SemiBold" Foreground="#FFE91E63" />
+                                            <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF0288D1" />
+                                            <TextBlock x:Name="WaterBtnSmallText" Text="Small" FontSize="11" FontWeight="SemiBold" Foreground="#FF0288D1" />
                                         </StackPanel>
                                     </Button>
                                     

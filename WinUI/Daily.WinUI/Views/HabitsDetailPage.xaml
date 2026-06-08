@@ -378,74 +378,83 @@
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
-                                                <Button Grid.Row="0" Grid.Column="0" Click="AddWater_Click" CornerRadius="18" Padding="10" Background="#FF2196F3" BorderThickness="0">
-                                                    <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="Water" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                    </StackPanel>
-                                                </Button>
-                                                <Button Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Padding="10" Background="#FFE91E63" BorderThickness="0">
-                                                    <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="Juice" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                    </StackPanel>
-                                                </Button>
-                                                <Button Grid.Row="1" Grid.Column="0" Click="AddCoffee_Click" CornerRadius="18" Padding="10" Background="#FFF2994A" BorderThickness="0">
-                                                    <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="Coffee" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                    </StackPanel>
-                                                </Button>
-                                                <Button Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Padding="10" Background="#FF27AE60" BorderThickness="0">
-                                                    <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                        <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="Tea" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                    </StackPanel>
-                                                </Button>
+                                                <Button Grid.Row="0" Grid.Column="0" Click="AddWaterLarge_Click" CornerRadius="18" Padding="10" Background="#FF2196F3" BorderThickness="0">
+                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                                         <FontIcon Glyph="&#xfc12;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                         <TextBlock Text="Large" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                     </StackPanel>
+                                                 </Button>
+                                                 <Button Grid.Row="0" Grid.Column="1" Click="AddWater_Click" CornerRadius="18" Padding="10" Background="#FF2196F3" BorderThickness="0">
+                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                                         <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                         <TextBlock Text="Small" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                     </StackPanel>
+                                                 </Button>
+                                                 <Button Grid.Row="1" Grid.Column="0" Click="AddCoffee_Click" CornerRadius="18" Padding="10" Background="#FFF2994A" BorderThickness="0">
+                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                                         <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                         <TextBlock Text="Coffee" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                     </StackPanel>
+                                                 </Button>
+                                                 <Button Grid.Row="1" Grid.Column="1" Click="AddTea_Click" CornerRadius="18" Padding="10" Background="#FF27AE60" BorderThickness="0">
+                                                     <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                                         <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                         <TextBlock Text="Tea" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                     </StackPanel>
+                                                 </Button>
                                             </Grid>
 
                                             <Border CornerRadius="18" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" Padding="12">
-                                                <Grid RowSpacing="8">
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="Auto" />
-                                                    </Grid.RowDefinitions>
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF2D9CDB" />
-                                                        <TextBlock Grid.Column="1" Text="Water" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Right" />
-                                                    </Grid>
-                                                    <Grid Grid.Row="1">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFF2994A" />
-                                                        <TextBlock Grid.Column="1" Text="Coffee" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Right" />
-                                                    </Grid>
-                                                    <Grid Grid.Row="2">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
-                                                        <TextBlock Grid.Column="1" Text="Tea" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Right" />
-                                                    </Grid>
-                                                    <Grid Grid.Row="3">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock Text="Goal" FontSize="11" Opacity="0.55" />
-                                                        <TextBlock Grid.Column="1" Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right" />
-                                                    </Grid>
-                                                </Grid>
-                                            </Border>
+                                                 <Grid RowSpacing="8">
+                                                     <Grid.RowDefinitions>
+                                                         <RowDefinition Height="Auto" />
+                                                         <RowDefinition Height="Auto" />
+                                                         <RowDefinition Height="Auto" />
+                                                         <RowDefinition Height="Auto" />
+                                                         <RowDefinition Height="Auto" />
+                                                     </Grid.RowDefinitions>
+                                                     <Grid Grid.Row="0">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="Auto" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <FontIcon Glyph="&#xfc12;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF2D9CDB" />
+                                                         <TextBlock Grid.Column="1" Text="Large" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Right" />
+                                                     </Grid>
+                                                     <Grid Grid.Row="1">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="Auto" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF2D9CDB" />
+                                                         <TextBlock Grid.Column="1" Text="Small" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Right" />
+                                                     </Grid>
+                                                     <Grid Grid.Row="2">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="Auto" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFF2994A" />
+                                                         <TextBlock Grid.Column="1" Text="Coffee" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Right" />
+                                                     </Grid>
+                                                     <Grid Grid.Row="3">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="Auto" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <FontIcon Glyph="&#xf552;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF27AE60" />
+                                                         <TextBlock Grid.Column="1" Text="Tea" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Right" />
+                                                     </Grid>
+                                                     <Grid Grid.Row="4">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="Auto" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <TextBlock Text="Goal" FontSize="11" Opacity="0.55" />
+                                                         <TextBlock Grid.Column="1" Text="{x:Bind GoalDisplay, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                                     </Grid>
+                                                 </Grid>
+                                             </Border>
                                         </StackPanel>
                                     </Border>
                                 </Grid>
@@ -480,18 +489,18 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <Button Grid.Row="0" Grid.Column="0" Click="AddWater_Click" CornerRadius="18" Padding="10" Background="#FF2196F3" BorderThickness="0">
-                                            <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                <TextBlock Text="Water" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                            </StackPanel>
-                                        </Button>
-                                        <Button Grid.Row="0" Grid.Column="1" Click="AddJuice_Click" CornerRadius="18" Padding="10" Background="#FFE91E63" BorderThickness="0">
-                                            <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                                <FontIcon Glyph="&#xef28;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                                <TextBlock Text="Juice" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
-                                            </StackPanel>
-                                        </Button>
+                                        <Button Grid.Row="0" Grid.Column="0" Click="AddWaterLarge_Click" CornerRadius="18" Padding="10" Background="#FF2196F3" BorderThickness="0">
+                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                                 <FontIcon Glyph="&#xfc12;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                 <TextBlock Text="Large" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                             </StackPanel>
+                                         </Button>
+                                         <Button Grid.Row="0" Grid.Column="1" Click="AddWater_Click" CornerRadius="18" Padding="10" Background="#FF2196F3" BorderThickness="0">
+                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                                 <FontIcon Glyph="&#xea97;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                                 <TextBlock Text="Small" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />
+                                             </StackPanel>
+                                         </Button>
                                         <Button Grid.Row="1" Grid.Column="0" Click="AddCoffee_Click" CornerRadius="18" Padding="10" Background="#FFF2994A" BorderThickness="0">
                                             <StackPanel Spacing="4" HorizontalAlignment="Center">
                                                 <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" />

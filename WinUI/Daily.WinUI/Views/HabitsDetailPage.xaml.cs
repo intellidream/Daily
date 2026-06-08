@@ -143,7 +143,8 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                 drinkOrType = "cigarette";
             }
 
-            string colorHex = GetColorForDrinkOrSmoke(drinkOrType.Contains("water") ? "water"
+            string colorHex = GetColorForDrinkOrSmoke(
+                              drinkOrType.Contains("water") || drinkOrType.Contains("large") || drinkOrType.Contains("small") ? "water"
                             : drinkOrType.Contains("coffee") ? "coffee"
                             : drinkOrType.Contains("tea") ? "tea"
                             : drinkOrType.Contains("juice") ? "juice"
@@ -155,31 +156,85 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
                             : drinkOrType.Contains("cigarette") ? "cigarette"
                             : _currentType == "smokes" ? "cigarette" : "water");
 
-            // Icon glyphs (Tabler Icons)
-            string icon = _currentType == "smokes"
-                ? drinkOrType switch
+            // Icon glyphs & labels
+            string icon = "\xea97"; // Empty bubble as fallback/small
+            string label = "";
+            
+            if (_currentType == "smokes")
+            {
+                icon = drinkOrType switch
                 {
                     var s when s.Contains("heated")     => "\xec2c",  // heated
                     var s when s.Contains("rolled")     => "\xec2b",  // rolled
                     var s when s.Contains("cigarillo")  => "\xeed2",  // cigarillo
                     _                                   => "\xecc4"   // cigarette
-                }
-                : drinkOrType switch
-                {
-                    var s when s.Contains("coffee")     => "\xef0e",  // coffee
-                    var s when s.Contains("tea")        => "\xf552",  // tea
-                    var s when s.Contains("juice")      => "\xef28",  // juice
-                    var s when s.Contains("beer")       => "\xefa1",  // beer
-                    var s when s.Contains("wine")       => "\xeab7",  // wine
-                    _                                   => "\xea97"   // water
                 };
-
-            string label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType) switch
+                label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType) switch
+                {
+                    "Heated Tobacco" => "Heated",
+                    var other => other
+                };
+            }
+            else
             {
-                "Large Water" => "Large",
-                "Heated Tobacco" => "Heated",
-                var other => other
-            };
+                if (drinkOrType.Contains("coffee"))
+                {
+                    icon = "\xef0e";
+                    label = "Coffee";
+                }
+                else if (drinkOrType.Contains("tea"))
+                {
+                    icon = "\xf552";
+                    label = "Tea";
+                }
+                else if (drinkOrType.Contains("juice"))
+                {
+                    icon = "\xef28";
+                    label = "Juice";
+                }
+                else if (drinkOrType.Contains("beer"))
+                {
+                    icon = "\xefa1";
+                    label = "Beer";
+                }
+                else if (drinkOrType.Contains("wine"))
+                {
+                    icon = "\xeab7";
+                    label = "Wine";
+                }
+                else
+                {
+                    // Water Large vs Small
+                    bool isLarge = false;
+                    string sizeProp = "";
+                    if (!string.IsNullOrWhiteSpace(log.Metadata))
+                    {
+                        try
+                        {
+                            using var doc = System.Text.Json.JsonDocument.Parse(log.Metadata);
+                            if (doc.RootElement.TryGetProperty("size", out var sProp))
+                                sizeProp = sProp.GetString()?.ToLowerInvariant() ?? "";
+                        }
+                        catch {}
+                    }
+
+                    if (drinkOrType.Contains("large") || sizeProp.Contains("large") || log.Value >= 300)
+                    {
+                        isLarge = true;
+                    }
+
+                    if (isLarge)
+                    {
+                        icon = "\xfc12"; // Droplets
+                        label = "Large";
+                    }
+                    else
+                    {
+                        icon = "\xea97"; // Empty bubble
+                        label = "Small";
+                    }
+                }
+            }
 
             string amount = _currentType == "smokes"
                 ? $"{(int)log.Value} unit"
@@ -612,9 +667,12 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     private string GetColorForDrinkOrSmoke(string item)
     {
-        return item.ToLowerInvariant() switch
+        var normalized = item.ToLowerInvariant();
+        if (normalized.Contains("water") || normalized.Contains("large") || normalized.Contains("small"))
+            return "#FF2996CC";
+
+        return normalized switch
         {
-            "water"     => "#FF2996CC",
             "coffee"    => "#FFF2994A",
             "tea"       => "#FF27AE60",
             "juice"     => "#FFE91E63",
@@ -652,7 +710,7 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     {
         var normalized = (drink ?? string.Empty).Trim().ToLowerInvariant();
 
-        if (normalized.Contains("water")) return GetWaterColorForAmount(amountMl);
+        if (normalized.Contains("water") || normalized.Contains("large") || normalized.Contains("small")) return GetWaterColorForAmount(amountMl);
         if (normalized.Contains("coffee")) return GetColorForDrinkOrSmoke("coffee");
         if (normalized.Contains("tea")) return GetColorForDrinkOrSmoke("tea");
         if (normalized.Contains("juice")) return GetColorForDrinkOrSmoke("juice");
@@ -697,14 +755,14 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     private async void AddWater_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("water", 150, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Water\",\"size\":\"Small\"}");
-        TrackHabitEvent("LogWater", 150, "ml", "{\"drink\":\"Water\",\"size\":\"Small\"}");
+        await _habitsService.AddLogAsync("water", 150, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Small Water\"}");
+        TrackHabitEvent("LogWater", 150, "ml", "{\"drink\":\"Small Water\"}");
     }
 
     private async void AddWaterLarge_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("water", 300, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Water\",\"size\":\"Large\"}");
-        TrackHabitEvent("LogWater", 300, "ml", "{\"drink\":\"Water\",\"size\":\"Large\"}");
+        await _habitsService.AddLogAsync("water", 300, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Large Water\"}");
+        TrackHabitEvent("LogWater", 300, "ml", "{\"drink\":\"Large Water\"}");
     }
 
     private async void AddCoffee_Click(object sender, RoutedEventArgs e)
@@ -717,12 +775,6 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
     {
         await _habitsService.AddLogAsync("water", 200, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Tea\"}");
         TrackHabitEvent("LogWater", 200, "ml", "{\"drink\":\"Tea\"}");
-    }
-
-    private async void AddJuice_Click(object sender, RoutedEventArgs e)
-    {
-        await _habitsService.AddLogAsync("water", 250, "ml", ViewDate.GetValueOrDefault().Date.Add(DateTime.Now.TimeOfDay), "{\"drink\":\"Juice\"}");
-        TrackHabitEvent("LogWater", 250, "ml", "{\"drink\":\"Juice\"}");
     }
 
     private async void AddBeer_Click(object sender, RoutedEventArgs e)

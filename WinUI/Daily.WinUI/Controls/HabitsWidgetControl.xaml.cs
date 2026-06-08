@@ -179,7 +179,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
     public string CurrentViewLabel => HabitsFlipView?.SelectedIndex == 0 ? "Bubbles" : "Smokes";
 
-    public event EventHandler? WidgetTapped;
+
 
     public HabitsWidgetControl()
     {
@@ -609,26 +609,68 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             foreach (var kvp in breakdown)
             {
                 if (kvp.Value <= 0) continue;
-                string label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(kvp.Key);
-                if (label == "Large Water") label = "Large";
-                else if (label == "Heated Tobacco") label = "Heated";
-                string colorHex = GetColorForDrinkOrSmoke(kvp.Key);
-                string icon = kvp.Key.ToLowerInvariant() switch
+                string drinkKey = kvp.Key.ToLowerInvariant();
+                
+                string label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkKey);
+                string icon = "\xea97"; // Empty bubble as fallback/small
+                string colorHex = GetColorForDrinkOrSmoke(drinkKey);
+
+                if (drinkKey.Contains("large"))
                 {
-                    var s when s.Contains("coffee")     => "\xef0e",
-                    var s when s.Contains("tea")        => "\xf552",
-                    var s when s.Contains("juice")      => "\xef28",
-                    var s when s.Contains("beer")       => "\xefa1",
-                    var s when s.Contains("wine")       => "\xeab7",
-                    _                                   => "\xea97"
-                };
-                waterItems.Add(new WidgetBreakdownItem
+                    label = "Large";
+                    icon = "\xfc12"; // Droplets
+                }
+                else if (drinkKey.Contains("small") || drinkKey == "water")
                 {
-                    Label = label,
-                    Amount = $"{(int)kvp.Value} ml",
-                    Icon = icon,
-                    ColorHex = colorHex
-                });
+                    label = "Small";
+                    icon = "\xea97"; // Empty bubble
+                }
+                else if (drinkKey.Contains("coffee"))
+                {
+                    label = "Coffee";
+                    icon = "\xef0e";
+                }
+                else if (drinkKey.Contains("tea"))
+                {
+                    label = "Tea";
+                    icon = "\xf552";
+                }
+                else if (drinkKey.Contains("beer"))
+                {
+                    label = "Beer";
+                    icon = "\xefa1";
+                }
+                else if (drinkKey.Contains("wine"))
+                {
+                    label = "Wine";
+                    icon = "\xeab7";
+                }
+                else if (drinkKey.Contains("juice"))
+                {
+                    label = "Juice";
+                    icon = "\xef28";
+                }
+
+                var existing = waterItems.FirstOrDefault(x => x.Label == label);
+                if (existing != null)
+                {
+                    try
+                    {
+                        int existingVal = int.Parse(existing.Amount.Split(' ')[0]);
+                        existing.Amount = $"{existingVal + (int)kvp.Value} ml";
+                    }
+                    catch { }
+                }
+                else
+                {
+                    waterItems.Add(new WidgetBreakdownItem
+                    {
+                        Label = label,
+                        Amount = $"{(int)kvp.Value} ml",
+                        Icon = icon,
+                        ColorHex = colorHex
+                    });
+                }
             }
             WaterBreakdown = new ObservableCollection<WidgetBreakdownItem>(waterItems);
 
@@ -765,37 +807,92 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
             string colorHex = GetColorForDrinkOrSmoke(drinkOrType);
             
-            // Icon glyphs (Tabler Icons)
-            string icon = viewType == "smokes"
-                ? drinkOrType switch
+            // Icon glyphs & labels
+            string icon = "\xea97"; // Empty bubble as fallback/small
+            string label = "";
+            
+            if (viewType == "smokes")
+            {
+                icon = drinkOrType switch
                 {
                     var s when s.Contains("heated")     => "\xec2c",  // heated
                     var s when s.Contains("rolled")     => "\xec2b",  // rolled
                     var s when s.Contains("cigarillo")  => "\xeed2",  // cigarillo
                     _                                   => "\xecc4"   // cigarette
-                }
-                : drinkOrType switch
-                {
-                    var s when s.Contains("coffee")     => "\xef0e",  // coffee
-                    var s when s.Contains("tea")        => "\xf552",  // tea
-                    var s when s.Contains("juice")      => "\xef28",  // juice
-                    var s when s.Contains("beer")       => "\xefa1",  // beer
-                    var s when s.Contains("wine")       => "\xeab7",  // wine
-                    _                                   => "\xea97"   // water
                 };
+                label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType) switch
+                {
+                    "Heated Tobacco" => "Heated",
+                    var other => other
+                };
+            }
+            else
+            {
+                if (drinkOrType.Contains("coffee"))
+                {
+                    icon = "\xef0e";
+                    label = "Coffee";
+                }
+                else if (drinkOrType.Contains("tea"))
+                {
+                    icon = "\xf552";
+                    label = "Tea";
+                }
+                else if (drinkOrType.Contains("juice"))
+                {
+                    icon = "\xef28";
+                    label = "Juice";
+                }
+                else if (drinkOrType.Contains("beer"))
+                {
+                    icon = "\xefa1";
+                    label = "Beer";
+                }
+                else if (drinkOrType.Contains("wine"))
+                {
+                    icon = "\xeab7";
+                    label = "Wine";
+                }
+                else
+                {
+                    // Water Large vs Small
+                    bool isLarge = false;
+                    string sizeProp = "";
+                    if (!string.IsNullOrWhiteSpace(log.Metadata))
+                    {
+                        try
+                        {
+                            using var doc = System.Text.Json.JsonDocument.Parse(log.Metadata);
+                            if (doc.RootElement.TryGetProperty("size", out var sProp))
+                                sizeProp = sProp.GetString()?.ToLowerInvariant() ?? "";
+                        }
+                        catch {}
+                    }
 
+                    if (drinkOrType.Contains("large") || sizeProp.Contains("large") || log.Value >= 300)
+                    {
+                        isLarge = true;
+                    }
 
-             widgetLogs.Add(new WidgetLogEntryViewModel
+                    if (isLarge)
+                    {
+                        icon = "\xfc12"; // Droplets
+                        label = "Large";
+                    }
+                    else
+                    {
+                        icon = "\xea97"; // Empty bubble
+                        label = "Small";
+                    }
+                }
+            }
+
+            widgetLogs.Add(new WidgetLogEntryViewModel
             {
                 Log = log,
                 Icon = icon,
                 ColorHex = colorHex,
-                Label = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(drinkOrType) switch
-                {
-                    "Large Water" => "Large",
-                    "Heated Tobacco" => "Heated",
-                    var other => other
-                },
+                Label = label,
                 Amount = isWater ? $"{(int)log.Value} ml" : $"{(int)log.Value} unit",
                 TimeText = log.LoggedAt.ToLocalTime().ToString("HH:mm")
             });
@@ -884,7 +981,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
     {
         var normalized = (item ?? string.Empty).Trim().ToLowerInvariant();
 
-        if (normalized.Contains("water")) return "#FF2196F3";
+        if (normalized.Contains("water") || normalized.Contains("large") || normalized.Contains("small")) return "#FF2196F3";
         if (normalized.Contains("coffee")) return "#FFF2994A";
         if (normalized.Contains("tea")) return "#FF27AE60";
         if (normalized.Contains("juice")) return "#FFE91E63";
@@ -930,17 +1027,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         HeaderGrid.Opacity = 1.0;
     }
 
-    private void Header_Tapped(object sender, TappedRoutedEventArgs e)
-    {
-        e.Handled = true;
-        WidgetTapped?.Invoke(this, EventArgs.Empty);
-    }
 
-    private void Widget_Tapped(object sender, TappedRoutedEventArgs e)
-    {
-        e.Handled = true;
-        WidgetTapped?.Invoke(this, EventArgs.Empty);
-    }
 
     private void Prev_Click(object sender, RoutedEventArgs e)
     {
@@ -968,12 +1055,12 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
     private async void AddWater_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("water", 250, "ml", DateTime.Now, "{\"drink\":\"Water\"}");
+        await _habitsService.AddLogAsync("water", 150, "ml", DateTime.Now, "{\"drink\":\"Small Water\"}");
     }
 
-    private async void AddJuice_Click(object sender, RoutedEventArgs e)
+    private async void AddWaterLarge_Click(object sender, RoutedEventArgs e)
     {
-        await _habitsService.AddLogAsync("water", 250, "ml", DateTime.Now, "{\"drink\":\"Juice\"}");
+        await _habitsService.AddLogAsync("water", 300, "ml", DateTime.Now, "{\"drink\":\"Large Water\"}");
     }
 
     private async void AddCoffee_Click(object sender, RoutedEventArgs e)
