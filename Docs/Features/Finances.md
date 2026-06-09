@@ -75,10 +75,12 @@ Finances data utilizes separate SQLite local structures and Supabase remote data
 
 ## 3. UI/UX & Layout
 
-### 3.1 Account Grids & Portfolio Details
+### 3.1 Account Grids, Portfolio Details & Widget Controls
 - **Balance Cards**: Styled cards that display account name, type, and current balance.
 - **Transaction Ledger**: A searchable grid table that filters transactions by category, account, or date ranges.
 - **World Map Visuals**: In WinUI, a custom `WorldMapControl.xaml` displays global market locations and indicators.
+- **Scroll-Wheel Page Cycles (WinUI)**: The Finances widget registers a `PointerWheelChanged` listener. Hovering and scrolling over the widget triggers cycling through accounts and watchlist pages in the `FinancesFlipView`, preventing outer scroll collisions. The default system FlipView side arrow buttons are hidden dynamically on load using a visual tree helper.
+- **Responsive Width Threshold (WinUI)**: The visual layout width threshold (`isWide`) is updated from `250px` to `450px` to maintain visual layout uniformity across different widget categories.
 
 ---
 

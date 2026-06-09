@@ -126,6 +126,7 @@ graph TD
 - **Glassmorphic Design**: The `ArticleSearchBox` utilizes standard app theme brushes (`AppGlassColorBrush` and `AppGlassBorderColorBrush`) with a 1px border and custom corner radius (`CornerRadius="18"`) for a modern, rounded pill design.
 - **Responsive Viewport Collapse**: In the page size change handler (`RssFeedDetailPage_SizeChanged`), the `ArticleSearchBox` is set to `Visibility.Collapsed` when the viewport width is less than 880px to prevent layout collision with the feed headers and cycle controls.
 - **All News Visual Treatment**: When "All News" is selected, the custom favicon image border (`SelectedFeedIconBorder`) is collapsed, and a standard Segoe Fluent Icon glyph (`&#xE909;`) is displayed within `SelectedFeedFontIcon` to represent the global feed context.
+- **Feed Selector Adaptive MaxWidth (WinUI)**: To prevent visual collision with the Pivot category headers in narrow layouts, the selected feed title (`SelectedFeedText`) in the right header has a default `MaxWidth` of 55px (with `CharacterEllipsis` trimming). On widget resize, `UpdateAdaptiveLayout` calculates the available space (`ActualWidth - 280` safety margin) and dynamically adjusts the text's `MaxWidth` between `55px` and `120px` to maximize readability on wider viewports.
 
 ---
 
