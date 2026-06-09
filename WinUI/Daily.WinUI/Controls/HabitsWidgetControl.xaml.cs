@@ -349,6 +349,11 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             return;
         }
 
+        if (HabitsFlipView != null)
+        {
+            HabitsFlipView.Margin = new Thickness(0);
+        }
+
         if (WaterLogsList != null) WaterLogsList.Width = double.NaN;
         if (WaterEmptyText != null) WaterEmptyText.Width = double.NaN;
         if (SmokesLogsList != null) SmokesLogsList.Width = double.NaN;
@@ -438,19 +443,23 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                     double progress = (width - 660.0) / (850.0 - 660.0);
                     progress = Math.Max(0.0, Math.Min(1.0, progress));
 
-                    // Padding Left/Right goes from 16 to 48px
-                    double padX = 16.0 + progress * (48.0 - 16.0);
-                    // Padding Top/Bottom goes from 10 to 12px
-                    double padY = 10.0 + progress * (12.0 - 10.0);
-                    RootGrid.Padding = new Thickness(padX, padY, padX, 14.0);
+                    // Keep RootGrid.Padding fixed to the default widget padding setup (16, 12, 16, 14)
+                    RootGrid.Padding = new Thickness(16.0, 12.0, 16.0, 14.0);
 
-                    // Gap between left and right column: 10 to 24px
-                    double extMarginLeft = 10.0 + progress * (24.0 - 10.0);
+                    // Pad internally by applying a margin to the flip view container (leaves 0px margin at 660px, up to 32px at 850px)
+                    double extraPadX = progress * 32.0;
+                    if (HabitsFlipView != null)
+                    {
+                        HabitsFlipView.Margin = new Thickness(extraPadX, 0, extraPadX, 0);
+                    }
+
+                    // Gap between left and right column: 8 to 16px
+                    double extMarginLeft = 8.0 + progress * (16.0 - 8.0);
                     WaterExtendedPanel.Margin = new Thickness(extMarginLeft, 0, 0, 0);
                     SmokesExtendedPanel.Margin = new Thickness(extMarginLeft, 0, 0, 0);
 
-                    // Column spacing inside extended panel (gap between chart and logs): 8 to 20px
-                    double colSpacing = 8.0 + progress * (20.0 - 8.0);
+                    // Column spacing inside extended panel (gap between chart and logs): 4 to 10px
+                    double colSpacing = 4.0 + progress * (10.0 - 4.0);
                     WaterExtendedPanel.ColumnSpacing = colSpacing;
                     SmokesExtendedPanel.ColumnSpacing = colSpacing;
 
@@ -459,9 +468,9 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                     WaterControlsStack.Spacing = controlsSpacing;
                     SmokesControlsStack.Spacing = controlsSpacing;
 
-                    // Ratios for chart vs logs
-                    double chartRatio = 1.0 + progress * 0.3; // 1.0 to 1.3
-                    double logsRatio = 1.2 - progress * 0.2;  // 1.2 to 1.0
+                    // Ratios for chart vs logs: give logs column more share (1.3 to 1.2) vs chart (1.0 to 1.1)
+                    double chartRatio = 1.0 + progress * 0.1; // 1.0 to 1.1
+                    double logsRatio = 1.3 - progress * 0.1;  // 1.3 to 1.2
                     WaterExtCol0.Width = new GridLength(chartRatio, GridUnitType.Star);
                     WaterExtCol1.Width = new GridLength(logsRatio, GridUnitType.Star);
                     SmokesExtCol0.Width = new GridLength(chartRatio, GridUnitType.Star);
