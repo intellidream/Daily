@@ -330,5 +330,48 @@ namespace Daily.Services
                 SyncedAt = domain.SyncedAt?.SafeUtc()
             };
         }
+
+        // --- CalendarAccount ---
+
+        public static CalendarAccount ToDomain(this LocalCalendarAccount local)
+        {
+            return new CalendarAccount
+            {
+                Id = Guid.Parse(local.Id),
+                UserId = Guid.Parse(local.UserId),
+                AccountType = local.AccountType,
+                Email = local.Email,
+                // Encrypt sensitive tokens before sending to cloud
+                AccessToken = Daily.Services.Auth.EncryptionHelper.Encrypt(local.AccessToken, local.UserId),
+                RefreshToken = Daily.Services.Auth.EncryptionHelper.Encrypt(local.RefreshToken, local.UserId),
+                TokenExpiresAt = SafeUtc(local.TokenExpiresAt),
+                Color = local.Color,
+                IsActive = local.IsActive,
+                CreatedAt = SafeUtc(local.CreatedAt),
+                UpdatedAt = SafeUtc(local.UpdatedAt),
+                SyncedAt = SafeUtc(local.SyncedAt)
+            };
+        }
+
+        public static LocalCalendarAccount ToLocal(this CalendarAccount domain)
+        {
+            var userIdStr = domain.UserId.ToString().ToLowerInvariant();
+            return new LocalCalendarAccount
+            {
+                Id = domain.Id.ToString().ToLowerInvariant(),
+                UserId = userIdStr,
+                AccountType = domain.AccountType,
+                Email = domain.Email,
+                // Decrypt sensitive tokens after pulling from cloud
+                AccessToken = Daily.Services.Auth.EncryptionHelper.Decrypt(domain.AccessToken, userIdStr),
+                RefreshToken = Daily.Services.Auth.EncryptionHelper.Decrypt(domain.RefreshToken, userIdStr),
+                TokenExpiresAt = domain.TokenExpiresAt.ToUniversalTime(),
+                Color = domain.Color,
+                IsActive = domain.IsActive,
+                CreatedAt = domain.CreatedAt.ToUniversalTime(),
+                UpdatedAt = domain.UpdatedAt?.ToUniversalTime() ?? DateTime.UtcNow,
+                SyncedAt = domain.SyncedAt?.ToUniversalTime()
+            };
+        }
     }
 }

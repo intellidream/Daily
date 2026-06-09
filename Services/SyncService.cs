@@ -350,6 +350,12 @@ namespace Daily.Services
                 // 6. Push RSS Subscriptions
                 await PushRssSubscriptionsAsync(userId);
             }
+
+            if ((scope & SyncScope.CalendarAccounts) != 0)
+            {
+                // 7. Push Calendar Accounts
+                await PushCalendarAccountsAsync(userId);
+            }
         }
 
         private async Task<int> PullInternalAsync(SyncScope scope)
@@ -409,6 +415,17 @@ namespace Daily.Services
                 DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
 
                 int pulled = await PullRssSubscriptionsAsync(userId, lastPull);
+                totalPulled += pulled;
+                SetPreference(key, DateTime.UtcNow.ToString("O"));
+            }
+
+            if ((scope & SyncScope.CalendarAccounts) != 0)
+            {
+                var key = "SyncService_LastPullTime_CalendarAccounts";
+                var lastPullStr = GetPreference(key, "");
+                DateTime lastPull = string.IsNullOrEmpty(lastPullStr) ? DateTime.MinValue : DateTime.Parse(lastPullStr).ToUniversalTime();
+
+                int pulled = await PullCalendarAccountsAsync(userId, lastPull);
                 totalPulled += pulled;
                 SetPreference(key, DateTime.UtcNow.ToString("O"));
             }
@@ -595,6 +612,69 @@ namespace Daily.Services
                 return count;
             }
             catch(Exception ex) { Console.WriteLine($"[SyncService] Pull RssSubscriptions Failed: {ex.Message}"); return 0; }
+        }
+
+        private async Task PushCalendarAccountsAsync(string userId)
+        {
+            var dirty = await _databaseService.Connection.Table<LocalCalendarAccount>()
+                                .Where(x => x.SyncedAt == null && x.UserId == userId)
+                                .ToListAsync();
+            if (dirty.Any())
+            {
+                Console.WriteLine($"[SyncService] Pushing {dirty.Count} dirty Calendar accounts...");
+                try 
+                {
+                    var remote = new List<CalendarAccount>();
+                    foreach(var d in dirty)
+                    {
+                        try { remote.Add(d.ToDomain()); } 
+                        catch (Exception ex) { Console.WriteLine($"[SyncService] ToDomain error for calendar account {d.Id}: {ex.Message}"); }
+                    }
+                    if (remote.Any())
+                    {
+                        await _supabase.From<CalendarAccount>().Upsert(remote);
+                        foreach (var l in dirty)
+                        {
+                            l.SyncedAt = DateTime.UtcNow;
+                            await _databaseService.Connection.UpdateAsync(l);
+                        }
+                    }
+                }
+                catch(Exception ex) { Console.WriteLine($"[SyncService] Push CalendarAccounts Failed: {ex.Message}"); }
+            }
+        }
+
+        private async Task<int> PullCalendarAccountsAsync(string userId, DateTime lastPull)
+        {
+            try 
+            {
+                Console.WriteLine($"[SyncService] Pulling Calendar accounts for User: {userId}...");
+                var query = _supabase.From<CalendarAccount>().Where(x => x.UserId == Guid.Parse(userId));
+                if (lastPull > DateTime.MinValue)
+                {
+                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                }
+                var response = await query.Get();
+                int count = response.Models.Count;
+                if (count > 0)
+                {
+                    var localBatch = response.Models.Select(m => {
+                        var l = m.ToLocal();
+                        l.SyncedAt = DateTime.UtcNow;
+                        return l;
+                    }).ToList();
+
+                    await _databaseService.Connection.RunInTransactionAsync(tran => 
+                    {
+                        foreach(var item in localBatch)
+                        {
+                            tran.InsertOrReplace(item);
+                        }
+                    });
+                }
+                return count;
+            }
+            catch(Exception ex) { Console.WriteLine($"[SyncService] Pull CalendarAccounts Failed: {ex.Message}"); return 0; }
         }
 
         public void Log(string message) => LogDebug(message);

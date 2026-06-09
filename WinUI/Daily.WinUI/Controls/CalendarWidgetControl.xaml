@@ -1,0 +1,263 @@
+<UserControl
+    x:Class="Daily_WinUI.Controls.CalendarWidgetControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:Daily_WinUI.Controls"
+    xmlns:converters="using:Daily_WinUI.Converters"
+    mc:Ignorable="d"
+    d:DesignHeight="300"
+    d:DesignWidth="400"
+    Background="Transparent">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <converters:EmptyVisibilityConverter x:Key="EmptyVisibilityConverter" />
+            <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Padding="16,12,16,14">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="AdaptiveStates">
+                <!-- SmallState: 1x1, Hide header and show single next upcoming item -->
+                <VisualState x:Name="SmallState">
+                    <VisualState.Setters>
+                        <Setter Target="HeaderGrid.Visibility" Value="Collapsed" />
+                        <Setter Target="SmallContainer.Visibility" Value="Visible" />
+                        <Setter Target="NormalContainer.Visibility" Value="Collapsed" />
+                        <Setter Target="TallContainer.Visibility" Value="Collapsed" />
+                        <Setter Target="LargeContainer.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+                
+                <!-- NormalState (Wide): 2x1, Show header and side-by-side list of next 2 items -->
+                <VisualState x:Name="NormalState">
+                    <VisualState.Setters>
+                        <Setter Target="HeaderGrid.Visibility" Value="Visible" />
+                        <Setter Target="SmallContainer.Visibility" Value="Collapsed" />
+                        <Setter Target="NormalContainer.Visibility" Value="Visible" />
+                        <Setter Target="TallContainer.Visibility" Value="Collapsed" />
+                        <Setter Target="LargeContainer.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+                
+                <!-- TallState: 1x2, Show header and vertical list of items -->
+                <VisualState x:Name="TallState">
+                    <VisualState.Setters>
+                        <Setter Target="HeaderGrid.Visibility" Value="Visible" />
+                        <Setter Target="SmallContainer.Visibility" Value="Collapsed" />
+                        <Setter Target="NormalContainer.Visibility" Value="Collapsed" />
+                        <Setter Target="TallContainer.Visibility" Value="Visible" />
+                        <Setter Target="LargeContainer.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+                
+                <!-- LargeState: 2x2, Show header, Left today card, Right vertical list -->
+                <VisualState x:Name="LargeState">
+                    <VisualState.Setters>
+                        <Setter Target="HeaderGrid.Visibility" Value="Visible" />
+                        <Setter Target="SmallContainer.Visibility" Value="Collapsed" />
+                        <Setter Target="NormalContainer.Visibility" Value="Collapsed" />
+                        <Setter Target="TallContainer.Visibility" Value="Collapsed" />
+                        <Setter Target="LargeContainer.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Loading spinner -->
+        <ProgressRing IsActive="{x:Bind IsLoading, Mode=OneWay}" Grid.RowSpan="2" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentFillColorDefaultBrush}" Canvas.ZIndex="10" />
+
+        <!-- Header (Shared for Normal, Tall, Large) -->
+        <Grid Grid.Row="0" x:Name="HeaderGrid" Margin="0,0,0,10" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource SystemAccentColor}" VerticalAlignment="Center" />
+                <TextBlock Text="Agenda &amp; Tasks" FontSize="14" FontWeight="SemiBold" Opacity="0.9" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <TextBlock Grid.Column="1" Text="Upcoming" FontSize="11" Opacity="0.5" VerticalAlignment="Center" />
+        </Grid>
+
+        <!-- Content Area -->
+        <Grid Grid.Row="1">
+            
+            <!-- 1. SMALL CONTAINER (1x1) -->
+            <Grid x:Name="SmallContainer" Visibility="Collapsed">
+                <ItemsControl ItemsSource="{x:Bind UpcomingItems, Mode=OneWay}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <Grid />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:CalendarWidgetItem">
+                            <!-- Show only the first item in 1x1 by layering and using layout control, but to prevent visual overlap we only bind the top item or just limit count. Since we can't easily limit count in simple XAML ItemsControl, we display a fallback if list is empty or build custom layout. Actually, it's safer to bind to the first item. But since ItemsControl has no easy First, we can wrap in a single Border using visibility styling or bindings. Let's do a clean approach: show next item by using a simple layout where the ItemsControl displays only one, or use binding directly.
+                                 Wait, the best way in WinUI to show only the first item is to Bind directly to UpcomingItems[0] if it exists, but since ObservableCollection indexer isn't safe for empty bindings, we can style the ItemsControl to only display the first item, or we can just bind to a property "FirstItem" from CodeBehind!
+                                 Let's keep it simple: the ItemsControl can have a MaxHeight or we can just display the ItemsControl but restrict it. Or even better: bind to a sub-list or first item. Wait, we can bind to FirstItem from code-behind! That is extremely safe and easy. Let's design XAML assuming we have an ItemsControl. In a ItemsControl, if we only have height for one, only one is shown. But let's look at a safer alternative. Let's just bind to the ItemsControl, but inside the DataTemplate we can display it nicely. Let's use a Grid and ItemsControl, or just bind directly. Let's use a ListView/ItemsControl with a height limit so only 1 fits.
+                            -->
+                            <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="10" Height="80" VerticalAlignment="Center">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="4" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="{x:Bind ColorBrush}" CornerRadius="2" VerticalAlignment="Stretch" Margin="0,0,8,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
+                                        <TextBlock Text="{x:Bind Title}" FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxLines="2" />
+                                        <TextBlock Text="{x:Bind Details}" FontSize="10" Opacity="0.6" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="No upcoming items" FontSize="11" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind UpcomingItems.Count, Converter={StaticResource EmptyVisibilityConverter}, ConverterParameter=0, Mode=OneWay, FallbackValue=Collapsed}" />
+            </Grid>
+
+            <!-- 2. NORMAL CONTAINER (2x1 Wide) -->
+            <Grid x:Name="NormalContainer" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                
+                <!-- Display up to 2 items side by side -->
+                <ItemsControl ItemsSource="{x:Bind UpcomingItems, Mode=OneWay}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Stretch" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:CalendarWidgetItem">
+                            <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12,10" Width="180" Height="85">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="4" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="{x:Bind ColorBrush}" CornerRadius="2" VerticalAlignment="Stretch" Margin="0,0,8,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
+                                        <TextBlock Text="{x:Bind Title}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxLines="2" />
+                                        <TextBlock Text="{x:Bind Details}" FontSize="10" Opacity="0.6" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="No agenda items" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind UpcomingItems.Count, Converter={StaticResource EmptyVisibilityConverter}, ConverterParameter=0, Mode=OneWay, FallbackValue=Collapsed}" />
+            </Grid>
+
+            <!-- 3. TALL CONTAINER (1x2 Tall) -->
+            <Grid x:Name="TallContainer" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{x:Bind UpcomingItems, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:CalendarWidgetItem">
+                                <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="10,8" Margin="0,0,0,6">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <!-- Left side: Checkbox if task, or color dot/icon if calendar event -->
+                                        <Grid Grid.Column="0" Width="28" Height="28" Margin="0,0,8,0" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                            <CheckBox IsChecked="{x:Bind IsCompleted, Mode=TwoWay}" Checked="Todo_Checked" Visibility="{x:Bind IsTodo, Mode=OneWay}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                            <Ellipse Width="10" Height="10" Fill="{x:Bind ColorBrush}" Visibility="{x:Bind IsTodo, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                        </Grid>
+
+                                        <!-- Right side: Title and Details -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind Title}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{x:Bind Details}" FontSize="10" Opacity="0.6" Margin="0,1,0,0" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <TextBlock Text="No upcoming events or tasks" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind UpcomingItems.Count, Converter={StaticResource EmptyVisibilityConverter}, ConverterParameter=0, Mode=OneWay, FallbackValue=Collapsed}" />
+            </Grid>
+
+            <!-- 4. LARGE CONTAINER (2x2 Large) -->
+            <Grid x:Name="LargeContainer" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="130" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Column: Desk Calendar style Date Card -->
+                <Grid Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Top">
+                    <Border CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Height="140" Width="110" Style="{StaticResource GlassPanelStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="30" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            
+                            <!-- Calendar top red/accent bar -->
+                            <Border Grid.Row="0" Background="{ThemeResource SystemAccentColor}" CornerRadius="12,12,0,0">
+                                <TextBlock Text="{x:Bind TodayMonth}" Foreground="White" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" CharacterSpacing="100" />
+                            </Border>
+
+                            <!-- Big day number -->
+                            <TextBlock Grid.Row="1" Text="{x:Bind TodayDayNumber}" FontSize="48" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-4,0,0" />
+
+                            <!-- Day of week name -->
+                            <TextBlock Grid.Row="2" Text="{x:Bind TodayDayName}" FontSize="11" Opacity="0.7" HorizontalAlignment="Center" Margin="0,0,0,12" />
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Right Column: ListView agenda and tasks -->
+                <Grid Grid.Column="1">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+                        <ItemsControl ItemsSource="{x:Bind UpcomingItems, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:CalendarWidgetItem">
+                                    <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12,8" Margin="0,0,0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <!-- Checkbox/Color block -->
+                                            <Grid Grid.Column="0" Width="28" Height="28" Margin="0,0,8,0" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <CheckBox IsChecked="{x:Bind IsCompleted, Mode=TwoWay}" Checked="Todo_Checked" Visibility="{x:Bind IsTodo, Mode=OneWay}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                <Ellipse Width="10" Height="10" Fill="{x:Bind ColorBrush}" Visibility="{x:Bind IsTodo, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                            </Grid>
+
+                                            <!-- Text fields -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind Title}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{x:Bind Details}" FontSize="10.5" Opacity="0.6" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Text="No upcoming items" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind UpcomingItems.Count, Converter={StaticResource EmptyVisibilityConverter}, ConverterParameter=0, Mode=OneWay, FallbackValue=Collapsed}" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

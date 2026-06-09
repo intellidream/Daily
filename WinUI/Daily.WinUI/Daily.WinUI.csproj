@@ -144,6 +144,7 @@
     <Compile Include="..\..\Services\Health\INativeHealthStore.cs" Link="Services\Health\INativeHealthStore.cs" />
     <Compile Include="..\..\Services\Health\MockNativeHealthStore.cs" Link="Services\Health\MockNativeHealthStore.cs" />
     <Compile Include="..\..\Services\Health\SupabaseHealthService.cs" Link="Services\Health\SupabaseHealthService.cs" />
+    <Compile Include="..\..\Services\Auth\EncryptionHelper.cs" Link="Services\Auth\EncryptionHelper.cs" />
     
         <!-- Finances Services -->
     <Compile Include="..\..\Services\Finances\IFinancesService.cs" Link="Services\Finances\IFinancesService.cs" />
@@ -186,6 +187,7 @@
     <PackageReference Include="Syncfusion.Editors.WinUI" Version="33.2.4" />
     <PackageReference Include="Syncfusion.Gauge.WinUI" Version="33.2.4" />
     <PackageReference Include="Syncfusion.Notifications.WinUI" Version="33.2.4" />
+    <PackageReference Include="Syncfusion.Scheduler.WinUI" Version="33.2.4" />
     <PackageReference Include="SmartReader" Version="0.10.2" />
     <PackageReference Include="Supabase" Version="1.1.1" />
     <PackageReference Include="postgrest-csharp" Version="3.5.1" />

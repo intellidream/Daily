@@ -19,7 +19,7 @@ public class WinUIAuthService
     /// Static TCS for the OAuth callback. Set by the protocol activation handler in App.xaml.cs.
     /// Volatile because it's written on the UI thread and read on an activation background thread.
     /// </summary>
-    public static volatile TaskCompletionSource<string>? GoogleAuthTcs;
+    public static volatile TaskCompletionSource<string>? OAuthCallbackTcs;
 
     public bool IsAuthenticated => _supabase.Auth.CurrentSession != null;
     public string? CurrentUserEmail => _supabase.Auth.CurrentSession?.User?.Email;
@@ -90,27 +90,27 @@ public class WinUIAuthService
 
             // 2. Open the system browser
             string? code = null;
-            GoogleAuthTcs = new TaskCompletionSource<string>();
-
+            OAuthCallbackTcs = new TaskCompletionSource<string>();
+            
             try
             {
                 System.Diagnostics.Debug.WriteLine("[WinUIAuth] Opening browser...");
                 await Windows.System.Launcher.LaunchUriAsync(state.Uri);
-
+                
                 System.Diagnostics.Debug.WriteLine("[WinUIAuth] Browser opened. Waiting for callback...");
-
+                
                 // Wait for the callback (up to 2 minutes)
-                var completedTask = await Task.WhenAny(GoogleAuthTcs.Task, Task.Delay(TimeSpan.FromMinutes(2)));
-
-                if (completedTask == GoogleAuthTcs.Task)
+                var completedTask = await Task.WhenAny(OAuthCallbackTcs.Task, Task.Delay(TimeSpan.FromMinutes(2)));
+                
+                if (completedTask == OAuthCallbackTcs.Task)
                 {
                     System.Diagnostics.Debug.WriteLine("[WinUIAuth] Callback received!");
-                    code = await GoogleAuthTcs.Task;
+                    code = await OAuthCallbackTcs.Task;
                 }
                 else
                 {
                     System.Diagnostics.Debug.WriteLine("[WinUIAuth] Login timed out.");
-                    GoogleAuthTcs.TrySetCanceled();
+                    OAuthCallbackTcs.TrySetCanceled();
                 }
             }
             catch (Exception ex)
@@ -120,7 +120,7 @@ public class WinUIAuthService
             }
             finally
             {
-                GoogleAuthTcs = null;
+                OAuthCallbackTcs = null;
             }
 
             // 3. Exchange the code for a session

@@ -67,6 +67,11 @@ namespace Daily.Services
                 // Health (Vitals)
                 await _connection.CreateTableAsync<LocalVitalMetric>().ConfigureAwait(false);
 
+                // Calendar Integration
+                await _connection.CreateTableAsync<LocalCalendarAccount>().ConfigureAwait(false);
+                await _connection.CreateTableAsync<LocalCalendarEvent>().ConfigureAwait(false);
+                await _connection.CreateTableAsync<LocalCalendarTodo>().ConfigureAwait(false);
+
                 // Smart Behavior
                 await _connection.CreateTableAsync<SmartBehaviorEvent>().ConfigureAwait(false);
 

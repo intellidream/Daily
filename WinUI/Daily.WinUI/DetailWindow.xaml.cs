@@ -147,6 +147,7 @@ public sealed partial class DetailWindow : Window
         if (key.Contains("health")) return "Health";
         if (key.Contains("finance")) return "Finances";
         if (key.Contains("rss") || key.Contains("news")) return "News";
+        if (key.Contains("calendar")) return "Calendar";
         return "Detail";
     }
 
@@ -157,6 +158,7 @@ public sealed partial class DetailWindow : Window
         if (pageType == typeof(HealthDetailPage)) return "Health";
         if (pageType == typeof(FinancesDetailPage)) return "Finances";
         if (pageType == typeof(RssFeedDetailPage)) return "News";
+        if (pageType == typeof(CalendarDetailPage)) return "Calendar";
         return "Detail";
     }
 
@@ -170,6 +172,7 @@ public sealed partial class DetailWindow : Window
             "Health" => "\uE95E",   // HealthDetailPage top icon
             "Finances" => "\uE825", // FinancesDetailPage top icon
             "News" => "\uE736",     // RssFeedDetailPage top icon
+            "Calendar" => "\uE787", // CalendarDetailPage top icon
             _ => "\uE706"
         };
     }
@@ -208,6 +211,10 @@ public sealed partial class DetailWindow : Window
             else if (RootFrame.Content is RssFeedDetailPage newsPage)
             {
                 await newsPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is CalendarDetailPage calendarPage)
+            {
+                await calendarPage.RefreshFromTitleBarAsync();
             }
         }
         catch (Exception ex)

@@ -12,7 +12,8 @@ namespace Daily.Services
         Preferences = 1 << 2,
         SavedArticles = 1 << 3,
         RssSubscriptions = 1 << 4,
-        All = Habits | Finances | Preferences | SavedArticles | RssSubscriptions
+        CalendarAccounts = 1 << 5,
+        All = Habits | Finances | Preferences | SavedArticles | RssSubscriptions | CalendarAccounts
     }
 
     [Flags]

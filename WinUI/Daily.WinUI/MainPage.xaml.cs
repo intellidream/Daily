@@ -232,6 +232,8 @@ public sealed partial class MainPage : Page
                     glassContainer.RefreshWithAnimation(() => health.RefreshAsync());
                 else if (glassContainer.Content is FinancesWidgetControl finances)
                     glassContainer.RefreshWithAnimation(() => finances.LoadDataAsync());
+                else if (glassContainer.Content is CalendarWidgetControl calendar)
+                    glassContainer.RefreshWithAnimation(() => calendar.RefreshAsync());
                 else
                     glassContainer.RefreshWithAnimation(() => System.Threading.Tasks.Task.CompletedTask);
             }
@@ -489,6 +491,9 @@ public sealed partial class MainPage : Page
                     break;
                 case "HealthWidget":
                     OpenDetailWindow(typeof(HealthDetailPage));
+                    break;
+                case "CalendarWidget":
+                    OpenDetailWindow(typeof(CalendarDetailPage));
                     break;
             }
         }

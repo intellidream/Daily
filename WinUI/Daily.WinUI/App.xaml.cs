@@ -273,6 +273,9 @@ public partial class App : Application
         services.AddSingleton<Daily.Services.IHabitsService, Daily.Services.HabitsService>();
         services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();
         
+        // Calendar Service
+        services.AddHttpClient<Daily_WinUI.Services.ICalendarService, Daily_WinUI.Services.CalendarService>();
+        
         // Finances Services
         services.AddHttpClient<Daily.Services.Finances.YahooFinanceService>();
         services.AddHttpClient<Daily.Services.Finances.FinnhubService>();
@@ -347,6 +350,20 @@ public partial class App : Application
         {
             var syncService = Services.GetRequiredService<Daily.Services.ISyncService>();
             syncService.StartBackgroundSync();
+
+            // Asynchronously sync calendars on startup
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var calendarService = Services.GetRequiredService<Daily_WinUI.Services.ICalendarService>();
+                    await calendarService.SyncAllCalendarsAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Initial calendar sync failed: {ex.Message}");
+                }
+            });
         }
     }
 
@@ -381,7 +398,7 @@ public partial class App : Application
 
         if (!string.IsNullOrEmpty(code))
         {
-            var tcs = Daily_WinUI.Services.WinUIAuthService.GoogleAuthTcs;
+            var tcs = Daily_WinUI.Services.WinUIAuthService.OAuthCallbackTcs;
             LogDebug($"TCS state: null={tcs == null}, TaskCompleted={(tcs != null ? tcs.Task.IsCompleted.ToString() : "N/A")}");
             if (tcs != null && !tcs.Task.IsCompleted)
             {
@@ -464,7 +481,7 @@ public partial class App : Application
 
             if (!string.IsNullOrEmpty(code))
             {
-                var tcs = Daily_WinUI.Services.WinUIAuthService.GoogleAuthTcs;
+                var tcs = Daily_WinUI.Services.WinUIAuthService.OAuthCallbackTcs;
                 if (tcs != null && !tcs.Task.IsCompleted)
                 {
                     System.Diagnostics.Debug.WriteLine("[WinUIAuth] Setting TCS Result...");
