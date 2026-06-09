@@ -285,16 +285,43 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         VisualStateManager.GoToState(this, state, true);
         ApplyGridDefinitions(state);
 
-        bool isSmall = state == "SmallState";
-        if (WaterDetailedProgressText != null) WaterDetailedProgressText.FontSize = isSmall ? 16 : 24;
+        bool isCompact = state == "SmallState" || state == "NormalState";
+        if (WaterDetailedProgressText != null) WaterDetailedProgressText.FontSize = isCompact ? 16 : 24;
         if (WaterDetailedGoalStack != null) WaterDetailedGoalStack.Visibility = Visibility.Visible;
         if (WaterDetailedSeparator != null) WaterDetailedSeparator.Visibility = Visibility.Visible;
-        if (WaterDetailedList != null) WaterDetailedList.Margin = isSmall ? new Thickness(2, 0, 2, 2) : new Thickness(8, 0, 8, 8);
+        if (WaterDetailedList != null)
+        {
+            WaterDetailedList.Margin = isCompact ? new Thickness(2, 0, 2, 2) : new Thickness(8, 0, 8, 8);
+            WaterDetailedList.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
 
-        if (SmokesDetailedProgressText != null) SmokesDetailedProgressText.FontSize = isSmall ? 16 : 24;
+        if (SmokesDetailedProgressText != null) SmokesDetailedProgressText.FontSize = isCompact ? 16 : 24;
         if (SmokesDetailedGoalStack != null) SmokesDetailedGoalStack.Visibility = Visibility.Visible;
         if (SmokesDetailedSeparator != null) SmokesDetailedSeparator.Visibility = Visibility.Visible;
-        if (SmokesDetailedList != null) SmokesDetailedList.Margin = isSmall ? new Thickness(2, 0, 2, 2) : new Thickness(8, 0, 8, 8);
+        if (SmokesDetailedList != null)
+        {
+            SmokesDetailedList.Margin = isCompact ? new Thickness(2, 0, 2, 2) : new Thickness(8, 0, 8, 8);
+            SmokesDetailedList.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
+
+        if (isCompact)
+        {
+            if (Resources.ContainsKey("DetailedListCompactTemplate"))
+            {
+                var ct = Resources["DetailedListCompactTemplate"] as DataTemplate;
+                if (WaterDetailedList != null && WaterDetailedList.ItemTemplate != ct) WaterDetailedList.ItemTemplate = ct;
+                if (SmokesDetailedList != null && SmokesDetailedList.ItemTemplate != ct) SmokesDetailedList.ItemTemplate = ct;
+            }
+        }
+        else
+        {
+            if (Resources.ContainsKey("DetailedListDefaultTemplate"))
+            {
+                var dt = Resources["DetailedListDefaultTemplate"] as DataTemplate;
+                if (WaterDetailedList != null && WaterDetailedList.ItemTemplate != dt) WaterDetailedList.ItemTemplate = dt;
+                if (SmokesDetailedList != null && SmokesDetailedList.ItemTemplate != dt) SmokesDetailedList.ItemTemplate = dt;
+            }
+        }
     }
 
     private void SetGridPosition(FrameworkElement element, int row, int col, int rowSpan = 1, int colSpan = 1)
