@@ -154,15 +154,15 @@
                         <Setter Target="WaterGaugeViewbox.Height" Value="NaN" />
                         <Setter Target="WaterGaugeViewbox.HorizontalAlignment" Value="Stretch" />
                         <Setter Target="WaterGaugeViewbox.VerticalAlignment" Value="Top" />
-                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="280" />
-                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="280" />
-                        <Setter Target="WaterGauge.Width" Value="280" />
-                        <Setter Target="WaterGauge.Height" Value="280" />
-                        <Setter Target="WaterGauge.MaxWidth" Value="280" />
-                        <Setter Target="WaterGauge.MaxHeight" Value="280" />
-                        <Setter Target="WaterDetailedCenterPanel.MaxWidth" Value="130" />
-                        <Setter Target="WaterDetailedCenterPanel.MaxHeight" Value="130" />
-                        <Setter Target="WaterDetailedCenterStack.Width" Value="120" />
+                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="220" />
+                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="220" />
+                        <Setter Target="WaterGauge.Width" Value="220" />
+                        <Setter Target="WaterGauge.Height" Value="220" />
+                        <Setter Target="WaterGauge.MaxWidth" Value="220" />
+                        <Setter Target="WaterGauge.MaxHeight" Value="220" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxWidth" Value="120" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxHeight" Value="120" />
+                        <Setter Target="WaterDetailedCenterStack.Width" Value="110" />
                         <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         
                         <!-- Water Buttons size & layout (2x2 text) -->
@@ -196,15 +196,15 @@
                         <Setter Target="SmokesGaugeViewbox.Height" Value="NaN" />
                         <Setter Target="SmokesGaugeViewbox.HorizontalAlignment" Value="Stretch" />
                         <Setter Target="SmokesGaugeViewbox.VerticalAlignment" Value="Top" />
-                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="280" />
-                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="280" />
-                        <Setter Target="SmokesGauge.Width" Value="280" />
-                        <Setter Target="SmokesGauge.Height" Value="280" />
-                        <Setter Target="SmokesGauge.MaxWidth" Value="280" />
-                        <Setter Target="SmokesGauge.MaxHeight" Value="280" />
-                        <Setter Target="SmokesDetailedCenterPanel.MaxWidth" Value="130" />
-                        <Setter Target="SmokesDetailedCenterPanel.MaxHeight" Value="130" />
-                        <Setter Target="SmokesDetailedCenterStack.Width" Value="120" />
+                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="220" />
+                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="220" />
+                        <Setter Target="SmokesGauge.Width" Value="220" />
+                        <Setter Target="SmokesGauge.Height" Value="220" />
+                        <Setter Target="SmokesGauge.MaxWidth" Value="220" />
+                        <Setter Target="SmokesGauge.MaxHeight" Value="220" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxWidth" Value="120" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxHeight" Value="120" />
+                        <Setter Target="SmokesDetailedCenterStack.Width" Value="110" />
                         <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         
                         <!-- Smokes Buttons size & layout (2x2 text) -->
@@ -286,8 +286,7 @@
                         <Setter Target="WaterGraphBorder.BorderThickness" Value="0" />
                         <Setter Target="WaterGraphBorder.Padding" Value="0" />
                         <Setter Target="WaterGraphBorder.Height" Value="NaN" />
-                        <Setter Target="WaterLogsList.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterEmptyText.Visibility" Value="Collapsed" />
+
 
                         <Setter Target="SmokesControlsStack.Orientation" Value="Horizontal" />
                         <Setter Target="SmokesControlsStack.Margin" Value="0" />
@@ -343,14 +342,15 @@
                         <Setter Target="SmokesGraphBorder.BorderThickness" Value="0" />
                         <Setter Target="SmokesGraphBorder.Padding" Value="0" />
                         <Setter Target="SmokesGraphBorder.Height" Value="NaN" />
-                        <Setter Target="SmokesLogsList.Visibility" Value="Collapsed" />
-                        <Setter Target="SmokesEmptyText.Visibility" Value="Collapsed" />
+
                     </VisualState.Setters>
                 </VisualState>
                 
                 <!-- LargeState: 2x2, Left splits Gauge/Legend/Buttons vertically, Right gets Extended vertical layout. -->
                 <VisualState x:Name="LargeState">
                     <VisualState.Setters>
+                        <Setter Target="RootGrid.Padding" Value="16,4,16,4" />
+                        <Setter Target="HeaderGrid.Margin" Value="0,0,0,4" />
                         <Setter Target="WaterSimpleCenterPanel.Visibility" Value="Collapsed" />
                         <Setter Target="WaterDetailedCenterPanel.Visibility" Value="Visible" />
                         <Setter Target="WaterControlsStack.Orientation" Value="Vertical" />
@@ -367,17 +367,17 @@
                         <Setter Target="WaterGaugeViewbox.Height" Value="NaN" />
                         <Setter Target="WaterGaugeViewbox.HorizontalAlignment" Value="Stretch" />
                         <Setter Target="WaterGaugeViewbox.VerticalAlignment" Value="Top" />
-                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="280" />
-                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="280" />
-                        <Setter Target="WaterGauge.Width" Value="280" />
-                        <Setter Target="WaterGauge.Height" Value="280" />
-                        <Setter Target="WaterGauge.MaxWidth" Value="280" />
-                        <Setter Target="WaterGauge.MaxHeight" Value="280" />
-                        <Setter Target="WaterDetailedCenterPanel.MaxWidth" Value="130" />
-                        <Setter Target="WaterDetailedCenterPanel.MaxHeight" Value="130" />
-                        <Setter Target="WaterDetailedCenterStack.Width" Value="120" />
+                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="220" />
+                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="220" />
+                        <Setter Target="WaterGauge.Width" Value="220" />
+                        <Setter Target="WaterGauge.Height" Value="220" />
+                        <Setter Target="WaterGauge.MaxWidth" Value="220" />
+                        <Setter Target="WaterGauge.MaxHeight" Value="220" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxWidth" Value="120" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxHeight" Value="120" />
+                        <Setter Target="WaterDetailedCenterStack.Width" Value="110" />
                         <Setter Target="WaterStatsGrid.Visibility" Value="Visible" />
-                        <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Auto" />
+                        <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         
                         <!-- Water Buttons size & layout (2x2 text) -->
                         <Setter Target="WaterBtnLarge.Width" Value="72" />
@@ -392,8 +392,8 @@
                         <Setter Target="WaterBtnTea.Width" Value="72" />
                         <Setter Target="WaterBtnTea.Height" Value="36" />
                         <Setter Target="WaterBtnTeaText.Visibility" Value="Visible" />
-                        <Setter Target="WaterProgressText.FontSize" Value="28" />
-                        <Setter Target="WaterGoalDisplayText.FontSize" Value="11" />
+                        <Setter Target="WaterProgressText.FontSize" Value="24" />
+                        <Setter Target="WaterGoalDisplayText.FontSize" Value="10" />
 
                         <Setter Target="WaterGraphBorder.Margin" Value="0,0,0,12" />
                         <Setter Target="WaterGraphBorder.Height" Value="100" />
@@ -416,17 +416,17 @@
                         <Setter Target="SmokesGaugeViewbox.Height" Value="NaN" />
                         <Setter Target="SmokesGaugeViewbox.HorizontalAlignment" Value="Stretch" />
                         <Setter Target="SmokesGaugeViewbox.VerticalAlignment" Value="Top" />
-                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="280" />
-                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="280" />
-                        <Setter Target="SmokesGauge.Width" Value="280" />
-                        <Setter Target="SmokesGauge.Height" Value="280" />
-                        <Setter Target="SmokesGauge.MaxWidth" Value="280" />
-                        <Setter Target="SmokesGauge.MaxHeight" Value="280" />
-                        <Setter Target="SmokesDetailedCenterPanel.MaxWidth" Value="130" />
-                        <Setter Target="SmokesDetailedCenterPanel.MaxHeight" Value="130" />
-                        <Setter Target="SmokesDetailedCenterStack.Width" Value="120" />
+                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="220" />
+                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="220" />
+                        <Setter Target="SmokesGauge.Width" Value="220" />
+                        <Setter Target="SmokesGauge.Height" Value="220" />
+                        <Setter Target="SmokesGauge.MaxWidth" Value="220" />
+                        <Setter Target="SmokesGauge.MaxHeight" Value="220" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxWidth" Value="120" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxHeight" Value="120" />
+                        <Setter Target="SmokesDetailedCenterStack.Width" Value="110" />
                         <Setter Target="SmokesStatsGrid.Visibility" Value="Visible" />
-                        <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Auto" />
+                        <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         
                         <!-- Smokes Buttons size & layout (2x2 text) -->
                         <Setter Target="SmokesBtnCigarette.Width" Value="72" />
@@ -442,8 +442,8 @@
                         <Setter Target="SmokesBtnCigarillo.Height" Value="36" />
                         <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Visible" />
                         
-                        <Setter Target="SmokesProgressText.FontSize" Value="28" />
-                        <Setter Target="SmokesGoalDisplayText.FontSize" Value="11" />
+                        <Setter Target="SmokesProgressText.FontSize" Value="24" />
+                        <Setter Target="SmokesGoalDisplayText.FontSize" Value="10" />
 
                         <Setter Target="SmokesGraphBorder.Margin" Value="0,0,0,12" />
                         <Setter Target="SmokesGraphBorder.Height" Value="100" />
@@ -701,12 +701,12 @@
                                     <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" MinWidth="70" MaxWidth="100" />
+                                            <ColumnDefinition Width="*" MinWidth="85" />
                                         </Grid.ColumnDefinitions>
                                         <FontIcon Grid.Column="0" Glyph="{x:Bind Icon}" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="{x:Bind ColorHex}" Margin="0,0,12,0" />
-                                        <TextBlock Grid.Column="1" Text="{x:Bind Label}" FontSize="14" VerticalAlignment="Center" />
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Label}" FontSize="14" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
                                             <TextBlock Text="{x:Bind Amount}" FontSize="14" FontWeight="SemiBold" />
                                             <TextBlock Text="{x:Bind TimeText}" FontSize="11" Opacity="0.5" VerticalAlignment="Center" />
                                         </StackPanel>
@@ -901,12 +901,12 @@
                                     <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" MinWidth="70" MaxWidth="100" />
+                                            <ColumnDefinition Width="*" MinWidth="85" />
                                         </Grid.ColumnDefinitions>
                                         <FontIcon Grid.Column="0" Glyph="{x:Bind Icon}" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="{x:Bind ColorHex}" Margin="0,0,12,0" />
-                                        <TextBlock Grid.Column="1" Text="{x:Bind Label}" FontSize="14" VerticalAlignment="Center" />
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Label}" FontSize="14" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
                                             <TextBlock Text="{x:Bind Amount}" FontSize="14" FontWeight="SemiBold" />
                                             <TextBlock Text="{x:Bind TimeText}" FontSize="11" Opacity="0.5" VerticalAlignment="Center" />
                                         </StackPanel>
