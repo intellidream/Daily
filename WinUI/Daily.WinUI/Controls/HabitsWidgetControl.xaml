@@ -68,23 +68,23 @@
                         <Setter Target="WaterButtonsStack.ColumnSpacing" Value="6" />
                         <Setter Target="WaterButtonsStack.RowSpacing" Value="6" />
                         
-                        <!-- Water Buttons size & layout (2x2 icon-only) -->
-                        <Setter Target="WaterBtnLarge.Width" Value="36" />
+                        <!-- Water Buttons size & layout (2x2 text) -->
+                        <Setter Target="WaterBtnLarge.Width" Value="72" />
                         <Setter Target="WaterBtnLarge.Height" Value="36" />
                         <Setter Target="WaterBtnLarge.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnLargeText.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterBtnSmall.Width" Value="36" />
+                        <Setter Target="WaterBtnLargeText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnSmall.Width" Value="72" />
                         <Setter Target="WaterBtnSmall.Height" Value="36" />
                         <Setter Target="WaterBtnSmall.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnSmallText.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterBtnCoffee.Width" Value="36" />
+                        <Setter Target="WaterBtnSmallText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnCoffee.Width" Value="72" />
                         <Setter Target="WaterBtnCoffee.Height" Value="36" />
                         <Setter Target="WaterBtnCoffee.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnCoffeeText.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterBtnTea.Width" Value="36" />
+                        <Setter Target="WaterBtnCoffeeText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnTea.Width" Value="72" />
                         <Setter Target="WaterBtnTea.Height" Value="36" />
                         <Setter Target="WaterBtnTea.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnTeaText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnTeaText.Visibility" Value="Visible" />
                         
                         <Setter Target="WaterProgressText.FontSize" Value="20" />
                         <Setter Target="WaterGoalDisplayText.FontSize" Value="9" />
@@ -113,23 +113,23 @@
                         <Setter Target="SmokesButtonsStack.ColumnSpacing" Value="6" />
                         <Setter Target="SmokesButtonsStack.RowSpacing" Value="6" />
                         
-                        <!-- Smokes Buttons size & layout (2x2 icon-only) -->
-                        <Setter Target="SmokesBtnCigarette.Width" Value="36" />
+                        <!-- Smokes Buttons size & layout (2x2 text) -->
+                        <Setter Target="SmokesBtnCigarette.Width" Value="72" />
                         <Setter Target="SmokesBtnCigarette.Height" Value="36" />
                         <Setter Target="SmokesBtnCigarette.CornerRadius" Value="18" />
-                        <Setter Target="SmokesBtnCigaretteText.Visibility" Value="Collapsed" />
-                        <Setter Target="SmokesBtnHeated.Width" Value="36" />
+                        <Setter Target="SmokesBtnCigaretteText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnHeated.Width" Value="72" />
                         <Setter Target="SmokesBtnHeated.Height" Value="36" />
                         <Setter Target="SmokesBtnHeated.CornerRadius" Value="18" />
-                        <Setter Target="SmokesBtnHeatedText.Visibility" Value="Collapsed" />
-                        <Setter Target="SmokesBtnRolled.Width" Value="36" />
+                        <Setter Target="SmokesBtnHeatedText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnRolled.Width" Value="72" />
                         <Setter Target="SmokesBtnRolled.Height" Value="36" />
                         <Setter Target="SmokesBtnRolled.CornerRadius" Value="18" />
-                        <Setter Target="SmokesBtnRolledText.Visibility" Value="Collapsed" />
-                        <Setter Target="SmokesBtnCigarillo.Width" Value="36" />
+                        <Setter Target="SmokesBtnRolledText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnCigarillo.Width" Value="72" />
                         <Setter Target="SmokesBtnCigarillo.Height" Value="36" />
                         <Setter Target="SmokesBtnCigarillo.CornerRadius" Value="18" />
-                        <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Visible" />
                         
                         <Setter Target="SmokesProgressText.FontSize" Value="20" />
                         <Setter Target="SmokesGoalDisplayText.FontSize" Value="9" />
@@ -262,23 +262,23 @@
                         <Setter Target="WaterButtonsStack.ColumnSpacing" Value="6" />
                         <Setter Target="WaterButtonsStack.RowSpacing" Value="6" />
                         
-                        <!-- Water Buttons size & layout (2x2 icon-only) -->
-                        <Setter Target="WaterBtnLarge.Width" Value="36" />
+                        <!-- Water Buttons size & layout (2x2 text) -->
+                        <Setter Target="WaterBtnLarge.Width" Value="72" />
                         <Setter Target="WaterBtnLarge.Height" Value="36" />
                         <Setter Target="WaterBtnLarge.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnLargeText.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterBtnSmall.Width" Value="36" />
+                        <Setter Target="WaterBtnLargeText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnSmall.Width" Value="72" />
                         <Setter Target="WaterBtnSmall.Height" Value="36" />
                         <Setter Target="WaterBtnSmall.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnSmallText.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterBtnCoffee.Width" Value="36" />
+                        <Setter Target="WaterBtnSmallText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnCoffee.Width" Value="72" />
                         <Setter Target="WaterBtnCoffee.Height" Value="36" />
                         <Setter Target="WaterBtnCoffee.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnCoffeeText.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterBtnTea.Width" Value="36" />
+                        <Setter Target="WaterBtnCoffeeText.Visibility" Value="Visible" />
+                        <Setter Target="WaterBtnTea.Width" Value="72" />
                         <Setter Target="WaterBtnTea.Height" Value="36" />
                         <Setter Target="WaterBtnTea.CornerRadius" Value="18" />
-                        <Setter Target="WaterBtnTeaText.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterBtnTeaText.Visibility" Value="Visible" />
                         
                         <Setter Target="WaterGraphBorder.Visibility" Value="Visible" />
                         <Setter Target="WaterGraphBorder.Margin" Value="0" />
@@ -318,23 +318,23 @@
                         <Setter Target="SmokesButtonsStack.ColumnSpacing" Value="6" />
                         <Setter Target="SmokesButtonsStack.RowSpacing" Value="6" />
                         
-                        <!-- Smokes Buttons size & layout (2x2 icon-only) -->
-                        <Setter Target="SmokesBtnCigarette.Width" Value="36" />
+                        <!-- Smokes Buttons size & layout (2x2 text) -->
+                        <Setter Target="SmokesBtnCigarette.Width" Value="72" />
                         <Setter Target="SmokesBtnCigarette.Height" Value="36" />
                         <Setter Target="SmokesBtnCigarette.CornerRadius" Value="18" />
-                        <Setter Target="SmokesBtnCigaretteText.Visibility" Value="Collapsed" />
-                        <Setter Target="SmokesBtnHeated.Width" Value="36" />
+                        <Setter Target="SmokesBtnCigaretteText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnHeated.Width" Value="72" />
                         <Setter Target="SmokesBtnHeated.Height" Value="36" />
                         <Setter Target="SmokesBtnHeated.CornerRadius" Value="18" />
-                        <Setter Target="SmokesBtnHeatedText.Visibility" Value="Collapsed" />
-                        <Setter Target="SmokesBtnRolled.Width" Value="36" />
+                        <Setter Target="SmokesBtnHeatedText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnRolled.Width" Value="72" />
                         <Setter Target="SmokesBtnRolled.Height" Value="36" />
                         <Setter Target="SmokesBtnRolled.CornerRadius" Value="18" />
-                        <Setter Target="SmokesBtnRolledText.Visibility" Value="Collapsed" />
-                        <Setter Target="SmokesBtnCigarillo.Width" Value="36" />
+                        <Setter Target="SmokesBtnRolledText.Visibility" Value="Visible" />
+                        <Setter Target="SmokesBtnCigarillo.Width" Value="72" />
                         <Setter Target="SmokesBtnCigarillo.Height" Value="36" />
                         <Setter Target="SmokesBtnCigarillo.CornerRadius" Value="18" />
-                        <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Visible" />
                         
                         <Setter Target="SmokesGraphBorder.Visibility" Value="Visible" />
                         <Setter Target="SmokesGraphBorder.Margin" Value="0" />

@@ -421,8 +421,8 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
             case "NormalState":
                 // Outer layouts: left radial gauge, right extended panel
-                // If width >= 650, there's enough space to show both chart and logs side-by-side
-                bool hasSpace = width >= 650;
+                // Hide logs when width < 660
+                bool hasSpace = width >= 660;
 
                 WaterExtRow0.Height = new GridLength(1, GridUnitType.Star);
                 WaterExtRow1.Height = new GridLength(0, GridUnitType.Pixel);
@@ -434,36 +434,38 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
                 if (hasSpace)
                 {
-                    if (width >= 720)
-                    {
-                        RootGrid.Padding = new Thickness(36, 12, 36, 14);
-                        WaterExtendedPanel.Margin = new Thickness(16, 0, 0, 0);
-                        SmokesExtendedPanel.Margin = new Thickness(16, 0, 0, 0);
+                    // Linear interpolation between width 660 and 850
+                    double progress = (width - 660.0) / (850.0 - 660.0);
+                    progress = Math.Max(0.0, Math.Min(1.0, progress));
 
-                        WaterExtCol0.Width = new GridLength(1.3, GridUnitType.Star);
-                        WaterExtCol1.Width = new GridLength(1.0, GridUnitType.Star);
+                    // Padding Left/Right goes from 16 to 48px
+                    double padX = 16.0 + progress * (48.0 - 16.0);
+                    // Padding Top/Bottom goes from 10 to 12px
+                    double padY = 10.0 + progress * (12.0 - 10.0);
+                    RootGrid.Padding = new Thickness(padX, padY, padX, 14.0);
 
-                        SmokesExtCol0.Width = new GridLength(1.3, GridUnitType.Star);
-                        SmokesExtCol1.Width = new GridLength(1.0, GridUnitType.Star);
+                    // Gap between left and right column: 10 to 24px
+                    double extMarginLeft = 10.0 + progress * (24.0 - 10.0);
+                    WaterExtendedPanel.Margin = new Thickness(extMarginLeft, 0, 0, 0);
+                    SmokesExtendedPanel.Margin = new Thickness(extMarginLeft, 0, 0, 0);
 
-                        WaterControlsStack.Spacing = 24;
-                        SmokesControlsStack.Spacing = 24;
-                    }
-                    else
-                    {
-                        RootGrid.Padding = new Thickness(24, 12, 24, 14);
-                        WaterExtendedPanel.Margin = new Thickness(12, 0, 0, 0);
-                        SmokesExtendedPanel.Margin = new Thickness(12, 0, 0, 0);
+                    // Column spacing inside extended panel (gap between chart and logs): 8 to 20px
+                    double colSpacing = 8.0 + progress * (20.0 - 8.0);
+                    WaterExtendedPanel.ColumnSpacing = colSpacing;
+                    SmokesExtendedPanel.ColumnSpacing = colSpacing;
 
-                        WaterExtCol0.Width = new GridLength(1.0, GridUnitType.Star);
-                        WaterExtCol1.Width = new GridLength(1.2, GridUnitType.Star);
+                    // Spacing inside radial/buttons stack: 10 to 20px
+                    double controlsSpacing = 10.0 + progress * (20.0 - 10.0);
+                    WaterControlsStack.Spacing = controlsSpacing;
+                    SmokesControlsStack.Spacing = controlsSpacing;
 
-                        SmokesExtCol0.Width = new GridLength(1.0, GridUnitType.Star);
-                        SmokesExtCol1.Width = new GridLength(1.2, GridUnitType.Star);
-
-                        WaterControlsStack.Spacing = 16;
-                        SmokesControlsStack.Spacing = 16;
-                    }
+                    // Ratios for chart vs logs
+                    double chartRatio = 1.0 + progress * 0.3; // 1.0 to 1.3
+                    double logsRatio = 1.2 - progress * 0.2;  // 1.2 to 1.0
+                    WaterExtCol0.Width = new GridLength(chartRatio, GridUnitType.Star);
+                    WaterExtCol1.Width = new GridLength(logsRatio, GridUnitType.Star);
+                    SmokesExtCol0.Width = new GridLength(chartRatio, GridUnitType.Star);
+                    SmokesExtCol1.Width = new GridLength(logsRatio, GridUnitType.Star);
 
                     WaterMainCol0.Width = GridLength.Auto;
                     WaterMainCol1.Width = new GridLength(1.0, GridUnitType.Star);
@@ -479,13 +481,13 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
                 else
                 {
                     RootGrid.Padding = new Thickness(10, 8, 10, 8);
-                    WaterExtendedPanel.Margin = new Thickness(12, 0, 0, 0);
-                    SmokesExtendedPanel.Margin = new Thickness(12, 0, 0, 0);
+                    WaterExtendedPanel.Margin = new Thickness(10, 0, 0, 0);
+                    SmokesExtendedPanel.Margin = new Thickness(10, 0, 0, 0);
 
-                    WaterMainCol0.Width = new GridLength(1.5, GridUnitType.Star);
+                    WaterMainCol0.Width = new GridLength(1.4, GridUnitType.Star);
                     WaterMainCol1.Width = new GridLength(1, GridUnitType.Star);
 
-                    SmokesMainCol0.Width = new GridLength(1.5, GridUnitType.Star);
+                    SmokesMainCol0.Width = new GridLength(1.4, GridUnitType.Star);
                     SmokesMainCol1.Width = new GridLength(1, GridUnitType.Star);
 
                     WaterExtCol0.Width = new GridLength(1, GridUnitType.Star);
