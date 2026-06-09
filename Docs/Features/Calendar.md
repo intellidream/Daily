@@ -34,9 +34,8 @@ To secure OAuth access tokens and passwords synced to the cloud:
 - **SQLite Cache**: Connected accounts are cached locally in the SQLite database and pushed to Supabase (`calendar_accounts` table) to sync connected credentials across user devices.
 
 ### 2.2 Redirect URI Scheme
-- The native WinUI app registers the custom protocol handler `com.intellidream.daily.desktop`.
-- All OAuth flows (Google, Microsoft) use `com.intellidream.daily.desktop://login-callback` as their redirect URI.
-- A named-pipe forwarder in `App.xaml.cs` captures this callback, extracts the authorization code, and routes it to the active auth task.
+- **Microsoft OAuth**: Uses the custom protocol handler `com.intellidream.daily.desktop://login-callback` as its redirect URI. A named-pipe forwarder in [App.xaml.cs](file:///c:/Users/mihai/Source/repos/Daily/WinUI/Daily.WinUI/App.xaml.cs) captures this callback and routes the auth code to the active login task.
+- **Google OAuth**: Uses a loopback address redirect URI (`http://localhost:<port>/`) via a dynamically started local `HttpListener` on the client, complying with Google's OAuth 2.0 policy for native desktop applications.
 
 ### 2.3 Data Models (`Models/CalendarModels.cs` & `Models/RemoteCalendarModels.cs`)
 

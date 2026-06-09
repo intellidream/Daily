@@ -245,6 +245,7 @@ namespace Daily_WinUI.Views
 
         private async void AccountActive_Toggled(object sender, RoutedEventArgs e)
         {
+            if (IsLoading) return;
             if (sender is ToggleSwitch ts && ts.DataContext is DisplayAccount acc)
             {
                 await _calendarService.ToggleAccountActiveAsync(acc.Id, ts.IsOn);

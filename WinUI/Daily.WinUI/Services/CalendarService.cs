@@ -66,6 +66,8 @@ namespace Daily_WinUI.Services
             var account = await _databaseService.Connection.Table<LocalCalendarAccount>().Where(x => x.Id == accountId).FirstOrDefaultAsync();
             if (account != null)
             {
+                if (account.IsActive == isActive) return; // Prevent loop/redundant updates if value hasn't changed
+                
                 account.IsActive = isActive;
                 account.UpdatedAt = DateTime.UtcNow;
                 account.SyncedAt = null;
@@ -84,6 +86,8 @@ namespace Daily_WinUI.Services
             var account = await _databaseService.Connection.Table<LocalCalendarAccount>().Where(x => x.Id == accountId).FirstOrDefaultAsync();
             if (account != null)
             {
+                if (account.Color.Equals(hexColor, StringComparison.OrdinalIgnoreCase)) return; // Prevent redundant updates
+                
                 account.Color = hexColor;
                 account.UpdatedAt = DateTime.UtcNow;
                 account.SyncedAt = null;
