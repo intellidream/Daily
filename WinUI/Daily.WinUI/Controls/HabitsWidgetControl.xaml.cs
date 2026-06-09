@@ -216,6 +216,11 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
     private void UpdateVisualState()
     {
+        if (!IsLoaded)
+        {
+            return;
+        }
+
         string state = "NormalState";
 
         double width = ActualWidth;
@@ -279,6 +284,17 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
         VisualStateManager.GoToState(this, state, true);
         ApplyGridDefinitions(state);
+
+        bool isSmall = state == "SmallState";
+        if (WaterDetailedProgressText != null) WaterDetailedProgressText.FontSize = isSmall ? 16 : 24;
+        if (WaterDetailedGoalStack != null) WaterDetailedGoalStack.Visibility = Visibility.Visible;
+        if (WaterDetailedSeparator != null) WaterDetailedSeparator.Visibility = Visibility.Visible;
+        if (WaterDetailedList != null) WaterDetailedList.Margin = isSmall ? new Thickness(2, 0, 2, 2) : new Thickness(8, 0, 8, 8);
+
+        if (SmokesDetailedProgressText != null) SmokesDetailedProgressText.FontSize = isSmall ? 16 : 24;
+        if (SmokesDetailedGoalStack != null) SmokesDetailedGoalStack.Visibility = Visibility.Visible;
+        if (SmokesDetailedSeparator != null) SmokesDetailedSeparator.Visibility = Visibility.Visible;
+        if (SmokesDetailedList != null) SmokesDetailedList.Margin = isSmall ? new Thickness(2, 0, 2, 2) : new Thickness(8, 0, 8, 8);
     }
 
     private void SetGridPosition(FrameworkElement element, int row, int col, int rowSpan = 1, int colSpan = 1)
@@ -349,25 +365,25 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
             case "NormalState":
                 // Outer layouts: 2 columns side-by-side, top row only
-                WaterMainCol0.Width = new GridLength(1, GridUnitType.Star);
-                WaterMainCol1.Width = new GridLength(1.2, GridUnitType.Star);
+                WaterMainCol0.Width = new GridLength(1.5, GridUnitType.Star);
+                WaterMainCol1.Width = new GridLength(1, GridUnitType.Star);
                 WaterMainRow0.Height = new GridLength(1, GridUnitType.Star);
                 WaterMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
 
-                SmokesMainCol0.Width = new GridLength(1, GridUnitType.Star);
-                SmokesMainCol1.Width = new GridLength(1.2, GridUnitType.Star);
+                SmokesMainCol0.Width = new GridLength(1.5, GridUnitType.Star);
+                SmokesMainCol1.Width = new GridLength(1, GridUnitType.Star);
                 SmokesMainRow0.Height = new GridLength(1, GridUnitType.Star);
                 SmokesMainRow1.Height = new GridLength(0, GridUnitType.Pixel);
 
                 // Extended panels grid: 2 columns side-by-side (Graph left, Logs right), Row 0 only active
                 WaterExtCol0.Width = new GridLength(1, GridUnitType.Star);
-                WaterExtCol1.Width = new GridLength(1, GridUnitType.Star);
+                WaterExtCol1.Width = new GridLength(0, GridUnitType.Pixel);
                 WaterExtRow0.Height = new GridLength(1, GridUnitType.Star);
                 WaterExtRow1.Height = new GridLength(0, GridUnitType.Pixel);
                 WaterExtRow2.Height = new GridLength(0, GridUnitType.Pixel);
 
                 SmokesExtCol0.Width = new GridLength(1, GridUnitType.Star);
-                SmokesExtCol1.Width = new GridLength(1, GridUnitType.Star);
+                SmokesExtCol1.Width = new GridLength(0, GridUnitType.Pixel);
                 SmokesExtRow0.Height = new GridLength(1, GridUnitType.Star);
                 SmokesExtRow1.Height = new GridLength(0, GridUnitType.Pixel);
                 SmokesExtRow2.Height = new GridLength(0, GridUnitType.Pixel);

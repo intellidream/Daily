@@ -14,21 +14,31 @@
     <Grid x:Name="RootGrid" Padding="16,12,16,14">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="AdaptiveStates">
-                <!-- SmallState: 1x1, Gauge/Buttons stack horizontally. Extended is hidden. -->
                 <VisualState x:Name="SmallState">
                     <VisualState.Setters>
-                        <Setter Target="RootGrid.Padding" Value="8,4,8,4" />
-                        <Setter Target="HeaderGrid.Margin" Value="0,0,0,4" />
+                        <Setter Target="RootGrid.Padding" Value="10,8,10,8" />
+                        <Setter Target="HeaderGrid.Margin" Value="0,0,0,6" />
                         
                         <Setter Target="WaterControlsStack.Orientation" Value="Horizontal" />
+                        <Setter Target="WaterControlsStack.Margin" Value="0" />
                         <Setter Target="WaterLegend.Visibility" Value="Collapsed" />
                         <Setter Target="WaterLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="WaterExtendedPanel.Visibility" Value="Collapsed" />
-                        <Setter Target="WaterGaugeViewbox.Width" Value="100" />
-                        <Setter Target="WaterGaugeViewbox.Height" Value="100" />
+                        <Setter Target="WaterGaugeViewbox.Width" Value="145" />
+                        <Setter Target="WaterGaugeViewbox.Height" Value="145" />
+                        <Setter Target="WaterGauge.Width" Value="145" />
+                        <Setter Target="WaterGauge.Height" Value="145" />
+                        <Setter Target="WaterGauge.MaxWidth" Value="145" />
+                        <Setter Target="WaterGauge.MaxHeight" Value="145" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxWidth" Value="90" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxHeight" Value="90" />
+                        <Setter Target="WaterDetailedCenterStack.Width" Value="80" />
+                        <Setter Target="WaterSimpleCenterPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterDetailedCenterPanel.Visibility" Value="Visible" />
                         <Setter Target="WaterStatsGrid.Visibility" Value="Collapsed" />
                         <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
-                        <Setter Target="WaterControlsStack.Spacing" Value="12" />
+                        <Setter Target="WaterScroller.Padding" Value="0" />
+                        <Setter Target="WaterControlsStack.Spacing" Value="10" />
                         <Setter Target="WaterLegendAndButtons.Spacing" Value="0" />
                         <Setter Target="WaterButtonsStack.ColumnSpacing" Value="6" />
                         <Setter Target="WaterButtonsStack.RowSpacing" Value="6" />
@@ -55,14 +65,25 @@
                         <Setter Target="WaterGoalDisplayText.FontSize" Value="9" />
  
                         <Setter Target="SmokesControlsStack.Orientation" Value="Horizontal" />
+                        <Setter Target="SmokesControlsStack.Margin" Value="0" />
                         <Setter Target="SmokesLegend.Visibility" Value="Collapsed" />
                         <Setter Target="SmokesLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="SmokesExtendedPanel.Visibility" Value="Collapsed" />
-                        <Setter Target="SmokesGaugeViewbox.Width" Value="100" />
-                        <Setter Target="SmokesGaugeViewbox.Height" Value="100" />
+                        <Setter Target="SmokesGaugeViewbox.Width" Value="145" />
+                        <Setter Target="SmokesGaugeViewbox.Height" Value="145" />
+                        <Setter Target="SmokesGauge.Width" Value="145" />
+                        <Setter Target="SmokesGauge.Height" Value="145" />
+                        <Setter Target="SmokesGauge.MaxWidth" Value="145" />
+                        <Setter Target="SmokesGauge.MaxHeight" Value="145" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxWidth" Value="90" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxHeight" Value="90" />
+                        <Setter Target="SmokesDetailedCenterStack.Width" Value="80" />
+                        <Setter Target="SmokesSimpleCenterPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesDetailedCenterPanel.Visibility" Value="Visible" />
                         <Setter Target="SmokesStatsGrid.Visibility" Value="Collapsed" />
                         <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
-                        <Setter Target="SmokesControlsStack.Spacing" Value="12" />
+                        <Setter Target="SmokesScroller.Padding" Value="0" />
+                        <Setter Target="SmokesControlsStack.Spacing" Value="10" />
                         <Setter Target="SmokesLegendAndButtons.Spacing" Value="0" />
                         <Setter Target="SmokesButtonsStack.ColumnSpacing" Value="6" />
                         <Setter Target="SmokesButtonsStack.RowSpacing" Value="6" />
@@ -93,9 +114,6 @@
                 <!-- TallState: 1x2 Adaption, Left side of large widget: Radial Gauge, internal breakdown list, and buttons underneath. -->
                 <VisualState x:Name="TallState">
                     <VisualState.Setters>
-                        <Setter Target="RootGrid.Padding" Value="16,4,16,4" />
-                        <Setter Target="HeaderGrid.Margin" Value="0,0,0,4" />
-                        
                         <Setter Target="WaterSimpleCenterPanel.Visibility" Value="Collapsed" />
                         <Setter Target="WaterDetailedCenterPanel.Visibility" Value="Visible" />
                         <Setter Target="WaterControlsStack.Orientation" Value="Vertical" />
@@ -111,8 +129,15 @@
                         <Setter Target="WaterGaugeViewbox.Height" Value="NaN" />
                         <Setter Target="WaterGaugeViewbox.HorizontalAlignment" Value="Stretch" />
                         <Setter Target="WaterGaugeViewbox.VerticalAlignment" Value="Top" />
-                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="240" />
-                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="240" />
+                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="280" />
+                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="280" />
+                        <Setter Target="WaterGauge.Width" Value="280" />
+                        <Setter Target="WaterGauge.Height" Value="280" />
+                        <Setter Target="WaterGauge.MaxWidth" Value="280" />
+                        <Setter Target="WaterGauge.MaxHeight" Value="280" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxWidth" Value="130" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxHeight" Value="130" />
+                        <Setter Target="WaterDetailedCenterStack.Width" Value="120" />
                         <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         
                         <!-- Water Buttons size & layout (2x2 text) -->
@@ -146,8 +171,15 @@
                         <Setter Target="SmokesGaugeViewbox.Height" Value="NaN" />
                         <Setter Target="SmokesGaugeViewbox.HorizontalAlignment" Value="Stretch" />
                         <Setter Target="SmokesGaugeViewbox.VerticalAlignment" Value="Top" />
-                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="240" />
-                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="240" />
+                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="280" />
+                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="280" />
+                        <Setter Target="SmokesGauge.Width" Value="280" />
+                        <Setter Target="SmokesGauge.Height" Value="280" />
+                        <Setter Target="SmokesGauge.MaxWidth" Value="280" />
+                        <Setter Target="SmokesGauge.MaxHeight" Value="280" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxWidth" Value="130" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxHeight" Value="130" />
+                        <Setter Target="SmokesDetailedCenterStack.Width" Value="120" />
                         <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         
                         <!-- Smokes Buttons size & layout (2x2 text) -->
@@ -172,8 +204,8 @@
                 <!-- NormalState (Wide): 2x1, Left splits Gauge/Buttons horizontally, Right gets Extended side-by-side. -->
                 <VisualState x:Name="NormalState">
                     <VisualState.Setters>
-                        <Setter Target="RootGrid.Padding" Value="16,4,16,4" />
-                        <Setter Target="HeaderGrid.Margin" Value="0,0,0,4" />
+                        <Setter Target="RootGrid.Padding" Value="12,10,12,10" />
+                        <Setter Target="HeaderGrid.Margin" Value="0,0,0,8" />
                         
                         <Setter Target="WaterControlsStack.Orientation" Value="Horizontal" />
                         <Setter Target="WaterControlsStack.Margin" Value="0" />
@@ -185,9 +217,18 @@
                         <Setter Target="WaterExtendedPanel.Margin" Value="16,0,0,0" />
                         <Setter Target="WaterGaugeViewbox.Width" Value="NaN" />
                         <Setter Target="WaterGaugeViewbox.Height" Value="NaN" />
-                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="180" />
-                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="180" />
+                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="280" />
+                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="280" />
                         <Setter Target="WaterGaugeViewbox.VerticalAlignment" Value="Stretch" />
+                        <Setter Target="WaterGauge.Width" Value="280" />
+                        <Setter Target="WaterGauge.Height" Value="280" />
+                        <Setter Target="WaterGauge.MaxWidth" Value="280" />
+                        <Setter Target="WaterGauge.MaxHeight" Value="280" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxWidth" Value="130" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxHeight" Value="130" />
+                        <Setter Target="WaterDetailedCenterStack.Width" Value="120" />
+                        <Setter Target="WaterSimpleCenterPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterDetailedCenterPanel.Visibility" Value="Visible" />
                         <Setter Target="WaterStatsGrid.Visibility" Value="Collapsed" />
                         <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         <Setter Target="WaterScroller.Padding" Value="0" />
@@ -212,13 +253,14 @@
                         <Setter Target="WaterBtnTea.CornerRadius" Value="18" />
                         <Setter Target="WaterBtnTeaText.Visibility" Value="Collapsed" />
                         
-                        <Setter Target="WaterProgressText.FontSize" Value="18" />
-                        <Setter Target="WaterGoalDisplayText.FontSize" Value="9" />
-                        
-                        <Setter Target="WaterGraphBorder.Margin" Value="0,0,8,0" />
+                        <Setter Target="WaterGraphBorder.Visibility" Value="Visible" />
+                        <Setter Target="WaterGraphBorder.Margin" Value="0" />
+                        <Setter Target="WaterGraphBorder.Background" Value="Transparent" />
+                        <Setter Target="WaterGraphBorder.BorderThickness" Value="0" />
+                        <Setter Target="WaterGraphBorder.Padding" Value="0" />
                         <Setter Target="WaterGraphBorder.Height" Value="NaN" />
-                        <Setter Target="WaterLogsList.Margin" Value="8,0,0,0" />
-                        <Setter Target="WaterEmptyText.Margin" Value="8,0,0,0" />
+                        <Setter Target="WaterLogsList.Visibility" Value="Collapsed" />
+                        <Setter Target="WaterEmptyText.Visibility" Value="Collapsed" />
 
                         <Setter Target="SmokesControlsStack.Orientation" Value="Horizontal" />
                         <Setter Target="SmokesControlsStack.Margin" Value="0" />
@@ -230,9 +272,18 @@
                         <Setter Target="SmokesExtendedPanel.Margin" Value="16,0,0,0" />
                         <Setter Target="SmokesGaugeViewbox.Width" Value="NaN" />
                         <Setter Target="SmokesGaugeViewbox.Height" Value="NaN" />
-                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="180" />
-                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="180" />
+                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="280" />
+                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="280" />
                         <Setter Target="SmokesGaugeViewbox.VerticalAlignment" Value="Stretch" />
+                        <Setter Target="SmokesGauge.Width" Value="280" />
+                        <Setter Target="SmokesGauge.Height" Value="280" />
+                        <Setter Target="SmokesGauge.MaxWidth" Value="280" />
+                        <Setter Target="SmokesGauge.MaxHeight" Value="280" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxWidth" Value="130" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxHeight" Value="130" />
+                        <Setter Target="SmokesDetailedCenterStack.Width" Value="120" />
+                        <Setter Target="SmokesSimpleCenterPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesDetailedCenterPanel.Visibility" Value="Visible" />
                         <Setter Target="SmokesStatsGrid.Visibility" Value="Collapsed" />
                         <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         <Setter Target="SmokesScroller.Padding" Value="0" />
@@ -257,21 +308,20 @@
                         <Setter Target="SmokesBtnCigarillo.CornerRadius" Value="18" />
                         <Setter Target="SmokesBtnCigarilloText.Visibility" Value="Collapsed" />
                         
-                        <Setter Target="SmokesProgressText.FontSize" Value="18" />
-                        <Setter Target="SmokesGoalDisplayText.FontSize" Value="9" />
-                        
-                        <Setter Target="SmokesGraphBorder.Margin" Value="0,0,8,0" />
+                        <Setter Target="SmokesGraphBorder.Visibility" Value="Visible" />
+                        <Setter Target="SmokesGraphBorder.Margin" Value="0" />
+                        <Setter Target="SmokesGraphBorder.Background" Value="Transparent" />
+                        <Setter Target="SmokesGraphBorder.BorderThickness" Value="0" />
+                        <Setter Target="SmokesGraphBorder.Padding" Value="0" />
                         <Setter Target="SmokesGraphBorder.Height" Value="NaN" />
-                        <Setter Target="SmokesLogsList.Margin" Value="8,0,0,0" />
-                        <Setter Target="SmokesEmptyText.Margin" Value="8,0,0,0" />
+                        <Setter Target="SmokesLogsList.Visibility" Value="Collapsed" />
+                        <Setter Target="SmokesEmptyText.Visibility" Value="Collapsed" />
                     </VisualState.Setters>
                 </VisualState>
                 
                 <!-- LargeState: 2x2, Left splits Gauge/Legend/Buttons vertically, Right gets Extended vertical layout. -->
                 <VisualState x:Name="LargeState">
                     <VisualState.Setters>
-                        <Setter Target="RootGrid.Padding" Value="16,4,16,4" />
-                        <Setter Target="HeaderGrid.Margin" Value="0,0,0,4" />
                         <Setter Target="WaterSimpleCenterPanel.Visibility" Value="Collapsed" />
                         <Setter Target="WaterDetailedCenterPanel.Visibility" Value="Visible" />
                         <Setter Target="WaterControlsStack.Orientation" Value="Vertical" />
@@ -288,8 +338,15 @@
                         <Setter Target="WaterGaugeViewbox.Height" Value="NaN" />
                         <Setter Target="WaterGaugeViewbox.HorizontalAlignment" Value="Stretch" />
                         <Setter Target="WaterGaugeViewbox.VerticalAlignment" Value="Top" />
-                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="240" />
-                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="240" />
+                        <Setter Target="WaterGaugeViewbox.MaxWidth" Value="280" />
+                        <Setter Target="WaterGaugeViewbox.MaxHeight" Value="280" />
+                        <Setter Target="WaterGauge.Width" Value="280" />
+                        <Setter Target="WaterGauge.Height" Value="280" />
+                        <Setter Target="WaterGauge.MaxWidth" Value="280" />
+                        <Setter Target="WaterGauge.MaxHeight" Value="280" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxWidth" Value="130" />
+                        <Setter Target="WaterDetailedCenterPanel.MaxHeight" Value="130" />
+                        <Setter Target="WaterDetailedCenterStack.Width" Value="120" />
                         <Setter Target="WaterStatsGrid.Visibility" Value="Visible" />
                         <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Auto" />
                         
@@ -330,8 +387,15 @@
                         <Setter Target="SmokesGaugeViewbox.Height" Value="NaN" />
                         <Setter Target="SmokesGaugeViewbox.HorizontalAlignment" Value="Stretch" />
                         <Setter Target="SmokesGaugeViewbox.VerticalAlignment" Value="Top" />
-                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="240" />
-                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="240" />
+                        <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="280" />
+                        <Setter Target="SmokesGaugeViewbox.MaxHeight" Value="280" />
+                        <Setter Target="SmokesGauge.Width" Value="280" />
+                        <Setter Target="SmokesGauge.Height" Value="280" />
+                        <Setter Target="SmokesGauge.MaxWidth" Value="280" />
+                        <Setter Target="SmokesGauge.MaxHeight" Value="280" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxWidth" Value="130" />
+                        <Setter Target="SmokesDetailedCenterPanel.MaxHeight" Value="130" />
+                        <Setter Target="SmokesDetailedCenterStack.Width" Value="120" />
                         <Setter Target="SmokesStatsGrid.Visibility" Value="Visible" />
                         <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Auto" />
                         
@@ -415,7 +479,7 @@
                             
                             <!-- Gauge -->
                             <Viewbox x:Name="WaterGaugeViewbox" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <gauge:SfRadialGauge x:Name="WaterGauge" Width="200" Height="200" HorizontalAlignment="Center" VerticalAlignment="Center" MaxHeight="200" MaxWidth="200" MinHeight="50" MinWidth="50">
+                                <gauge:SfRadialGauge x:Name="WaterGauge" Margin="0" Padding="0" Width="280" Height="280" HorizontalAlignment="Center" VerticalAlignment="Center" MaxHeight="280" MaxWidth="280" MinHeight="50" MinWidth="50">
                                     <gauge:SfRadialGauge.Axes>
                                         <gauge:RadialAxis x:Name="WaterRadialAxis" StartAngle="135" EndAngle="405" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowAxisLine="False" TickLengthUnit="Factor" MajorTickLength="0.265" MinorTickLength="0.13" MinorTicksPerInterval="4" TickOffset="0" RadiusFactor="1">
                                             <gauge:RadialAxis.Ranges>
@@ -432,18 +496,18 @@
                                                             </StackPanel>
 
                                                             <!-- Detailed Center Panel (visible in LargeState only) -->
-                                                            <ScrollViewer x:Name="WaterDetailedCenterPanel" Visibility="Collapsed" MaxWidth="115" MaxHeight="115" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
-                                                                <StackPanel Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center" Width="105">
+                                                            <ScrollViewer x:Name="WaterDetailedCenterPanel" Visibility="Collapsed" MaxWidth="130" MaxHeight="130" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                                                                <StackPanel x:Name="WaterDetailedCenterStack" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center" Width="120">
                                                                     <StackPanel Spacing="0" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{x:Bind WaterProgressColor, Mode=OneWay}" />
-                                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="3" Opacity="0.6">
+                                                                        <TextBlock x:Name="WaterDetailedProgressText" Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{x:Bind WaterProgressColor, Mode=OneWay}" />
+                                                                        <StackPanel x:Name="WaterDetailedGoalStack" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="3" Opacity="0.6">
                                                                             <TextBlock Text="of" FontSize="11" VerticalAlignment="Center" />
                                                                             <TextBlock Text="{x:Bind GoalValueDisplay, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
                                                                             <TextBlock Text="ml" FontSize="11" VerticalAlignment="Center" />
                                                                         </StackPanel>
                                                                     </StackPanel>
-                                                                    <Border BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
-                                                                    <ItemsControl ItemsSource="{x:Bind WaterBreakdown, Mode=OneWay}" HorizontalAlignment="Stretch" Margin="8,0,8,8">
+                                                                    <Border x:Name="WaterDetailedSeparator" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
+                                                                    <ItemsControl x:Name="WaterDetailedList" ItemsSource="{x:Bind WaterBreakdown, Mode=OneWay}" HorizontalAlignment="Stretch" Margin="8,0,8,8">
                                                                         <ItemsControl.ItemTemplate>
                                                                             <DataTemplate x:DataType="local:WidgetBreakdownItem">
                                                                                 <Grid Margin="0,2,0,2" HorizontalAlignment="Stretch">
@@ -658,7 +722,7 @@
                             
                             <!-- Gauge -->
                             <Viewbox x:Name="SmokesGaugeViewbox" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <gauge:SfRadialGauge x:Name="SmokesGauge" Width="200" Height="200" HorizontalAlignment="Center" VerticalAlignment="Center" MaxHeight="200" MaxWidth="200" MinHeight="50" MinWidth="50">
+                                <gauge:SfRadialGauge x:Name="SmokesGauge" Margin="0" Padding="0" Width="280" Height="280" HorizontalAlignment="Center" VerticalAlignment="Center" MaxHeight="280" MaxWidth="280" MinHeight="50" MinWidth="50">
                                     <gauge:SfRadialGauge.Axes>
                                         <gauge:RadialAxis x:Name="SmokesRadialAxis" StartAngle="135" EndAngle="405" Minimum="0" Maximum="{x:Bind GoalValue, Mode=OneWay}" ShowLabels="False" ShowAxisLine="False" TickLengthUnit="Factor" MajorTickLength="0.265" MinorTickLength="0.13" MinorTicksPerInterval="4" TickOffset="0" RadiusFactor="1">
                                             <gauge:RadialAxis.Ranges>
@@ -675,18 +739,18 @@
                                                             </StackPanel>
 
                                                             <!-- Detailed Center Panel (visible in LargeState only) -->
-                                                            <ScrollViewer x:Name="SmokesDetailedCenterPanel" Visibility="Collapsed" MaxWidth="115" MaxHeight="115" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
-                                                                <StackPanel Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center" Width="105">
+                                                            <ScrollViewer x:Name="SmokesDetailedCenterPanel" Visibility="Collapsed" MaxWidth="130" MaxHeight="130" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                                                                <StackPanel x:Name="SmokesDetailedCenterStack" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center" Width="120">
                                                                     <StackPanel Spacing="0" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                        <TextBlock Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{x:Bind GaugeColor, Mode=OneWay}" />
-                                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="3" Opacity="0.6">
-                                                                            <TextBlock Text="of" FontSize="11" VerticalAlignment="Center" />
-                                                                            <TextBlock Text="{x:Bind GoalValueDisplay, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                                                            <TextBlock Text="smokes" FontSize="11" VerticalAlignment="Center" />
-                                                                        </StackPanel>
-                                                                    </StackPanel>
-                                                                    <Border BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
-                                                                    <ItemsControl ItemsSource="{x:Bind SmokesBreakdown, Mode=OneWay}" HorizontalAlignment="Stretch" Margin="8,0,8,8">
+                                                                         <TextBlock x:Name="SmokesDetailedProgressText" Text="{x:Bind CurrentProgress, Mode=OneWay}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{x:Bind GaugeColor, Mode=OneWay}" />
+                                                                         <StackPanel x:Name="SmokesDetailedGoalStack" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="3" Opacity="0.6">
+                                                                             <TextBlock Text="of" FontSize="11" VerticalAlignment="Center" />
+                                                                             <TextBlock Text="{x:Bind GoalValueDisplay, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                             <TextBlock Text="smokes" FontSize="11" VerticalAlignment="Center" />
+                                                                         </StackPanel>
+                                                                     </StackPanel>
+                                                                     <Border x:Name="SmokesDetailedSeparator" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
+                                                                     <ItemsControl x:Name="SmokesDetailedList" ItemsSource="{x:Bind SmokesBreakdown, Mode=OneWay}" HorizontalAlignment="Stretch" Margin="8,0,8,8">
                                                                         <ItemsControl.ItemTemplate>
                                                                             <DataTemplate x:DataType="local:WidgetBreakdownItem">
                                                                                 <Grid Margin="0,2,0,2" HorizontalAlignment="Stretch">
