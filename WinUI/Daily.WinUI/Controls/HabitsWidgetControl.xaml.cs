@@ -221,16 +221,15 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             return;
         }
 
-        string state = "NormalState";
-
         double width = ActualWidth;
         double height = ActualHeight;
 
-        if (width == 0 || height == 0)
+        if (width <= 0 || height <= 0 || double.IsNaN(width) || double.IsNaN(height))
         {
-            width = Width;
-            height = Height;
+            return;
         }
+
+        string state = "NormalState";
 
         if (DataContext is WidgetModel widget)
         {
@@ -282,7 +281,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             }
         }
 
-        VisualStateManager.GoToState(this, state, true);
+        VisualStateManager.GoToState(this, state, false);
         ApplyGridDefinitions(state, width);
 
         bool isCompact = state == "SmallState" || state == "NormalState";
@@ -668,10 +667,14 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
     private async void HabitsWidgetControl_Loaded(object sender, RoutedEventArgs e)
     {
         _habitsService.OnHabitsUpdated += HabitsService_OnHabitsUpdated;
-        UpdateVisualState();
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            UpdateVisualState();
+        });
         var task = LoadDataAsync();
         MainPage.Current?.RegisterLoadingTask(task);
         await task;
+        UpdateVisualState();
     }
 
     private void HabitsWidgetControl_Unloaded(object sender, RoutedEventArgs e)

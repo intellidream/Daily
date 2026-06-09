@@ -229,7 +229,6 @@
                 <!-- NormalState (Wide): 2x1, Left splits Gauge/Buttons horizontally, Right gets Extended side-by-side. -->
                 <VisualState x:Name="NormalState">
                     <VisualState.Setters>
-                        <Setter Target="RootGrid.Padding" Value="10,8,10,8" />
                         <Setter Target="HeaderGrid.Margin" Value="0,0,0,6" />
                         
                         <Setter Target="WaterControlsStack.Orientation" Value="Horizontal" />
@@ -239,7 +238,6 @@
                         <Setter Target="WaterLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="WaterLegendAndButtons.VerticalAlignment" Value="Center" />
                         <Setter Target="WaterExtendedPanel.Visibility" Value="Visible" />
-                        <Setter Target="WaterExtendedPanel.Margin" Value="16,0,0,0" />
                         <Setter Target="WaterGaugeViewbox.Width" Value="150" />
                         <Setter Target="WaterGaugeViewbox.Height" Value="150" />
                         <Setter Target="WaterGaugeViewbox.MaxWidth" Value="150" />
@@ -257,7 +255,6 @@
                         <Setter Target="WaterStatsGrid.Visibility" Value="Collapsed" />
                         <Setter Target="WaterScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         <Setter Target="WaterScroller.Padding" Value="0" />
-                        <Setter Target="WaterControlsStack.Spacing" Value="10" />
                         <Setter Target="WaterLegendAndButtons.Spacing" Value="0" />
                         <Setter Target="WaterButtonsStack.ColumnSpacing" Value="6" />
                         <Setter Target="WaterButtonsStack.RowSpacing" Value="6" />
@@ -295,7 +292,6 @@
                         <Setter Target="SmokesLegendAndButtons.Orientation" Value="Vertical" />
                         <Setter Target="SmokesLegendAndButtons.VerticalAlignment" Value="Center" />
                         <Setter Target="SmokesExtendedPanel.Visibility" Value="Visible" />
-                        <Setter Target="SmokesExtendedPanel.Margin" Value="16,0,0,0" />
                         <Setter Target="SmokesGaugeViewbox.Width" Value="150" />
                         <Setter Target="SmokesGaugeViewbox.Height" Value="150" />
                         <Setter Target="SmokesGaugeViewbox.MaxWidth" Value="150" />
@@ -313,7 +309,6 @@
                         <Setter Target="SmokesStatsGrid.Visibility" Value="Collapsed" />
                         <Setter Target="SmokesScroller.VerticalScrollBarVisibility" Value="Disabled" />
                         <Setter Target="SmokesScroller.Padding" Value="0" />
-                        <Setter Target="SmokesControlsStack.Spacing" Value="10" />
                         <Setter Target="SmokesLegendAndButtons.Spacing" Value="0" />
                         <Setter Target="SmokesButtonsStack.ColumnSpacing" Value="6" />
                         <Setter Target="SmokesButtonsStack.RowSpacing" Value="6" />
