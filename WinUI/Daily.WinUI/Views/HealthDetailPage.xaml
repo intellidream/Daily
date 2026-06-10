@@ -455,7 +455,7 @@
                                             <TextBlock Text="{x:Bind FormattedValue}" FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                             <Grid Height="50" Width="14" HorizontalAlignment="Center">
                                                 <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="7" Height="50" Width="14" />
-                                                <Border Background="#FF9800" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneWay}" Width="14" VerticalAlignment="Bottom" />
+                                                <Border Background="#FF9800" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneTime}" Width="14" VerticalAlignment="Bottom" />
                                             </Grid>
                                             <TextBlock Text="{x:Bind Label}" FontSize="10" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                         </StackPanel>
@@ -524,7 +524,7 @@
                                             <TextBlock Text="{x:Bind FormattedValue}" FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                             <Grid Height="50" Width="14" HorizontalAlignment="Center">
                                                 <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="7" Height="50" Width="14" />
-                                                <Border Background="#FF5252" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneWay}" Width="14" VerticalAlignment="Bottom" />
+                                                <Border Background="#FF5252" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneTime}" Width="14" VerticalAlignment="Bottom" />
                                             </Grid>
                                             <TextBlock Text="{x:Bind Label}" FontSize="10" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                         </StackPanel>
@@ -593,7 +593,7 @@
                                             <TextBlock Text="{x:Bind FormattedValue}" FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                             <Grid Height="50" Width="14" HorizontalAlignment="Center">
                                                 <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="7" Height="50" Width="14" />
-                                                <Border Background="#7C4DFF" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneWay}" Width="14" VerticalAlignment="Bottom" />
+                                                <Border Background="#7C4DFF" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneTime}" Width="14" VerticalAlignment="Bottom" />
                                             </Grid>
                                             <TextBlock Text="{x:Bind Label}" FontSize="10" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                         </StackPanel>
@@ -662,7 +662,7 @@
                                             <TextBlock Text="{x:Bind FormattedValue}" FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                             <Grid Height="50" Width="14" HorizontalAlignment="Center">
                                                 <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="7" Height="50" Width="14" />
-                                                <Border Background="#FF9800" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneWay}" Width="14" VerticalAlignment="Bottom" />
+                                                <Border Background="#FF9800" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneTime}" Width="14" VerticalAlignment="Bottom" />
                                             </Grid>
                                             <TextBlock Text="{x:Bind Label}" FontSize="10" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                         </StackPanel>
@@ -731,7 +731,7 @@
                                             <TextBlock Text="{x:Bind FormattedValue}" FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                             <Grid Height="50" Width="14" HorizontalAlignment="Center">
                                                 <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="7" Height="50" Width="14" />
-                                                <Border Background="#2196F3" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneWay}" Width="14" VerticalAlignment="Bottom" />
+                                                <Border Background="#2196F3" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneTime}" Width="14" VerticalAlignment="Bottom" />
                                             </Grid>
                                             <TextBlock Text="{x:Bind Label}" FontSize="10" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                         </StackPanel>
@@ -800,7 +800,7 @@
                                             <TextBlock Text="{x:Bind FormattedValue}" FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                             <Grid Height="50" Width="14" HorizontalAlignment="Center">
                                                 <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="7" Height="50" Width="14" />
-                                                <Border Background="#9C27B0" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneWay}" Width="14" VerticalAlignment="Bottom" />
+                                                <Border Background="#9C27B0" CornerRadius="7" Height="{x:Bind BarHeight, Mode=OneTime}" Width="14" VerticalAlignment="Bottom" />
                                             </Grid>
                                             <TextBlock Text="{x:Bind Label}" FontSize="10" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                         </StackPanel>

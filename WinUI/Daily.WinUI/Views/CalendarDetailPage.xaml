@@ -22,7 +22,7 @@
         </Grid.RowDefinitions>
 
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="340" />
+            <ColumnDefinition x:Name="SidebarColumn" Width="340" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -34,6 +34,9 @@
             </Grid.ColumnDefinitions>
             
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <ToggleButton x:Name="ToggleSidebarBtn" IsChecked="True" Checked="ToggleSidebar_Checked" Unchecked="ToggleSidebar_Unchecked" Background="Transparent" BorderThickness="0" Width="36" Height="36" Padding="0" Margin="0,0,4,0" ToolTipService.ToolTip="Toggle Sidebar">
+                    <FontIcon Glyph="&#xE700;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" />
+                </ToggleButton>
                 <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource AppGlassColorBrush}">
                     <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
@@ -46,6 +49,7 @@
 
         <!-- Left Sidebar: Accounts Panel -->
         <Border Grid.Row="1" Grid.Column="0" 
+                x:Name="SidebarPanel"
                 Background="{ThemeResource AppGlassColorBrush}" 
                 BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
                 BorderThickness="0,1,1,0" 
@@ -79,7 +83,7 @@
 
                                         <!-- Provider Icon -->
                                         <Border Grid.Column="0" Grid.Row="0" Width="32" Height="32" CornerRadius="16" Background="{x:Bind ColorBrush}" Margin="0,0,10,0">
-                                            <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
 
                                         <!-- Email Address -->
@@ -121,83 +125,58 @@
                     </ItemsControl>
                 </ScrollViewer>
 
-                <!-- Bottom Panel: Add new connections -->
-                <StackPanel Grid.Row="2" Spacing="8">
-                    <TextBlock Text="Link New Calendar" FontSize="12" FontWeight="Bold" Opacity="0.6" Margin="0,0,0,4" />
-                    
-                    <Button Click="ConnectGoogle_Click" HorizontalAlignment="Stretch" Padding="12,8" CornerRadius="8" Background="#100078D4" BorderBrush="#200078D4">
-                        <Grid HorizontalAlignment="Stretch">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <FontIcon Glyph="&#xE8A9;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF0078D4" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1" Text="Connect Google Calendar" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF0078D4" />
-                        </Grid>
-                    </Button>
-                    
-                    <Button Click="ConnectMicrosoft_Click" HorizontalAlignment="Stretch" Padding="12,8" CornerRadius="8" Background="#10107C41" BorderBrush="#20107C41">
-                        <Grid HorizontalAlignment="Stretch">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <FontIcon Glyph="&#xE193;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF107C41" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1" Text="Connect Microsoft Outlook" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF107C41" />
-                        </Grid>
-                    </Button>
-                    
-                    <Button Click="ConnectYahoo_Click" HorizontalAlignment="Stretch" Padding="12,8" CornerRadius="8" Background="#10512BD4" BorderBrush="#20512BD4">
-                        <Grid HorizontalAlignment="Stretch">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <FontIcon Glyph="&#xE114;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF512BD4" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1" Text="Connect Yahoo Calendar" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF512BD4" />
-                        </Grid>
-                    </Button>
-                </StackPanel>
+                <!-- Bottom Panel: Add new connections (Expander) -->
+                <Expander Grid.Row="2"
+                          Header="Link New Calendar"
+                          HorizontalAlignment="Stretch"
+                          Background="Transparent"
+                          BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                          BorderThickness="1"
+                          CornerRadius="8"
+                          IsExpanded="False"
+                          Padding="0">
+                    <StackPanel Spacing="8" Padding="12">
+                        <Button Click="ConnectGoogle_Click" HorizontalAlignment="Stretch" Padding="12,8" CornerRadius="8" Background="#100078D4" BorderBrush="#200078D4">
+                            <Grid HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xEC1F;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF0078D4" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Connect Google Calendar" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF0078D4" />
+                            </Grid>
+                        </Button>
+                        
+                        <Button Click="ConnectMicrosoft_Click" HorizontalAlignment="Stretch" Padding="12,8" CornerRadius="8" Background="#10107C41" BorderBrush="#20107C41">
+                            <Grid HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xECD8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF107C41" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Connect Microsoft Outlook" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF107C41" />
+                            </Grid>
+                        </Button>
+                        
+                        <Button Click="ConnectYahoo_Click" HorizontalAlignment="Stretch" Padding="12,8" CornerRadius="8" Background="#10512BD4" BorderBrush="#20512BD4">
+                            <Grid HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xED73;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FF512BD4" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Connect Yahoo Calendar" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF512BD4" />
+                            </Grid>
+                        </Button>
+                    </StackPanel>
+                </Expander>
             </Grid>
         </Border>
 
         <!-- Right Pane: Syncfusion Scheduler -->
         <Grid Grid.Row="1" Grid.Column="1" Padding="20">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <!-- Scheduler custom header controls -->
-            <Grid Grid.Row="0" Margin="0,0,0,16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <!-- Navigators -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                    <Button Click="Prev_Click" Content="&#xE76B;" FontFamily="Segoe Fluent Icons" Background="Transparent" BorderThickness="0" Width="32" Height="32" ToolTipService.ToolTip="Previous" />
-                    <Button Click="Today_Click" Content="Today" Padding="12,4" CornerRadius="6" VerticalAlignment="Center" />
-                    <Button Click="Next_Click" Content="&#xE76C;" FontFamily="Segoe Fluent Icons" Background="Transparent" BorderThickness="0" Width="32" Height="32" ToolTipService.ToolTip="Next" />
-                </StackPanel>
-
-                <!-- Current Month Header Display -->
-                <TextBlock x:Name="SchedulerDateHeader" Grid.Column="1" Text="Calendar Display Date" FontSize="20" FontWeight="Bold" FontFamily="Segoe UI Variable Display" HorizontalAlignment="Center" VerticalAlignment="Center" />
-
-                <!-- View switch buttons -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="4" CornerRadius="8">
-                    <Button Click="ViewSwitcher_Click" Tag="Day" Content="Day" CornerRadius="4" Padding="12,4" Background="Transparent" BorderThickness="0" />
-                    <Button Click="ViewSwitcher_Click" Tag="Week" Content="Week" CornerRadius="4" Padding="12,4" Background="Transparent" BorderThickness="0" />
-                    <Button Click="ViewSwitcher_Click" Tag="Month" Content="Month" CornerRadius="4" Padding="12,4" Background="Transparent" BorderThickness="0" />
-                    <Button Click="ViewSwitcher_Click" Tag="WorkWeek" Content="Work Week" CornerRadius="4" Padding="12,4" Background="Transparent" BorderThickness="0" />
-                </StackPanel>
-            </Grid>
-
             <!-- SfScheduler Control -->
             <scheduler:SfScheduler x:Name="Scheduler" 
-                                   Grid.Row="1"
                                    ViewType="Month" 
                                    ItemsSource="{x:Bind Appointments, Mode=OneWay}"
                                    AppointmentTapped="Scheduler_AppointmentTapped">
@@ -213,6 +192,19 @@
                 </scheduler:SfScheduler.AppointmentMapping>
             </scheduler:SfScheduler>
 
+            <!-- Scheduler Controls Overlay (Aligned with SfScheduler Header) -->
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,9,20,0" Height="32" Canvas.ZIndex="1">
+                <!-- Today Button -->
+                <Button Click="Today_Click" Content="Today" Padding="12,4" CornerRadius="6" FontSize="12" Height="32" VerticalAlignment="Center" />
+                
+                <!-- View switch buttons -->
+                <StackPanel Orientation="Horizontal" Spacing="2" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="3" CornerRadius="8" Height="32" VerticalAlignment="Center">
+                    <Button Click="ViewSwitcher_Click" Tag="Day" Content="Day" CornerRadius="5" Padding="10,3" FontSize="11" Background="Transparent" BorderThickness="0" Height="24" />
+                    <Button Click="ViewSwitcher_Click" Tag="Week" Content="Week" CornerRadius="5" Padding="10,3" FontSize="11" Background="Transparent" BorderThickness="0" Height="24" />
+                    <Button Click="ViewSwitcher_Click" Tag="WorkWeek" Content="Work" CornerRadius="5" Padding="10,3" FontSize="11" Background="Transparent" BorderThickness="0" Height="24" />
+                    <Button Click="ViewSwitcher_Click" Tag="Month" Content="Month" CornerRadius="5" Padding="10,3" FontSize="11" Background="Transparent" BorderThickness="0" Height="24" />
+                </StackPanel>
+            </StackPanel>
         </Grid>
 
         <!-- Progress Overlay -->

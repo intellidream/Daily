@@ -49,9 +49,9 @@ namespace Daily_WinUI.Views
 
         public string IconGlyph => AccountType.ToLowerInvariant() switch
         {
-            "google" => "\xE8A9;", // People icon or custom
-            "yahoo" => "\xE114;",  // Mail/alternate or custom
-            _ => "\xE193;"         // Outlook/Microsoft logo glyph approximation
+            "google" => "\uEC1F", // brand-google
+            "yahoo" => "\uED73",  // brand-yahoo
+            _ => "\uECD8"         // brand-windows
         };
 
         public Microsoft.UI.Xaml.Media.Brush ColorBrush => GetSolidBrush(Color);
@@ -146,9 +146,6 @@ namespace Daily_WinUI.Views
             base.OnNavigatedTo(e);
             _calendarService.OnCalendarDataChanged += OnCalendarDataChanged;
             await LoadDataAsync();
-            
-            // Set current date on scheduler header
-            UpdateSchedulerHeaderDate();
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -307,7 +304,7 @@ namespace Daily_WinUI.Views
                 listener.Prefixes.Add(redirectUri);
                 listener.Start();
 
-                var authUrl = $"https://accounts.google.com/o/oauth2/v2/auth?client_id={Secrets.WindowsClientId}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("https://www.googleapis.com/auth/calendar.readonly")}&access_type=offline&prompt=consent&state={state}";
+                var authUrl = $"https://accounts.google.com/o/oauth2/v2/auth?client_id={Secrets.WindowsClientId}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("https://www.googleapis.com/auth/calendar.readonly")}&access_type=offline&prompt=select_account&state={state}";
 
                 await Launcher.LaunchUriAsync(new Uri(authUrl));
 
@@ -426,7 +423,7 @@ namespace Daily_WinUI.Views
                 var codeVerifier = GenerateCodeVerifier();
                 var codeChallenge = GenerateCodeChallenge(codeVerifier);
 
-                var authUrl = $"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={Secrets.MicrosoftClientId}&response_type=code&redirect_uri={Uri.EscapeDataString("com.intellidream.daily.desktop://login-callback")}&response_mode=query&scope={Uri.EscapeDataString("offline_access https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Tasks.Read")}&prompt=consent&code_challenge={codeChallenge}&code_challenge_method=S256";
+                var authUrl = $"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={Secrets.MicrosoftClientId}&response_type=code&redirect_uri={Uri.EscapeDataString("com.intellidream.daily.desktop://login-callback")}&response_mode=query&scope={Uri.EscapeDataString("offline_access https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Tasks.Read")}&prompt=select_account&code_challenge={codeChallenge}&code_challenge_method=S256";
 
                 WinUIAuthService.OAuthCallbackTcs = new TaskCompletionSource<string>();
                 await Launcher.LaunchUriAsync(new Uri(authUrl));
@@ -872,6 +869,35 @@ namespace Daily_WinUI.Views
             }
         }
 
+        private void ToggleSidebar_Checked(object sender, RoutedEventArgs e)
+        {
+            if (SidebarColumn != null)
+            {
+                SidebarColumn.Width = new GridLength(340);
+            }
+            if (SidebarPanel != null)
+            {
+                SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            }
+        }
+
+        private void ToggleSidebar_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (SidebarColumn != null)
+            {
+                SidebarColumn.Width = new GridLength(0);
+            }
+            if (SidebarPanel != null)
+            {
+                SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            }
+        }
+
+        private void Today_Click(object sender, RoutedEventArgs e)
+        {
+            Scheduler.DisplayDate = DateTime.Today;
+        }
+
         private void ViewSwitcher_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.Tag is string viewTypeStr)
@@ -882,42 +908,12 @@ namespace Daily_WinUI.Views
                     "Week" => SchedulerViewType.Week,
                     "WorkWeek" => SchedulerViewType.WorkWeek,
                     "Month" => SchedulerViewType.Month,
-                     _ => SchedulerViewType.Month
+                    _ => SchedulerViewType.Month
                 };
-                UpdateSchedulerHeaderDate();
             }
         }
 
-        private void Prev_Click(object sender, RoutedEventArgs e)
-        {
-            Scheduler.Backward();
-            UpdateSchedulerHeaderDate();
-        }
 
-        private void Next_Click(object sender, RoutedEventArgs e)
-        {
-            Scheduler.Forward();
-            UpdateSchedulerHeaderDate();
-        }
-
-        private void Today_Click(object sender, RoutedEventArgs e)
-        {
-            Scheduler.DisplayDate = DateTime.Today;
-            UpdateSchedulerHeaderDate();
-        }
-
-        private void Scheduler_ViewChanged(object sender, ViewChangedEventArgs e)
-        {
-            UpdateSchedulerHeaderDate();
-        }
-
-        private void UpdateSchedulerHeaderDate()
-        {
-            if (Scheduler == null || SchedulerDateHeader == null) return;
-            
-            var displayDate = Scheduler.DisplayDate;
-            SchedulerDateHeader.Text = displayDate.ToString("MMMM yyyy");
-        }
 
         private async void Scheduler_AppointmentTapped(object sender, AppointmentTappedArgs e)
         {
