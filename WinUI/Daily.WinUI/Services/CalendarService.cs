@@ -189,8 +189,8 @@ namespace Daily_WinUI.Services
 
         private async Task RefreshTokenIfNeededAsync(LocalCalendarAccount account)
         {
-            // Yahoo uses App Passwords so token refreshing is not needed
-            if (account.AccountType.Equals("Yahoo", StringComparison.OrdinalIgnoreCase)) return;
+            // Yahoo uses App Passwords or OAuth. If App Password (no RefreshToken), skip refreshing.
+            if (account.AccountType.Equals("Yahoo", StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(account.RefreshToken)) return;
 
             // Check expiry with a 5-minute buffer
             if (DateTime.UtcNow.AddMinutes(5) < account.TokenExpiresAt.ToUniversalTime()) return;
@@ -269,6 +269,53 @@ namespace Daily_WinUI.Services
                 else
                 {
                     throw new Exception($"Microsoft Token Refresh HTTP {response.StatusCode}");
+                }
+            }
+            else if (account.AccountType.Equals("Yahoo", StringComparison.OrdinalIgnoreCase))
+            {
+                var decryptedRefreshToken = Daily.Services.Auth.EncryptionHelper.Decrypt(account.RefreshToken, account.UserId);
+                var redirectUri = string.IsNullOrEmpty(Secrets.YahooRedirectUri) ? "https://localhost:50389/" : Secrets.YahooRedirectUri;
+
+                var content = new FormUrlEncodedContent(new[]
+                {
+                    new KeyValuePair<string, string>("grant_type", "refresh_token"),
+                    new KeyValuePair<string, string>("refresh_token", decryptedRefreshToken),
+                    new KeyValuePair<string, string>("redirect_uri", redirectUri)
+                });
+
+                var request = new HttpRequestMessage(HttpMethod.Post, "https://api.login.yahoo.com/oauth2/get_token");
+                request.Content = content;
+
+                var authBytes = Encoding.UTF8.GetBytes($"{Secrets.YahooClientId}:{Secrets.YahooClientSecret}");
+                request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+                var response = await _httpClient.SendAsync(request);
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    using var doc = JsonDocument.Parse(json);
+                    var root = doc.RootElement;
+                    var accessToken = root.GetProperty("access_token").GetString() ?? string.Empty;
+                    if (root.TryGetProperty("refresh_token", out var refToken))
+                    {
+                        var newRefreshToken = refToken.GetString() ?? string.Empty;
+                        if (!string.IsNullOrEmpty(newRefreshToken))
+                        {
+                            account.RefreshToken = Daily.Services.Auth.EncryptionHelper.Encrypt(newRefreshToken, account.UserId);
+                        }
+                    }
+                    account.AccessToken = Daily.Services.Auth.EncryptionHelper.Encrypt(accessToken, account.UserId);
+                    var expiresIn = root.GetProperty("expires_in").GetInt32();
+                    account.TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
+                    
+                    account.SyncedAt = null; // Mark dirty
+                    await _databaseService.Connection.UpdateAsync(account);
+                    Log($"[CalendarService] Yahoo token refreshed successfully.");
+                }
+                else
+                {
+                    var errorDetails = await response.Content.ReadAsStringAsync();
+                    throw new Exception($"Yahoo Token Refresh HTTP {response.StatusCode}: {errorDetails}");
                 }
             }
         }
@@ -520,15 +567,28 @@ namespace Daily_WinUI.Services
 
         private async Task SyncYahooCalendarAsync(LocalCalendarAccount account)
         {
-            // Simple CalDAV sync using username + App Password (stored in AccessToken)
+            // Simple CalDAV sync using username + App Password or OAuth Bearer token
             // Yahoo CalDAV URL: https://caldav.calendar.yahoo.com
-            // CalDAV uses HTTP basic auth
             
             var user = account.Email;
-            var appPassword = Daily.Services.Auth.EncryptionHelper.Decrypt(account.AccessToken, account.UserId);
+            var decryptedToken = Daily.Services.Auth.EncryptionHelper.Decrypt(account.AccessToken, account.UserId);
+            var isOAuth = !string.IsNullOrEmpty(account.RefreshToken);
 
             var baseAddress = "https://caldav.calendar.yahoo.com";
             
+            void ApplyAuth(HttpRequestMessage request)
+            {
+                if (isOAuth)
+                {
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", decryptedToken);
+                }
+                else
+                {
+                    var authBytes = Encoding.UTF8.GetBytes($"{user}:{decryptedToken}");
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+                }
+            }
+
             // Step 1: Query collection list to find calendar paths
             // We do a simple propfind request
             var propfindXml = @"<d:propfind xmlns:d=""DAV:"">
@@ -537,8 +597,7 @@ namespace Daily_WinUI.Services
 
             var propRequest = new HttpRequestMessage(new HttpMethod("PROPFIND"), $"{baseAddress}/dav/{user}/Calendar");
             propRequest.Headers.TryAddWithoutValidation("Depth", "1");
-            var authBytes = Encoding.UTF8.GetBytes($"{user}:{appPassword}");
-            propRequest.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+            ApplyAuth(propRequest);
             propRequest.Content = new StringContent(propfindXml, Encoding.UTF8, "text/xml");
 
             var propResponse = await _httpClient.SendAsync(propRequest);
@@ -546,95 +605,241 @@ namespace Daily_WinUI.Services
             {
                 throw new Exception($"Yahoo CalDAV collection query HTTP {propResponse.StatusCode}");
             }
+            var propContent = await propResponse.Content.ReadAsStringAsync();
+            Log($"[CalendarService] Yahoo PROPFIND response: {propContent}");
 
-            // Parse response to find calendar URLs. If parsing is complex, we target the default user calendar path:
-            // https://caldav.calendar.yahoo.com/dav/{email}/Calendar/calendar/
-            // Many Yahoo calendars default to `/dav/{email}/Calendar/calendar` or `/dav/{email}/Calendar/calendar/`
-            // Let's do a calendar-query report on the user's primary path.
-            
-            var reportXml = @"<c:calendar-query xmlns:d=""DAV:"" xmlns:c=""urn:ietf:params:xml:ns:caldav"">
+            // Extract all hrefs returned
+            var calendarHrefs = new List<string>();
+            try
+            {
+                var doc = System.Xml.Linq.XDocument.Parse(propContent);
+                var hrefElements = doc.Descendants().Where(x => x.Name.LocalName.Equals("href", StringComparison.OrdinalIgnoreCase));
+                foreach (var elem in hrefElements)
+                {
+                    var hrefVal = elem.Value.Trim();
+                    if (!string.IsNullOrEmpty(hrefVal) && !calendarHrefs.Contains(hrefVal))
+                    {
+                        calendarHrefs.Add(hrefVal);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[CalendarService] Failed to parse PROPFIND XML: {ex.Message}. Falling back to string parsing...");
+                int index = 0;
+                while (true)
+                {
+                    index = propContent.IndexOf("href", index, StringComparison.OrdinalIgnoreCase);
+                    if (index == -1) break;
+                    
+                    int tagEnd = propContent.IndexOf(">", index);
+                    if (tagEnd == -1) break;
+                    
+                    int dataStart = tagEnd + 1;
+                    int dataEnd = propContent.IndexOf("</", dataStart);
+                    if (dataEnd == -1) break;
+                    
+                    var hrefVal = propContent.Substring(dataStart, dataEnd - dataStart).Trim();
+                    if (!string.IsNullOrEmpty(hrefVal) && !calendarHrefs.Contains(hrefVal))
+                    {
+                        calendarHrefs.Add(hrefVal);
+                    }
+                    index = dataEnd;
+                }
+            }
+
+            // Fallback if no hrefs found
+            if (calendarHrefs.Count == 0)
+            {
+                calendarHrefs.Add($"/dav/{user}/Calendar/calendar");
+                calendarHrefs.Add($"/dav/{user}/Calendar");
+            }
+
+            var startStr = DateTime.UtcNow.AddDays(-30).ToString("yyyyMMddTHHmmssZ");
+            var endStr = DateTime.UtcNow.AddDays(90).ToString("yyyyMMddTHHmmssZ");
+
+            var reportXml = $@"<c:calendar-query xmlns:d=""DAV:"" xmlns:c=""urn:ietf:params:xml:ns:caldav"">
               <d:prop>
                 <d:getetag />
                 <c:calendar-data />
               </d:prop>
               <c:filter>
                 <c:comp-filter name=""VCALENDAR"">
-                  <c:comp-filter name=""VEVENT"" />
+                  <c:comp-filter name=""VEVENT"">
+                    <c:time-range start=""{startStr}"" end=""{endStr}"" />
+                  </c:comp-filter>
                 </c:comp-filter>
               </c:filter>
             </c:calendar-query>";
 
-            // Try the standard main path
-            var reportUrl = $"{baseAddress}/dav/{user}/Calendar/calendar";
-            var reportRequest = new HttpRequestMessage(new HttpMethod("REPORT"), reportUrl);
-            reportRequest.Headers.TryAddWithoutValidation("Depth", "1");
-            reportRequest.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
-            reportRequest.Content = new StringContent(reportXml, Encoding.UTF8, "text/xml");
+            // Clear old cached events
+            await _databaseService.Connection.Table<LocalCalendarEvent>()
+                .Where(x => x.AccountId == account.Id)
+                .DeleteAsync();
 
-            var reportResponse = await _httpClient.SendAsync(reportRequest);
-            if (!reportResponse.IsSuccessStatusCode)
+            var seenUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int parsedCount = 0;
+
+            foreach (var href in calendarHrefs)
             {
-                // Try fallback directory
-                reportUrl = $"{baseAddress}/dav/{user}/Calendar";
-                reportRequest = new HttpRequestMessage(new HttpMethod("REPORT"), reportUrl);
-                reportRequest.Headers.TryAddWithoutValidation("Depth", "1");
-                reportRequest.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
-                reportRequest.Content = new StringContent(reportXml, Encoding.UTF8, "text/xml");
-                reportResponse = await _httpClient.SendAsync(reportRequest);
-            }
-
-            if (reportResponse.IsSuccessStatusCode)
-            {
-                var content = await reportResponse.Content.ReadAsStringAsync();
-                
-                // Clear old cached events
-                await _databaseService.Connection.Table<LocalCalendarEvent>()
-                    .Where(x => x.AccountId == account.Id)
-                    .DeleteAsync();
-
-                // Simple custom iCalendar (ics) text parser inside XML nodes
-                // CalDAV returns XML containing <c:calendar-data> tags, which hold raw .ics content.
-                int index = 0;
-                while (true)
+                var reportUrl = baseAddress;
+                if (href.StartsWith("/"))
                 {
-                    index = content.IndexOf("<c:calendar-data>", index);
-                    if (index == -1) index = content.IndexOf("<calendar-data xmlns=\"urn:ietf:params:xml:ns:caldav\">", index);
-                    if (index == -1) break;
+                    reportUrl += href;
+                }
+                else
+                {
+                    reportUrl += "/" + href;
+                }
 
-                    int dataStart = content.IndexOf(">", index) + 1;
-                    int dataEnd = content.IndexOf("</", dataStart);
-                    if (dataEnd == -1) break;
+                Log($"[CalendarService] Sending CalDAV REPORT to Yahoo path: {reportUrl}");
 
-                    var icsContent = content.Substring(dataStart, dataEnd - dataStart).Trim();
-                    icsContent = System.Net.WebUtility.HtmlDecode(icsContent);
+                try
+                {
+                    var reportRequest = new HttpRequestMessage(new HttpMethod("REPORT"), reportUrl);
+                    reportRequest.Headers.TryAddWithoutValidation("Depth", "1");
+                    ApplyAuth(reportRequest);
+                    reportRequest.Content = new StringContent(reportXml, Encoding.UTF8, "text/xml");
 
-                    ParseAndCacheIcsEvent(icsContent, account);
+                    var reportResponse = await _httpClient.SendAsync(reportRequest);
+                    if (!reportResponse.IsSuccessStatusCode)
+                    {
+                        Log($"[CalendarService] CalDAV REPORT failed for {reportUrl} with HTTP {reportResponse.StatusCode}");
+                        continue;
+                    }
 
-                    index = dataEnd;
+                    var content = await reportResponse.Content.ReadAsStringAsync();
+                    Log($"[CalendarService] Yahoo CalDAV response length for {href}: {content.Length}");
+                    if (content.Length > 316)
+                    {
+                        Log($"[CalendarService] Yahoo CalDAV response content for {href}: {content}");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(content) || !content.Contains("multistatus", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var doc = System.Xml.Linq.XDocument.Parse(content);
+                        System.Xml.Linq.XNamespace caldavNs = "urn:ietf:params:xml:ns:caldav";
+                        
+                        var calendarDataElements = doc.Descendants(caldavNs + "calendar-data");
+                        foreach (var elem in calendarDataElements)
+                        {
+                            var icsContent = elem.Value.Trim();
+                            ParseAndCacheIcsEvent(icsContent, account, seenUids);
+                            parsedCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"[CalendarService] Yahoo XML Linq parsing failed for {href}: {ex.Message}. Falling back to string parsing...");
+                        
+                        int index = 0;
+                        while (true)
+                        {
+                            index = content.IndexOf("calendar-data", index, StringComparison.OrdinalIgnoreCase);
+                            if (index == -1) break;
+                            
+                            int tagEnd = content.IndexOf(">", index);
+                            if (tagEnd == -1) break;
+                            
+                            int dataStart = tagEnd + 1;
+                            int dataEnd = content.IndexOf("</", dataStart);
+                            if (dataEnd == -1) break;
+                            
+                            var icsContent = content.Substring(dataStart, dataEnd - dataStart).Trim();
+                            icsContent = System.Net.WebUtility.HtmlDecode(icsContent);
+                            
+                            ParseAndCacheIcsEvent(icsContent, account, seenUids);
+                            parsedCount++;
+                            
+                            index = dataEnd;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"[CalendarService] Exception during REPORT query for {reportUrl}: {ex.Message}");
                 }
             }
-            else
-            {
-                throw new Exception($"Yahoo CalDAV query HTTP {reportResponse.StatusCode}");
-            }
+
+            Log($"[CalendarService] Yahoo Sync finished. Parsed {parsedCount} total events ({seenUids.Count} unique).");
         }
 
-        private void ParseAndCacheIcsEvent(string icsText, LocalCalendarAccount account)
+        private void ParseAndCacheIcsEvent(string icsText, LocalCalendarAccount account, HashSet<string> seenUids)
         {
             try
             {
+                // Unfold lines (RFC 5545: CRLF or LF followed by a space or tab is ignored/removed)
+                icsText = icsText.Replace("\r\n ", "")
+                                 .Replace("\n ", "")
+                                 .Replace("\r\n\t", "")
+                                 .Replace("\n\t", "");
+
                 var lines = icsText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
                 string summary = "No Title";
                 string desc = "";
                 string location = "";
-                string uid = Guid.NewGuid().ToString();
+                string uid = "";
                 
                 DateTime start = DateTime.UtcNow;
                 DateTime end = DateTime.UtcNow.AddHours(1);
                 bool isAllDay = false;
+                bool inVEvent = false;
 
                 foreach (var line in lines)
                 {
+                    var trimmed = line.Trim();
+                    if (trimmed.Equals("BEGIN:VEVENT", StringComparison.OrdinalIgnoreCase))
+                    {
+                        inVEvent = true;
+                        summary = "No Title";
+                        desc = "";
+                        location = "";
+                        uid = Guid.NewGuid().ToString();
+                        start = DateTime.UtcNow;
+                        end = DateTime.UtcNow.AddHours(1);
+                        isAllDay = false;
+                        continue;
+                    }
+                    
+                    if (trimmed.Equals("END:VEVENT", StringComparison.OrdinalIgnoreCase))
+                    {
+                        inVEvent = false;
+                        
+                        if (!string.IsNullOrEmpty(uid))
+                        {
+                            if (!seenUids.Contains(uid))
+                            {
+                                seenUids.Add(uid);
+                                
+                                var localEvent = new LocalCalendarEvent
+                                {
+                                    Id = Guid.NewGuid().ToString().ToLowerInvariant(),
+                                    AccountId = account.Id,
+                                    UserId = account.UserId,
+                                    ProviderEventId = uid,
+                                    Title = summary,
+                                    Description = desc,
+                                    Start = start,
+                                    End = end,
+                                    IsAllDay = isAllDay,
+                                    Location = location,
+                                    Color = account.Color,
+                                    UpdatedAt = DateTime.UtcNow
+                                };
+
+                                _databaseService.Connection.InsertAsync(localEvent).Wait();
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (!inVEvent) continue;
+
                     if (line.StartsWith("SUMMARY:", StringComparison.OrdinalIgnoreCase))
                     {
                         summary = line.Substring(8).Trim();
@@ -653,33 +858,27 @@ namespace Daily_WinUI.Services
                     }
                     else if (line.StartsWith("DTSTART;", StringComparison.OrdinalIgnoreCase) || line.StartsWith("DTSTART:", StringComparison.OrdinalIgnoreCase))
                     {
-                        var val = line.Substring(line.IndexOf(":") + 1).Trim();
-                        start = ParseIcsDateTime(val, out isAllDay);
+                        var colonIdx = line.IndexOf(':');
+                        if (colonIdx != -1)
+                        {
+                            var header = line.Substring(0, colonIdx);
+                            var val = line.Substring(colonIdx + 1).Trim();
+                            var tzid = ExtractTzid(header);
+                            start = ParseIcsDateTime(val, tzid, out isAllDay);
+                        }
                     }
                     else if (line.StartsWith("DTEND;", StringComparison.OrdinalIgnoreCase) || line.StartsWith("DTEND:", StringComparison.OrdinalIgnoreCase))
                     {
-                        var val = line.Substring(line.IndexOf(":") + 1).Trim();
-                        end = ParseIcsDateTime(val, out var _);
+                        var colonIdx = line.IndexOf(':');
+                        if (colonIdx != -1)
+                        {
+                            var header = line.Substring(0, colonIdx);
+                            var val = line.Substring(colonIdx + 1).Trim();
+                            var tzid = ExtractTzid(header);
+                            end = ParseIcsDateTime(val, tzid, out var _);
+                        }
                     }
                 }
-
-                var localEvent = new LocalCalendarEvent
-                {
-                    Id = Guid.NewGuid().ToString().ToLowerInvariant(),
-                    AccountId = account.Id,
-                    UserId = account.UserId,
-                    ProviderEventId = uid,
-                    Title = summary,
-                    Description = desc,
-                    Start = start,
-                    End = end,
-                    IsAllDay = isAllDay,
-                    Location = location,
-                    Color = account.Color,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                _databaseService.Connection.InsertAsync(localEvent).Wait();
             }
             catch (Exception ex)
             {
@@ -687,15 +886,106 @@ namespace Daily_WinUI.Services
             }
         }
 
-        private DateTime ParseIcsDateTime(string val, out bool isAllDay)
+        private static readonly Dictionary<string, string> IanaToWindowsTz = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Europe/Bucharest", "GTB Standard Time" },
+            { "Europe/London", "GMT Standard Time" },
+            { "Europe/Paris", "Romance Standard Time" },
+            { "Europe/Berlin", "W. Europe Standard Time" },
+            { "America/New_York", "Eastern Standard Time" },
+            { "America/Chicago", "Central Standard Time" },
+            { "America/Denver", "Mountain Standard Time" },
+            { "America/Los_Angeles", "Pacific Standard Time" },
+            { "Asia/Tokyo", "Tokyo Standard Time" }
+        };
+
+        private string ExtractTzid(string header)
+        {
+            int tzidIdx = header.IndexOf("TZID=", StringComparison.OrdinalIgnoreCase);
+            if (tzidIdx != -1)
+            {
+                var remaining = header.Substring(tzidIdx + 5);
+                int semicolonIdx = remaining.IndexOf(';');
+                string tzidVal = semicolonIdx != -1 ? remaining.Substring(0, semicolonIdx) : remaining;
+                return tzidVal.Trim(' ', '"', '\'');
+            }
+            return null;
+        }
+
+        private TimeZoneInfo SafeFindTimeZone(string tzid)
+        {
+            if (string.IsNullOrEmpty(tzid)) return null;
+
+            var cleanTzid = tzid.Trim(' ', '"', '\'', '/', '\\');
+            
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(cleanTzid);
+            }
+            catch {}
+
+            if (IanaToWindowsTz.TryGetValue(cleanTzid, out var windowsTz))
+            {
+                try
+                {
+                    return TimeZoneInfo.FindSystemTimeZoneById(windowsTz);
+                }
+                catch {}
+            }
+
+            if (cleanTzid.Contains('/'))
+            {
+                var parts = cleanTzid.Split('/');
+                if (parts.Length >= 2)
+                {
+                    var lastTwo = parts[parts.Length - 2] + "/" + parts[parts.Length - 1];
+                    try
+                    {
+                        return TimeZoneInfo.FindSystemTimeZoneById(lastTwo);
+                    }
+                    catch {}
+                    
+                    if (IanaToWindowsTz.TryGetValue(lastTwo, out var winTz2))
+                    {
+                        try
+                        {
+                            return TimeZoneInfo.FindSystemTimeZoneById(winTz2);
+                        }
+                        catch {}
+                    }
+                }
+                
+                var lastPart = parts[parts.Length - 1];
+                try
+                {
+                    return TimeZoneInfo.FindSystemTimeZoneById(lastPart);
+                }
+                catch {}
+                
+                if (IanaToWindowsTz.TryGetValue(lastPart, out var winTz3))
+                {
+                    try
+                    {
+                        return TimeZoneInfo.FindSystemTimeZoneById(winTz3);
+                    }
+                    catch {}
+                }
+            }
+
+            return null;
+        }
+
+        private DateTime ParseIcsDateTime(string val, string tzid, out bool isAllDay)
         {
             isAllDay = false;
             // Format can be:
             // 20260610T120000Z (UTC)
-            // 20260610T120000 (Local)
+            // 20260610T120000 (Local/Floating)
             // 20260610 (Date only)
             
-            val = val.Replace("Z", "");
+            bool isUtc = val.EndsWith("Z", StringComparison.OrdinalIgnoreCase);
+            val = val.Replace("Z", "").Replace("z", "");
+            
             if (val.Contains("T"))
             {
                 var parts = val.Split('T');
@@ -710,7 +1000,16 @@ namespace Daily_WinUI.Services
                 int min = int.Parse(timeStr.Substring(2, 2));
                 int sec = int.Parse(timeStr.Substring(4, 2));
 
-                return new DateTime(yr, mn, dy, hr, min, sec, DateTimeKind.Utc);
+                var dt = new DateTime(yr, mn, dy, hr, min, sec, DateTimeKind.Unspecified);
+                if (isUtc)
+                {
+                    return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+                }
+                else
+                {
+                    TimeZoneInfo tz = SafeFindTimeZone(tzid) ?? TimeZoneInfo.Local;
+                    return TimeZoneInfo.ConvertTimeToUtc(dt, tz);
+                }
             }
             else
             {
@@ -786,6 +1085,12 @@ namespace Daily_WinUI.Services
         {
             Console.WriteLine(message);
             System.Diagnostics.Debug.WriteLine(message);
+            try
+            {
+                var logPath = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "calendar_sync_debug.log");
+                System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\r\n");
+            }
+            catch { }
         }
     }
 }

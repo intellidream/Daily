@@ -549,18 +549,97 @@ namespace Daily_WinUI.Views
 
         private async void ConnectYahoo_Click(object sender, RoutedEventArgs e)
         {
-            var emailInput = new TextBox { PlaceholderText = "Yahoo Email Address", Margin = new Thickness(0, 0, 0, 10) };
-            var passwordInput = new PasswordBox { PlaceholderText = "Yahoo App Password" };
+            var pivot = new Pivot { Width = 360 };
 
-            var panel = new StackPanel();
-            panel.Children.Add(new TextBlock { Text = "Please create and enter a Yahoo App Password (not your primary password) to link via CalDAV.", Margin = new Thickness(0, 0, 0, 12), FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-            panel.Children.Add(emailInput);
-            panel.Children.Add(passwordInput);
+            // Tab 1: App Password
+            var appPasswordPanel = new StackPanel { Spacing = 8, Margin = new Thickness(0, 10, 0, 0) };
+            appPasswordPanel.Children.Add(new TextBlock
+            {
+                Text = "To connect, please generate a 16-character App Password on your Yahoo Account Security page.",
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 13
+            });
+
+            var linkBtn = new HyperlinkButton
+            {
+                Content = "Open Yahoo Account Security Settings",
+                NavigateUri = new Uri("https://login.yahoo.com/account/security"),
+                Padding = new Thickness(0),
+                Margin = new Thickness(0, 0, 0, 8),
+                FontSize = 12
+            };
+            appPasswordPanel.Children.Add(linkBtn);
+
+            var appEmailInput = new TextBox { PlaceholderText = "Yahoo Email Address", Header = "Email Address", Margin = new Thickness(0, 0, 0, 4) };
+            var appPasswordInput = new PasswordBox { PlaceholderText = "16-character App Password", Header = "Yahoo App Password" };
+            appPasswordPanel.Children.Add(appEmailInput);
+            appPasswordPanel.Children.Add(appPasswordInput);
+
+            var item1 = new PivotItem { Header = "App Password", Content = appPasswordPanel };
+            pivot.Items.Add(item1);
+
+            // Tab 2: Developer OAuth
+            var oauthPanel = new StackPanel { Spacing = 8, Margin = new Thickness(0, 10, 0, 0) };
+            TextBox urlInputRef = null;
+
+            if (string.IsNullOrEmpty(Secrets.YahooClientId) || string.IsNullOrEmpty(Secrets.YahooClientSecret))
+            {
+                oauthPanel.Children.Add(new TextBlock
+                {
+                    Text = "Yahoo Developer Credentials Required",
+                    FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                    FontSize = 14,
+                    Margin = new Thickness(0, 0, 0, 4)
+                });
+                oauthPanel.Children.Add(new TextBlock
+                {
+                    Text = "Please register an Installed Application on developer.yahoo.com, set Redirect URI to https://localhost:50389/, select Calendar Read/Write and OpenID permissions, then update Secrets.cs.",
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 12,
+                    Opacity = 0.8
+                });
+            }
+            else
+            {
+                oauthPanel.Children.Add(new TextBlock
+                {
+                    Text = "Click the button below to authorize Daily in your browser, then copy and paste the redirected URL below.",
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 13
+                });
+
+                var state = Guid.NewGuid().ToString();
+                var redirectUri = string.IsNullOrEmpty(Secrets.YahooRedirectUri) ? "https://localhost:50389/" : Secrets.YahooRedirectUri;
+                var authUrl = $"https://api.login.yahoo.com/oauth2/request_auth?client_id={Secrets.YahooClientId}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("openid email ycal-r ycal-w")}&state={state}";
+
+                var authButton = new Button
+                {
+                    Content = "Open Browser to Authorize",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Style = (Style)Application.Current.Resources["AccentButtonStyle"]
+                };
+                authButton.Click += async (s, args) =>
+                {
+                    await Launcher.LaunchUriAsync(new Uri(authUrl));
+                };
+                oauthPanel.Children.Add(authButton);
+
+                urlInputRef = new TextBox
+                {
+                    PlaceholderText = "Paste the redirect URL here...",
+                    Header = "Redirect URL",
+                    TextWrapping = TextWrapping.Wrap
+                };
+                oauthPanel.Children.Add(urlInputRef);
+            }
+
+            var item2 = new PivotItem { Header = "Developer OAuth", Content = oauthPanel };
+            pivot.Items.Add(item2);
 
             var dialog = new ContentDialog
             {
                 Title = "Connect Yahoo Calendar",
-                Content = panel,
+                Content = pivot,
                 PrimaryButtonText = "Connect",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Primary,
@@ -570,36 +649,165 @@ namespace Daily_WinUI.Views
             var result = await dialog.ShowAsync();
             if (result == ContentDialogResult.Primary)
             {
-                var email = emailInput.Text.Trim();
-                var password = passwordInput.Password.Trim();
-
-                if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+                var selectedItem = pivot.SelectedItem as PivotItem;
+                if (selectedItem?.Header?.ToString() == "App Password")
                 {
-                    ShowErrorDialog("Yahoo Link Failed", "Email and app password are required.");
-                    return;
-                }
+                    var email = appEmailInput.Text.Trim();
+                    var password = appPasswordInput.Password.Trim();
 
-                IsLoading = true;
-                try
-                {
-                    // Validate Yahoo CalDAV connection with a quick query
-                    var baseAddress = "https://caldav.calendar.yahoo.com";
-                    var propfindXml = @"<d:propfind xmlns:d=""DAV:""><d:prop></d:prop></d:propfind>";
-                    var propRequest = new HttpRequestMessage(new HttpMethod("PROPFIND"), $"{baseAddress}/dav/{email}/Calendar");
-                     propRequest.Headers.TryAddWithoutValidation("Depth", "1");
-                    
-                    var authBytes = Encoding.UTF8.GetBytes($"{email}:{password}");
-                    propRequest.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
-                    propRequest.Content = new StringContent(propfindXml, Encoding.UTF8, "text/xml");
-
-                    var response = await _httpClient.SendAsync(propRequest);
-                    if (response.IsSuccessStatusCode)
+                    if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
                     {
+                        ShowErrorDialog("Yahoo Link Failed", "Email and app password are required.");
+                        return;
+                    }
+
+                    IsLoading = true;
+                    try
+                    {
+                        // Validate Yahoo CalDAV connection with a quick query
+                        var baseAddress = "https://caldav.calendar.yahoo.com";
+                        var propfindXml = @"<d:propfind xmlns:d=""DAV:""><d:prop></d:prop></d:propfind>";
+                        var propRequest = new HttpRequestMessage(new HttpMethod("PROPFIND"), $"{baseAddress}/dav/{email}/Calendar");
+                        propRequest.Headers.TryAddWithoutValidation("Depth", "1");
+                        
+                        var authBytes = Encoding.UTF8.GetBytes($"{email}:{password}");
+                        propRequest.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+                        propRequest.Content = new StringContent(propfindXml, Encoding.UTF8, "text/xml");
+
+                        var response = await _httpClient.SendAsync(propRequest);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var userSession = App.SupabaseClient.Auth.CurrentSession;
+                            var userId = userSession?.User?.Id ?? "local_user";
+
+                            // Encrypt password (stored in AccessToken, RefreshToken is empty)
+                            var encryptedPassword = EncryptionHelper.Encrypt(password, userId);
+
+                            var account = new LocalCalendarAccount
+                            {
+                                Id = Guid.NewGuid().ToString().ToLowerInvariant(),
+                                UserId = userId,
+                                Email = email,
+                                AccountType = "Yahoo",
+                                AccessToken = encryptedPassword,
+                                RefreshToken = string.Empty,
+                                TokenExpiresAt = DateTime.MaxValue,
+                                Color = "#6001d2", // Yahoo Purple
+                                IsActive = true,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+
+                            await _calendarService.AddAccountAsync(account);
+                            await LoadDataAsync();
+                        }
+                        else
+                        {
+                            ShowErrorDialog("Yahoo Link Failed", $"CalDAV server returned HTTP {response.StatusCode}. Please verify your email and App Password.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        ShowErrorDialog("Yahoo Link Failed", ex.Message);
+                    }
+                    finally
+                    {
+                        IsLoading = false;
+                    }
+                }
+                else // Developer OAuth
+                {
+                    if (urlInputRef == null)
+                    {
+                        ShowErrorDialog("Yahoo Link Failed", "Developer credentials not configured.");
+                        return;
+                    }
+
+                    var pastedText = urlInputRef.Text.Trim();
+                    if (string.IsNullOrEmpty(pastedText))
+                    {
+                        ShowErrorDialog("Yahoo Link Failed", "Redirect URL or code is required.");
+                        return;
+                    }
+
+                    string code = pastedText;
+                    if (pastedText.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            var uri = new Uri(pastedText);
+                            var query = uri.Query.TrimStart('?');
+                            var parts = query.Split('&');
+                            foreach (var part in parts)
+                            {
+                                var kv = part.Split('=');
+                                if (kv.Length == 2 && kv[0] == "code")
+                                {
+                                    code = Uri.UnescapeDataString(kv[1]);
+                                    break;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            ShowErrorDialog("Yahoo Link Failed", "Could not parse code from the pasted URL: " + ex.Message);
+                            return;
+                        }
+                    }
+
+                    IsLoading = true;
+                    try
+                    {
+                        var redirectUri = string.IsNullOrEmpty(Secrets.YahooRedirectUri) ? "https://localhost:50389/" : Secrets.YahooRedirectUri;
+                        var content = new FormUrlEncodedContent(new[]
+                        {
+                            new KeyValuePair<string, string>("client_id", Secrets.YahooClientId),
+                            new KeyValuePair<string, string>("client_secret", Secrets.YahooClientSecret),
+                            new KeyValuePair<string, string>("code", code),
+                            new KeyValuePair<string, string>("redirect_uri", redirectUri),
+                            new KeyValuePair<string, string>("grant_type", "authorization_code")
+                        });
+
+                        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.login.yahoo.com/oauth2/get_token");
+                        request.Content = content;
+
+                        var authBytes = Encoding.UTF8.GetBytes($"{Secrets.YahooClientId}:{Secrets.YahooClientSecret}");
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+                        var response = await _httpClient.SendAsync(request);
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            var errorBody = await response.Content.ReadAsStringAsync();
+                            throw new Exception($"Failed to exchange token. HTTP {response.StatusCode}: {errorBody}");
+                        }
+
+                        var json = await response.Content.ReadAsStringAsync();
+                        using var doc = JsonDocument.Parse(json);
+                        var root = doc.RootElement;
+                        var accessToken = root.GetProperty("access_token").GetString() ?? "";
+                        var refreshToken = root.GetProperty("refresh_token").GetString() ?? "";
+                        var expiresIn = root.GetProperty("expires_in").GetInt32();
+
+                        var infoReq = new HttpRequestMessage(HttpMethod.Get, "https://api.login.yahoo.com/openid/v1/userinfo");
+                        infoReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                        var infoResp = await _httpClient.SendAsync(infoReq);
+                        var email = "Yahoo Calendar";
+
+                        if (infoResp.IsSuccessStatusCode)
+                        {
+                            var infoJson = await infoResp.Content.ReadAsStringAsync();
+                            using var infoDoc = JsonDocument.Parse(infoJson);
+                            var infoRoot = infoDoc.RootElement;
+                            if (infoRoot.TryGetProperty("email", out var emailProp))
+                            {
+                                email = emailProp.GetString() ?? email;
+                            }
+                        }
+
                         var userSession = App.SupabaseClient.Auth.CurrentSession;
                         var userId = userSession?.User?.Id ?? "local_user";
 
-                        // Encrypt password (stored in AccessToken, RefreshToken is empty)
-                        var encryptedPassword = EncryptionHelper.Encrypt(password, userId);
+                        var encryptedAccessToken = EncryptionHelper.Encrypt(accessToken, userId);
+                        var encryptedRefreshToken = EncryptionHelper.Encrypt(refreshToken, userId);
 
                         var account = new LocalCalendarAccount
                         {
@@ -607,10 +815,10 @@ namespace Daily_WinUI.Views
                             UserId = userId,
                             Email = email,
                             AccountType = "Yahoo",
-                            AccessToken = encryptedPassword,
-                            RefreshToken = string.Empty,
-                            TokenExpiresAt = DateTime.MaxValue,
-                            Color = "#512BD4",
+                            AccessToken = encryptedAccessToken,
+                            RefreshToken = encryptedRefreshToken,
+                            TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn),
+                            Color = "#6001d2",
                             IsActive = true,
                             UpdatedAt = DateTime.UtcNow
                         };
@@ -618,18 +826,14 @@ namespace Daily_WinUI.Views
                         await _calendarService.AddAccountAsync(account);
                         await LoadDataAsync();
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        ShowErrorDialog("Yahoo Link Failed", $"CalDAV server returned HTTP {response.StatusCode}. Please verify your email and App Password.");
+                        ShowErrorDialog("Yahoo Link Failed", ex.Message);
                     }
-                }
-                catch (Exception ex)
-                {
-                    ShowErrorDialog("Yahoo Link Failed", ex.Message);
-                }
-                finally
-                {
-                    IsLoading = false;
+                    finally
+                    {
+                        IsLoading = false;
+                    }
                 }
             }
         }
