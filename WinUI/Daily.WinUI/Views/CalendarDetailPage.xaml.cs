@@ -328,6 +328,7 @@ namespace Daily_WinUI.Views
                     response.ContentLength64 = buffer.Length;
                     response.OutputStream.Write(buffer, 0, buffer.Length);
                     response.OutputStream.Close();
+                    await Task.Delay(1000); // Give browser time to read response before closing socket
 
                     if (!string.IsNullOrEmpty(code))
                     {
@@ -402,6 +403,8 @@ namespace Daily_WinUI.Views
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[Google OAuth] Connection failed: {ex}");
+                Console.WriteLine($"[Google OAuth] Connection failed: {ex}");
                 ShowErrorDialog("Google OAuth Link Failed", ex.Message);
             }
             finally

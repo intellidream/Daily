@@ -183,7 +183,7 @@ namespace Daily_WinUI.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[CalendarService] Sync failed for account {account.Email}: {ex.Message}");
+                Log($"[CalendarService] Sync failed for account {account.Email}: {ex}");
             }
         }
 
@@ -195,7 +195,7 @@ namespace Daily_WinUI.Services
             // Check expiry with a 5-minute buffer
             if (DateTime.UtcNow.AddMinutes(5) < account.TokenExpiresAt.ToUniversalTime()) return;
 
-            System.Diagnostics.Debug.WriteLine($"[CalendarService] Refreshing token for {account.Email}...");
+            Log($"[CalendarService] Refreshing token for {account.Email}...");
 
             if (account.AccountType.Equals("Google", StringComparison.OrdinalIgnoreCase))
             {
@@ -223,7 +223,7 @@ namespace Daily_WinUI.Services
                     
                     account.SyncedAt = null; // Mark dirty
                     await _databaseService.Connection.UpdateAsync(account);
-                    System.Diagnostics.Debug.WriteLine($"[CalendarService] Google token refreshed successfully.");
+                    Log($"[CalendarService] Google token refreshed successfully.");
                 }
                 else
                 {
@@ -264,7 +264,7 @@ namespace Daily_WinUI.Services
                     
                     account.SyncedAt = null; // Mark dirty
                     await _databaseService.Connection.UpdateAsync(account);
-                    System.Diagnostics.Debug.WriteLine($"[CalendarService] Microsoft token refreshed successfully.");
+                    Log($"[CalendarService] Microsoft token refreshed successfully.");
                 }
                 else
                 {
@@ -287,7 +287,8 @@ namespace Daily_WinUI.Services
             var response = await _httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Google Calendar Sync HTTP {response.StatusCode}");
+                var errorBody = await response.Content.ReadAsStringAsync();
+                throw new Exception($"Google Calendar Sync HTTP {response.StatusCode}: {errorBody}");
             }
 
             var json = await response.Content.ReadAsStringAsync();
@@ -682,7 +683,7 @@ namespace Daily_WinUI.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[CalendarService] ICS parsing failed: {ex.Message}");
+                Console.WriteLine($"[CalendarService] ICS parsing failed: {ex.Message}");
             }
         }
 
@@ -769,17 +770,22 @@ namespace Daily_WinUI.Services
                                 var response = await _httpClient.SendAsync(request);
                                 if (!response.IsSuccessStatusCode)
                                 {
-                                    System.Diagnostics.Debug.WriteLine($"[CalendarService] Failed to complete task in Microsoft Graph: {response.StatusCode}");
+                                    Log($"[CalendarService] Failed to complete task in Microsoft Graph: {response.StatusCode}");
                                 }
                             }
                         }
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[CalendarService] Microsoft Graph complete task exception: {ex.Message}");
+                        Log($"[CalendarService] Microsoft Graph complete task exception: {ex}");
                     }
                 });
             }
+        }
+        private void Log(string message)
+        {
+            Console.WriteLine(message);
+            System.Diagnostics.Debug.WriteLine(message);
         }
     }
 }
