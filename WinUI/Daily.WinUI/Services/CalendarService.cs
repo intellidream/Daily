@@ -199,12 +199,14 @@ namespace Daily_WinUI.Services
 
             if (account.AccountType.Equals("Google", StringComparison.OrdinalIgnoreCase))
             {
+                var decryptedRefreshToken = Daily.Services.Auth.EncryptionHelper.Decrypt(account.RefreshToken, account.UserId);
+
                 var content = new FormUrlEncodedContent(new[]
                 {
                     new KeyValuePair<string, string>("client_id", Secrets.WindowsClientId),
                     new KeyValuePair<string, string>("client_secret", Secrets.WindowsClientSecret),
                     new KeyValuePair<string, string>("grant_type", "refresh_token"),
-                    new KeyValuePair<string, string>("refresh_token", account.RefreshToken)
+                    new KeyValuePair<string, string>("refresh_token", decryptedRefreshToken)
                 });
 
                 var response = await _httpClient.PostAsync("https://oauth2.googleapis.com/token", content);
@@ -213,8 +215,10 @@ namespace Daily_WinUI.Services
                     var json = await response.Content.ReadAsStringAsync();
                     using var doc = JsonDocument.Parse(json);
                     var root = doc.RootElement;
-                    account.AccessToken = root.GetProperty("access_token").GetString() ?? string.Empty;
+                    var accessToken = root.GetProperty("access_token").GetString() ?? string.Empty;
                     var expiresIn = root.GetProperty("expires_in").GetInt32();
+                    
+                    account.AccessToken = Daily.Services.Auth.EncryptionHelper.Encrypt(accessToken, account.UserId);
                     account.TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
                     
                     account.SyncedAt = null; // Mark dirty
@@ -229,11 +233,13 @@ namespace Daily_WinUI.Services
             else if (account.AccountType.Equals("MicrosoftPersonal", StringComparison.OrdinalIgnoreCase) ||
                      account.AccountType.Equals("MicrosoftWork", StringComparison.OrdinalIgnoreCase))
             {
+                var decryptedRefreshToken = Daily.Services.Auth.EncryptionHelper.Decrypt(account.RefreshToken, account.UserId);
+
                 var content = new FormUrlEncodedContent(new[]
                 {
                     new KeyValuePair<string, string>("client_id", Secrets.MicrosoftClientId),
                     new KeyValuePair<string, string>("grant_type", "refresh_token"),
-                    new KeyValuePair<string, string>("refresh_token", account.RefreshToken),
+                    new KeyValuePair<string, string>("refresh_token", decryptedRefreshToken),
                     new KeyValuePair<string, string>("redirect_uri", "com.intellidream.daily.desktop://login-callback")
                 });
 
@@ -243,11 +249,16 @@ namespace Daily_WinUI.Services
                     var json = await response.Content.ReadAsStringAsync();
                     using var doc = JsonDocument.Parse(json);
                     var root = doc.RootElement;
-                    account.AccessToken = root.GetProperty("access_token").GetString() ?? string.Empty;
+                    var accessToken = root.GetProperty("access_token").GetString() ?? string.Empty;
                     if (root.TryGetProperty("refresh_token", out var refToken))
                     {
-                        account.RefreshToken = refToken.GetString() ?? account.RefreshToken;
+                        var newRefreshToken = refToken.GetString() ?? string.Empty;
+                        if (!string.IsNullOrEmpty(newRefreshToken))
+                        {
+                            account.RefreshToken = Daily.Services.Auth.EncryptionHelper.Encrypt(newRefreshToken, account.UserId);
+                        }
                     }
+                    account.AccessToken = Daily.Services.Auth.EncryptionHelper.Encrypt(accessToken, account.UserId);
                     var expiresIn = root.GetProperty("expires_in").GetInt32();
                     account.TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
                     
@@ -268,8 +279,10 @@ namespace Daily_WinUI.Services
             var timeMax = DateTime.UtcNow.AddDays(90).ToString("yyyy-MM-ddTHH:mm:ssZ");
             var url = $"https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin={Uri.EscapeDataString(timeMin)}&timeMax={Uri.EscapeDataString(timeMax)}&singleEvents=true";
 
+            var decryptedAccessToken = Daily.Services.Auth.EncryptionHelper.Decrypt(account.AccessToken, account.UserId);
+
             var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", decryptedAccessToken);
 
             var response = await _httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
@@ -345,13 +358,15 @@ namespace Daily_WinUI.Services
 
         private async Task SyncMicrosoftCalendarAndTodosAsync(LocalCalendarAccount account)
         {
+            var decryptedAccessToken = Daily.Services.Auth.EncryptionHelper.Decrypt(account.AccessToken, account.UserId);
+
             // 1. Sync Calendar View Events (expanded recurrence)
             var startStr = DateTime.UtcNow.AddDays(-30).ToString("yyyy-MM-ddTHH:mm:ssZ");
             var endStr = DateTime.UtcNow.AddDays(90).ToString("yyyy-MM-ddTHH:mm:ssZ");
             var url = $"https://graph.microsoft.com/v1.0/me/calendarView?startDateTime={Uri.EscapeDataString(startStr)}&endDateTime={Uri.EscapeDataString(endStr)}";
 
             var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", decryptedAccessToken);
 
             var response = await _httpClient.SendAsync(request);
             if (response.IsSuccessStatusCode)
@@ -418,7 +433,7 @@ namespace Daily_WinUI.Services
             // 2. Sync ToDo Tasks
             var todoListUrl = "https://graph.microsoft.com/v1.0/me/todo/lists";
             var todoRequest = new HttpRequestMessage(HttpMethod.Get, todoListUrl);
-            todoRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
+            todoRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", decryptedAccessToken);
 
             var todoResponse = await _httpClient.SendAsync(todoRequest);
             if (todoResponse.IsSuccessStatusCode)
@@ -438,7 +453,7 @@ namespace Daily_WinUI.Services
                         var tasksUrl = $"https://graph.microsoft.com/v1.0/me/todo/lists/{listId}/tasks";
                         
                         var taskReq = new HttpRequestMessage(HttpMethod.Get, tasksUrl);
-                        taskReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
+                        taskReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", decryptedAccessToken);
                         var taskResp = await _httpClient.SendAsync(taskReq);
 
                         if (taskResp.IsSuccessStatusCode)
@@ -509,7 +524,7 @@ namespace Daily_WinUI.Services
             // CalDAV uses HTTP basic auth
             
             var user = account.Email;
-            var appPassword = account.AccessToken; // Decrypted app password
+            var appPassword = Daily.Services.Auth.EncryptionHelper.Decrypt(account.AccessToken, account.UserId);
 
             var baseAddress = "https://caldav.calendar.yahoo.com";
             
@@ -747,7 +762,8 @@ namespace Daily_WinUI.Services
 
                                 var patchJson = JsonSerializer.Serialize(patchData);
                                 var request = new HttpRequestMessage(new HttpMethod("PATCH"), url);
-                                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
+                                var decryptedAccessToken = Daily.Services.Auth.EncryptionHelper.Decrypt(account.AccessToken, account.UserId);
+                                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", decryptedAccessToken);
                                 request.Content = new StringContent(patchJson, Encoding.UTF8, "application/json");
 
                                 var response = await _httpClient.SendAsync(request);

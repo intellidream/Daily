@@ -420,7 +420,10 @@ namespace Daily_WinUI.Views
             IsLoading = true;
             try
             {
-                var authUrl = $"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={Secrets.MicrosoftClientId}&response_type=code&redirect_uri={Uri.EscapeDataString("com.intellidream.daily.desktop://login-callback")}&response_mode=query&scope={Uri.EscapeDataString("offline_access https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Tasks.Read")}&prompt=consent";
+                var codeVerifier = GenerateCodeVerifier();
+                var codeChallenge = GenerateCodeChallenge(codeVerifier);
+
+                var authUrl = $"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={Secrets.MicrosoftClientId}&response_type=code&redirect_uri={Uri.EscapeDataString("com.intellidream.daily.desktop://login-callback")}&response_mode=query&scope={Uri.EscapeDataString("offline_access https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Tasks.Read")}&prompt=consent&code_challenge={codeChallenge}&code_challenge_method=S256";
 
                 WinUIAuthService.OAuthCallbackTcs = new TaskCompletionSource<string>();
                 await Launcher.LaunchUriAsync(new Uri(authUrl));
@@ -436,7 +439,8 @@ namespace Daily_WinUI.Views
                         new KeyValuePair<string, string>("client_id", Secrets.MicrosoftClientId),
                         new KeyValuePair<string, string>("code", code),
                         new KeyValuePair<string, string>("redirect_uri", "com.intellidream.daily.desktop://login-callback"),
-                        new KeyValuePair<string, string>("grant_type", "authorization_code")
+                        new KeyValuePair<string, string>("grant_type", "authorization_code"),
+                        new KeyValuePair<string, string>("code_verifier", codeVerifier)
                     });
 
                     var response = await _httpClient.PostAsync("https://login.microsoftonline.com/common/oauth2/v2.0/token", content);
@@ -510,6 +514,34 @@ namespace Daily_WinUI.Views
                 IsLoading = false;
                 WinUIAuthService.OAuthCallbackTcs = null;
             }
+        }
+
+        private static string GenerateCodeVerifier()
+        {
+            var bytes = new byte[32];
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(bytes);
+            }
+            return Base64UrlEncode(bytes);
+        }
+
+        private static string GenerateCodeChallenge(string codeVerifier)
+        {
+            using (var sha256 = System.Security.Cryptography.SHA256.Create())
+            {
+                var bytes = System.Text.Encoding.UTF8.GetBytes(codeVerifier);
+                var hash = sha256.ComputeHash(bytes);
+                return Base64UrlEncode(hash);
+            }
+        }
+
+        private static string Base64UrlEncode(byte[] bytes)
+        {
+            return Convert.ToBase64String(bytes)
+                .Replace("+", "-")
+                .Replace("/", "_")
+                .TrimEnd('=');
         }
 
         private async void ConnectYahoo_Click(object sender, RoutedEventArgs e)
