@@ -95,6 +95,29 @@ namespace Daily_WinUI.Controls
         }
 
         public ObservableCollection<CalendarWidgetItem> UpcomingItems { get; } = new();
+        public ObservableCollection<CalendarWidgetItem> SmallItems { get; } = new();
+        public ObservableCollection<CalendarWidgetItem> NormalItems { get; } = new();
+
+        private bool _hasSmallItems;
+        public bool HasSmallItems
+        {
+            get => _hasSmallItems;
+            set { _hasSmallItems = value; OnPropertyChanged(); }
+        }
+
+        private bool _hasNormalItems;
+        public bool HasNormalItems
+        {
+            get => _hasNormalItems;
+            set { _hasNormalItems = value; OnPropertyChanged(); }
+        }
+
+        private bool _hasUpcomingItems;
+        public bool HasUpcomingItems
+        {
+            get => _hasUpcomingItems;
+            set { _hasUpcomingItems = value; OnPropertyChanged(); }
+        }
 
         public string TodayMonth => DateTime.Today.ToString("MMM").ToUpperInvariant();
         public string TodayDayNumber => DateTime.Today.Day.ToString();
@@ -241,14 +264,30 @@ namespace Daily_WinUI.Controls
                     });
                 }
 
-                // Sort by date. Items with max value sort dates (no due date tasks) go last.
-                var sorted = combinedList.OrderBy(x => x.SortDate).ToList();
+                // Sort by date. Items with max value sort dates (no due date tasks) go last. Limit to top 15.
+                var sorted = combinedList.OrderBy(x => x.SortDate).Take(15).ToList();
 
                 UpcomingItems.Clear();
                 foreach (var item in sorted)
                 {
                     UpcomingItems.Add(item);
                 }
+
+                SmallItems.Clear();
+                if (sorted.Count > 0)
+                {
+                    SmallItems.Add(sorted[0]);
+                }
+
+                NormalItems.Clear();
+                foreach (var item in sorted.Take(2))
+                {
+                    NormalItems.Add(item);
+                }
+
+                HasSmallItems = SmallItems.Count > 0;
+                HasNormalItems = NormalItems.Count > 0;
+                HasUpcomingItems = UpcomingItems.Count > 0;
             }
             catch (Exception ex)
             {

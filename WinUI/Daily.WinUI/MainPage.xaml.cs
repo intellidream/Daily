@@ -163,6 +163,12 @@ public sealed partial class MainPage : Page
         var cacheMgr = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
         _pregeneratedBriefingTask = cacheMgr.GetOrGenerateBriefingAsync(currentUserName);
 
+        // Show Smart Briefing if enabled on startup (trigger check before window loading overlay fades out)
+        if (settingsForPreGen.EnableSmartBriefing && isInitialBoot)
+        {
+            ShowSmartBriefing(isAutomatic: true);
+        }
+
         if (isInitialBoot && mainWindow != null)
         {
             // 5. Ensure minimum boot time has elapsed
@@ -181,13 +187,6 @@ public sealed partial class MainPage : Page
         {
             // 7. Trigger local widgets entrance animation
             FadeInContentStoryboard.Begin();
-        }
-
-        // 9. Show Smart Briefing if enabled on startup
-        var settings = SettingsService.Load();
-        if (settings.EnableSmartBriefing && isInitialBoot)
-        {
-            ShowSmartBriefing(isAutomatic: true);
         }
     }
 
@@ -586,41 +585,22 @@ public sealed partial class MainPage : Page
             }
         }
 
-        SmartBriefingData? data = null;
-        string currentAcc = settings.SelectedAiAccelerator ?? "Auto";
-        string currentModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
-        
-        if (_pregeneratedBriefingTask != null &&
-            (_pregeneratedAccelerator != currentAcc || _pregeneratedModelId != currentModelId))
-        {
-            System.Diagnostics.Debug.WriteLine("[MainPage] Discarding pregenerated briefing because AI settings changed.");
-            _pregeneratedBriefingTask = null;
-        }
-
         var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
 
-        // For automatic show, load data first to check if cache was refreshed
+        // For automatic show, check if a regeneration is required first to avoid showing a hidden loading screen
         if (isAutomatic)
         {
+            bool willRegenerate = false;
             try
             {
-                if (_pregeneratedBriefingTask != null)
-                {
-                    data = await _pregeneratedBriefingTask;
-                    _pregeneratedBriefingTask = null;
-                }
-                else
-                {
-                    data = await cacheManager.GetOrGenerateBriefingAsync(userName);
-                }
+                willRegenerate = await cacheManager.WillBriefingRegenerateAsync(userName);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[MainPage] Automatic briefing load failed: {ex.Message}");
-                return;
+                System.Diagnostics.Debug.WriteLine($"[MainPage] Check will regenerate failed: {ex.Message}");
             }
 
-            if (data == null || !data.WasRegenerated)
+            if (!willRegenerate)
             {
                 System.Diagnostics.Debug.WriteLine("[MainPage] Skipping automatic smart briefing: Cached narrative is unchanged.");
                 return;
@@ -639,38 +619,56 @@ public sealed partial class MainPage : Page
         // Cancel any active typewriter or download timers
         _typewriterTimer?.Stop();
 
-        if (data == null)
+        SmartBriefingData? data = null;
+        string currentAcc = settings.SelectedAiAccelerator ?? "Auto";
+        string currentModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+        
+        if (_pregeneratedBriefingTask != null &&
+            (_pregeneratedAccelerator != currentAcc || _pregeneratedModelId != currentModelId))
         {
-            BriefingLoadingPanel.Visibility = Visibility.Visible;
-            RotatingLoadingIconStoryboard.Begin();
-            BriefingGrid.Visibility = Visibility.Collapsed;
+            System.Diagnostics.Debug.WriteLine("[MainPage] Discarding pregenerated briefing because AI settings changed.");
+            _pregeneratedBriefingTask = null;
+        }
 
-            try
+        // Show loading panel immediately, and hide the grid
+        BriefingLoadingPanel.Visibility = Visibility.Visible;
+        RotatingLoadingIconStoryboard.Begin();
+        BriefingGrid.Visibility = Visibility.Collapsed;
+
+        try
+        {
+            if (_pregeneratedBriefingTask != null)
             {
-                if (_pregeneratedBriefingTask != null)
-                {
-                    data = await _pregeneratedBriefingTask;
-                    _pregeneratedBriefingTask = null;
-                }
-                else
-                {
-                    data = await cacheManager.GetOrGenerateBriefingAsync(userName);
-                }
+                data = await _pregeneratedBriefingTask;
+                _pregeneratedBriefingTask = null;
             }
-            catch (System.Exception ex)
+            else
             {
-                System.Diagnostics.Debug.WriteLine($"[MainPage] Briefing generation failed: {ex.Message}");
-                CloseBriefing_Click(this, new RoutedEventArgs());
-                return;
+                data = await cacheManager.GetOrGenerateBriefingAsync(userName);
             }
         }
-        else
+        catch (System.Exception ex)
         {
-            BriefingLoadingPanel.Visibility = Visibility.Collapsed;
-            BriefingGrid.Visibility = Visibility.Visible;
+            System.Diagnostics.Debug.WriteLine($"[MainPage] Briefing generation failed: {ex.Message}");
+            CloseBriefing_Click(this, new RoutedEventArgs());
+            return;
+        }
+
+        // For automatic show, double check that it was actually regenerated.
+        // If for some reason it wasn't, dismiss the overlay.
+        if (isAutomatic && (data == null || !data.WasRegenerated))
+        {
+            System.Diagnostics.Debug.WriteLine("[MainPage] Skipping automatic smart briefing after load: Cached narrative was unchanged.");
+            CloseBriefing_Click(this, new RoutedEventArgs());
+            return;
         }
 
         if (!_isBriefingActive) return;
+
+        // Hide loading panel and show briefing content grid
+        BriefingLoadingPanel.Visibility = Visibility.Collapsed;
+        RotatingLoadingIconStoryboard.Stop();
+        BriefingGrid.Visibility = Visibility.Visible;
 
         // Bind Weather Card
         BriefingWeatherTempText.Text = $"{data.WeatherTemp:F0}°C";

@@ -53,7 +53,7 @@ namespace Daily_WinUI.Services
 
                     var parameters = new ModelParams(modelPath)
                     {
-                        ContextSize = 4096,
+                        ContextSize = 8192,
                         GpuLayerCount = _allowGpuOffload ? 99 : 0 // Offload layers to GPU if allowed
                     };
 
@@ -75,16 +75,15 @@ namespace Daily_WinUI.Services
             {
                 var parameters = new ModelParams(_loadedModelPath)
                 {
-                    ContextSize = 4096,
+                    ContextSize = 8192,
                     GpuLayerCount = _allowGpuOffload ? 99 : 0
                 };
 
-                using var context = _weights.CreateContext(parameters);
                 var executor = new StatelessExecutor(_weights, parameters);
 
                 var inferenceParams = new InferenceParams
                 {
-                    MaxTokens = 2048,
+                    MaxTokens = 1024,
                     AntiPrompts = new[] { "<|eot_id|>", "<|end|>" },
                     SamplingPipeline = new DefaultSamplingPipeline
                     {

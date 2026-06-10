@@ -84,6 +84,11 @@ namespace Daily_WinUI.Services
         // News Recommendations
         public List<NewsRecommendationData> NewsRecommendations { get; set; } = new();
 
+        // Calendars & Todos & News Headlines
+        public List<LocalCalendarEvent> CalendarEventsToday { get; set; } = new();
+        public List<LocalCalendarTodo> ActiveTodos { get; set; } = new();
+        public List<string> TopNewsHeadlines { get; set; } = new();
+
         // Weather Details
         public string WeatherHourlyDetails { get; set; } = string.Empty;
         public string WeatherFiveDayDetails { get; set; } = string.Empty;
@@ -101,6 +106,7 @@ namespace Daily_WinUI.Services
         private readonly IHabitsService? _habitsService;
         private readonly IRssFeedService? _rssFeedService;
         private readonly IRssArticleService? _rssArticleService;
+        private readonly ICalendarService? _calendarService;
         private readonly ISmartIntelligenceService _smartService;
         private readonly IBehaviorService _behaviorService;
 
@@ -118,6 +124,7 @@ namespace Daily_WinUI.Services
                 _habitsService = App.Current.Services.GetService(typeof(IHabitsService)) as IHabitsService;
                 _rssFeedService = App.Current.Services.GetService(typeof(IRssFeedService)) as IRssFeedService;
                 _rssArticleService = App.Current.Services.GetService(typeof(IRssArticleService)) as IRssArticleService;
+                _calendarService = App.Current.Services.GetService(typeof(ICalendarService)) as ICalendarService;
             }
             catch (Exception ex)
             {
@@ -161,6 +168,11 @@ namespace Daily_WinUI.Services
             var hydrationTask = _habitsService != null ? _habitsService.GetDailyProgressAsync("water", DateTime.Today) : Task.FromResult(0.0);
             var smokesTask = _habitsService != null ? _habitsService.GetDailyProgressAsync("smokes", DateTime.Today) : Task.FromResult(0.0);
             var waterGoalTask = _habitsService != null ? _habitsService.GetGoalAsync("water") : Task.FromResult<HabitGoal?>(null);
+
+            var start = DateTime.Today;
+            var end = DateTime.Today.AddDays(1).AddTicks(-1);
+            var calendarTask = _calendarService != null ? _calendarService.GetCachedEventsAsync(start, end) : Task.FromResult(new List<LocalCalendarEvent>());
+            var todosTask = _calendarService != null ? _calendarService.GetCachedTodosAsync() : Task.FromResult(new List<LocalCalendarTodo>());
 
             // 2. Weather Aggregation
             double temp = 21.5;
@@ -525,6 +537,55 @@ namespace Daily_WinUI.Services
                 }
             }
 
+            // 5.1 Calendars & Todos Aggregation
+            try
+            {
+                var todayEvents = await calendarTask;
+                data.CalendarEventsToday = todayEvents ?? new List<LocalCalendarEvent>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartBriefingService] Calendar Load Error: {ex.Message}");
+            }
+
+            try
+            {
+                var allTodos = await todosTask;
+                data.ActiveTodos = allTodos?.Where(t => !t.IsCompleted).ToList() ?? new List<LocalCalendarTodo>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartBriefingService] Todos Load Error: {ex.Message}");
+            }
+
+            string calendarSummary = "";
+            if (data.CalendarEventsToday.Count > 0)
+            {
+                calendarSummary = $"You have {data.CalendarEventsToday.Count} calendar event(s) scheduled for today.";
+            }
+            else
+            {
+                calendarSummary = "Your calendar is clear for today.";
+            }
+
+            string todoSummary = "";
+            if (data.ActiveTodos.Count > 0)
+            {
+                var highPriority = data.ActiveTodos.Count(t => t.Importance?.ToLower() == "high");
+                if (highPriority > 0)
+                {
+                    todoSummary = $"You have {data.ActiveTodos.Count} active task(s) on your agenda, including {highPriority} high priority task(s).";
+                }
+                else
+                {
+                    todoSummary = $"You have {data.ActiveTodos.Count} active task(s) on your agenda.";
+                }
+            }
+            else
+            {
+                todoSummary = "You have no pending tasks today.";
+            }
+
 
             // 6. News AI Recommendations with Source Diversity & Interest Matching
             if (!onlyLocal && _rssFeedService != null && _rssFeedService.Feeds != null && _rssFeedService.Feeds.Count > 0)
@@ -730,6 +791,13 @@ namespace Daily_WinUI.Services
                         RssItem = sel.Item
                     });
                 }
+
+                // Populate TopNewsHeadlines with top 5 scored headlines
+                var topHeadlines = ordered.Take(5).ToList();
+                foreach (var h in topHeadlines)
+                {
+                    data.TopNewsHeadlines.Add($"- {h.Item.Title} (Source: {h.Item.PublicationName ?? "Feed"})");
+                }
             }
 
             if (!onlyLocal)
@@ -755,7 +823,7 @@ namespace Daily_WinUI.Services
             data.WeatherHourlyDetails = hourlyWeatherDetails;
             data.WeatherFiveDayDetails = fiveDayWeatherDetails;
 
-            string fallbackBriefing = $"{weatherSentence} {healthSentence}\n\n{financeSentence} {habitsSentence}\n\nLastly, we found a couple of interesting articles in your feed you might like: \"{(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Source : "N/A")}, and \"{(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Source : "N/A")}.";
+            string fallbackBriefing = $"{weatherSentence} {healthSentence}\n\n{calendarSummary} {todoSummary}\n\n{financeSentence} {habitsSentence}\n\nLastly, we found a couple of interesting articles in your feed you might like: \"{(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Source : "N/A")}, and \"{(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Source : "N/A")}.";
             data.BriefingText = fallbackBriefing;
             data.IntroText = "";
             data.OutroText = "Have a highly productive day!";
@@ -785,23 +853,30 @@ namespace Daily_WinUI.Services
                     string behaviorSummary = await _behaviorService.GetWeeklyBehaviorSummaryAsync();
                     
                     StringBuilder stocksBuilder = new StringBuilder();
-                    foreach (var stock in data.WatchlistStocks)
+                    var limitStocks = data.WatchlistStocks.Take(10).ToList();
+                    foreach (var stock in limitStocks)
                     {
                         stocksBuilder.Append($"{stock.Symbol}: {stock.Price:F2} ({stock.FormattedChange}), ");
                     }
-                    string watchlistDetails = stocksBuilder.Length > 0 ? stocksBuilder.ToString().TrimEnd(',', ' ') : "None";
+                    if (data.WatchlistStocks.Count > 10)
+                    {
+                        stocksBuilder.Append($"... and {data.WatchlistStocks.Count - 10} more stocks");
+                    }
+                    string watchlistDetails = stocksBuilder.Length > 0 ? stocksBuilder.ToString().TrimEnd(',', ' ', '.') : "None";
 
                     string systemPrompt = 
                         "You are DayOne, a helpful personal assistant AI running locally on the user's device. " +
                         "Generate a concise, natural, and friendly daily briefing narrative based on the user's data. " +
-                        "Analyze their weather, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.\n" +
+                        "Analyze their weather, calendar events, active tasks/todos, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.\n" +
                         "Rules:\n" +
-                        "- Do NOT write any greeting (like 'Good morning', 'Good evening', 'Hello', etc.) or introductory filler (like 'Here is your briefing' or 'Based on your data'). Start directly with the weather analysis.\n" +
+                        "- Do NOT write any greeting (like 'Good morning', 'Good evening', 'Hello', etc.) or introductory filler (like 'Here is your briefing' or 'Based on your data'). Start directly with the weather and calendar analysis.\n" +
                         "- Keep the briefing structured in 2-3 short, focused paragraphs of conversational flowing text. Keep descriptions extremely concise and direct to stay on point and avoid hallucinating details. Do not use markdown headers or lists.\n" +
                         "- Format your paragraphs clearly, using double newlines (\n\n) to separate them.\n" +
+                        "- Integrate the user's scheduled calendar events and active tasks (todos) with their notes naturally, suggesting when they might focus on tasks or highlighting busy periods.\n" +
                         "- If finance data is marked as UNINITIALIZED, do not congratulate the user on net worth or mention a $0 net worth. Suggest setting up their ledger or adding an account instead.\n" +
                         "- If smoking habit data is present, treat it as a negative target (reduction/cessation). Do NOT congratulate the user for smoking or logging smokes; instead, encourage reduction or praise staying under limit.\n" +
-                        "- Evaluate the weather forecast over the next hours and next 5 days, highlighting key transitions (e.g. if it will rain later, recommend taking an umbrella or exercising indoors).\n\n" +
+                        "- Evaluate the weather forecast over the next hours and next 5 days, highlighting key transitions (e.g. if it will rain later, recommend taking an umbrella or exercising indoors).\n" +
+                        "- Evaluate the news headlines provided and concisely summarize the most important trends or events in a paragraph.\n\n" +
                         "At the very end of your response, you MUST append a JSON block enclosed in <insights> and </insights> tags. The JSON must contain short advice strings (1 sentence each) for the widgets: " +
                         "{\n" +
                         "  \"weatherAdvice\": \"short advice based on weather forecast\",\n" +
@@ -811,6 +886,70 @@ namespace Daily_WinUI.Services
                         "}\n" +
                         "Do not write any introductory or transition text before or after the JSON block. Go directly from the end of your narrative text to the <insights> tag. Do not write any text after the </insights> tag.";
 
+                    StringBuilder calBuilder = new StringBuilder();
+                    if (data.CalendarEventsToday.Count > 0)
+                    {
+                        var limitEvents = data.CalendarEventsToday.Take(5).ToList();
+                        foreach (var ev in limitEvents)
+                        {
+                            string timeStr = ev.IsAllDay ? "All Day" : $"{ev.Start.ToLocalTime():t} - {ev.End.ToLocalTime():t}";
+                            string desc = ev.Description ?? "";
+                            if (desc.Length > 120)
+                            {
+                                desc = desc.Substring(0, 120) + "...";
+                            }
+                            calBuilder.AppendLine($"- {ev.Title} ({timeStr}){(string.IsNullOrEmpty(ev.Location) ? "" : $" at {ev.Location}")} - Description: {desc}");
+                        }
+                        if (data.CalendarEventsToday.Count > 5)
+                        {
+                            calBuilder.AppendLine($"- ... and {data.CalendarEventsToday.Count - 5} more calendar event(s).");
+                        }
+                    }
+                    else
+                    {
+                        calBuilder.AppendLine("No events scheduled for today.");
+                    }
+
+                    StringBuilder todoBuilder = new StringBuilder();
+                    if (data.ActiveTodos.Count > 0)
+                    {
+                        var limitTodos = data.ActiveTodos
+                            .OrderByDescending(t => t.Importance?.ToLower() == "high")
+                            .Take(8)
+                            .ToList();
+                        foreach (var td in limitTodos)
+                        {
+                            string dueStr = td.DueDate.HasValue ? $"Due: {td.DueDate.Value.ToLocalTime():d}" : "No due date";
+                            string notes = td.Notes ?? "";
+                            if (notes.Length > 120)
+                            {
+                                notes = notes.Substring(0, 120) + "...";
+                            }
+                            todoBuilder.AppendLine($"- {td.Title} ({dueStr}, Priority: {td.Importance}) - Notes: {notes}");
+                        }
+                        if (data.ActiveTodos.Count > 8)
+                        {
+                            todoBuilder.AppendLine($"- ... and {data.ActiveTodos.Count - 8} more active task(s).");
+                        }
+                    }
+                    else
+                    {
+                        todoBuilder.AppendLine("No active tasks/todos.");
+                    }
+
+                    StringBuilder newsBuilder = new StringBuilder();
+                    if (data.TopNewsHeadlines.Count > 0)
+                    {
+                        foreach (var headline in data.TopNewsHeadlines)
+                        {
+                            newsBuilder.AppendLine(headline);
+                        }
+                    }
+                    else
+                    {
+                        newsBuilder.AppendLine("No news headlines available.");
+                    }
+
                     string userPrompt = 
                         $"User Name: {userName}\n" +
                         $"Current Time: {DateTime.Now:f}\n\n" +
@@ -818,6 +957,12 @@ namespace Daily_WinUI.Services
                         $"Condition: {data.WeatherCondition} (Temp: {data.WeatherTemp}°C)\n" +
                         $"Hourly Forecast (next 8 hours):\n{data.WeatherHourlyDetails}\n" +
                         $"5-Day Forecast:\n{data.WeatherFiveDayDetails}\n\n" +
+                        $"--- CALENDAR EVENTS TODAY ---\n" +
+                        $"{calBuilder}\n" +
+                        $"--- ACTIVE TASKS & TODOS ---\n" +
+                        $"{todoBuilder}\n" +
+                        $"--- NEWS HEADLINES ---\n" +
+                        $"{newsBuilder}\n" +
                         $"--- HEALTH DATA ---\n" +
                         $"Steps Today: {data.HealthSteps}\n" +
                         $"Sleep Last Night: {data.HealthSleepHours:F1} hours\n" +
@@ -835,7 +980,7 @@ namespace Daily_WinUI.Services
                         $"Water target: {data.HabitsWaterGoal:F0} ml, Drank today: {data.HabitsWaterProgress:F0} ml\n" +
                         (data.HabitsSmokesGoal > 0 || data.HabitsSmokesProgress > 0 
                             ? $"Cigarettes limit/baseline: {data.HabitsSmokesGoal:F0} today, Smoked today: {data.HabitsSmokesProgress:F0}\n"
-                             : "") + "\n" +
+                            : "") + "\n" +
                         $"--- RECENT USER BEHAVIOR TELEMETRY (Last 7 Days) ---\n" +
                         $"{behaviorSummary}";
 
@@ -845,20 +990,20 @@ namespace Daily_WinUI.Services
                     Console.WriteLine($"[SmartBriefingService] Raw Response:\n{responseText}\n[End Raw Response]");
                     
                     // Parse insights tag
-                    string cleanBriefingText = responseText;
-                    int startIndex = responseText.IndexOf("<insights>");
-                    int endIndex = responseText.IndexOf("</insights>");
+                    string cleanBriefingText = responseText ?? string.Empty;
+                    int startIndex = cleanBriefingText.IndexOf("<insights>");
+                    int endIndex = cleanBriefingText.IndexOf("</insights>");
                     string jsonContent = "";
                     
                     if (startIndex >= 0)
                     {
                         if (endIndex > startIndex)
                         {
-                            jsonContent = responseText.Substring(startIndex + 10, endIndex - (startIndex + 10)).Trim();
+                            jsonContent = cleanBriefingText.Substring(startIndex + 10, endIndex - (startIndex + 10)).Trim();
                         }
                         else
                         {
-                            jsonContent = responseText.Substring(startIndex + 10).Trim();
+                            jsonContent = cleanBriefingText.Substring(startIndex + 10).Trim();
                         }
                         
                         // Strip any potential trailing tag if it was partially generated or present
@@ -873,7 +1018,7 @@ namespace Daily_WinUI.Services
                         }
 
                         Console.WriteLine($"[SmartBriefingService] Extracted JSON content:\n{jsonContent}\n[End JSON content]");
-                        cleanBriefingText = responseText.Substring(0, startIndex).Trim();
+                        cleanBriefingText = cleanBriefingText.Substring(0, startIndex).Trim();
                         
                         // Clean up trailing metadata transition lines (e.g. "Here is the JSON block...", "Below are the insights...")
                         var lines = cleanBriefingText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
@@ -944,6 +1089,12 @@ namespace Daily_WinUI.Services
                         }
                     }
                     
+                    if (string.IsNullOrWhiteSpace(cleanBriefingText) || cleanBriefingText.Length < 20)
+                    {
+                        Console.WriteLine("[SmartBriefingService] AI narrative is empty, whitespace, or too short. Falling back to template.");
+                        cleanBriefingText = fallbackBriefing;
+                    }
+
                     data.IntroText = "";
                     data.BriefingText = cleanBriefingText;
                     data.OutroText = "Have a highly productive day!";

@@ -608,7 +608,7 @@
                                    FontWeight="SemiBold" 
                                    Foreground="{ThemeResource AppFgColorBrush}" 
                                    HorizontalAlignment="Center"/>
-                        <TextBlock Text="Gathering news, weather, finances, habits, and health insights." 
+                        <TextBlock Text="Gathering news, weather, finances, habits, health, calendars, todos, and notes." 
                                    FontSize="13" 
                                    Foreground="{ThemeResource AppFgMutedColorBrush}" 
                                    HorizontalAlignment="Center"/>

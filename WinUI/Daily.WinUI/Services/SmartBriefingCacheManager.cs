@@ -128,6 +128,7 @@ namespace Daily_WinUI.Services
                         currentMetrics.WeatherFiveDayDetails = cachedData.WeatherFiveDayDetails;
                         currentMetrics.WatchlistStocks = cachedData.WatchlistStocks;
                         currentMetrics.NewsRecommendations = cachedData.NewsRecommendations;
+                        currentMetrics.TopNewsHeadlines = cachedData.TopNewsHeadlines;
 
                         currentMetrics.WasRegenerated = false; // Served from cache
                         return currentMetrics;
@@ -185,6 +186,64 @@ namespace Daily_WinUI.Services
             await SaveBriefingToCacheAsync(userId, regeneratedBriefing);
             
             return regeneratedBriefing;
+        }
+
+        public async Task<bool> WillBriefingRegenerateAsync(string userName)
+        {
+            var settings = SettingsService.Load();
+            if (!settings.EnableSmartBriefing) return false;
+
+            string userId = _supabase.Auth?.CurrentUser?.Id ?? "local_user";
+            await _db.InitializeAsync();
+
+            CachedSmartBriefing? localCached = null;
+            try
+            {
+                localCached = await _db.Connection.Table<CachedSmartBriefing>()
+                    .Where(c => c.UserId == userId)
+                    .FirstOrDefaultAsync();
+            }
+            catch { }
+
+            SmartBriefingData? cachedData = null;
+            DateTime? cacheTime = null;
+
+            if (localCached != null)
+            {
+                try
+                {
+                    cachedData = JsonSerializer.Deserialize<SmartBriefingData>(localCached.SerializedData);
+                    cacheTime = localCached.Timestamp;
+                }
+                catch { }
+            }
+
+            if (cachedData == null && !string.IsNullOrEmpty(settings.CachedBriefingJson) && settings.CachedBriefingTime.HasValue)
+            {
+                try
+                {
+                    cachedData = JsonSerializer.Deserialize<SmartBriefingData>(settings.CachedBriefingJson);
+                    cacheTime = settings.CachedBriefingTime;
+                }
+                catch { }
+            }
+
+            if (cachedData == null || !cacheTime.HasValue)
+            {
+                return true; // No cache exists, must generate
+            }
+
+            DateTime now = DateTime.UtcNow;
+
+            // 1. Time slot changed
+            if (GetDayTimeSlot(cacheTime.Value) != GetDayTimeSlot(now))
+            {
+                return true;
+            }
+
+            // 2. Local metrics changed (Steps, Habits, Calendar, Todos)
+            var currentLocalMetrics = await _briefingService.LoadBriefingMetricsAsync(userName, onlyLocal: true);
+            return ShouldRegenerate(cachedData, currentLocalMetrics, onlyLocal: true);
         }
 
         // Predisposition: checks if prefetching is needed silently
@@ -376,6 +435,48 @@ namespace Daily_WinUI.Services
                 {
                     Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Smokes progress increased by {smokesIncrease:F1} (>= 10% of goal/baseline: {threshold:F1})");
                     return true;
+                }
+            }
+
+            // 3.3 Calendar events change
+            if (cached.CalendarEventsToday != null && current.CalendarEventsToday != null)
+            {
+                if (cached.CalendarEventsToday.Count != current.CalendarEventsToday.Count)
+                {
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Calendar event count changed ({cached.CalendarEventsToday.Count} vs {current.CalendarEventsToday.Count})");
+                    return true;
+                }
+                for (int i = 0; i < cached.CalendarEventsToday.Count; i++)
+                {
+                    if (cached.CalendarEventsToday[i].Title != current.CalendarEventsToday[i].Title ||
+                        cached.CalendarEventsToday[i].Start != current.CalendarEventsToday[i].Start ||
+                        cached.CalendarEventsToday[i].End != current.CalendarEventsToday[i].End)
+                    {
+                        Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Calendar event details changed");
+                        return true;
+                    }
+                }
+            }
+
+            // 3.4 Active todos change
+            if (cached.ActiveTodos != null && current.ActiveTodos != null)
+            {
+                if (cached.ActiveTodos.Count != current.ActiveTodos.Count)
+                {
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Active todos count changed ({cached.ActiveTodos.Count} vs {current.ActiveTodos.Count})");
+                    return true;
+                }
+                for (int i = 0; i < cached.ActiveTodos.Count; i++)
+                {
+                    if (cached.ActiveTodos[i].Title != current.ActiveTodos[i].Title ||
+                        cached.ActiveTodos[i].IsCompleted != current.ActiveTodos[i].IsCompleted ||
+                        cached.ActiveTodos[i].Importance != current.ActiveTodos[i].Importance ||
+                        cached.ActiveTodos[i].Notes != current.ActiveTodos[i].Notes ||
+                        cached.ActiveTodos[i].DueDate != current.ActiveTodos[i].DueDate)
+                    {
+                        Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Active todo details changed");
+                        return true;
+                    }
                 }
             }
 

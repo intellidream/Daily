@@ -95,18 +95,9 @@
             
             <!-- 1. SMALL CONTAINER (1x1) -->
             <Grid x:Name="SmallContainer" Visibility="Collapsed">
-                <ItemsControl ItemsSource="{x:Bind UpcomingItems, Mode=OneWay}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <Grid />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
+                <ItemsControl ItemsSource="{x:Bind SmallItems, Mode=OneWay}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="local:CalendarWidgetItem">
-                            <!-- Show only the first item in 1x1 by layering and using layout control, but to prevent visual overlap we only bind the top item or just limit count. Since we can't easily limit count in simple XAML ItemsControl, we display a fallback if list is empty or build custom layout. Actually, it's safer to bind to the first item. But since ItemsControl has no easy First, we can wrap in a single Border using visibility styling or bindings. Let's do a clean approach: show next item by using a simple layout where the ItemsControl displays only one, or use binding directly.
-                                 Wait, the best way in WinUI to show only the first item is to Bind directly to UpcomingItems[0] if it exists, but since ObservableCollection indexer isn't safe for empty bindings, we can style the ItemsControl to only display the first item, or we can just bind to a property "FirstItem" from CodeBehind!
-                                 Let's keep it simple: the ItemsControl can have a MaxHeight or we can just display the ItemsControl but restrict it. Or even better: bind to a sub-list or first item. Wait, we can bind to FirstItem from code-behind! That is extremely safe and easy. Let's design XAML assuming we have an ItemsControl. In a ItemsControl, if we only have height for one, only one is shown. But let's look at a safer alternative. Let's just bind to the ItemsControl, but inside the DataTemplate we can display it nicely. Let's use a Grid and ItemsControl, or just bind directly. Let's use a ListView/ItemsControl with a height limit so only 1 fits.
-                            -->
                             <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="10" Height="80" VerticalAlignment="Center">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -123,21 +114,16 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="No upcoming items" FontSize="11" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind UpcomingItems.Count, Converter={StaticResource EmptyVisibilityConverter}, ConverterParameter=0, Mode=OneWay, FallbackValue=Collapsed}" />
+                <TextBlock Text="No upcoming items" FontSize="11" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasSmallItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" />
             </Grid>
 
             <!-- 2. NORMAL CONTAINER (2x1 Wide) -->
             <Grid x:Name="NormalContainer" Visibility="Collapsed">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                
                 <!-- Display up to 2 items side by side -->
-                <ItemsControl ItemsSource="{x:Bind UpcomingItems, Mode=OneWay}">
+                <ItemsControl ItemsSource="{x:Bind NormalItems, Mode=OneWay}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Stretch" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -158,7 +144,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="No agenda items" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind UpcomingItems.Count, Converter={StaticResource EmptyVisibilityConverter}, ConverterParameter=0, Mode=OneWay, FallbackValue=Collapsed}" />
+                <TextBlock Text="No agenda items" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasNormalItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" />
             </Grid>
 
             <!-- 3. TALL CONTAINER (1x2 Tall) -->
@@ -191,7 +177,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-                <TextBlock Text="No upcoming events or tasks" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind UpcomingItems.Count, Converter={StaticResource EmptyVisibilityConverter}, ConverterParameter=0, Mode=OneWay, FallbackValue=Collapsed}" />
+                <TextBlock Text="No upcoming events or tasks" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasUpcomingItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" />
             </Grid>
 
             <!-- 4. LARGE CONTAINER (2x2 Large) -->
@@ -255,7 +241,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <TextBlock Text="No upcoming items" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind UpcomingItems.Count, Converter={StaticResource EmptyVisibilityConverter}, ConverterParameter=0, Mode=OneWay, FallbackValue=Collapsed}" />
+                    <TextBlock Text="No upcoming items" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasUpcomingItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" />
                 </Grid>
             </Grid>
         </Grid>

@@ -96,3 +96,10 @@ The local SQLite initialization creates:
 - **Native Scheduler Integration**: Migrated the scheduler header to use the native Syncfusion `SfScheduler` header controls for date title display and Prev/Next page navigation.
 - **Glass-Pill Button Sizing & Shapes**: Styled the native Prev, Next, and Today buttons using a scoped implicit `Style` targeting `Button` inside the scheduler's resources. They are sized to `32px` in height, have a `6px` corner radius, and use the semi-transparent glass backdrop (`AppGlassColorBrush` and `AppGlassBorderColorBrush` border).
 - **Segmented View Switcher Overlay**: Placed a `32px` segmented glass-capsule view switcher (Day/Week/Work/Month) in the top right header (overlapping the native header area on a single vertical center line), aligning perfectly with the Today button.
+
+### 5.4 Dashboard Widget Layout & State Fixes (June 2026)
+- **Overlapping Stacks Resolved**: Replaced the `<Grid>` layout panel in the widget's `SmallState` (1x1 view) with a standard vertical layout, stopping multiple upcoming items from drawing directly on top of each other.
+- **Adaptive Size Constraints**: Introduced distinct `SmallItems` (1 item) and `NormalItems` (2 items) collections populated during data loading. The 1x1 view binds only to the first next event, and the 2x1 view binds only to the top two, preventing layout overflow.
+- **Full Width Grid Alignment**: Removed the ColumnDefinitions grid constraint inside the `NormalContainer` (2x1 view), letting the wide horizontal stack stretch across the full width of the cell rather than squishing in the left 50% section.
+- **Boolean State Indicators**: Exposed indicator flags (`HasSmallItems`, `HasNormalItems`, `HasUpcomingItems`) to safely control empty state fallback visibility via the native `InverseBooleanToVisibilityConverter`.
+- **In-Widget Item Cap**: Limited the total scrollable upcoming items collection to a maximum of 15 items to keep the widget lightweight.

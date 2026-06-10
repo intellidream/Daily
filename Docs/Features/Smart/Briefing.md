@@ -154,7 +154,7 @@ public class LLamaUniversalEngine : ISmartBriefingEngine, IDisposable
 
         var parameters = new ModelParams(modelPath)
         {
-            ContextSize = 4096,
+            ContextSize = 8192,
             GpuLayerCount = _allowGpuOffload ? 99 : 0
         };
 
@@ -167,11 +167,10 @@ public class LLamaUniversalEngine : ISmartBriefingEngine, IDisposable
     {
         var parameters = new ModelParams(_loadedModelPath)
         {
-            ContextSize = 4096,
+            ContextSize = 8192,
             GpuLayerCount = _allowGpuOffload ? 99 : 0
         };
 
-        using var context = _weights.CreateContext(parameters);
         var executor = new StatelessExecutor(_weights, parameters);
         // Execute token generation loop...
     }
@@ -223,6 +222,8 @@ To reduce unnecessary local hardware power consumption (NPU/GPU/CPU) and optimiz
    - Habit totals and completions remain identical
    - Habit progress increases (water intake and smoked tobacco count) remain below 10% of their respective goals relative to the previous cached value
    - Top news recommendation titles are unchanged (ignored in local-only check)
+   - **Calendar Events**: Today's calendar events (count, or any event Title, Start, or End) remain identical.
+   - **Active Tasks**: Uncompleted todos (count, or any todo Title, Notes, DueDate, Importance, or Completion status) remain identical.
    The engine re-uses the existing AI narrative text but updates the numeric widgets with fresh metrics, avoiding costly SLM model generation.
 4. **Contextual Time-Slot Cache Validation**: The cache is divided into four local time slots:
    - **Morning** (5:00 AM - 11:59 AM)
@@ -281,11 +282,11 @@ During the application boot process, [MainPage.xaml.cs](file:///c:/Users/Mihai/s
 1. It asynchronously queries Supabase to pull down the user's remote briefing cache via `PullRemoteCacheAsync()`.
 2. It initiates background pre-generation of the briefing task (`_pregeneratedBriefingTask`) by calling `cacheMgr.GetOrGenerateBriefingAsync(currentUserName)` to avoid blocking the thread when the UI transitions.
 
-At the very end of startup, the app checks if it should display the briefing overlay:
+Before the window-level loading overlay begins fading out, the app checks if it should display the briefing overlay. This ensures a seamless transition directly from the boot screen:
 ```csharp
 // MainPage.xaml.cs
-var settings = SettingsService.Load();
-if (settings.EnableSmartBriefing && isInitialBoot)
+// Show Smart Briefing if enabled on startup (trigger check before window loading overlay fades out)
+if (settingsForPreGen.EnableSmartBriefing && isInitialBoot)
 {
     ShowSmartBriefing(isAutomatic: true);
 }
@@ -356,15 +357,17 @@ If the system decides to regenerate the briefing and the AI engine is ready, the
 ```text
 You are DayOne, a helpful personal assistant AI running locally on the user's device. 
 Generate a concise, natural, and friendly daily briefing narrative based on the user's data. 
-Analyze their weather, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.
+Analyze their weather, calendar events, active tasks/todos, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.
 
 Rules:
-- Do NOT write any greeting (like 'Good morning', 'Good evening', 'Hello', etc.) or introductory filler (like 'Here is your briefing' or 'Based on your data'). Start directly with the weather analysis.
+- Do NOT write any greeting (like 'Good morning', 'Good evening', 'Hello', etc.) or introductory filler (like 'Here is your briefing' or 'Based on your data'). Start directly with the weather and calendar analysis.
 - Keep the briefing structured in 2-3 short, focused paragraphs of conversational flowing text. Keep descriptions extremely concise and direct to stay on point and avoid hallucinating details. Do not use markdown headers or lists.
 - Format your paragraphs clearly, using double newlines (\n\n) to separate them.
+- Integrate the user's scheduled calendar events and active tasks (todos) with their notes naturally, suggesting when they might focus on tasks or highlighting busy periods.
 - If finance data is marked as UNINITIALIZED, do not congratulate the user on net worth or mention a $0 net worth. Suggest setting up their ledger or adding an account instead.
 - If smoking habit data is present, treat it as a negative target (reduction/cessation). Do NOT congratulate the user for smoking or logging smokes; instead, encourage reduction or praise staying under limit.
 - Evaluate the weather forecast over the next hours and next 5 days, highlighting key transitions (e.g. if it will rain later, recommend taking an umbrella or exercising indoors).
+- Evaluate the news headlines provided and concisely summarize the most important trends or events in a paragraph.
 
 At the very end of your response, you MUST append a JSON block enclosed in <insights> and </insights> tags. The JSON must contain short advice strings (1 sentence each) for the widgets: 
 {
@@ -377,7 +380,7 @@ Do not write any introductory or transition text before or after the JSON block.
 ```
 
 #### 5.3.2 User Prompt Structure
-The user prompt aggregates the data payload dynamically:
+The user prompt aggregates the data payload dynamically, incorporating truncation and item count limits to ensure context size safety:
 ```text
 User Name: [Name]
 Current Time: [Local Time]
@@ -387,6 +390,15 @@ Condition: [Condition] (Temp: [Temp]°C)
 Hourly Forecast (next 8 hours): [List of hourly labels, temp, feels like, precipitation %]
 5-Day Forecast: [List of days, max/min temps, conditions]
 
+--- CALENDAR EVENTS TODAY ---
+[Capped at top 5 events. Time ranges, locations, and descriptions are included. Descriptions are truncated to 120 chars maximum to prevent context window overflow.]
+
+--- ACTIVE TASKS & TODOS ---
+[Capped at top 8 tasks, sorted by high importance first. Due dates and task notes are included. Notes are truncated to 120 chars maximum to prevent context window overflow.]
+
+--- NEWS HEADLINES ---
+[Capped at top 5 scored feed headlines, e.g. "- Title (Source: Publication)"]
+
 --- HEALTH DATA ---
 Steps Today: [Count]
 Sleep Last Night: [Hours]
@@ -394,7 +406,7 @@ Average Heart Rate: [BPM]
 [Optional: Weight, Active Energy Burned, HRV, Blood Pressure, SpO2]
 
 --- FINANCE DATA ---
-[If HasLedgerData]: Net Worth: [Amount] | Watchlist Stocks: [Ticker: Price (Change)]
+[If HasLedgerData]: Net Worth: [Amount] | Watchlist Stocks: [Ticker: Price (Change)] (Capped at top 10 stocks in watchlist details)
 [If Uninitialized]: Ledger status: UNINITIALIZED (No accounts or transactions logged yet...)
 
 --- HABITS DATA ---
