@@ -77,3 +77,22 @@ The local SQLite initialization creates:
 | **Visual States** | VisualStateManager with native XAML states (`SmallState`, `NormalState`, etc.) | CSS Media queries & MudBlazor Breakpoint listeners |
 | **OAuth Catching** | Native WinUI protocol activation and named-pipe forwarder | System web views or MAUI WebAuthenticator callback handlers |
 | **Credential Storage** | Encrypted locally in SQLite and synchronized to Supabase | SQLite encrypted local variables |
+
+---
+
+## 5. Recent Improvements (June 2026)
+
+### 5.1 Authentication & Multi-Account Support
+- **Multi-Account Account Switching**: Added `prompt=select_account` to Google and Microsoft OAuth authorization URLs. This prevents the browser from automatically logging in using the default browser session and enables users to connect multiple distinct accounts.
+- **Enterprise Microsoft 365 Support**: Refactored Microsoft Graph user endpoints and database mapping to support corporate and school accounts (`MicrosoftWork`) alongside personal Outlook profiles (`MicrosoftPersonal`).
+- **Google Sync Loop Prevention**: Resolved infinite loading and synchronization loop triggers by adding local SQLite verification guards, stopping redundant sync cascades.
+
+### 5.2 Yahoo CalDAV & Timezone Synchronization
+- **Yahoo CalDAV Auto-Discovery**: Added a Basic Auth CalDAV interface over HTTPS for Yahoo Calendar. The service automatically performs XML `PROPFIND` queries to discover calendar folders.
+- **Timezone Offset Correction**: Resolved timezone offset conversion bugs (e.g. Romanian timezone) that shifted single-day events into late night or early morning hours.
+
+### 5.3 Unified Header UI & Glassmorphic Styling
+- **Interactive Calendar Header Button**: Merged the left sidebar collapse button and the calendar icon into a single circular `40x40px` glass button (`CornerRadius="20"`). It displays the calendar icon (`&#xE787;`) and functions as the sidebar toggle, removing header clutter.
+- **Native Scheduler Integration**: Migrated the scheduler header to use the native Syncfusion `SfScheduler` header controls for date title display and Prev/Next page navigation.
+- **Glass-Pill Button Sizing & Shapes**: Styled the native Prev, Next, and Today buttons using a scoped implicit `Style` targeting `Button` inside the scheduler's resources. They are sized to `32px` in height, have a `6px` corner radius, and use the semi-transparent glass backdrop (`AppGlassColorBrush` and `AppGlassBorderColorBrush` border).
+- **Segmented View Switcher Overlay**: Placed a `32px` segmented glass-capsule view switcher (Day/Week/Work/Month) in the top right header (overlapping the native header area on a single vertical center line), aligning perfectly with the Today button.
