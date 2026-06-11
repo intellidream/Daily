@@ -1182,7 +1182,12 @@ namespace Daily_WinUI.Views
 
             if (SchedulerDateText == null) return;
 
-            bool isSmall = this.ActualWidth < 800;
+            double availableWidth = this.ActualWidth;
+            if (ToggleSidebarBtn != null && ToggleSidebarBtn.IsChecked == true)
+            {
+                availableWidth -= 340;
+            }
+            bool isSmall = availableWidth < 700;
 
             if (Scheduler.ViewType == SchedulerViewType.Month)
             {
@@ -1393,13 +1398,20 @@ namespace Daily_WinUI.Views
         private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             double width = e.NewSize.Width;
-            bool isSmall = width < 800;
 
-            // 1. Collapse connected accounts sidebar if expanded and resizing to small size
-            if (isSmall && ToggleSidebarBtn != null && ToggleSidebarBtn.IsChecked == true)
+            // 1. Collapse connected accounts sidebar if expanded and resizing to small size (< 950px)
+            if (width < 950 && ToggleSidebarBtn != null && ToggleSidebarBtn.IsChecked == true)
             {
                 ToggleSidebarBtn.IsChecked = false;
             }
+
+            // Calculate available width for the scheduler header
+            double availableWidth = width;
+            if (ToggleSidebarBtn != null && ToggleSidebarBtn.IsChecked == true)
+            {
+                availableWidth -= 340;
+            }
+            bool isSmall = availableWidth < 700;
 
             // 2. Update Today button content (icon vs text) and width
             if (TodayBtn != null && TodayText != null && TodayIcon != null)
