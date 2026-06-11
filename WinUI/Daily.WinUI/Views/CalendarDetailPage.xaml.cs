@@ -229,6 +229,18 @@ namespace Daily_WinUI.Views
                 if (SidebarPanel != null) SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             }
 
+            // Restore Scheduler View Type
+            var viewTypeStr = LoadSchedulerViewType();
+            Scheduler.ViewType = viewTypeStr switch
+            {
+                "Day" => SchedulerViewType.Day,
+                "Week" => SchedulerViewType.Week,
+                "WorkWeek" => SchedulerViewType.WorkWeek,
+                "Month" => SchedulerViewType.Month,
+                _ => SchedulerViewType.Month
+            };
+            UpdateSwitcherButtonsVisuals(viewTypeStr);
+
             await LoadDataAsync();
         }
 
@@ -1146,6 +1158,73 @@ namespace Daily_WinUI.Views
             Scheduler.DisplayDate = DateTime.Today;
         }
 
+        private void Prev_Click(object sender, RoutedEventArgs e)
+        {
+            Scheduler.Backward();
+        }
+
+        private void Next_Click(object sender, RoutedEventArgs e)
+        {
+            Scheduler.Forward();
+        }
+
+        private void Scheduler_ViewChanged(object sender, ViewChangedEventArgs e)
+        {
+            UpdateDateText(e.NewValue.ActualStartDate, e.NewValue.ActualEndDate);
+        }
+
+        private void UpdateDateText(DateTime start, DateTime end)
+        {
+            if (SchedulerDateText == null) return;
+
+            if (Scheduler.ViewType == SchedulerViewType.Month)
+            {
+                var midDate = start.AddDays((end - start).Days / 2);
+                SchedulerDateText.Text = midDate.ToString("MMMM yyyy");
+            }
+            else if (Scheduler.ViewType == SchedulerViewType.Day)
+            {
+                SchedulerDateText.Text = Scheduler.DisplayDate.ToString("MMMM dd, yyyy");
+            }
+            else // Week, WorkWeek
+            {
+                if (start.Year != end.Year)
+                {
+                    SchedulerDateText.Text = $"{start:MMM dd, yyyy} - {end:MMM dd, yyyy}";
+                }
+                else if (start.Month != end.Month)
+                {
+                    SchedulerDateText.Text = $"{start:MMM dd} - {end:MMM dd, yyyy}";
+                }
+                else
+                {
+                    SchedulerDateText.Text = $"{start:MMM dd} - {end:dd, yyyy}";
+                }
+            }
+
+            // Sync HeaderCalendarView date selection silently (prevent re-triggering loop)
+            if (HeaderCalendarView != null)
+            {
+                HeaderCalendarView.SelectedDatesChanged -= HeaderCalendarView_SelectedDatesChanged;
+                HeaderCalendarView.SelectedDates.Clear();
+                HeaderCalendarView.SelectedDates.Add(Scheduler.DisplayDate);
+                HeaderCalendarView.SelectedDatesChanged += HeaderCalendarView_SelectedDatesChanged;
+            }
+        }
+
+        private void HeaderCalendarView_SelectedDatesChanged(CalendarView sender, CalendarViewSelectedDatesChangedEventArgs args)
+        {
+            if (args.AddedDates.Count > 0)
+            {
+                var selectedDate = args.AddedDates[0].DateTime;
+                Scheduler.DisplayDate = selectedDate;
+                if (CalendarFlyout != null)
+                {
+                    CalendarFlyout.Hide();
+                }
+            }
+        }
+
         private void ViewSwitcher_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.Tag is string viewTypeStr)
@@ -1158,6 +1237,94 @@ namespace Daily_WinUI.Views
                     "Month" => SchedulerViewType.Month,
                     _ => SchedulerViewType.Month
                 };
+                UpdateSwitcherButtonsVisuals(viewTypeStr);
+                SaveSchedulerViewType(viewTypeStr);
+            }
+        }
+
+        private void SaveSchedulerViewType(string viewType)
+        {
+            try
+            {
+                var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
+                localSettings.Values["CalendarSchedulerViewType"] = viewType;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CalendarDetailPage] SaveSchedulerViewType error: {ex.Message}");
+                try
+                {
+                    var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+                    Directory.CreateDirectory(appDataPath);
+                    var file = Path.Combine(appDataPath, "CalendarSchedulerViewType.txt");
+                    File.WriteAllText(file, viewType);
+                }
+                catch { }
+            }
+        }
+
+        private string LoadSchedulerViewType()
+        {
+            try
+            {
+                var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
+                if (localSettings.Values.TryGetValue("CalendarSchedulerViewType", out var val) && val is string viewType)
+                {
+                    return viewType;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CalendarDetailPage] LoadSchedulerViewType error: {ex.Message}");
+            }
+
+            try
+            {
+                var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+                var file = Path.Combine(appDataPath, "CalendarSchedulerViewType.txt");
+                if (File.Exists(file))
+                {
+                    return File.ReadAllText(file).Trim();
+                }
+            }
+            catch { }
+
+            return "Month"; // Default
+        }
+
+        private void UpdateSwitcherButtonsVisuals(string selectedViewType)
+        {
+            if (DayViewBtn == null || WeekViewBtn == null || WorkWeekViewBtn == null || MonthViewBtn == null) return;
+
+            // Clear active state of all buttons (make them transparent and muted text)
+            DayViewBtn.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            WeekViewBtn.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            WorkWeekViewBtn.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            MonthViewBtn.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
+            var fgMutedBrush = Application.Current.Resources.TryGetValue("AppFgMutedColorBrush", out var fmb) ? fmb as Brush : null;
+            var fgBrush = Application.Current.Resources.TryGetValue("AppFgColorBrush", out var fb) ? fb as Brush : null;
+            var activeBgBrush = Application.Current.Resources.TryGetValue("AppGlassColorBrush", out var gb) ? gb as Brush : null;
+
+            DayViewBtn.Foreground = fgMutedBrush;
+            WeekViewBtn.Foreground = fgMutedBrush;
+            WorkWeekViewBtn.Foreground = fgMutedBrush;
+            MonthViewBtn.Foreground = fgMutedBrush;
+
+            // Highlight the active button
+            Button? activeBtn = selectedViewType switch
+            {
+                "Day" => DayViewBtn,
+                "Week" => WeekViewBtn,
+                "WorkWeek" => WorkWeekViewBtn,
+                "Month" => MonthViewBtn,
+                _ => MonthViewBtn
+            };
+
+            if (activeBtn != null)
+            {
+                activeBtn.Background = activeBgBrush;
+                activeBtn.Foreground = fgBrush;
             }
         }
 

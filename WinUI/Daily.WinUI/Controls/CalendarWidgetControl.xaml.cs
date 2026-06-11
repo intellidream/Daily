@@ -274,9 +274,9 @@ namespace Daily_WinUI.Controls
                 }
 
                 SmallItems.Clear();
-                if (sorted.Count > 0)
+                foreach (var item in sorted.Take(2))
                 {
-                    SmallItems.Add(sorted[0]);
+                    SmallItems.Add(item);
                 }
 
                 NormalItems.Clear();

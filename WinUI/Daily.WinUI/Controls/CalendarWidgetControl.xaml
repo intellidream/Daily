@@ -94,20 +94,20 @@
         <Grid Grid.Row="1">
             
             <!-- 1. SMALL CONTAINER (1x1) -->
-            <Grid x:Name="SmallContainer" Visibility="Collapsed">
+            <Grid x:Name="SmallContainer" Visibility="Collapsed" VerticalAlignment="Center">
                 <ItemsControl ItemsSource="{x:Bind SmallItems, Mode=OneWay}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="local:CalendarWidgetItem">
-                            <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="10" Height="80" VerticalAlignment="Center">
+                            <Border CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="8,6" Margin="0,0,0,6" Height="52" VerticalAlignment="Center">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="4" />
+                                        <ColumnDefinition Width="3" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Background="{x:Bind ColorBrush}" CornerRadius="2" VerticalAlignment="Stretch" Margin="0,0,8,0" />
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
-                                        <TextBlock Text="{x:Bind Title}" FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxLines="2" />
-                                        <TextBlock Text="{x:Bind Details}" FontSize="10" Opacity="0.6" Margin="0,2,0,0" />
+                                    <Border Grid.Column="0" Background="{x:Bind ColorBrush}" CornerRadius="1.5" VerticalAlignment="Stretch" Margin="0,0,6,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="4,0,0,0">
+                                        <TextBlock Text="{x:Bind Title}" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                        <TextBlock Text="{x:Bind Details}" FontSize="9.5" Opacity="0.6" Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </Grid>
                             </Border>

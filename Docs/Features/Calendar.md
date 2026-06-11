@@ -91,15 +91,37 @@ The local SQLite initialization creates:
 - **Yahoo CalDAV Auto-Discovery**: Added a Basic Auth CalDAV interface over HTTPS for Yahoo Calendar. The service automatically performs XML `PROPFIND` queries to discover calendar folders.
 - **Timezone Offset Correction**: Resolved timezone offset conversion bugs (e.g. Romanian timezone) that shifted single-day events into late night or early morning hours.
 
-### 5.3 Unified Header UI & Glassmorphic Styling
+### 5.3 Unified Header UI & Glassmorphic Styling (June 2026)
 - **Interactive Calendar Header Button**: Merged the left sidebar collapse button and the calendar icon into a single circular `40x40px` glass button (`CornerRadius="20"`). It displays the calendar icon (`&#xE787;`) and functions as the sidebar toggle, removing header clutter.
-- **Native Scheduler Integration**: Migrated the scheduler header to use the native Syncfusion `SfScheduler` header controls for date title display and Prev/Next page navigation.
-- **Glass-Pill Button Sizing & Shapes**: Styled the native Prev, Next, and Today buttons using a scoped implicit `Style` targeting `Button` inside the scheduler's resources. They are sized to `32px` in height, have a `6px` corner radius, and use the semi-transparent glass backdrop (`AppGlassColorBrush` and `AppGlassBorderColorBrush` border).
-- **Segmented View Switcher Overlay**: Placed a `32px` segmented glass-capsule view switcher (Day/Week/Work/Month) in the top right header (overlapping the native header area on a single vertical center line), aligning perfectly with the Today button.
+- **Custom Header Layout & Date Selection**: Migrated from the native Syncfusion header control to a fully custom XAML header layout by setting `HeaderHeight="0"`. This custom header houses an interactive date range button, a navigation stack (previous, next, and Today buttons), and the view switcher panel side-by-side in a single grid row.
+- **Interactive Date Selector Button**: Wrapped the date range `TextBlock` inside a transparent `Button` that triggers a `Flyout` containing a `CalendarView`. Choosing a date in the calendar view updates the scheduler's display date programmatically and closes the flyout. The calendar view selection is synchronized bi-directionally whenever the scheduler range navigates (e.g. Prev/Next/Today).
+- **Today & Navigation Button Alignment**: Designed the custom Today, previous, and next navigation buttons to be squarer (`CornerRadius="6"`) and taller (`Height="32"`), matching the height and corner radius of the view switcher pane exactly, utilizing matching glassy backdrops (`AppGlassSubColorBrush` and `AppGlassBorderColorBrush` border).
+- **Add New Account Expander & Redesigned Connection Buttons**:
+  - Renamed the connection panel header from **"Link New Calendar"** to **"Add New Account"**.
+  - Redesigned the Google, Microsoft, and Yahoo connection buttons inside the expander to just display **"Google"**, **"Microsoft"**, and **"Yahoo"** respectively.
+  - Styled the buttons to be larger and more prominent (`Height="48"`, `CornerRadius="10"`), utilizing larger brand icons (`FontSize="18"`), bold text, and vibrant color-tinted glassy backdrops.
 
 ### 5.4 Dashboard Widget Layout & State Fixes (June 2026)
 - **Overlapping Stacks Resolved**: Replaced the `<Grid>` layout panel in the widget's `SmallState` (1x1 view) with a standard vertical layout, stopping multiple upcoming items from drawing directly on top of each other.
-- **Adaptive Size Constraints**: Introduced distinct `SmallItems` (1 item) and `NormalItems` (2 items) collections populated during data loading. The 1x1 view binds only to the first next event, and the 2x1 view binds only to the top two, preventing layout overflow.
+- **Adaptive Size Constraints**: Introduced distinct `SmallItems` (up to 2 items) and `NormalItems` (2 items) collections populated during data loading. The 2x1 view binds to the top two horizontal cards, and the 1x1 view binds to the vertical list.
+- **1x1 Multi-Item Support**: Redesigned the small state widget layout in `CalendarWidgetControl.xaml` to render up to 2 items vertically. Items are styled in an extremely compact template (`Height="52"`, `Padding="8,6"`, `Margin="0,0,0,6"`, smaller text size and character truncation) that prevents layout overflow.
 - **Full Width Grid Alignment**: Removed the ColumnDefinitions grid constraint inside the `NormalContainer` (2x1 view), letting the wide horizontal stack stretch across the full width of the cell rather than squishing in the left 50% section.
 - **Boolean State Indicators**: Exposed indicator flags (`HasSmallItems`, `HasNormalItems`, `HasUpcomingItems`) to safely control empty state fallback visibility via the native `InverseBooleanToVisibilityConverter`.
 - **In-Widget Item Cap**: Limited the total scrollable upcoming items collection to a maximum of 15 items to keep the widget lightweight.
+
+### 5.5 Account Personalization, Reordering & Sidebar Memory (June 2026)
+- **Premium Color Presets**: Expanded color preset choices from 6 to 11 items (adding Teal, Pink, Lavender, Coral, and Mint) and adjusted horizontal layout spacing from `8px` to `6px` to fit all presets on a single row.
+- **Account Renaming & Display Hierarchy**:
+  - Enabled inline editing of account names (saved on Enter, cancelled on Escape).
+  - Without Custom Name: Shows Email as main title, and Provider/Org as subtitle.
+  - With Custom Name: Shows Custom Name as main title, Email as subtitle, and Provider/Org as a more transparent, smaller footer.
+- **Drag-and-Drop Reordering**: Migrated the accounts management list to a `ListView` supporting native drag reordering (`CanReorderItems="True"`, `AllowDrop="True"`). Order indices are persisted in the SQLite database (`DisplayOrder` field).
+- **Accounts Sidebar Layout Memory**: Saved the sidebar pane open/closed toggle state inside LocalSettings so that it is restored on page navigation.
+- **Outlook/Microsoft Personal Account Email Fetch & Fallbacks**:
+  - Requested `User.Read` scope during Microsoft OAuth links.
+  - Implemented a fallback query to primary calendar metadata (`GET /me/calendar` for `owner.address`) under `Calendars.Read` scope if the profile lookup fails.
+  - Programmed a self-healing background sync routine to update the local SQLite database email cache for legacy calendar connections.
+
+### 5.6 Scheduler View Persistence & Switcher Highlights (June 2026)
+- **View Selection Memory**: Saved the last selected view type (Day, Week, Work, Month) inside LocalSettings and restored it on page navigation.
+- **Visual Highlight**: Added active button selection highlighting in the view switcher. The selected button is given a solid glassy background (`AppGlassColorBrush`) and solid white text, while unselected ones remain transparent and muted.
