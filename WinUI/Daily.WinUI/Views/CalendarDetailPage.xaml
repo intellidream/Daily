@@ -172,41 +172,113 @@
 
         <!-- Right Pane: Syncfusion Scheduler -->
         <Grid Grid.Row="1" Grid.Column="1" Padding="20,0,20,20">
-            <!-- SfScheduler Control -->
-            <scheduler:SfScheduler x:Name="Scheduler" 
-                                   HeaderHeight="50"
-                                   ViewType="Month" 
-                                   ItemsSource="{x:Bind Appointments, Mode=OneWay}"
-                                   AppointmentTapped="Scheduler_AppointmentTapped">
-                <scheduler:SfScheduler.Resources>
-                    <Style TargetType="Button">
-                        <Setter Property="Height" Value="32" />
-                        <Setter Property="VerticalAlignment" Value="Center" />
-                        <Setter Property="Background" Value="{ThemeResource AppGlassColorBrush}" />
-                        <Setter Property="BorderBrush" Value="{ThemeResource AppGlassBorderColorBrush}" />
-                        <Setter Property="BorderThickness" Value="1" />
-                        <Setter Property="CornerRadius" Value="6" />
-                        <Setter Property="Padding" Value="12,4" />
-                        <Setter Property="FontSize" Value="11" />
-                        <Setter Property="Foreground" Value="{ThemeResource AppFgColorBrush}" />
-                    </Style>
-                </scheduler:SfScheduler.Resources>
-                <scheduler:SfScheduler.AppointmentMapping>
-                    <scheduler:AppointmentMapping
-                        Subject="Subject"
-                        StartTime="StartTime"
-                        EndTime="EndTime"
-                        AppointmentBackground="AppointmentBackground"
-                        IsAllDay="IsAllDay"
-                        Notes="Notes"
-                        Location="Location" />
-                </scheduler:SfScheduler.AppointmentMapping>
-            </scheduler:SfScheduler>
+            <!-- Glassy Border Container -->
+            <Border Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="16"
+                    Style="{StaticResource GlassPanelStyle}">
+                <!-- SfScheduler Control -->
+                <scheduler:SfScheduler x:Name="Scheduler" 
+                                       HeaderHeight="50"
+                                       ViewType="Month" 
+                                       Background="Transparent"
+                                       BorderThickness="0"
+                                       ItemsSource="{x:Bind Appointments, Mode=OneWay}"
+                                       AppointmentTapped="Scheduler_AppointmentTapped">
+                    <scheduler:SfScheduler.Resources>
+                        <Style TargetType="Button">
+                            <Setter Property="Height" Value="32" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="Background" Value="{ThemeResource AppGlassSubColorBrush}" />
+                            <Setter Property="BorderBrush" Value="{ThemeResource AppGlassBorderColorBrush}" />
+                            <Setter Property="BorderThickness" Value="1" />
+                            <Setter Property="CornerRadius" Value="6" />
+                            <Setter Property="Padding" Value="12,4" />
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Foreground" Value="{ThemeResource AppFgColorBrush}" />
+                        </Style>
+
+                        <!-- Style for Scheduler Header Control -->
+                        <Style TargetType="scheduler:SchedulerHeaderControl">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="{ThemeResource AppGlassSubColorBrush}" />
+                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                            <Setter Property="Foreground" Value="{ThemeResource AppFgColorBrush}" />
+                        </Style>
+
+                        <!-- Style for View Header Control (displays days of week at top of cells) -->
+                        <Style TargetType="scheduler:ViewHeaderControl">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="{ThemeResource AppGlassSubColorBrush}" />
+                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                            <Setter Property="Foreground" Value="{ThemeResource AppFgMutedColorBrush}" />
+                        </Style>
+
+                        <!-- Override Syncfusion Scheduler Theme Brushes for Glassy Look -->
+                        <SolidColorBrush x:Key="SyncfusionSchedulerBackground" Color="Transparent" />
+                        <SolidColorBrush x:Key="SyncfusionViewHeaderControlBackground" Color="Transparent" />
+                        <SolidColorBrush x:Key="SyncfusionViewHeaderBaseBackground" Color="Transparent" />
+                        <SolidColorBrush x:Key="SyncfusionTimeRulerCellBackground" Color="Transparent" />
+                        <SolidColorBrush x:Key="SyncfusionTimeSlotCellBackground" Color="Transparent" />
+                        <SolidColorBrush x:Key="SyncfusionAllDayAppointmentViewControlBackground" Color="Transparent" />
+                        <SolidColorBrush x:Key="SyncfusionResourceHeaderControlBackground" Color="Transparent" />
+
+                        <!-- Borders -->
+                        <StaticResource x:Key="SyncfusionSchedulerBorderBrush" ResourceKey="AppGlassSubColorBrush" />
+                        <StaticResource x:Key="SyncfusionViewHeaderControlBorderBrush" ResourceKey="AppGlassSubColorBrush" />
+                        <StaticResource x:Key="SyncfusionTimeRulerCellBorderBrush" ResourceKey="AppGlassSubColorBrush" />
+                        <StaticResource x:Key="SyncfusionTimeSlotCellBorderBrush" ResourceKey="AppGlassSubColorBrush" />
+                        <StaticResource x:Key="SyncfusionAllDayAppointmentViewControlBorderBrush" ResourceKey="AppGlassSubColorBrush" />
+                        <StaticResource x:Key="SyncfusionResourceHeaderControlBorderBrush" ResourceKey="AppGlassSubColorBrush" />
+
+                        <!-- Foregrounds -->
+                        <StaticResource x:Key="SyncfusionTimeRulerCellForeground" ResourceKey="AppFgMutedColorBrush" />
+                        <StaticResource x:Key="SyncfusionDayViewHeaderDayForeground" ResourceKey="AppFgMutedColorBrush" />
+                        <StaticResource x:Key="SyncfusionDayViewHeaderDateForeground" ResourceKey="AppFgColorBrush" />
+                        <StaticResource x:Key="SyncfusionResourceHeaderControlForeground" ResourceKey="AppFgColorBrush" />
+                        <StaticResource x:Key="SyncfusionMonthViewHeaderForeground" ResourceKey="AppFgMutedColorBrush" />
+                    </scheduler:SfScheduler.Resources>
+                    
+                    <scheduler:SfScheduler.AppointmentMapping>
+                        <scheduler:AppointmentMapping
+                            Subject="Subject"
+                            StartTime="StartTime"
+                            EndTime="EndTime"
+                            AppointmentBackground="AppointmentBackground"
+                            IsAllDay="IsAllDay"
+                            Notes="Notes"
+                            Location="Location" />
+                    </scheduler:SfScheduler.AppointmentMapping>
+
+                    <scheduler:SfScheduler.MonthViewSettings>
+                        <scheduler:MonthViewSettings>
+                            <!-- Custom Month Cell Template for glassy grid look -->
+                            <scheduler:MonthViewSettings.MonthCellTemplate>
+                                <DataTemplate>
+                                    <Border Background="Transparent" 
+                                            BorderBrush="{ThemeResource AppGlassSubColorBrush}" 
+                                            BorderThickness="0,0,1,1">
+                                        <TextBlock Text="{Binding DateTime.Day}" 
+                                                   Foreground="{ThemeResource AppFgColorBrush}"
+                                                   FontSize="11"
+                                                   Margin="8,6,0,0" 
+                                                   HorizontalAlignment="Left" 
+                                                   VerticalAlignment="Top" 
+                                                   Opacity="0.8"/>
+                                    </Border>
+                                </DataTemplate>
+                            </scheduler:MonthViewSettings.MonthCellTemplate>
+                        </scheduler:MonthViewSettings>
+                    </scheduler:SfScheduler.MonthViewSettings>
+                </scheduler:SfScheduler>
+            </Border>
 
             <!-- Scheduler Controls Overlay (Aligned with SfScheduler Header) -->
-            <Grid Height="50" HorizontalAlignment="Right" VerticalAlignment="Top" Canvas.ZIndex="1" Margin="0,0,100,0">
+            <Grid Height="50" HorizontalAlignment="Right" VerticalAlignment="Top" Canvas.ZIndex="1" Margin="0,16,116,0">
                 <!-- View switch buttons -->
-                <StackPanel Orientation="Horizontal" Spacing="2" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="2" CornerRadius="6" Height="32" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="2" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="2" CornerRadius="6" Height="32" VerticalAlignment="Center">
                     <Button Click="ViewSwitcher_Click" Tag="Day" Content="Day" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
                     <Button Click="ViewSwitcher_Click" Tag="Week" Content="Week" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
                     <Button Click="ViewSwitcher_Click" Tag="WorkWeek" Content="Work" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
