@@ -32,6 +32,37 @@ namespace Daily_WinUI.Views
         public string Email { get; set; } = string.Empty;
         public string AccountType { get; set; } = string.Empty;
         public string Color { get; set; } = "#512BD4";
+        public int DisplayOrder { get; set; }
+
+        private string _customName = string.Empty;
+        public string CustomName
+        {
+            get => _customName;
+            set
+            {
+                if (_customName != value)
+                {
+                    _customName = value;
+                    OnPropertyChanged();
+                    RefreshComputedProperties();
+                }
+            }
+        }
+
+        private string _identifiedName = string.Empty;
+        public string IdentifiedName
+        {
+            get => _identifiedName;
+            set
+            {
+                if (_identifiedName != value)
+                {
+                    _identifiedName = value;
+                    OnPropertyChanged();
+                    RefreshComputedProperties();
+                }
+            }
+        }
 
         private bool _isActive;
         public bool IsActive
@@ -45,6 +76,36 @@ namespace Daily_WinUI.Views
                     OnPropertyChanged();
                 }
             }
+        }
+
+        private bool _isEditing;
+        public bool IsEditing
+        {
+            get => _isEditing;
+            set
+            {
+                if (_isEditing != value)
+                {
+                    _isEditing = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(EditModeVisibility));
+                    OnPropertyChanged(nameof(ViewModeVisibility));
+                }
+            }
+        }
+
+        public Visibility EditModeVisibility => IsEditing ? Visibility.Visible : Visibility.Collapsed;
+        public Visibility ViewModeVisibility => IsEditing ? Visibility.Collapsed : Visibility.Visible;
+
+        public bool HasCustomName => !string.IsNullOrEmpty(CustomName);
+        public Visibility CustomNameVisibility => HasCustomName ? Visibility.Visible : Visibility.Collapsed;
+        public Visibility NoCustomNameVisibility => HasCustomName ? Visibility.Collapsed : Visibility.Visible;
+
+        public void RefreshComputedProperties()
+        {
+            OnPropertyChanged(nameof(HasCustomName));
+            OnPropertyChanged(nameof(CustomNameVisibility));
+            OnPropertyChanged(nameof(NoCustomNameVisibility));
         }
 
         public string IconGlyph => AccountType.ToLowerInvariant() switch
@@ -110,6 +171,8 @@ namespace Daily_WinUI.Views
         private readonly ICalendarService _calendarService;
         private readonly HttpClient _httpClient;
         private bool _isLoading;
+        private bool _isInitialized = false;
+        private bool _isUpdatingAccountsList = false;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
@@ -131,7 +194,12 @@ namespace Daily_WinUI.Views
             "#107C41", // Green
             "#D83B01", // Orange
             "#E81123", // Red
-            "#FFB900"  // Yellow
+            "#FFB900", // Yellow
+            "#00B7C3", // Teal
+            "#D01B70", // Pink
+            "#7F7DFF", // Lavender
+            "#FF6B6B", // Coral
+            "#00A389"  // Mint
         };
 
         public CalendarDetailPage()
@@ -139,12 +207,28 @@ namespace Daily_WinUI.Views
             this.InitializeComponent();
             _calendarService = App.Current.Services.GetRequiredService<ICalendarService>();
             _httpClient = App.Current.Services.GetRequiredService<HttpClient>();
+            Accounts.CollectionChanged += Accounts_CollectionChanged;
+            _isInitialized = true;
         }
 
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
             _calendarService.OnCalendarDataChanged += OnCalendarDataChanged;
+
+            var isOpened = LoadSidebarState();
+            ToggleSidebarBtn.IsChecked = isOpened;
+            if (isOpened)
+            {
+                if (SidebarColumn != null) SidebarColumn.Width = new GridLength(340);
+                if (SidebarPanel != null) SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            }
+            else
+            {
+                if (SidebarColumn != null) SidebarColumn.Width = new GridLength(0);
+                if (SidebarPanel != null) SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            }
+
             await LoadDataAsync();
         }
 
@@ -175,17 +259,28 @@ namespace Daily_WinUI.Views
             {
                 // Load accounts
                 var rawAccounts = await _calendarService.GetAccountsAsync();
-                Accounts.Clear();
-                foreach (var ra in rawAccounts)
+                _isUpdatingAccountsList = true;
+                try
                 {
-                    Accounts.Add(new DisplayAccount
+                    Accounts.Clear();
+                    foreach (var ra in rawAccounts)
                     {
-                        Id = ra.Id,
-                        Email = ra.Email,
-                        AccountType = ra.AccountType,
-                        Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color,
-                        IsActive = ra.IsActive
-                    });
+                        Accounts.Add(new DisplayAccount
+                        {
+                            Id = ra.Id,
+                            Email = ra.Email,
+                            AccountType = ra.AccountType,
+                            Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color,
+                            IsActive = ra.IsActive,
+                            CustomName = ra.CustomName,
+                            IdentifiedName = ra.IdentifiedName,
+                            DisplayOrder = ra.DisplayOrder
+                        });
+                    }
+                }
+                finally
+                {
+                    _isUpdatingAccountsList = false;
                 }
 
                 // Load events (within range of scheduler, e.g. -60 days to +90 days)
@@ -256,6 +351,66 @@ namespace Daily_WinUI.Views
                 await _calendarService.UpdateAccountColorAsync(acc.Id, hexColor);
                 await LoadDataAsync();
             }
+        }
+
+        private void EditAccount_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is DisplayAccount acc)
+            {
+                acc.IsEditing = true;
+            }
+        }
+
+        private async void SaveCustomName_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is DisplayAccount acc)
+            {
+                var grid = FindParent<Grid>(btn);
+                var textBox = grid?.Children.OfType<TextBox>().FirstOrDefault();
+                if (textBox != null)
+                {
+                    acc.CustomName = textBox.Text.Trim();
+                }
+                await _calendarService.UpdateAccountCustomNameAsync(acc.Id, acc.CustomName);
+                acc.IsEditing = false;
+                acc.RefreshComputedProperties();
+            }
+        }
+
+        private void CancelEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is DisplayAccount acc)
+            {
+                acc.IsEditing = false;
+            }
+        }
+
+        private async void CustomNameTextBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            if (sender is TextBox textBox && textBox.DataContext is DisplayAccount acc)
+            {
+                if (e.Key == Windows.System.VirtualKey.Enter)
+                {
+                    acc.CustomName = textBox.Text.Trim();
+                    await _calendarService.UpdateAccountCustomNameAsync(acc.Id, acc.CustomName);
+                    acc.IsEditing = false;
+                    acc.RefreshComputedProperties();
+                    e.Handled = true;
+                }
+                else if (e.Key == Windows.System.VirtualKey.Escape)
+                {
+                    acc.IsEditing = false;
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private static T? FindParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            DependencyObject parentObject = VisualTreeHelper.GetParent(child);
+            if (parentObject == null) return null;
+            if (parentObject is T parent) return parent;
+            return FindParent<T>(parentObject);
         }
 
         private async void DeleteAccount_Click(object sender, RoutedEventArgs e)
@@ -423,7 +578,7 @@ namespace Daily_WinUI.Views
                 var codeVerifier = GenerateCodeVerifier();
                 var codeChallenge = GenerateCodeChallenge(codeVerifier);
 
-                var authUrl = $"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={Secrets.MicrosoftClientId}&response_type=code&redirect_uri={Uri.EscapeDataString("com.intellidream.daily.desktop://login-callback")}&response_mode=query&scope={Uri.EscapeDataString("offline_access https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Tasks.Read")}&prompt=select_account&code_challenge={codeChallenge}&code_challenge_method=S256";
+                var authUrl = $"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={Secrets.MicrosoftClientId}&response_type=code&redirect_uri={Uri.EscapeDataString("com.intellidream.daily.desktop://login-callback")}&response_mode=query&scope={Uri.EscapeDataString("offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Tasks.Read")}&prompt=select_account&code_challenge={codeChallenge}&code_challenge_method=S256";
 
                 WinUIAuthService.OAuthCallbackTcs = new TaskCompletionSource<string>();
                 await Launcher.LaunchUriAsync(new Uri(authUrl));
@@ -458,9 +613,7 @@ namespace Daily_WinUI.Views
                         meReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
                         var meResp = await _httpClient.SendAsync(meReq);
                         var email = "Outlook Calendar";
-                        var accountType = "MicrosoftPersonal";
-
-                        if (meResp.IsSuccessStatusCode)
+                        var accountType = "MicrosoftPersonal";                        if (meResp.IsSuccessStatusCode)
                         {
                             var meJson = await meResp.Content.ReadAsStringAsync();
                             using var meDoc = JsonDocument.Parse(meJson);
@@ -471,8 +624,33 @@ namespace Daily_WinUI.Views
                             {
                                 email = upn.GetString() ?? email;
                             }
+                        }
 
-                            // Determine tenant/type
+                        // Fallback/Verify via primary calendar owner address (under Calendars.Read scope)
+                        if (email == "Outlook Calendar" || string.IsNullOrEmpty(email))
+                        {
+                            try
+                            {
+                                var calReq = new HttpRequestMessage(HttpMethod.Get, "https://graph.microsoft.com/v1.0/me/calendar");
+                                calReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                                var calResp = await _httpClient.SendAsync(calReq);
+                                if (calResp.IsSuccessStatusCode)
+                                {
+                                    var calJson = await calResp.Content.ReadAsStringAsync();
+                                    using var calDoc = JsonDocument.Parse(calJson);
+                                    if (calDoc.RootElement.TryGetProperty("owner", out var owner) && 
+                                        owner.TryGetProperty("address", out var addr))
+                                    {
+                                        email = addr.GetString() ?? email;
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+
+                        // Determine tenant/type
+                        if (email != "Outlook Calendar" && !string.IsNullOrEmpty(email))
+                        {
                             if (email.EndsWith(".onmicrosoft.com") || (!email.EndsWith("@outlook.com") && !email.EndsWith("@hotmail.com") && !email.EndsWith("@live.com")))
                             {
                                 accountType = "MicrosoftWork";
@@ -869,6 +1047,61 @@ namespace Daily_WinUI.Views
             }
         }
 
+        private void SaveSidebarState(bool isOpened)
+        {
+            if (!_isInitialized) return; // Guard against events fired during XAML initialization
+            
+            try
+            {
+                var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
+                localSettings.Values["CalendarSidebarState"] = isOpened ? "open" : "closed";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CalendarDetailPage] SaveSidebarState error: {ex.Message}");
+                // Fallback to text file
+                try
+                {
+                    var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+                    Directory.CreateDirectory(appDataPath);
+                    var file = Path.Combine(appDataPath, "CalendarSidebarState.txt");
+                    File.WriteAllText(file, isOpened ? "open" : "closed");
+                }
+                catch { }
+            }
+        }
+
+        private bool LoadSidebarState()
+        {
+            try
+            {
+                var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
+                if (localSettings.Values.TryGetValue("CalendarSidebarState", out var val) && val is string state)
+                {
+                    return state == "open";
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CalendarDetailPage] LoadSidebarState error: {ex.Message}");
+            }
+
+            // Fallback to text file
+            try
+            {
+                var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+                var file = Path.Combine(appDataPath, "CalendarSidebarState.txt");
+                if (File.Exists(file))
+                {
+                    var txt = File.ReadAllText(file).Trim().ToLowerInvariant();
+                    return txt == "open";
+                }
+            }
+            catch { }
+
+            return true; // default value
+        }
+
         private void ToggleSidebar_Checked(object sender, RoutedEventArgs e)
         {
             if (SidebarColumn != null)
@@ -879,6 +1112,7 @@ namespace Daily_WinUI.Views
             {
                 SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
             }
+            SaveSidebarState(true);
         }
 
         private void ToggleSidebar_Unchecked(object sender, RoutedEventArgs e)
@@ -891,6 +1125,20 @@ namespace Daily_WinUI.Views
             {
                 SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             }
+            SaveSidebarState(false);
+        }
+
+        private async void Accounts_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+        {
+            var accountIds = Accounts.Select(x => x.Id).ToList();
+            await _calendarService.UpdateAccountsOrderAsync(accountIds);
+        }
+
+        private async void Accounts_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (_isUpdatingAccountsList) return;
+            var accountIds = Accounts.Select(x => x.Id).ToList();
+            await _calendarService.UpdateAccountsOrderAsync(accountIds);
         }
 
         private void Today_Click(object sender, RoutedEventArgs e)

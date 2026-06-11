@@ -28,12 +28,30 @@ namespace Daily_WinUI.Services
         public async Task<List<LocalCalendarAccount>> GetAccountsAsync()
         {
             await _databaseService.InitializeAsync();
-            return await _databaseService.Connection.Table<LocalCalendarAccount>().ToListAsync();
+            var accounts = await _databaseService.Connection.Table<LocalCalendarAccount>().OrderBy(x => x.DisplayOrder).ToListAsync();
+            foreach (var account in accounts)
+            {
+                if (string.IsNullOrEmpty(account.IdentifiedName))
+                {
+                    account.IdentifiedName = DetermineIdentifiedName(account.Email, account.AccountType);
+                    await _databaseService.Connection.UpdateAsync(account);
+                }
+            }
+            return accounts;
         }
 
         public async Task AddAccountAsync(LocalCalendarAccount account)
         {
             await _databaseService.InitializeAsync();
+            if (string.IsNullOrEmpty(account.IdentifiedName))
+            {
+                account.IdentifiedName = DetermineIdentifiedName(account.Email, account.AccountType);
+            }
+            var existing = await _databaseService.Connection.Table<LocalCalendarAccount>().ToListAsync();
+            if (account.DisplayOrder == 0 && existing.Any())
+            {
+                account.DisplayOrder = existing.Max(x => x.DisplayOrder) + 1;
+            }
             account.SyncedAt = null; // Mark dirty for Supabase sync
             await _databaseService.Connection.InsertOrReplaceAsync(account);
             OnCalendarDataChanged?.Invoke();
@@ -407,6 +425,36 @@ namespace Daily_WinUI.Services
         private async Task SyncMicrosoftCalendarAndTodosAsync(LocalCalendarAccount account)
         {
             var decryptedAccessToken = Daily.Services.Auth.EncryptionHelper.Decrypt(account.AccessToken, account.UserId);
+
+            // Self-healing: if email is generic, retrieve owner email from calendar metadata
+            if (account.Email == "Outlook Calendar" || string.IsNullOrEmpty(account.Email))
+            {
+                try
+                {
+                    var calReq = new HttpRequestMessage(HttpMethod.Get, "https://graph.microsoft.com/v1.0/me/calendar");
+                    calReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", decryptedAccessToken);
+                    var calResp = await _httpClient.SendAsync(calReq);
+                    if (calResp.IsSuccessStatusCode)
+                    {
+                        var calJson = await calResp.Content.ReadAsStringAsync();
+                        using var calDoc = JsonDocument.Parse(calJson);
+                        if (calDoc.RootElement.TryGetProperty("owner", out var owner) && 
+                            owner.TryGetProperty("address", out var addr))
+                        {
+                            var realEmail = addr.GetString();
+                            if (!string.IsNullOrEmpty(realEmail) && realEmail != "Outlook Calendar")
+                            {
+                                account.Email = realEmail;
+                                account.IdentifiedName = DetermineIdentifiedName(realEmail, account.AccountType);
+                                account.UpdatedAt = DateTime.UtcNow;
+                                account.SyncedAt = null; // Mark dirty
+                                await _databaseService.Connection.UpdateAsync(account);
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
 
             // 1. Sync Calendar View Events (expanded recurrence)
             var startStr = DateTime.UtcNow.AddDays(-30).ToString("yyyy-MM-ddTHH:mm:ssZ");
@@ -1081,6 +1129,123 @@ namespace Daily_WinUI.Services
                 });
             }
         }
+
+        public async Task UpdateAccountCustomNameAsync(string accountId, string customName)
+        {
+            await _databaseService.InitializeAsync();
+            var account = await _databaseService.Connection.Table<LocalCalendarAccount>().Where(x => x.Id == accountId).FirstOrDefaultAsync();
+            if (account != null)
+            {
+                account.CustomName = customName ?? string.Empty;
+                account.UpdatedAt = DateTime.UtcNow;
+                account.SyncedAt = null;
+                await _databaseService.Connection.UpdateAsync(account);
+                OnCalendarDataChanged?.Invoke();
+            }
+        }
+
+        public async Task UpdateAccountsOrderAsync(List<string> accountIds)
+        {
+            if (accountIds == null) return;
+            await _databaseService.InitializeAsync();
+            for (int i = 0; i < accountIds.Count; i++)
+            {
+                var id = accountIds[i];
+                var account = await _databaseService.Connection.Table<LocalCalendarAccount>().Where(x => x.Id == id).FirstOrDefaultAsync();
+                if (account != null)
+                {
+                    if (account.DisplayOrder != i)
+                    {
+                        account.DisplayOrder = i;
+                        account.UpdatedAt = DateTime.UtcNow;
+                        account.SyncedAt = null;
+                        await _databaseService.Connection.UpdateAsync(account);
+                    }
+                }
+            }
+            OnCalendarDataChanged?.Invoke();
+        }
+
+        public static string DetermineIdentifiedName(string email, string accountType)
+        {
+            if (string.IsNullOrWhiteSpace(email)) return string.Empty;
+
+            // 1. Google -> always "Google"
+            if (accountType.Equals("Google", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Google";
+            }
+
+            // 2. Yahoo -> always "Yahoo"
+            if (accountType.Equals("Yahoo", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Yahoo";
+            }
+
+            // Extract domain
+            int atIndex = email.LastIndexOf('@');
+            if (atIndex < 0 || atIndex >= email.Length - 1)
+            {
+                return "Outlook"; // fallback
+            }
+
+            string domain = email.Substring(atIndex + 1).ToLowerInvariant();
+
+            // 3. Microsoft Personal domains
+            if (domain.StartsWith("outlook.") || domain == "outlook")
+            {
+                return "Outlook";
+            }
+            if (domain.StartsWith("hotmail.") || domain == "hotmail")
+            {
+                return "Hotmail";
+            }
+            if (domain.StartsWith("live.") || domain == "live")
+            {
+                return "Live";
+            }
+            if (domain == "msn.com" || domain == "msn")
+            {
+                return "MSN";
+            }
+
+            // 4. Microsoft Work/School or any other domain -> try to extract the company/school name
+            // Split domain by '.'
+            string[] parts = domain.Split('.');
+            if (parts.Length > 0)
+            {
+                // Common TLDs and SLDs to filter out from right-to-left
+                var commonSuffixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "com", "org", "edu", "net", "gov", "mil", "co", "ac", "or", "go", "ltd", "me", "io", "cc", "tv", 
+                    "biz", "info", "mobi", "name", "us", "uk", "ca", "de", "fr", "jp", "au", "ro", "nl", "it", "es", "ch", "se", "no"
+                };
+
+                // Traverse right-to-left and pick the first part that is not in the common suffixes
+                for (int i = parts.Length - 1; i >= 0; i--)
+                {
+                    string part = parts[i];
+                    if (!commonSuffixes.Contains(part))
+                    {
+                        // Capitalize the first letter
+                        if (part.Length > 0)
+                        {
+                            return char.ToUpper(part[0]) + part.Substring(1);
+                        }
+                    }
+                }
+
+                // Fallback: capitalize the first part of domain if everything is classified as suffix
+                string firstPart = parts[0];
+                if (firstPart.Length > 0)
+                {
+                    return char.ToUpper(firstPart[0]) + firstPart.Substring(1);
+                }
+            }
+
+            return "Outlook"; // default fallback for microsoft/office365
+        }
+
         private void Log(string message)
         {
             Console.WriteLine(message);

@@ -668,6 +668,12 @@ namespace Daily.Services
                     {
                         foreach(var item in localBatch)
                         {
+                            var existing = tran.Find<LocalCalendarAccount>(item.Id);
+                            if (existing != null)
+                            {
+                                item.CustomName = existing.CustomName;
+                                item.IdentifiedName = existing.IdentifiedName;
+                            }
                             tran.InsertOrReplace(item);
                         }
                     });

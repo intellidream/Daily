@@ -50,6 +50,7 @@
                 Background="{ThemeResource AppGlassColorBrush}" 
                 BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
                 BorderThickness="0,1,1,0" 
+                CornerRadius="0,12,0,0"
                 Padding="16,20">
             <Grid>
                 <Grid.RowDefinitions>
@@ -63,8 +64,27 @@
 
                 <!-- Accounts List -->
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,16">
-                    <ItemsControl ItemsSource="{x:Bind Accounts, Mode=OneWay}">
-                        <ItemsControl.ItemTemplate>
+                    <ListView ItemsSource="{x:Bind Accounts, Mode=OneWay}"
+                              CanDragItems="True"
+                              CanReorderItems="True"
+                              AllowDrop="True"
+                              ReorderMode="Enabled"
+                              SelectionMode="None"
+                              DragItemsCompleted="Accounts_DragItemsCompleted"
+                              Background="Transparent"
+                              Padding="0"
+                              BorderThickness="0">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0" />
+                                <Setter Property="MinHeight" Value="0" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
                             <DataTemplate x:DataType="local:DisplayAccount">
                                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10">
                                     <Grid>
@@ -83,14 +103,43 @@
                                             <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
 
-                                        <!-- Email Address -->
-                                        <StackPanel Grid.Column="1" Grid.Row="0" VerticalAlignment="Center" Margin="0,0,8,0">
-                                            <TextBlock Text="{x:Bind Email}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource AppFgColorBrush}" />
-                                            <TextBlock Text="{x:Bind AccountType}" FontSize="10" Opacity="0.5" Foreground="{ThemeResource AppFgColorBrush}" />
+                                        <!-- Name/Email Display (View Mode) -->
+                                        <StackPanel Grid.Column="1" Grid.Row="0" VerticalAlignment="Center" Margin="0,0,8,0" Visibility="{x:Bind ViewModeVisibility, Mode=OneWay}">
+                                            <!-- If custom name is NOT set -->
+                                            <StackPanel Visibility="{x:Bind NoCustomNameVisibility, Mode=OneWay}">
+                                                <TextBlock Text="{x:Bind Email, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource AppFgColorBrush}" />
+                                                <TextBlock Text="{x:Bind IdentifiedName, Mode=OneWay}" FontSize="10" Opacity="0.5" Foreground="{ThemeResource AppFgColorBrush}" />
+                                            </StackPanel>
+
+                                            <!-- If custom name IS set -->
+                                            <StackPanel Visibility="{x:Bind CustomNameVisibility, Mode=OneWay}">
+                                                <TextBlock Text="{x:Bind CustomName, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource AppFgColorBrush}" />
+                                                <TextBlock Text="{x:Bind Email, Mode=OneWay}" FontSize="10" Opacity="0.7" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource AppFgColorBrush}" />
+                                                <TextBlock Text="{x:Bind IdentifiedName, Mode=OneWay}" FontSize="9" Opacity="0.4" Foreground="{ThemeResource AppFgColorBrush}" />
+                                            </StackPanel>
                                         </StackPanel>
 
-                                        <!-- Right side controls: Toggle / Disconnect -->
-                                        <StackPanel Grid.Column="2" Grid.Row="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <!-- Edit Custom Name (Edit Mode) -->
+                                        <Grid Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="0" VerticalAlignment="Center" Margin="0,0,0,0" Visibility="{x:Bind EditModeVisibility, Mode=OneWay}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Text="{x:Bind CustomName, Mode=OneWay}" PlaceholderText="Custom Name" FontSize="11" Height="28" Padding="6,2" VerticalAlignment="Center" Margin="0,0,4,0" KeyDown="CustomNameTextBox_KeyDown" />
+                                            <Button Grid.Column="1" Width="26" Height="26" Padding="0" Background="Transparent" BorderThickness="0" CornerRadius="13" Click="SaveCustomName_Click" ToolTipService.ToolTip="Save" VerticalAlignment="Center" Margin="0,0,2,0">
+                                                <FontIcon Glyph="&#xE8FB;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#00A389" />
+                                            </Button>
+                                            <Button Grid.Column="2" Width="26" Height="26" Padding="0" Background="Transparent" BorderThickness="0" CornerRadius="13" Click="CancelEdit_Click" ToolTipService.ToolTip="Cancel" VerticalAlignment="Center">
+                                                <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                                            </Button>
+                                        </Grid>
+
+                                        <!-- Right side controls (View Mode) -->
+                                        <StackPanel Grid.Column="2" Grid.Row="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Visibility="{x:Bind ViewModeVisibility, Mode=OneWay}">
+                                            <Button Background="Transparent" BorderThickness="0" Padding="4" Click="EditAccount_Click" ToolTipService.ToolTip="Edit Custom Name">
+                                                <FontIcon Glyph="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
+                                            </Button>
                                             <ToggleSwitch IsOn="{x:Bind IsActive, Mode=TwoWay}" Toggled="AccountActive_Toggled" OnContent="" OffContent="" MinWidth="0" VerticalAlignment="Center" />
                                             <Button Background="Transparent" BorderThickness="0" Padding="4" Click="DeleteAccount_Click" ToolTipService.ToolTip="Disconnect Account">
                                                 <FontIcon Glyph="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppErrorBrush}" />
@@ -101,7 +150,7 @@
                                         <ItemsControl Grid.Row="1" Grid.ColumnSpan="3" x:Name="ColorItemsControl" Tag="{Binding}" ItemsSource="{Binding ElementName=RootPage, Path=ColorPresets}" Margin="0,8,0,0">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Horizontal" Spacing="8" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" />
                                                 </ItemsPanelTemplate>
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
@@ -118,8 +167,8 @@
                                     </Grid>
                                 </Border>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        </ListView.ItemTemplate>
+                    </ListView>
                 </ScrollViewer>
 
                 <!-- Bottom Panel: Add new connections (Expander) -->

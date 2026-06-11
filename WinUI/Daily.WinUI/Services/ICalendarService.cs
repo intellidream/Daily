@@ -15,6 +15,8 @@ namespace Daily_WinUI.Services
         Task<List<LocalCalendarTodo>> GetCachedTodosAsync();
         Task ToggleAccountActiveAsync(string accountId, bool isActive);
         Task UpdateAccountColorAsync(string accountId, string hexColor);
+        Task UpdateAccountCustomNameAsync(string accountId, string customName);
+        Task UpdateAccountsOrderAsync(List<string> accountIds);
         Task CompleteTodoAsync(string todoId);
         event Action OnCalendarDataChanged;
     }
