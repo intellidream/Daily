@@ -11,6 +11,9 @@ namespace Daily_WinUI.Services
     {
         Task<bool> IsModelReadyAsync();
         Task<string> GenerateResponseAsync(string systemPrompt, string userPrompt, CancellationToken ct = default);
+        Task InitializeAsync();
+        bool IsPhiSilicaActive { get; }
+        string ActiveEngineName { get; }
     }
 
     public class OnnxGenAiSmartService : ISmartIntelligenceService
@@ -23,6 +26,15 @@ namespace Daily_WinUI.Services
         }
 
         public bool IsUsingCpuFallback => _aiManager.ActiveEngineName.Contains("CPU Fallback");
+
+        public string ActiveEngineName => _aiManager.ActiveEngineName;
+
+        public bool IsPhiSilicaActive => _aiManager.ActiveEngine is PhiSilicaNpuEngine;
+
+        public async Task InitializeAsync()
+        {
+            await _aiManager.InitializeAsync();
+        }
 
         public async Task<bool> IsModelReadyAsync()
         {
@@ -67,6 +79,15 @@ namespace Daily_WinUI.Services
         public SmartIntelligenceCoordinator(AIManager aiManager)
         {
             _aiManager = aiManager;
+        }
+
+        public string ActiveEngineName => _aiManager.ActiveEngineName;
+
+        public bool IsPhiSilicaActive => _aiManager.ActiveEngine is PhiSilicaNpuEngine;
+
+        public async Task InitializeAsync()
+        {
+            await _aiManager.InitializeAsync();
         }
 
         public async Task<bool> IsModelReadyAsync()

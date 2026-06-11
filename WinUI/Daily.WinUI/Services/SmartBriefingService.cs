@@ -850,139 +850,17 @@ namespace Daily_WinUI.Services
             {
                 try
                 {
+                    // Initialize active engine to get accurate info (e.g. if we are using Phi Silica NPU)
+                    await _smartService.InitializeAsync();
+                    
+                    int budgetLimit = _smartService.IsPhiSilicaActive ? 1500 : 5000;
                     string behaviorSummary = await _behaviorService.GetWeeklyBehaviorSummaryAsync();
                     
-                    StringBuilder stocksBuilder = new StringBuilder();
-                    var limitStocks = data.WatchlistStocks.Take(10).ToList();
-                    foreach (var stock in limitStocks)
-                    {
-                        stocksBuilder.Append($"{stock.Symbol}: {stock.Price:F2} ({stock.FormattedChange}), ");
-                    }
-                    if (data.WatchlistStocks.Count > 10)
-                    {
-                        stocksBuilder.Append($"... and {data.WatchlistStocks.Count - 10} more stocks");
-                    }
-                    string watchlistDetails = stocksBuilder.Length > 0 ? stocksBuilder.ToString().TrimEnd(',', ' ', '.') : "None";
-
-                    string systemPrompt = 
-                        "You are DayOne, a helpful personal assistant AI running locally on the user's device. " +
-                        "Generate a concise, natural, and friendly daily briefing narrative based on the user's data. " +
-                        "Analyze their weather, calendar events, active tasks/todos, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.\n" +
-                        "Rules:\n" +
-                        "- Do NOT write any greeting (like 'Good morning', 'Good evening', 'Hello', etc.) or introductory filler (like 'Here is your briefing' or 'Based on your data'). Start directly with the weather and calendar analysis.\n" +
-                        "- Keep the briefing structured in 2-3 short, focused paragraphs of conversational flowing text. Keep descriptions extremely concise and direct to stay on point and avoid hallucinating details. Do not use markdown headers or lists.\n" +
-                        "- Format your paragraphs clearly, using double newlines (\n\n) to separate them.\n" +
-                        "- Integrate the user's scheduled calendar events and active tasks (todos) with their notes naturally, suggesting when they might focus on tasks or highlighting busy periods.\n" +
-                        "- If finance data is marked as UNINITIALIZED, do not congratulate the user on net worth or mention a $0 net worth. Suggest setting up their ledger or adding an account instead.\n" +
-                        "- If smoking habit data is present, treat it as a negative target (reduction/cessation). Do NOT congratulate the user for smoking or logging smokes; instead, encourage reduction or praise staying under limit.\n" +
-                        "- Evaluate the weather forecast over the next hours and next 5 days, highlighting key transitions (e.g. if it will rain later, recommend taking an umbrella or exercising indoors).\n" +
-                        "- Evaluate the news headlines provided and concisely summarize the most important trends or events in a paragraph.\n\n" +
-                        "At the very end of your response, you MUST append a JSON block enclosed in <insights> and </insights> tags. The JSON must contain short advice strings (1 sentence each) for the widgets: " +
-                        "{\n" +
-                        "  \"weatherAdvice\": \"short advice based on weather forecast\",\n" +
-                        "  \"healthAdvice\": \"short advice based on vitals/sleep\",\n" +
-                        "  \"financeAdvice\": \"short advice based on ledger/watchlist\",\n" +
-                        "  \"habitsAdvice\": \"short advice based on water/smoking\"\n" +
-                        "}\n" +
-                        "Do not write any introductory or transition text before or after the JSON block. Go directly from the end of your narrative text to the <insights> tag. Do not write any text after the </insights> tag.";
-
-                    StringBuilder calBuilder = new StringBuilder();
-                    if (data.CalendarEventsToday.Count > 0)
-                    {
-                        var limitEvents = data.CalendarEventsToday.Take(5).ToList();
-                        foreach (var ev in limitEvents)
-                        {
-                            string timeStr = ev.IsAllDay ? "All Day" : $"{ev.Start.ToLocalTime():t} - {ev.End.ToLocalTime():t}";
-                            string desc = ev.Description ?? "";
-                            if (desc.Length > 120)
-                            {
-                                desc = desc.Substring(0, 120) + "...";
-                            }
-                            calBuilder.AppendLine($"- {ev.Title} ({timeStr}){(string.IsNullOrEmpty(ev.Location) ? "" : $" at {ev.Location}")} - Description: {desc}");
-                        }
-                        if (data.CalendarEventsToday.Count > 5)
-                        {
-                            calBuilder.AppendLine($"- ... and {data.CalendarEventsToday.Count - 5} more calendar event(s).");
-                        }
-                    }
-                    else
-                    {
-                        calBuilder.AppendLine("No events scheduled for today.");
-                    }
-
-                    StringBuilder todoBuilder = new StringBuilder();
-                    if (data.ActiveTodos.Count > 0)
-                    {
-                        var limitTodos = data.ActiveTodos
-                            .OrderByDescending(t => t.Importance?.ToLower() == "high")
-                            .Take(8)
-                            .ToList();
-                        foreach (var td in limitTodos)
-                        {
-                            string dueStr = td.DueDate.HasValue ? $"Due: {td.DueDate.Value.ToLocalTime():d}" : "No due date";
-                            string notes = td.Notes ?? "";
-                            if (notes.Length > 120)
-                            {
-                                notes = notes.Substring(0, 120) + "...";
-                            }
-                            todoBuilder.AppendLine($"- {td.Title} ({dueStr}, Priority: {td.Importance}) - Notes: {notes}");
-                        }
-                        if (data.ActiveTodos.Count > 8)
-                        {
-                            todoBuilder.AppendLine($"- ... and {data.ActiveTodos.Count - 8} more active task(s).");
-                        }
-                    }
-                    else
-                    {
-                        todoBuilder.AppendLine("No active tasks/todos.");
-                    }
-
-                    StringBuilder newsBuilder = new StringBuilder();
-                    if (data.TopNewsHeadlines.Count > 0)
-                    {
-                        foreach (var headline in data.TopNewsHeadlines)
-                        {
-                            newsBuilder.AppendLine(headline);
-                        }
-                    }
-                    else
-                    {
-                        newsBuilder.AppendLine("No news headlines available.");
-                    }
-
-                    string userPrompt = 
-                        $"User Name: {userName}\n" +
-                        $"Current Time: {DateTime.Now:f}\n\n" +
-                        $"--- WEATHER DATA ---\n" +
-                        $"Condition: {data.WeatherCondition} (Temp: {data.WeatherTemp}°C)\n" +
-                        $"Hourly Forecast (next 8 hours):\n{data.WeatherHourlyDetails}\n" +
-                        $"5-Day Forecast:\n{data.WeatherFiveDayDetails}\n\n" +
-                        $"--- CALENDAR EVENTS TODAY ---\n" +
-                        $"{calBuilder}\n" +
-                        $"--- ACTIVE TASKS & TODOS ---\n" +
-                        $"{todoBuilder}\n" +
-                        $"--- NEWS HEADLINES ---\n" +
-                        $"{newsBuilder}\n" +
-                        $"--- HEALTH DATA ---\n" +
-                        $"Steps Today: {data.HealthSteps}\n" +
-                        $"Sleep Last Night: {data.HealthSleepHours:F1} hours\n" +
-                        $"Average Heart Rate: {data.HealthAvgHr} BPM\n" +
-                        (data.HealthWeight > 0 ? $"Weight: {data.HealthWeight:F1} kg\n" : "") +
-                        (data.HealthActiveEnergy > 0 ? $"Active Energy Burned: {data.HealthActiveEnergy:F0} kcal\n" : "") +
-                        (data.HealthHrv > 0 ? $"Heart Rate Variability (HRV): {data.HealthHrv:F0} ms\n" : "") +
-                        (data.HealthBpSystolic > 0 && data.HealthBpDiastolic > 0 ? $"Blood Pressure: {data.HealthBpSystolic:F0}/{data.HealthBpDiastolic:F0} mmHg\n" : "") +
-                        (data.HealthSpO2 > 0 ? $"Oxygen Saturation (SpO2): {data.HealthSpO2:F1}%\n" : "") + "\n" +
-                        $"--- FINANCE DATA ---\n" +
-                        (data.HasLedgerData 
-                            ? $"Net Worth: {data.NetWorth:C0}\nWatchlist stocks info: {watchlistDetails}\n" 
-                            : "Ledger status: UNINITIALIZED (No accounts or transactions logged yet. Do not mention a $0 net worth; suggest setting up their ledger or adding their first account/transaction instead)\n") + "\n" +
-                        $"--- HABITS DATA ---\n" +
-                        $"Water target: {data.HabitsWaterGoal:F0} ml, Drank today: {data.HabitsWaterProgress:F0} ml\n" +
-                        (data.HabitsSmokesGoal > 0 || data.HabitsSmokesProgress > 0 
-                            ? $"Cigarettes limit/baseline: {data.HabitsSmokesGoal:F0} today, Smoked today: {data.HabitsSmokesProgress:F0}\n"
-                            : "") + "\n" +
-                        $"--- RECENT USER BEHAVIOR TELEMETRY (Last 7 Days) ---\n" +
-                        $"{behaviorSummary}";
+                    var promptBuilder = new SmartBriefingPromptBuilder();
+                    promptBuilder.Build(data, userName, behaviorSummary, budgetLimit);
+                    
+                    string systemPrompt = promptBuilder.SystemPrompt;
+                    string userPrompt = promptBuilder.UserPrompt;
 
                     Console.WriteLine($"[SmartBriefingService] Calling GenerateResponseAsync...");
                     string responseText = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);

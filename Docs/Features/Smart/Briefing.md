@@ -379,8 +379,32 @@ At the very end of your response, you MUST append a JSON block enclosed in <insi
 Do not write any introductory or transition text before or after the JSON block. Go directly from the end of your narrative text to the <insights> tag. Do not write any text after the </insights> tag.
 ```
 
-#### 5.3.2 User Prompt Structure
-The user prompt aggregates the data payload dynamically, incorporating truncation and item count limits to ensure context size safety:
+#### 5.3.2 Dynamic Prompt Budgeting and Pruning
+To prevent context size failures (specifically the `PromptLargerThanContext` error on Snapdragon NPU Phi Silica models which have a native 2048-token context window limit), prompt construction is managed by the `SmartBriefingPromptBuilder`. 
+
+The builder calculates prompt length using a token estimation heuristic:
+$$\text{Estimated Tokens} = \lceil\text{Characters} / 3.8\rceil$$
+
+##### Target Budgets by Active Engine:
+- **Built-in Phi Silica NPU**: Capped at **1,500 tokens** to leave adequate context headroom for the generated narrative response.
+- **Local GGUF Engines (GPU/CPU)**: Capped at **5,000 tokens** (since context size is configured up to 8,192).
+
+##### Dynamic Pruning Sequence:
+If the estimated token count of the combined prompts exceeds the engine's budget limit, the builder runs an iterative loop, downgrading elements step-by-step until it fits:
+1. **Drop Behavior Telemetry**: Remove the weekly behavior summary string.
+2. **Reduce Headlines**: Cap news headlines from 5 down to 2.
+3. **Reduce Watchlist**: Cap watchlist stocks from 10 down to 5.
+4. **Reduce Todos**: Cap active todos from 8 down to 4.
+5. **Reduce Events**: Cap calendar events from 5 down to 2.
+6. **Shorten Text Bounds**: Truncate calendar descriptions and todo notes from 120 down to 60 characters.
+7. **Drop Hourly Weather**: Remove the hourly forecast list, preserving only the 5-day outlook.
+8. **Remove Headlines entirely**: Cap news headlines to 0.
+9. **Remove Watchlist entirely**: Cap watchlist stocks to 0.
+10. **Minimize Todos**: Cap active todos to 1.
+11. **Minimize Events**: Cap calendar events to 1.
+
+#### 5.3.3 User Prompt Structure
+The user prompt aggregates the data payload dynamically:
 ```text
 User Name: [Name]
 Current Time: [Local Time]
