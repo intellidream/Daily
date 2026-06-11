@@ -9,7 +9,8 @@
     xmlns:scheduler="using:Syncfusion.UI.Xaml.Scheduler"
     xmlns:converters="using:Daily_WinUI.Converters"
     mc:Ignorable="d"
-    Background="Transparent">
+    Background="Transparent"
+    SizeChanged="Page_SizeChanged">
 
     <Page.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
@@ -241,12 +242,33 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- Left side: Date Text & Navigation Arrows & Today -->
-                        <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                        <!-- Left side: Navigation Arrows & Today + Date Selector -->
+                        <StackPanel x:Name="HeaderLeftStackPanel" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                            <!-- Navigation Controls -->
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                <Button Click="Prev_Click" Width="32" Height="32" Padding="0" CornerRadius="6" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" ToolTipService.ToolTip="Previous">
+                                    <FontIcon Glyph="&#xE76B;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
+                                </Button>
+                                
+                                <Button x:Name="TodayBtn" Click="Today_Click" Height="32" CornerRadius="6" Padding="16,0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" ToolTipService.ToolTip="Today">
+                                    <Grid>
+                                        <TextBlock x:Name="TodayText" Text="Today" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center" />
+                                        <FontIcon x:Name="TodayIcon" Glyph="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    </Grid>
+                                </Button>
+
+                                <Button Click="Next_Click" Width="32" Height="32" Padding="0" CornerRadius="6" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" ToolTipService.ToolTip="Next">
+                                    <FontIcon Glyph="&#xE76C;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
+                                </Button>
+                            </StackPanel>
+
                             <!-- Date Range Selector Button with Flyout Calendar -->
-                            <Button x:Name="SchedulerDateButton" Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center" CornerRadius="6" Height="32">
+                            <Button x:Name="SchedulerDateButton" Background="Transparent" BorderThickness="0" Padding="8,0,8,0" VerticalAlignment="Center" CornerRadius="6" Height="32">
                                 <Button.Content>
-                                    <TextBlock x:Name="SchedulerDateText" FontSize="18" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <TextBlock x:Name="SchedulerDateText" FontSize="18" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center" />
+                                        <FontIcon Glyph="&#xE70D;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center" Margin="0,2,0,0" />
+                                    </StackPanel>
                                 </Button.Content>
                                 <Button.Flyout>
                                     <Flyout x:Name="CalendarFlyout">
@@ -254,19 +276,6 @@
                                     </Flyout>
                                 </Button.Flyout>
                             </Button>
-
-                            <!-- Navigation Controls -->
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                <Button Click="Prev_Click" Width="32" Height="32" Padding="0" CornerRadius="6" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" ToolTipService.ToolTip="Previous">
-                                    <FontIcon Glyph="&#xE76B;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
-                                </Button>
-                                
-                                <Button Click="Today_Click" Content="Today" Height="32" CornerRadius="6" Padding="16,0" FontSize="11" FontWeight="SemiBold" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Foreground="{ThemeResource AppFgColorBrush}" />
-
-                                <Button Click="Next_Click" Width="32" Height="32" Padding="0" CornerRadius="6" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" ToolTipService.ToolTip="Next">
-                                    <FontIcon Glyph="&#xE76C;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
-                                </Button>
-                            </StackPanel>
                         </StackPanel>
 
                         <!-- Right side: View Switcher Pane -->

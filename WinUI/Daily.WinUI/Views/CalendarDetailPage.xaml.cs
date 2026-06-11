@@ -173,6 +173,8 @@ namespace Daily_WinUI.Views
         private bool _isLoading;
         private bool _isInitialized = false;
         private bool _isUpdatingAccountsList = false;
+        private DateTime _currentStartDate;
+        private DateTime _currentEndDate;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
@@ -1175,30 +1177,53 @@ namespace Daily_WinUI.Views
 
         private void UpdateDateText(DateTime start, DateTime end)
         {
+            _currentStartDate = start;
+            _currentEndDate = end;
+
             if (SchedulerDateText == null) return;
+
+            bool isSmall = this.ActualWidth < 800;
 
             if (Scheduler.ViewType == SchedulerViewType.Month)
             {
                 var midDate = start.AddDays((end - start).Days / 2);
-                SchedulerDateText.Text = midDate.ToString("MMMM yyyy");
+                SchedulerDateText.Text = isSmall ? midDate.ToString("MMM yyyy") : midDate.ToString("MMMM yyyy");
             }
             else if (Scheduler.ViewType == SchedulerViewType.Day)
             {
-                SchedulerDateText.Text = Scheduler.DisplayDate.ToString("MMMM dd, yyyy");
+                SchedulerDateText.Text = isSmall ? Scheduler.DisplayDate.ToString("MMM dd, yy") : Scheduler.DisplayDate.ToString("MMMM dd, yyyy");
             }
             else // Week, WorkWeek
             {
-                if (start.Year != end.Year)
+                if (isSmall)
                 {
-                    SchedulerDateText.Text = $"{start:MMM dd, yyyy} - {end:MMM dd, yyyy}";
-                }
-                else if (start.Month != end.Month)
-                {
-                    SchedulerDateText.Text = $"{start:MMM dd} - {end:MMM dd, yyyy}";
+                    if (start.Year != end.Year)
+                    {
+                        SchedulerDateText.Text = $"{start:MM/dd/yy} - {end:MM/dd/yy}";
+                    }
+                    else if (start.Month != end.Month)
+                    {
+                        SchedulerDateText.Text = $"{start:MMM dd} - {end:MMM dd}";
+                    }
+                    else
+                    {
+                        SchedulerDateText.Text = $"{start:MMM dd} - {end:dd}";
+                    }
                 }
                 else
                 {
-                    SchedulerDateText.Text = $"{start:MMM dd} - {end:dd, yyyy}";
+                    if (start.Year != end.Year)
+                    {
+                        SchedulerDateText.Text = $"{start:MMM dd, yyyy} - {end:MMM dd, yyyy}";
+                    }
+                    else if (start.Month != end.Month)
+                    {
+                        SchedulerDateText.Text = $"{start:MMM dd} - {end:MMM dd, yyyy}";
+                    }
+                    else
+                    {
+                        SchedulerDateText.Text = $"{start:MMM dd} - {end:dd, yyyy}";
+                    }
                 }
             }
 
@@ -1362,6 +1387,76 @@ namespace Daily_WinUI.Views
                     XamlRoot = this.XamlRoot
                 };
                 await dialog.ShowAsync();
+            }
+        }
+
+        private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            double width = e.NewSize.Width;
+            bool isSmall = width < 800;
+
+            // 1. Collapse connected accounts sidebar if expanded and resizing to small size
+            if (isSmall && ToggleSidebarBtn != null && ToggleSidebarBtn.IsChecked == true)
+            {
+                ToggleSidebarBtn.IsChecked = false;
+            }
+
+            // 2. Update Today button content (icon vs text) and width
+            if (TodayBtn != null && TodayText != null && TodayIcon != null)
+            {
+                if (isSmall)
+                {
+                    TodayText.Visibility = Visibility.Collapsed;
+                    TodayIcon.Visibility = Visibility.Visible;
+                    TodayBtn.Width = 32;
+                    TodayBtn.Padding = new Thickness(0);
+                }
+                else
+                {
+                    TodayText.Visibility = Visibility.Visible;
+                    TodayIcon.Visibility = Visibility.Collapsed;
+                    TodayBtn.Width = double.NaN;
+                    TodayBtn.Padding = new Thickness(16, 0, 16, 0);
+                }
+            }
+
+            // 3. Adjust Spacing in left stack panel
+            if (HeaderLeftStackPanel != null)
+            {
+                HeaderLeftStackPanel.Spacing = isSmall ? 8 : 16;
+            }
+
+            // 4. Update view switcher buttons (abbreviated text on small widths)
+            if (DayViewBtn != null && WeekViewBtn != null && WorkWeekViewBtn != null && MonthViewBtn != null)
+            {
+                if (isSmall)
+                {
+                    DayViewBtn.Content = "D";
+                    DayViewBtn.Padding = new Thickness(8, 0, 8, 0);
+                    WeekViewBtn.Content = "W";
+                    WeekViewBtn.Padding = new Thickness(8, 0, 8, 0);
+                    WorkWeekViewBtn.Content = "Wk";
+                    WorkWeekViewBtn.Padding = new Thickness(8, 0, 8, 0);
+                    MonthViewBtn.Content = "M";
+                    MonthViewBtn.Padding = new Thickness(8, 0, 8, 0);
+                }
+                else
+                {
+                    DayViewBtn.Content = "Day";
+                    DayViewBtn.Padding = new Thickness(12, 0, 12, 0);
+                    WeekViewBtn.Content = "Week";
+                    WeekViewBtn.Padding = new Thickness(12, 0, 12, 0);
+                    WorkWeekViewBtn.Content = "Work";
+                    WorkWeekViewBtn.Padding = new Thickness(12, 0, 12, 0);
+                    MonthViewBtn.Content = "Month";
+                    MonthViewBtn.Padding = new Thickness(12, 0, 12, 0);
+                }
+            }
+
+            // 5. Force re-formatting the date range text
+            if (_currentStartDate != default && _currentEndDate != default)
+            {
+                UpdateDateText(_currentStartDate, _currentEndDate);
             }
         }
     }
