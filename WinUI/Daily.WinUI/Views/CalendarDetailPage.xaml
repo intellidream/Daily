@@ -53,13 +53,16 @@
               Background="Transparent">
             <Border x:Name="SidebarPanel"
                     Width="340"
-                    HorizontalAlignment="Right"
-                    Margin="0,0,0,20"
+                    HorizontalAlignment="Left"
+                    Margin="20,0,0,20"
                     Background="{ThemeResource AppGlassColorBrush}" 
                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
                     BorderThickness="1" 
                     CornerRadius="12"
                     Padding="16,20">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="SidebarTranslate" X="0" />
+                </Border.RenderTransform>
             <Grid Width="308" HorizontalAlignment="Left">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -79,6 +82,7 @@
                           ReorderMode="Enabled"
                           SelectionMode="None"
                           DragItemsCompleted="Accounts_DragItemsCompleted"
+                          DragItemsStarting="Accounts_DragItemsStarting"
                           Background="Transparent"
                           Padding="0"
                           Margin="0,0,0,16"
@@ -97,7 +101,8 @@
                         </ListView.ItemContainerStyle>
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="local:DisplayAccount">
-                                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10">
+                                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10"
+                                        PointerEntered="AccountCard_PointerEntered" PointerExited="AccountCard_PointerExited">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
@@ -157,35 +162,42 @@
                                             </Button>
                                         </StackPanel>
 
-                                         <!-- Row 1: Colors & Drag Handle (Spanning all columns) -->
-                                         <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0">
-                                             <Grid.ColumnDefinitions>
-                                                 <ColumnDefinition Width="*" />
-                                                 <ColumnDefinition Width="Auto" />
-                                             </Grid.ColumnDefinitions>
+                                        <!-- Row 1: Colors & Drag Handle (Spanning all columns) -->
+                                        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
 
-                                             <!-- Preset Color Dots Selection -->
-                                             <ItemsControl Grid.Column="0" x:Name="ColorItemsControl" Tag="{Binding}" ItemsSource="{Binding ElementName=RootPage, Path=ColorPresets}" VerticalAlignment="Center">
-                                                 <ItemsControl.ItemsPanel>
-                                                     <ItemsPanelTemplate>
-                                                         <StackPanel Orientation="Horizontal" Spacing="6" />
-                                                     </ItemsPanelTemplate>
-                                                 </ItemsControl.ItemsPanel>
-                                                 <ItemsControl.ItemTemplate>
-                                                     <DataTemplate x:DataType="x:String">
-                                                         <!-- Color dot button. Use custom styling or simple circular border. -->
-                                                         <Button Width="18" Height="18" Padding="0" CornerRadius="9" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Click="ColorPreset_Click" Tag="{Binding Tag, ElementName=ColorItemsControl}">
-                                                             <Button.Background>
-                                                                 <SolidColorBrush Color="{Binding}" />
-                                                             </Button.Background>
-                                                         </Button>
-                                                     </DataTemplate>
-                                                 </ItemsControl.ItemTemplate>
-                                             </ItemsControl>
+                                            <!-- Preset Color Dots Selection -->
+                                            <ItemsControl Grid.Column="0" ItemsSource="{x:Bind Presets, Mode=OneWay}" VerticalAlignment="Center">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="local:ColorPresetItem">
+                                                        <!-- Outer selection ring container -->
+                                                        <Border Width="24" Height="24" CornerRadius="12" Padding="2" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                                BorderBrush="{x:Bind SelectionBrush, Mode=OneWay}"
+                                                                BorderThickness="{x:Bind SelectionThickness, Mode=OneWay}">
+                                                            <Button Width="18" Height="18" Padding="0" CornerRadius="9" BorderThickness="0" Click="ColorPreset_Click" Tag="{x:Bind Account}" DataContext="{x:Bind Color}">
+                                                                <Button.Background>
+                                                                    <SolidColorBrush Color="{Binding}" />
+                                                                </Button.Background>
+                                                            </Button>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
 
-                                             <!-- Drag Handle / Reorder Indicator -->
-                                             <FontIcon Grid.Column="1" Glyph="&#xE700;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" Opacity="0.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0" ToolTipService.ToolTip="Drag to reorder" />
-                                         </Grid>
+                                            <!-- Drag Handle / Reorder Indicator -->
+                                            <FontIcon Grid.Column="1" Glyph="&#xE700;" FontFamily="Segoe Fluent Icons" FontSize="12" 
+                                                      Foreground="{x:Bind DragHandleForeground, Mode=OneWay}" 
+                                                      Opacity="{x:Bind DragHandleOpacity, Mode=OneWay}" 
+                                                      HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0" ToolTipService.ToolTip="Drag to reorder" />
+                                        </Grid>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

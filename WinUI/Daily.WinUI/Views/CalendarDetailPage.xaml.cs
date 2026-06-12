@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Sockets;
@@ -27,6 +28,31 @@ using Windows.System;
 
 namespace Daily_WinUI.Views
 {
+    public class ColorPresetItem
+    {
+        public string Color { get; set; } = string.Empty;
+        public DisplayAccount Account { get; set; } = null!;
+        public bool IsSelected => Color.Replace("#", "").ToLowerInvariant() == Account.Color.Replace("#", "").ToLowerInvariant();
+
+        public Microsoft.UI.Xaml.Media.Brush SelectionBrush
+        {
+            get
+            {
+                if (IsSelected)
+                {
+                    if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("AppFgColorBrush", out var res) && res is Microsoft.UI.Xaml.Media.Brush b)
+                    {
+                        return b;
+                    }
+                    return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray);
+                }
+                return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            }
+        }
+
+        public Microsoft.UI.Xaml.Thickness SelectionThickness => IsSelected ? new Microsoft.UI.Xaml.Thickness(1.5) : new Microsoft.UI.Xaml.Thickness(0);
+    }
+
     public class DisplayAccount : INotifyPropertyChanged
     {
         public string Id { get; set; } = string.Empty;
@@ -148,6 +174,98 @@ namespace Daily_WinUI.Views
             }
         }
 
+        private bool _isDragging;
+        public bool IsDragging
+        {
+            get => _isDragging;
+            set
+            {
+                if (_isDragging != value)
+                {
+                    _isDragging = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DragHandleOpacity));
+                    OnPropertyChanged(nameof(DragHandleForeground));
+                }
+            }
+        }
+
+        private bool _isPointerOver;
+        public bool IsPointerOver
+        {
+            get => _isPointerOver;
+            set
+            {
+                if (_isPointerOver != value)
+                {
+                    _isPointerOver = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DragHandleOpacity));
+                    OnPropertyChanged(nameof(DragHandleForeground));
+                }
+            }
+        }
+
+        public double DragHandleOpacity => (IsDragging || IsPointerOver) ? 1.0 : 0.4;
+
+        public Microsoft.UI.Xaml.Media.Brush DragHandleForeground
+        {
+            get
+            {
+                if (IsDragging || IsPointerOver)
+                {
+                    if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("SystemAccentColorBrush", out var res) && res is Brush brush)
+                    {
+                        return brush;
+                    }
+                    if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("SystemAccentColor", out var resColor) && resColor is Windows.UI.Color color)
+                    {
+                        return new SolidColorBrush(color);
+                    }
+                    return new SolidColorBrush(Microsoft.UI.Colors.RoyalBlue);
+                }
+                else
+                {
+                    if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("AppFgMutedColorBrush", out var res) && res is Brush brush)
+                    {
+                        return brush;
+                    }
+                    return new SolidColorBrush(Microsoft.UI.Colors.Gray);
+                }
+            }
+        }
+
+        public static readonly List<string> ColorPresetsStatic = new()
+        {
+            "#512BD4", // Purple
+            "#0078D4", // Blue
+            "#107C41", // Green
+            "#D83B01", // Orange
+            "#E81123", // Red
+            "#FFB900", // Yellow
+            "#00B7C3", // Teal
+            "#D01B70", // Pink
+            "#7F7DFF", // Lavender
+            "#A0A0A0"  // Gray
+        };
+
+        private List<ColorPresetItem>? _presets;
+        public List<ColorPresetItem> Presets
+        {
+            get
+            {
+                if (_presets == null)
+                {
+                    _presets = ColorPresetsStatic.Select(color => new ColorPresetItem
+                    {
+                        Color = color,
+                        Account = this
+                    }).ToList();
+                }
+                return _presets;
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -224,19 +342,21 @@ namespace Daily_WinUI.Views
             ToggleSidebarBtn.IsChecked = isOpened;
             if (isOpened)
             {
-                if (SidebarContainer != null)
+                if (SidebarContainer != null && SidebarTranslate != null)
                 {
                     SidebarContainer.Width = 360;
                     SidebarContainer.Opacity = 1.0;
+                    SidebarTranslate.X = 0;
                     SidebarContainer.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
                 }
             }
             else
             {
-                if (SidebarContainer != null)
+                if (SidebarContainer != null && SidebarTranslate != null)
                 {
                     SidebarContainer.Width = 0;
                     SidebarContainer.Opacity = 0.0;
+                    SidebarTranslate.X = -360;
                     SidebarContainer.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
                 }
             }
@@ -1128,16 +1248,18 @@ namespace Daily_WinUI.Views
 
         private void AnimateSidebar(bool open)
         {
-            if (SidebarContainer == null) return;
+            if (SidebarContainer == null || SidebarTranslate == null) return;
 
             // Capture current states before stopping any active animation to prevent reversion
             double startWidth = open ? 0 : 360;
             double startOpacity = open ? 0.0 : 1.0;
+            double startTranslateX = open ? -360 : 0;
 
             if (SidebarContainer.Visibility == Visibility.Visible)
             {
                 startWidth = SidebarContainer.ActualWidth;
                 startOpacity = SidebarContainer.Opacity;
+                startTranslateX = SidebarTranslate.X;
             }
 
             if (_sidebarStoryboard != null)
@@ -1159,6 +1281,12 @@ namespace Daily_WinUI.Views
             Storyboard.SetTarget(opacityAnimation, SidebarContainer);
             Storyboard.SetTargetProperty(opacityAnimation, "Opacity");
 
+            var translateAnimation = new DoubleAnimation();
+            translateAnimation.Duration = new Duration(TimeSpan.FromMilliseconds(250));
+            translateAnimation.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
+            Storyboard.SetTarget(translateAnimation, SidebarTranslate);
+            Storyboard.SetTargetProperty(translateAnimation, "X");
+
             if (open)
             {
                 SidebarContainer.Visibility = Visibility.Visible;
@@ -1168,8 +1296,12 @@ namespace Daily_WinUI.Views
                 opacityAnimation.From = startOpacity;
                 opacityAnimation.To = 1.0;
 
+                translateAnimation.From = startTranslateX;
+                translateAnimation.To = 0;
+
                 _sidebarStoryboard.Children.Add(widthAnimation);
                 _sidebarStoryboard.Children.Add(opacityAnimation);
+                _sidebarStoryboard.Children.Add(translateAnimation);
                 _sidebarStoryboard.Begin();
             }
             else
@@ -1180,8 +1312,12 @@ namespace Daily_WinUI.Views
                 opacityAnimation.From = startOpacity;
                 opacityAnimation.To = 0.0;
 
+                translateAnimation.From = startTranslateX;
+                translateAnimation.To = -360;
+
                 _sidebarStoryboard.Children.Add(widthAnimation);
                 _sidebarStoryboard.Children.Add(opacityAnimation);
+                _sidebarStoryboard.Children.Add(translateAnimation);
 
                 _sidebarStoryboard.Completed += (s, ev) =>
                 {
@@ -1206,10 +1342,46 @@ namespace Daily_WinUI.Views
             SaveSidebarState(false);
         }
 
+        private void Accounts_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
+        {
+            if (e.Items != null)
+            {
+                foreach (var item in e.Items)
+                {
+                    if (item is DisplayAccount acc)
+                    {
+                        acc.IsDragging = true;
+                    }
+                }
+            }
+        }
+
         private async void Accounts_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
         {
+            // Reset dragging state on all accounts
+            foreach (var acc in Accounts)
+            {
+                acc.IsDragging = false;
+            }
+
             var accountIds = Accounts.Select(x => x.Id).ToList();
             await _calendarService.UpdateAccountsOrderAsync(accountIds);
+        }
+
+        private void AccountCard_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is DisplayAccount acc)
+            {
+                acc.IsPointerOver = true;
+            }
+        }
+
+        private void AccountCard_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is DisplayAccount acc)
+            {
+                acc.IsPointerOver = false;
+            }
         }
 
         private async void Accounts_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
