@@ -116,12 +116,16 @@ The local SQLite initialization creates:
 - **In-Widget Item Cap**: Limited the total scrollable upcoming items collection to a maximum of 15 items to keep the widget lightweight.
 
 ### 5.5 Account Personalization, Reordering & Sidebar Memory (June 2026)
-- **Premium Color Presets**: Expanded color preset choices from 6 to 11 items (adding Teal, Pink, Lavender, Coral, and Mint) and adjusted horizontal layout spacing from `8px` to `6px` to fit all presets on a single row.
+- **Premium Color Presets**: Expanded color preset choices from 6 to 11 items (adding Teal, Pink, Lavender, Coral, and Mint) and adjusted horizontal layout spacing to `6px`. To prevent clipping, the color picker and drag handle are placed inside a nested Grid spanning all three columns (`Grid.ColumnSpan="3"`), allowing all 11 colors to stretch dynamically up to the drag handle.
 - **Account Renaming & Display Hierarchy**:
   - Enabled inline editing of account names (saved on Enter, cancelled on Escape).
   - Without Custom Name: Shows Email as main title, and Provider/Org as subtitle.
   - With Custom Name: Shows Custom Name as main title, Email as subtitle, and Provider/Org as a more transparent, smaller footer.
-- **Drag-and-Drop Reordering**: Migrated the accounts management list to a `ListView` supporting native drag reordering (`CanReorderItems="True"`, `AllowDrop="True"`). Order indices are persisted in the SQLite database (`DisplayOrder` field).
+- **Drag-and-Drop Reordering**: Migrated the accounts management list to a `ListView` supporting native drag reordering (`CanReorderItems="True"`, `AllowDrop="True"`). Order indices are persisted in the SQLite database (`DisplayOrder` field). Added a visual reorder indicator icon (`&#xE700;` hamburger glyph from Segoe Fluent Icons) to the far right of the color presets selector in each account card, suggesting to the user that cards can be dragged to reorder.
+- **Sidebar Layout Float & Transitions**:
+  - **Symmetrical Layout Margin**: Styled the sidebar border with `Margin="20,0,0,20"`, full borders (`BorderThickness="1"`), and `CornerRadius="12"`, creating a floating glassy panel that matches the scheduler container spacing and rounding exactly.
+  - **Slide-and-Fade Transition Animation**: Wrapped the sidebar panel inside a `SidebarContainer` Grid and programmed a `Storyboard` that animates the container's `Width` (0 to 360px) and `Opacity` (0.0 to 1.0) using cubic easing (`CubicEase` over 250ms). By aligning the inner `SidebarPanel` to the `Right` with a fixed width of `340px` and placing the `20px` spacing as the difference inside the container, the sidebar panel slides smoothly off-screen to the left when collapsing, completely eliminating visual layout jumps. To ensure transitions play fluidly in both directions and do not trigger jumps during rapid toggle clicks, the logic captures the current `ActualWidth` and `Opacity` values as starting points immediately before stopping any active storyboards.
+  - **Constraint-Based Scroll Containment**: Removed the redundant outer ScrollViewer, placing the accounts `ListView` directly inside the Grid row (row height set to `*`). The `ListView` constraints restrict its height automatically, enabling high-performance vertical scrolling inside its own container without pushing down or overlapping the bottom "Add New Account" Expander.
 - **Accounts Sidebar Layout Memory**: Saved the sidebar pane open/closed toggle state inside LocalSettings so that it is restored on page navigation.
 - **Outlook/Microsoft Personal Account Email Fetch & Fallbacks**:
   - Requested `User.Read` scope during Microsoft OAuth links.

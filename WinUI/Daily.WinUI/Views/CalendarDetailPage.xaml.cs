@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
@@ -175,6 +176,7 @@ namespace Daily_WinUI.Views
         private bool _isUpdatingAccountsList = false;
         private DateTime _currentStartDate;
         private DateTime _currentEndDate;
+        private Storyboard? _sidebarStoryboard;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
@@ -222,13 +224,21 @@ namespace Daily_WinUI.Views
             ToggleSidebarBtn.IsChecked = isOpened;
             if (isOpened)
             {
-                if (SidebarColumn != null) SidebarColumn.Width = new GridLength(340);
-                if (SidebarPanel != null) SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                if (SidebarContainer != null)
+                {
+                    SidebarContainer.Width = 360;
+                    SidebarContainer.Opacity = 1.0;
+                    SidebarContainer.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                }
             }
             else
             {
-                if (SidebarColumn != null) SidebarColumn.Width = new GridLength(0);
-                if (SidebarPanel != null) SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                if (SidebarContainer != null)
+                {
+                    SidebarContainer.Width = 0;
+                    SidebarContainer.Opacity = 0.0;
+                    SidebarContainer.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                }
             }
 
             // Restore Scheduler View Type
@@ -1116,29 +1126,83 @@ namespace Daily_WinUI.Views
             return true; // default value
         }
 
+        private void AnimateSidebar(bool open)
+        {
+            if (SidebarContainer == null) return;
+
+            // Capture current states before stopping any active animation to prevent reversion
+            double startWidth = open ? 0 : 360;
+            double startOpacity = open ? 0.0 : 1.0;
+
+            if (SidebarContainer.Visibility == Visibility.Visible)
+            {
+                startWidth = SidebarContainer.ActualWidth;
+                startOpacity = SidebarContainer.Opacity;
+            }
+
+            if (_sidebarStoryboard != null)
+            {
+                _sidebarStoryboard.Stop();
+            }
+
+            _sidebarStoryboard = new Storyboard();
+
+            var widthAnimation = new DoubleAnimation();
+            widthAnimation.Duration = new Duration(TimeSpan.FromMilliseconds(250));
+            widthAnimation.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
+            Storyboard.SetTarget(widthAnimation, SidebarContainer);
+            Storyboard.SetTargetProperty(widthAnimation, "Width");
+
+            var opacityAnimation = new DoubleAnimation();
+            opacityAnimation.Duration = new Duration(TimeSpan.FromMilliseconds(200));
+            opacityAnimation.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
+            Storyboard.SetTarget(opacityAnimation, SidebarContainer);
+            Storyboard.SetTargetProperty(opacityAnimation, "Opacity");
+
+            if (open)
+            {
+                SidebarContainer.Visibility = Visibility.Visible;
+                widthAnimation.From = startWidth;
+                widthAnimation.To = 360;
+
+                opacityAnimation.From = startOpacity;
+                opacityAnimation.To = 1.0;
+
+                _sidebarStoryboard.Children.Add(widthAnimation);
+                _sidebarStoryboard.Children.Add(opacityAnimation);
+                _sidebarStoryboard.Begin();
+            }
+            else
+            {
+                widthAnimation.From = startWidth;
+                widthAnimation.To = 0;
+
+                opacityAnimation.From = startOpacity;
+                opacityAnimation.To = 0.0;
+
+                _sidebarStoryboard.Children.Add(widthAnimation);
+                _sidebarStoryboard.Children.Add(opacityAnimation);
+
+                _sidebarStoryboard.Completed += (s, ev) =>
+                {
+                    if (!open)
+                    {
+                        SidebarContainer.Visibility = Visibility.Collapsed;
+                    }
+                };
+                _sidebarStoryboard.Begin();
+            }
+        }
+
         private void ToggleSidebar_Checked(object sender, RoutedEventArgs e)
         {
-            if (SidebarColumn != null)
-            {
-                SidebarColumn.Width = new GridLength(340);
-            }
-            if (SidebarPanel != null)
-            {
-                SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
-            }
+            AnimateSidebar(true);
             SaveSidebarState(true);
         }
 
         private void ToggleSidebar_Unchecked(object sender, RoutedEventArgs e)
         {
-            if (SidebarColumn != null)
-            {
-                SidebarColumn.Width = new GridLength(0);
-            }
-            if (SidebarPanel != null)
-            {
-                SidebarPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
-            }
+            AnimateSidebar(false);
             SaveSidebarState(false);
         }
 
@@ -1185,7 +1249,7 @@ namespace Daily_WinUI.Views
             double availableWidth = this.ActualWidth;
             if (ToggleSidebarBtn != null && ToggleSidebarBtn.IsChecked == true)
             {
-                availableWidth -= 340;
+                availableWidth -= 360;
             }
             bool isSmall = availableWidth < 700;
 
@@ -1409,7 +1473,7 @@ namespace Daily_WinUI.Views
             double availableWidth = width;
             if (ToggleSidebarBtn != null && ToggleSidebarBtn.IsChecked == true)
             {
-                availableWidth -= 340;
+                availableWidth -= 360;
             }
             bool isSmall = availableWidth < 700;
 
