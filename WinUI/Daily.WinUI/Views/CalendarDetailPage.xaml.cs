@@ -349,6 +349,10 @@ namespace Daily_WinUI.Views
                     SidebarTranslate.X = 0;
                     SidebarContainer.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
                 }
+                if (SchedulerTranslate != null)
+                {
+                    SchedulerTranslate.X = 0;
+                }
             }
             else
             {
@@ -358,6 +362,10 @@ namespace Daily_WinUI.Views
                     SidebarContainer.Opacity = 0.0;
                     SidebarTranslate.X = -360;
                     SidebarContainer.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                }
+                if (SchedulerTranslate != null)
+                {
+                    SchedulerTranslate.X = 0;
                 }
             }
 
@@ -1248,18 +1256,20 @@ namespace Daily_WinUI.Views
 
         private void AnimateSidebar(bool open)
         {
-            if (SidebarContainer == null || SidebarTranslate == null) return;
+            if (SidebarContainer == null || SidebarTranslate == null || SchedulerTranslate == null) return;
 
             // Capture current states before stopping any active animation to prevent reversion
             double startWidth = open ? 0 : 360;
             double startOpacity = open ? 0.0 : 1.0;
             double startTranslateX = open ? -360 : 0;
+            double startSchedulerTranslateX = open ? -80 : 80;
 
             if (SidebarContainer.Visibility == Visibility.Visible)
             {
                 startWidth = SidebarContainer.ActualWidth;
                 startOpacity = SidebarContainer.Opacity;
                 startTranslateX = SidebarTranslate.X;
+                startSchedulerTranslateX = SchedulerTranslate.X;
             }
 
             if (_sidebarStoryboard != null)
@@ -1287,6 +1297,12 @@ namespace Daily_WinUI.Views
             Storyboard.SetTarget(translateAnimation, SidebarTranslate);
             Storyboard.SetTargetProperty(translateAnimation, "X");
 
+            var schedulerTranslateAnimation = new DoubleAnimation();
+            schedulerTranslateAnimation.Duration = new Duration(TimeSpan.FromMilliseconds(250));
+            schedulerTranslateAnimation.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
+            Storyboard.SetTarget(schedulerTranslateAnimation, SchedulerTranslate);
+            Storyboard.SetTargetProperty(schedulerTranslateAnimation, "X");
+
             if (open)
             {
                 SidebarContainer.Visibility = Visibility.Visible;
@@ -1299,9 +1315,13 @@ namespace Daily_WinUI.Views
                 translateAnimation.From = startTranslateX;
                 translateAnimation.To = 0;
 
+                schedulerTranslateAnimation.From = startSchedulerTranslateX;
+                schedulerTranslateAnimation.To = 0;
+
                 _sidebarStoryboard.Children.Add(widthAnimation);
                 _sidebarStoryboard.Children.Add(opacityAnimation);
                 _sidebarStoryboard.Children.Add(translateAnimation);
+                _sidebarStoryboard.Children.Add(schedulerTranslateAnimation);
                 _sidebarStoryboard.Begin();
             }
             else
@@ -1315,9 +1335,13 @@ namespace Daily_WinUI.Views
                 translateAnimation.From = startTranslateX;
                 translateAnimation.To = -360;
 
+                schedulerTranslateAnimation.From = startSchedulerTranslateX;
+                schedulerTranslateAnimation.To = 0;
+
                 _sidebarStoryboard.Children.Add(widthAnimation);
                 _sidebarStoryboard.Children.Add(opacityAnimation);
                 _sidebarStoryboard.Children.Add(translateAnimation);
+                _sidebarStoryboard.Children.Add(schedulerTranslateAnimation);
 
                 _sidebarStoryboard.Completed += (s, ev) =>
                 {

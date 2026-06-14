@@ -253,8 +253,10 @@
         </Border>
     </Grid>
 
-        <!-- Right Pane: Syncfusion Scheduler -->
-        <Grid Grid.Row="1" Grid.Column="1" Padding="20,0,20,20">
+        <Grid Grid.Row="1" Grid.Column="1" Padding="20,0,20,20" x:Name="SchedulerContainer">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="SchedulerTranslate" X="0" />
+            </Grid.RenderTransform>
             <!-- Glassy Border Container -->
             <Border Background="{ThemeResource AppGlassColorBrush}"
                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
