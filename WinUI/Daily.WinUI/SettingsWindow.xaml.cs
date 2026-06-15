@@ -32,6 +32,8 @@ public sealed partial class SettingsWindow : Window
         {
             rootContent.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPointerPressed), true);
         }
+
+        App.Current.RegisterSecondaryWindow(this);
     }
 
     private void OnPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)

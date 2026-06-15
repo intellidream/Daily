@@ -598,6 +598,8 @@ public sealed partial class MainWindow : Window
         _dateTimer?.Stop();
         SettingsService.Save(_settings);
         TrayIcon?.Dispose();
+
+        App.Current.CloseAllSecondaryWindows();
     }
 
     private void LogTray(string message)

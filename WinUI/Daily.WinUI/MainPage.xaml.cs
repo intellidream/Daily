@@ -295,6 +295,8 @@ public sealed partial class MainPage : Page
         if (_authService.IsAuthenticated)
             await _authService.SignOutAsync();
 
+        App.Current.CloseAllSecondaryWindows();
+
         // Reset the title-bar avatar/email/flyout text before leaving this page
         UpdateUserUI();
 
@@ -527,6 +529,8 @@ public sealed partial class MainPage : Page
         window.ApplyTheme(activeTheme);
         window.Activate();
     }
+
+
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool EnableWindow(IntPtr hWnd, bool bEnable);
 

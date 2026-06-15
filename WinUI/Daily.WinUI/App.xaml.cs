@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 using Daily.Configuration;
@@ -15,6 +16,31 @@ public partial class App : Application
     public IServiceProvider Services { get; private set; } = null!;
     public static new App Current => (App)Application.Current;
     private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _centralAuthListener;
+
+    private readonly System.Collections.Generic.List<Window> _activeSecondaryWindows = new();
+
+    public void RegisterSecondaryWindow(Window window)
+    {
+        _activeSecondaryWindows.Add(window);
+        window.Closed += (s, e) =>
+        {
+            _activeSecondaryWindows.Remove(window);
+        };
+    }
+
+    public void CloseAllSecondaryWindows()
+    {
+        var windowsToClose = _activeSecondaryWindows.ToList();
+        foreach (var window in windowsToClose)
+        {
+            try
+            {
+                window.Close();
+            }
+            catch { }
+        }
+        _activeSecondaryWindows.Clear();
+    }
 
     /// <summary>
     /// Custom entry point. Runs BEFORE the WinUI Application is created.
