@@ -1536,6 +1536,20 @@ namespace Daily_WinUI.Views
         private void Scheduler_ViewChanged(object sender, ViewChangedEventArgs e)
         {
             UpdateDateText(e.NewValue.ActualStartDate, e.NewValue.ActualEndDate);
+
+            if (Scheduler != null)
+            {
+                string viewTypeStr = Scheduler.ViewType switch
+                {
+                    SchedulerViewType.Day => "Day",
+                    SchedulerViewType.Week => "Week",
+                    SchedulerViewType.WorkWeek => "WorkWeek",
+                    SchedulerViewType.Month => "Month",
+                    _ => "Month"
+                };
+                UpdateSwitcherButtonsVisuals(viewTypeStr);
+                SaveSchedulerViewType(viewTypeStr);
+            }
         }
 
         private void UpdateDateText(DateTime start, DateTime end)
