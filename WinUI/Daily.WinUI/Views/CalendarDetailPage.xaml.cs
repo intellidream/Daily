@@ -394,7 +394,7 @@ namespace Daily_WinUI.Views
         {
             DispatcherQueue.TryEnqueue(async () =>
             {
-                await LoadDataAsync();
+                await LoadEventsAsync();
             });
         }
 
@@ -404,37 +404,122 @@ namespace Daily_WinUI.Views
             await _calendarService.SyncAllCalendarsAsync();
         }
 
-        private async Task LoadDataAsync()
+        private async Task LoadAccountsAsync()
         {
-            IsLoading = true;
             try
             {
-                // Load accounts
                 var rawAccounts = await _calendarService.GetAccountsAsync();
+                
+                // If collection is empty, populate it initially
+                if (Accounts.Count == 0)
+                {
+                    _isUpdatingAccountsList = true;
+                    try
+                    {
+                        foreach (var ra in rawAccounts)
+                        {
+                            Accounts.Add(new DisplayAccount
+                            {
+                                Id = ra.Id,
+                                Email = ra.Email,
+                                AccountType = ra.AccountType,
+                                Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color,
+                                IsActive = ra.IsActive,
+                                CustomName = ra.CustomName,
+                                IdentifiedName = ra.IdentifiedName,
+                                DisplayOrder = ra.DisplayOrder
+                            });
+                        }
+                    }
+                    finally
+                    {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            _isUpdatingAccountsList = false;
+                        });
+                    }
+                    return;
+                }
+
+                // If not empty, update or synchronize items in-place to avoid clearing the list
                 _isUpdatingAccountsList = true;
                 try
                 {
-                    Accounts.Clear();
-                    foreach (var ra in rawAccounts)
+                    // 1. Remove accounts that are no longer present
+                    for (int i = Accounts.Count - 1; i >= 0; i--)
                     {
-                        Accounts.Add(new DisplayAccount
+                        var acc = Accounts[i];
+                        if (!rawAccounts.Any(x => x.Id == acc.Id))
                         {
-                            Id = ra.Id,
-                            Email = ra.Email,
-                            AccountType = ra.AccountType,
-                            Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color,
-                            IsActive = ra.IsActive,
-                            CustomName = ra.CustomName,
-                            IdentifiedName = ra.IdentifiedName,
-                            DisplayOrder = ra.DisplayOrder
-                        });
+                            Accounts.RemoveAt(i);
+                        }
+                    }
+
+                    // 2. Add or update accounts
+                    for (int i = 0; i < rawAccounts.Count; i++)
+                    {
+                        var ra = rawAccounts[i];
+                        var existing = Accounts.FirstOrDefault(x => x.Id == ra.Id);
+                        if (existing == null)
+                        {
+                            Accounts.Insert(i, new DisplayAccount
+                            {
+                                Id = ra.Id,
+                                Email = ra.Email,
+                                AccountType = ra.AccountType,
+                                Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color,
+                                IsActive = ra.IsActive,
+                                CustomName = ra.CustomName,
+                                IdentifiedName = ra.IdentifiedName,
+                                DisplayOrder = ra.DisplayOrder
+                            });
+                        }
+                        else
+                        {
+                            if (existing.Email != ra.Email) existing.Email = ra.Email;
+                            if (existing.AccountType != ra.AccountType) existing.AccountType = ra.AccountType;
+                            if (existing.Color != ra.Color) existing.Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color;
+                            if (existing.IsActive != ra.IsActive) existing.IsActive = ra.IsActive;
+                            if (existing.CustomName != ra.CustomName) existing.CustomName = ra.CustomName;
+                            if (existing.IdentifiedName != ra.IdentifiedName) existing.IdentifiedName = ra.IdentifiedName;
+                            if (existing.DisplayOrder != ra.DisplayOrder) existing.DisplayOrder = ra.DisplayOrder;
+                        }
+                    }
+
+                    // 3. Align order of items to match rawAccounts (sorted by DisplayOrder in DB)
+                    for (int i = 0; i < rawAccounts.Count; i++)
+                    {
+                        var ra = rawAccounts[i];
+                        var existingItem = Accounts.FirstOrDefault(x => x.Id == ra.Id);
+                        if (existingItem != null)
+                        {
+                            var index = Accounts.IndexOf(existingItem);
+                            if (index != i)
+                            {
+                                Accounts.RemoveAt(index);
+                                Accounts.Insert(i, existingItem);
+                            }
+                        }
                     }
                 }
                 finally
                 {
-                    _isUpdatingAccountsList = false;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        _isUpdatingAccountsList = false;
+                    });
                 }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CalendarDetailPage] LoadAccountsAsync error: {ex.Message}");
+            }
+        }
 
+        private async Task LoadEventsAsync()
+        {
+            try
+            {
                 // Load events (within range of scheduler, e.g. -60 days to +90 days)
                 var start = DateTime.UtcNow.AddDays(-60);
                 var end = DateTime.UtcNow.AddDays(90);
@@ -479,6 +564,20 @@ namespace Daily_WinUI.Views
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[CalendarDetailPage] LoadEventsAsync error: {ex.Message}");
+            }
+        }
+
+        private async Task LoadDataAsync()
+        {
+            IsLoading = true;
+            try
+            {
+                await LoadAccountsAsync();
+                await LoadEventsAsync();
+            }
+            catch (Exception ex)
+            {
                 System.Diagnostics.Debug.WriteLine($"[CalendarDetailPage] LoadDataAsync error: {ex.Message}");
             }
             finally
@@ -489,10 +588,14 @@ namespace Daily_WinUI.Views
 
         private async void AccountActive_Toggled(object sender, RoutedEventArgs e)
         {
-            if (IsLoading) return;
+            if (IsLoading || _isUpdatingAccountsList) return;
             if (sender is ToggleSwitch ts && ts.DataContext is DisplayAccount acc)
             {
-                await _calendarService.ToggleAccountActiveAsync(acc.Id, ts.IsOn);
+                if (acc.IsActive != ts.IsOn)
+                {
+                    acc.IsActive = ts.IsOn;
+                    await _calendarService.ToggleAccountActiveAsync(acc.Id, ts.IsOn);
+                }
             }
         }
 

@@ -74,7 +74,7 @@
                 <TextBlock Grid.Row="0" Text="Connected Accounts" FontSize="14" FontWeight="SemiBold" Opacity="0.8" Margin="0,0,0,14" />
 
                 <!-- Accounts List -->
-                <ListView Grid.Row="1"
+                <ListView x:Name="AccountsListView" Grid.Row="1"
                           ItemsSource="{x:Bind Accounts, Mode=OneWay}"
                           CanDragItems="True"
                           CanReorderItems="True"
@@ -156,7 +156,7 @@
                                             <Button Background="Transparent" BorderThickness="0" Padding="4" Click="EditAccount_Click" ToolTipService.ToolTip="Edit Custom Name">
                                                 <FontIcon Glyph="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
                                             </Button>
-                                            <ToggleSwitch IsOn="{x:Bind IsActive, Mode=TwoWay}" Toggled="AccountActive_Toggled" OnContent="" OffContent="" MinWidth="0" VerticalAlignment="Center" />
+                                            <ToggleSwitch IsOn="{x:Bind IsActive, Mode=OneWay}" Toggled="AccountActive_Toggled" OnContent="" OffContent="" MinWidth="0" VerticalAlignment="Center" />
                                             <Button Background="Transparent" BorderThickness="0" Padding="4" Click="DeleteAccount_Click" ToolTipService.ToolTip="Disconnect Account">
                                                 <FontIcon Glyph="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppErrorBrush}" />
                                             </Button>

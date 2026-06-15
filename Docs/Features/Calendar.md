@@ -136,6 +136,12 @@ The local SQLite initialization creates:
   - Implemented a fallback query to primary calendar metadata (`GET /me/calendar` for `owner.address`) under `Calendars.Read` scope if the profile lookup fails.
   - Programmed a self-healing background sync routine to update the local SQLite database email cache for legacy calendar connections.
   - **Local Time & Timezone Conversion Fix**: Configured the Microsoft Graph API request to return dates converted to UTC by sending the `Prefer: outlook.timezone="UTC"` header. Added robust timezone parsing using `SafeFindTimeZone` to parse Microsoft's timezone strings (converting naive local datetimes to UTC) to guarantee that Outlook events show up in the correct local time on the calendar, matching Google and Yahoo calendars.
+- **Robust Virtualization & Toggling Feedback Loop Fix**: Resolved timing race conditions, container recycling bugs, and programmatic toggle loops in the side panel connected accounts list:
+  - Changed the `ToggleSwitch.IsOn` binding from `TwoWay` to `OneWay` to stop direct property write-backs during virtualization.
+  - Implemented in-place synchronization of the `Accounts` collection in `LoadAccountsAsync()` instead of clearing the list, maintaining list focus and preventing visual jumps.
+  - Defer resetting the `_isUpdatingAccountsList` update gate using `DispatcherQueue.TryEnqueue` to shield the control against programmatic toggles during collection changes.
+  - Restricted the background `OnCalendarDataChanged` event handler to only call `LoadEventsAsync()`, leaving the static accounts list completely stable and untouched during active state toggles. This entirely eliminates background rebindings, container recycling, and focus leaks, making toggles 100% stable and responsive.
+
 
 ### 5.6 Scheduler View Persistence & Switcher Highlights (June 2026)
 - **View Selection Memory**: Saved the last selected view type (Day, Week, Work, Month) inside LocalSettings and restored it on page navigation.
