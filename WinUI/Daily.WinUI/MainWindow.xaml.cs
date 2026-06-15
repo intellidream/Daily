@@ -22,6 +22,7 @@ public sealed partial class MainWindow : Window
     private Windows.UI.ViewManagement.UISettings? _uiSettings;
     private bool _isExiting = false;
     private readonly System.Threading.Tasks.Task _minBootTimeTask;
+    private string? _loadedAvatarUrl;
 
     public MainWindow()
     {
@@ -83,28 +84,131 @@ public sealed partial class MainWindow : Window
     // ── Title bar user state ──────────────────────────────────────────────────
 
     /// <summary>Called by MainPage after auth state changes to update title bar profile.</summary>
-    public void UpdateTitleBarUser(string email, string displayName, string? avatarUrl, bool isAuthenticated)
+    public void UpdateTitleBarUser(string userFirstName, string displayName, string? avatarUrl, bool isAuthenticated)
     {
-        DispatcherQueue.TryEnqueue(() =>
+        DispatcherQueue.TryEnqueue(async () =>
         {
             TitleBarUserAvatar.DisplayName = isAuthenticated ? (displayName ?? "U") : "?";
-            TitleBarUserAvatar.ProfilePicture = null;
-            if (isAuthenticated && !string.IsNullOrEmpty(avatarUrl))
+            TitleBarAuthItem.Text = isAuthenticated ? "Sign Out" : "Sign In";
+            TitleBarAuthIcon.Glyph = isAuthenticated ? "\uF3B1" : "\uE77B"; // sign-out : person
+            TitleBarUserEmailText.Text = isAuthenticated ? $"Hi, {userFirstName}!" : "Not signed in";
+
+            if (!isAuthenticated || string.IsNullOrEmpty(avatarUrl))
             {
+                TitleBarUserAvatar.ProfilePicture = null;
+                _loadedAvatarUrl = null;
+                return;
+            }
+
+            if (_loadedAvatarUrl == avatarUrl)
+            {
+                // Already loading or loaded this avatar URL, do not reload
+                return;
+            }
+
+            _loadedAvatarUrl = avatarUrl;
+
+            // Set to null first to clear previous picture while we load the new one
+            TitleBarUserAvatar.ProfilePicture = null;
+
+            try
+            {
+                // 1. Check if we have a locally cached file of this avatar URL
+                var cacheFolder = Path.Combine(Windows.Storage.ApplicationData.Current.LocalFolder.Path, "AvatarCache");
+                if (!Directory.Exists(cacheFolder))
+                {
+                    Directory.CreateDirectory(cacheFolder);
+                }
+
+                // Create a deterministic filename based on the hash of the URL
+                var safeFileName = GetMd5Hash(avatarUrl) + ".png";
+                var localFilePath = Path.Combine(cacheFolder, safeFileName);
+
+                if (File.Exists(localFilePath))
+                {
+                    // Load from local file
+                    await SetAvatarFromFileAsync(localFilePath);
+                    return;
+                }
+
+                // 2. Download from web and save to local file
+                var downloadedPath = await DownloadAvatarAsync(avatarUrl, localFilePath);
+                if (downloadedPath != null)
+                {
+                    await SetAvatarFromFileAsync(downloadedPath);
+                }
+                else
+                {
+                    // Fallback to web URI if download failed but we can still try to let WinUI load it
+                    TitleBarUserAvatar.ProfilePicture = new BitmapImage(new System.Uri(avatarUrl));
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] Error loading/caching avatar: {ex.Message}");
+                // Fallback
                 try
                 {
                     TitleBarUserAvatar.ProfilePicture = new BitmapImage(new System.Uri(avatarUrl));
                 }
-                catch (Exception ex)
+                catch
                 {
-                    System.Diagnostics.Debug.WriteLine($"[MainWindow] Failed to load avatar image: {ex.Message}");
+                    // Ignore
                 }
             }
-
-            TitleBarAuthItem.Text = isAuthenticated ? "Sign Out" : "Sign In";
-            TitleBarAuthIcon.Glyph = isAuthenticated ? "\uF3B1" : "\uE77B"; // sign-out : person
-            TitleBarUserEmailText.Text = isAuthenticated ? (email ?? "Signed in") : "Not signed in";
         });
+    }
+
+    private async System.Threading.Tasks.Task<string?> DownloadAvatarAsync(string url, string destinationPath)
+    {
+        try
+        {
+            using (var httpClient = new System.Net.Http.HttpClient())
+            {
+                // Add user agent so Google doesn't block the request
+                httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                
+                var bytes = await httpClient.GetByteArrayAsync(url);
+                await File.WriteAllBytesAsync(destinationPath, bytes);
+                return destinationPath;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] Failed to download avatar from {url}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private async System.Threading.Tasks.Task SetAvatarFromFileAsync(string localPath)
+    {
+        try
+        {
+            var storageFile = await Windows.Storage.StorageFile.GetFileFromPathAsync(localPath);
+            using (var randomAccessStream = await storageFile.OpenAsync(Windows.Storage.FileAccessMode.Read))
+            {
+                var bitmapImage = new BitmapImage();
+                await bitmapImage.SetSourceAsync(randomAccessStream);
+                TitleBarUserAvatar.ProfilePicture = bitmapImage;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] Failed to set avatar from file: {ex.Message}");
+            // Delete corrupt file if any
+            try { File.Delete(localPath); } catch {}
+            throw;
+        }
+    }
+
+    private string GetMd5Hash(string input)
+    {
+        using (var md5 = System.Security.Cryptography.MD5.Create())
+        {
+            var inputBytes = System.Text.Encoding.ASCII.GetBytes(input);
+            var hashBytes = md5.ComputeHash(inputBytes);
+            return Convert.ToHexString(hashBytes);
+        }
     }
 
     /// <summary>Called by MainPage after a theme toggle to sync the title bar button icon/text.</summary>

@@ -53,6 +53,41 @@ public class WinUIAuthService
         }
     }
 
+    public string? CurrentUserFirstName
+    {
+        get
+        {
+            var metadata = _supabase.Auth.CurrentSession?.User?.UserMetadata;
+            if (metadata != null)
+            {
+                if (metadata.TryGetValue("given_name", out var givenName) && givenName != null && !string.IsNullOrWhiteSpace(givenName.ToString()))
+                {
+                    return givenName.ToString();
+                }
+                if (metadata.TryGetValue("first_name", out var firstName) && firstName != null && !string.IsNullOrWhiteSpace(firstName.ToString()))
+                {
+                    return firstName.ToString();
+                }
+                if (metadata.TryGetValue("full_name", out var fullName) && fullName != null && !string.IsNullOrWhiteSpace(fullName.ToString()))
+                {
+                    var parts = fullName.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length > 0) return parts[0];
+                }
+                if (metadata.TryGetValue("name", out var name) && name != null && !string.IsNullOrWhiteSpace(name.ToString()))
+                {
+                    var parts = name.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length > 0) return parts[0];
+                }
+            }
+            var email = CurrentUserEmail;
+            if (string.IsNullOrEmpty(email)) return null;
+            var localPart = email.Split('@').FirstOrDefault();
+            if (string.IsNullOrEmpty(localPart)) return null;
+            var nameParts = localPart.Split(new[] { '.', '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
+            return nameParts.Length > 0 ? nameParts[0] : localPart;
+        }
+    }
+
     public void AddStateChangedListener(IGotrueClient<User, Session>.AuthEventHandler handler)
     {
         _supabase.Auth.AddStateChangedListener(handler);

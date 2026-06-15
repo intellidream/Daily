@@ -248,15 +248,16 @@ public sealed partial class MainPage : Page
 
     private void UpdateUserUI()
     {
+        var firstName   = _authService.CurrentUserFirstName;
         var email       = _authService.CurrentUserEmail;
-        var displayName = email?.Split('@').FirstOrDefault() ?? "U";
+        var displayName = _authService.CurrentUserDisplayName ?? email?.Split('@').FirstOrDefault() ?? "U";
         var avatarUrl   = _authService.CurrentUserAvatarUrl;
         var isAuth      = _authService.IsAuthenticated;
 
         // Push state to the OS title bar controls hosted in MainWindow
         if (App.Current.MainWindow is MainWindow mw)
         {
-            mw.UpdateTitleBarUser(email ?? string.Empty, displayName, avatarUrl, isAuth);
+            mw.UpdateTitleBarUser(firstName ?? email ?? string.Empty, displayName, avatarUrl, isAuth);
         }
     }
 
