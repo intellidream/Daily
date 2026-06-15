@@ -463,6 +463,7 @@ namespace Daily_WinUI.Services
 
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", decryptedAccessToken);
+            request.Headers.Add("Prefer", "outlook.timezone=\"UTC\"");
 
             var response = await _httpClient.SendAsync(request);
             if (response.IsSuccessStatusCode)
@@ -495,14 +496,34 @@ namespace Daily_WinUI.Services
                         {
                             var dtStr = startEl.GetProperty("dateTime").GetString()!;
                             var zoneStr = startEl.GetProperty("timeZone").GetString()!;
-                            start = DateTime.Parse(dtStr).ToUniversalTime();
+                            
+                            if (zoneStr.Equals("UTC", StringComparison.OrdinalIgnoreCase) || zoneStr.Equals("Coordinated Universal Time", StringComparison.OrdinalIgnoreCase))
+                            {
+                                start = DateTime.Parse(dtStr, null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
+                            }
+                            else
+                            {
+                                var tz = SafeFindTimeZone(zoneStr) ?? TimeZoneInfo.Local;
+                                var dtNaive = DateTime.Parse(dtStr);
+                                start = TimeZoneInfo.ConvertTimeToUtc(dtNaive, tz);
+                            }
                         }
 
                         if (ev.TryGetProperty("end", out var endEl))
                         {
                             var dtStr = endEl.GetProperty("dateTime").GetString()!;
                             var zoneStr = endEl.GetProperty("timeZone").GetString()!;
-                            end = DateTime.Parse(dtStr).ToUniversalTime();
+                            
+                            if (zoneStr.Equals("UTC", StringComparison.OrdinalIgnoreCase) || zoneStr.Equals("Coordinated Universal Time", StringComparison.OrdinalIgnoreCase))
+                            {
+                                end = DateTime.Parse(dtStr, null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
+                            }
+                            else
+                            {
+                                var tz = SafeFindTimeZone(zoneStr) ?? TimeZoneInfo.Local;
+                                var dtNaive = DateTime.Parse(dtStr);
+                                end = TimeZoneInfo.ConvertTimeToUtc(dtNaive, tz);
+                            }
                         }
 
                         var localEvent = new LocalCalendarEvent

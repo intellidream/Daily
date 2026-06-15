@@ -135,6 +135,7 @@ The local SQLite initialization creates:
   - Requested `User.Read` scope during Microsoft OAuth links.
   - Implemented a fallback query to primary calendar metadata (`GET /me/calendar` for `owner.address`) under `Calendars.Read` scope if the profile lookup fails.
   - Programmed a self-healing background sync routine to update the local SQLite database email cache for legacy calendar connections.
+  - **Local Time & Timezone Conversion Fix**: Configured the Microsoft Graph API request to return dates converted to UTC by sending the `Prefer: outlook.timezone="UTC"` header. Added robust timezone parsing using `SafeFindTimeZone` to parse Microsoft's timezone strings (converting naive local datetimes to UTC) to guarantee that Outlook events show up in the correct local time on the calendar, matching Google and Yahoo calendars.
 
 ### 5.6 Scheduler View Persistence & Switcher Highlights (June 2026)
 - **View Selection Memory**: Saved the last selected view type (Day, Week, Work, Month) inside LocalSettings and restored it on page navigation.
