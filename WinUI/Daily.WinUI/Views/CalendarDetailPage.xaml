@@ -115,7 +115,7 @@
                                         </Grid.ColumnDefinitions>
 
                                         <!-- Provider Icon -->
-                                        <Border Grid.Column="0" Grid.Row="0" Width="32" Height="32" CornerRadius="16" Background="{x:Bind ColorBrush}" Margin="0,0,10,0">
+                                        <Border Grid.Column="0" Grid.Row="0" Width="32" Height="32" CornerRadius="16" Background="{x:Bind ColorBrush, Mode=OneWay}" Margin="0,0,10,0">
                                             <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
 

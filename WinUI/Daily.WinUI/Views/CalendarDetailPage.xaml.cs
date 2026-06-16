@@ -28,10 +28,38 @@ using Windows.System;
 
 namespace Daily_WinUI.Views
 {
-    public class ColorPresetItem
+    public class ColorPresetItem : INotifyPropertyChanged
     {
         public string Color { get; set; } = string.Empty;
-        public DisplayAccount Account { get; set; } = null!;
+
+        private DisplayAccount _account = null!;
+        public DisplayAccount Account
+        {
+            get => _account;
+            set
+            {
+                if (_account != null)
+                {
+                    _account.PropertyChanged -= Account_PropertyChanged;
+                }
+                _account = value;
+                if (_account != null)
+                {
+                    _account.PropertyChanged += Account_PropertyChanged;
+                }
+            }
+        }
+
+        private void Account_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(DisplayAccount.Color))
+            {
+                OnPropertyChanged(nameof(IsSelected));
+                OnPropertyChanged(nameof(SelectionBrush));
+                OnPropertyChanged(nameof(SelectionThickness));
+            }
+        }
+
         public bool IsSelected => Color.Replace("#", "").ToLowerInvariant() == Account.Color.Replace("#", "").ToLowerInvariant();
 
         public Microsoft.UI.Xaml.Media.Brush SelectionBrush
@@ -51,6 +79,10 @@ namespace Daily_WinUI.Views
         }
 
         public Microsoft.UI.Xaml.Thickness SelectionThickness => IsSelected ? new Microsoft.UI.Xaml.Thickness(1.5) : new Microsoft.UI.Xaml.Thickness(0);
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
     public class DisplayAccount : INotifyPropertyChanged
@@ -58,7 +90,20 @@ namespace Daily_WinUI.Views
         public string Id { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string AccountType { get; set; } = string.Empty;
-        public string Color { get; set; } = "#512BD4";
+        private string _color = "#512BD4";
+        public string Color
+        {
+            get => _color;
+            set
+            {
+                if (_color != value)
+                {
+                    _color = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(ColorBrush));
+                }
+            }
+        }
         public int DisplayOrder { get; set; }
 
         private string _customName = string.Empty;
