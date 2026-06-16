@@ -55,28 +55,11 @@ namespace Daily_WinUI.Views
             if (e.PropertyName == nameof(DisplayAccount.Color))
             {
                 OnPropertyChanged(nameof(IsSelected));
-                OnPropertyChanged(nameof(SelectionBrush));
                 OnPropertyChanged(nameof(SelectionThickness));
             }
         }
 
         public bool IsSelected => Color.Replace("#", "").ToLowerInvariant() == Account.Color.Replace("#", "").ToLowerInvariant();
-
-        public Microsoft.UI.Xaml.Media.Brush SelectionBrush
-        {
-            get
-            {
-                if (IsSelected)
-                {
-                    if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("AppFgColorBrush", out var res) && res is Microsoft.UI.Xaml.Media.Brush b)
-                    {
-                        return b;
-                    }
-                    return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray);
-                }
-                return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            }
-        }
 
         public Microsoft.UI.Xaml.Thickness SelectionThickness => IsSelected ? new Microsoft.UI.Xaml.Thickness(1.5) : new Microsoft.UI.Xaml.Thickness(0);
 
@@ -340,6 +323,7 @@ namespace Daily_WinUI.Views
         private DateTime _currentStartDate;
         private DateTime _currentEndDate;
         private Storyboard? _sidebarStoryboard;
+        private SchedulerViewType? _lastViewType;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
@@ -372,10 +356,30 @@ namespace Daily_WinUI.Views
         public CalendarDetailPage()
         {
             this.InitializeComponent();
+            
+            // Programmatically configure DaysViewSettings to avoid XAML binding exceptions on Stroke property
+            if (Scheduler != null)
+            {
+                if (Scheduler.DaysViewSettings == null)
+                {
+                    Scheduler.DaysViewSettings = new DaysViewSettings();
+                }
+                Scheduler.DaysViewSettings.ShowCurrentTimeIndicator = true;
+                UpdateCurrentTimeIndicatorStroke();
+            }
+
+            this.ActualThemeChanged += (s, e) => UpdateCurrentTimeIndicatorStroke();
+
             _calendarService = App.Current.Services.GetRequiredService<ICalendarService>();
             _httpClient = App.Current.Services.GetRequiredService<HttpClient>();
             Accounts.CollectionChanged += Accounts_CollectionChanged;
             _isInitialized = true;
+        }
+
+        private void UpdateCurrentTimeIndicatorStroke()
+        {
+            if (Scheduler?.DaysViewSettings == null) return;
+            Scheduler.DaysViewSettings.CurrentTimeIndicatorStroke = Daily_WinUI.Converters.CalendarColorHelper.GetLightAccentBrush();
         }
 
         protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -1565,7 +1569,19 @@ namespace Daily_WinUI.Views
 
         private void Today_Click(object sender, RoutedEventArgs e)
         {
-            Scheduler.DisplayDate = DateTime.Today;
+            var scrollTime = DateTime.Now.TimeOfDay.Subtract(TimeSpan.FromHours(1));
+            if (scrollTime < TimeSpan.Zero) scrollTime = TimeSpan.Zero;
+
+            if (Scheduler.ViewType == SchedulerViewType.Day ||
+                Scheduler.ViewType == SchedulerViewType.Week ||
+                Scheduler.ViewType == SchedulerViewType.WorkWeek)
+            {
+                Scheduler.DisplayDate = DateTime.Today.Add(scrollTime);
+            }
+            else
+            {
+                Scheduler.DisplayDate = DateTime.Today;
+            }
         }
 
         private void Prev_Click(object sender, RoutedEventArgs e)
@@ -1594,6 +1610,22 @@ namespace Daily_WinUI.Views
                 };
                 UpdateSwitcherButtonsVisuals(viewTypeStr);
                 SaveSchedulerViewType(viewTypeStr);
+
+                // Scroll to current time if view type changed and is day/week view
+                if (Scheduler.ViewType != _lastViewType)
+                {
+                    _lastViewType = Scheduler.ViewType;
+                    if (Scheduler.ViewType == SchedulerViewType.Day ||
+                        Scheduler.ViewType == SchedulerViewType.Week ||
+                        Scheduler.ViewType == SchedulerViewType.WorkWeek)
+                    {
+                        var scrollTime = DateTime.Now.TimeOfDay.Subtract(TimeSpan.FromHours(1));
+                        if (scrollTime < TimeSpan.Zero) scrollTime = TimeSpan.Zero;
+                        
+                        var currentDate = Scheduler.DisplayDate.Date;
+                        Scheduler.DisplayDate = currentDate.Add(scrollTime);
+                    }
+                }
             }
         }
 

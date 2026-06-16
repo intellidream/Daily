@@ -14,6 +14,10 @@
 
     <Page.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:IsTodayToVisibilityConverter x:Key="IsTodayToVisibilityConverter" />
+        <converters:IsTodayToBrushConverter x:Key="IsTodayToBrushConverter" />
+        <converters:TodayBackgroundGlowConverter x:Key="TodayBackgroundGlowConverter" />
+        <converters:TodayCircleBadgeBrushConverter x:Key="TodayCircleBadgeBrushConverter" />
     </Page.Resources>
 
     <Grid Background="Transparent">
@@ -180,7 +184,7 @@
                                                     <DataTemplate x:DataType="local:ColorPresetItem">
                                                         <!-- Outer selection ring container -->
                                                         <Border Width="24" Height="24" CornerRadius="12" Padding="2" VerticalAlignment="Center" HorizontalAlignment="Center"
-                                                                BorderBrush="{x:Bind SelectionBrush, Mode=OneWay}"
+                                                                BorderBrush="{ThemeResource AppFgColorBrush}"
                                                                 BorderThickness="{x:Bind SelectionThickness, Mode=OneWay}">
                                                             <Button Width="18" Height="18" Padding="0" CornerRadius="9" BorderThickness="0" Click="ColorPreset_Click" Tag="{x:Bind Account}" DataContext="{x:Bind Color}">
                                                                 <Button.Background>
@@ -194,7 +198,7 @@
 
                                             <!-- Drag Handle / Reorder Indicator -->
                                             <FontIcon Grid.Column="1" Glyph="&#xE700;" FontFamily="Segoe Fluent Icons" FontSize="12" 
-                                                      Foreground="{x:Bind DragHandleForeground, Mode=OneWay}" 
+                                                      Foreground="{ThemeResource AppFgMutedColorBrush}" 
                                                       Opacity="{x:Bind DragHandleOpacity, Mode=OneWay}" 
                                                       HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0" ToolTipService.ToolTip="Drag to reorder" />
                                         </Grid>
@@ -385,13 +389,31 @@
                                         <Border Background="Transparent" 
                                                 BorderBrush="{ThemeResource AppGlassSubColorBrush}" 
                                                 BorderThickness="0,0,1,1">
-                                            <TextBlock Text="{Binding DateTime.Day}" 
-                                                       Foreground="{ThemeResource AppFgColorBrush}"
-                                                       FontSize="11"
-                                                       Margin="8,6,0,0" 
-                                                       HorizontalAlignment="Left" 
-                                                       VerticalAlignment="Top" 
-                                                       Opacity="0.8"/>
+                                            <Grid>
+                                                <!-- Today Highlight Glow (Background of today's cell) -->
+                                                <Border Background="{Binding DateTime, Converter={StaticResource TodayBackgroundGlowConverter}}" 
+                                                        Visibility="{Binding DateTime, Converter={StaticResource IsTodayToVisibilityConverter}}" />
+                                                
+                                                <!-- Today Cell Outline Border -->
+                                                <Border BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        BorderThickness="1.5"
+                                                        Margin="0,0,1,1"
+                                                        Opacity="0.3"
+                                                        Visibility="{Binding DateTime, Converter={StaticResource IsTodayToVisibilityConverter}}" />
+
+                                                <Grid Margin="8,6,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Width="20" Height="20">
+                                                    <!-- Today Circle badge -->
+                                                    <Ellipse Fill="{Binding DateTime, Converter={StaticResource TodayCircleBadgeBrushConverter}}" 
+                                                             Visibility="{Binding DateTime, Converter={StaticResource IsTodayToVisibilityConverter}}" />
+                                                    
+                                                    <TextBlock Text="{Binding DateTime.Day}" 
+                                                               Foreground="{Binding DateTime, Converter={StaticResource IsTodayToBrushConverter}}"
+                                                               FontSize="11"
+                                                               FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center" 
+                                                               VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Grid>
                                         </Border>
                                     </DataTemplate>
                                 </scheduler:MonthViewSettings.MonthCellTemplate>
