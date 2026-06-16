@@ -207,9 +207,34 @@
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
+                    
+                    <!-- Placeholder when no accounts are connected -->
+                    <StackPanel x:Name="NoAccountsPlaceholder"
+                                Grid.Row="1"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="6"
+                                Padding="12"
+                                Visibility="Collapsed">
+                        <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="{ThemeResource SystemAccentColor}" HorizontalAlignment="Center" />
+                        <TextBlock Text="No accounts connected yet."
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{ThemeResource AppFgColorBrush}"
+                                   Opacity="0.8"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center" />
+                        <TextBlock Text="Use the buttons below to add your calendars."
+                                   FontSize="11"
+                                   Foreground="{ThemeResource AppFgMutedColorBrush}"
+                                   TextWrapping="Wrap"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center" />
+                    </StackPanel>
 
                 <!-- Bottom Panel: Add new connections (Expander) -->
-                <Expander Grid.Row="2"
+                <Expander x:Name="AddAccountExpander"
+                          Grid.Row="2"
                           Header="Add New Account"
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Stretch"

@@ -516,76 +516,90 @@ namespace Daily_WinUI.Views
                             _isUpdatingAccountsList = false;
                         });
                     }
-                    return;
                 }
-
-                // If not empty, update or synchronize items in-place to avoid clearing the list
-                _isUpdatingAccountsList = true;
-                try
+                else
                 {
-                    // 1. Remove accounts that are no longer present
-                    for (int i = Accounts.Count - 1; i >= 0; i--)
+                    // If not empty, update or synchronize items in-place to avoid clearing the list
+                    _isUpdatingAccountsList = true;
+                    try
                     {
-                        var acc = Accounts[i];
-                        if (!rawAccounts.Any(x => x.Id == acc.Id))
+                        // 1. Remove accounts that are no longer present
+                        for (int i = Accounts.Count - 1; i >= 0; i--)
                         {
-                            Accounts.RemoveAt(i);
-                        }
-                    }
-
-                    // 2. Add or update accounts
-                    for (int i = 0; i < rawAccounts.Count; i++)
-                    {
-                        var ra = rawAccounts[i];
-                        var existing = Accounts.FirstOrDefault(x => x.Id == ra.Id);
-                        if (existing == null)
-                        {
-                            Accounts.Insert(i, new DisplayAccount
+                            var acc = Accounts[i];
+                            if (!rawAccounts.Any(x => x.Id == acc.Id))
                             {
-                                Id = ra.Id,
-                                Email = ra.Email,
-                                AccountType = ra.AccountType,
-                                Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color,
-                                IsActive = ra.IsActive,
-                                CustomName = ra.CustomName,
-                                IdentifiedName = ra.IdentifiedName,
-                                DisplayOrder = ra.DisplayOrder
-                            });
+                                Accounts.RemoveAt(i);
+                            }
                         }
-                        else
-                        {
-                            if (existing.Email != ra.Email) existing.Email = ra.Email;
-                            if (existing.AccountType != ra.AccountType) existing.AccountType = ra.AccountType;
-                            if (existing.Color != ra.Color) existing.Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color;
-                            if (existing.IsActive != ra.IsActive) existing.IsActive = ra.IsActive;
-                            if (existing.CustomName != ra.CustomName) existing.CustomName = ra.CustomName;
-                            if (existing.IdentifiedName != ra.IdentifiedName) existing.IdentifiedName = ra.IdentifiedName;
-                            if (existing.DisplayOrder != ra.DisplayOrder) existing.DisplayOrder = ra.DisplayOrder;
-                        }
-                    }
 
-                    // 3. Align order of items to match rawAccounts (sorted by DisplayOrder in DB)
-                    for (int i = 0; i < rawAccounts.Count; i++)
-                    {
-                        var ra = rawAccounts[i];
-                        var existingItem = Accounts.FirstOrDefault(x => x.Id == ra.Id);
-                        if (existingItem != null)
+                        // 2. Add or update accounts
+                        for (int i = 0; i < rawAccounts.Count; i++)
                         {
-                            var index = Accounts.IndexOf(existingItem);
-                            if (index != i)
+                            var ra = rawAccounts[i];
+                            var existing = Accounts.FirstOrDefault(x => x.Id == ra.Id);
+                            if (existing == null)
                             {
-                                Accounts.RemoveAt(index);
-                                Accounts.Insert(i, existingItem);
+                                Accounts.Insert(i, new DisplayAccount
+                                {
+                                    Id = ra.Id,
+                                    Email = ra.Email,
+                                    AccountType = ra.AccountType,
+                                    Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color,
+                                    IsActive = ra.IsActive,
+                                    CustomName = ra.CustomName,
+                                    IdentifiedName = ra.IdentifiedName,
+                                    DisplayOrder = ra.DisplayOrder
+                                });
+                            }
+                            else
+                            {
+                                if (existing.Email != ra.Email) existing.Email = ra.Email;
+                                if (existing.AccountType != ra.AccountType) existing.AccountType = ra.AccountType;
+                                if (existing.Color != ra.Color) existing.Color = string.IsNullOrEmpty(ra.Color) ? "#512BD4" : ra.Color;
+                                if (existing.IsActive != ra.IsActive) existing.IsActive = ra.IsActive;
+                                if (existing.CustomName != ra.CustomName) existing.CustomName = ra.CustomName;
+                                if (existing.IdentifiedName != ra.IdentifiedName) existing.IdentifiedName = ra.IdentifiedName;
+                                if (existing.DisplayOrder != ra.DisplayOrder) existing.DisplayOrder = ra.DisplayOrder;
+                            }
+                        }
+
+                        // 3. Align order of items to match rawAccounts (sorted by DisplayOrder in DB)
+                        for (int i = 0; i < rawAccounts.Count; i++)
+                        {
+                            var ra = rawAccounts[i];
+                            var existingItem = Accounts.FirstOrDefault(x => x.Id == ra.Id);
+                            if (existingItem != null)
+                            {
+                                var index = Accounts.IndexOf(existingItem);
+                                if (index != i)
+                                {
+                                    Accounts.RemoveAt(index);
+                                    Accounts.Insert(i, existingItem);
+                                }
                             }
                         }
                     }
-                }
-                finally
-                {
-                    DispatcherQueue.TryEnqueue(() =>
+                    finally
                     {
-                        _isUpdatingAccountsList = false;
-                    });
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            _isUpdatingAccountsList = false;
+                        });
+                    }
+                }
+
+                // If no accounts are connected, expand the sidebar and also the Add New Account expander.
+                if (rawAccounts.Count == 0)
+                {
+                    ToggleSidebarBtn.IsChecked = true;
+                    AddAccountExpander.IsExpanded = true;
+                    NoAccountsPlaceholder.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    AddAccountExpander.IsExpanded = false;
+                    NoAccountsPlaceholder.Visibility = Visibility.Collapsed;
                 }
             }
             catch (Exception ex)

@@ -138,7 +138,10 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="No upcoming items" FontSize="11" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasSmallItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" />
+                <StackPanel Orientation="Vertical" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasSmallItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource SystemAccentColor}" HorizontalAlignment="Center" />
+                    <TextBlock Text="No upcoming items" FontSize="10.5" Opacity="0.6" Foreground="{ThemeResource SystemAccentColor}" HorizontalAlignment="Center" TextAlignment="Center" />
+                </StackPanel>
             </Grid>
 
             <!-- 2. NORMAL CONTAINER (2x1 Wide) -->
@@ -192,7 +195,10 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="No agenda items" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasNormalItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" />
+                <StackPanel Orientation="Vertical" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasNormalItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{ThemeResource SystemAccentColor}" HorizontalAlignment="Center" />
+                    <TextBlock Text="No agenda items" FontSize="11.5" Opacity="0.6" Foreground="{ThemeResource SystemAccentColor}" HorizontalAlignment="Center" TextAlignment="Center" />
+                </StackPanel>
             </Grid>
 
             <!-- 3. TALL CONTAINER (1x2 Tall) -->
@@ -245,7 +251,10 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-                <TextBlock Text="No upcoming events or tasks" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasUpcomingItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" />
+                <StackPanel Orientation="Vertical" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasUpcomingItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="{ThemeResource SystemAccentColor}" HorizontalAlignment="Center" />
+                    <TextBlock Text="No upcoming events or tasks" FontSize="12" Opacity="0.6" Foreground="{ThemeResource SystemAccentColor}" HorizontalAlignment="Center" TextAlignment="Center" />
+                </StackPanel>
             </Grid>
 
             <!-- 4. LARGE CONTAINER (2x2 Large) -->
@@ -329,7 +338,10 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <TextBlock Text="No upcoming items" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasUpcomingItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" />
+                    <StackPanel Orientation="Vertical" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind HasUpcomingItems, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}">
+                        <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="{ThemeResource SystemAccentColor}" HorizontalAlignment="Center" />
+                        <TextBlock Text="No upcoming items" FontSize="12" Opacity="0.6" Foreground="{ThemeResource SystemAccentColor}" HorizontalAlignment="Center" TextAlignment="Center" />
+                    </StackPanel>
                 </Grid>
             </Grid>
         </Grid>
