@@ -447,10 +447,39 @@ namespace Daily_WinUI.Views
             });
         }
 
+        private async void Refresh_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                IsLoading = true;
+                await _calendarService.SyncAllCalendarsAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CalendarDetailPage] Refresh_Click sync failed: {ex.Message}");
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
         public async Task RefreshFromTitleBarAsync()
         {
-            await LoadDataAsync();
-            await _calendarService.SyncAllCalendarsAsync();
+            try
+            {
+                IsLoading = true;
+                await LoadDataAsync();
+                await _calendarService.SyncAllCalendarsAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CalendarDetailPage] RefreshFromTitleBarAsync failed: {ex.Message}");
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
 
         private async Task LoadAccountsAsync()

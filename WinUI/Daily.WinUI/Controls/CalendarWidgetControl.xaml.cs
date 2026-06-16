@@ -211,7 +211,26 @@ namespace Daily_WinUI.Controls
             }
         }
 
-        public async Task RefreshAsync() => await LoadDataAsync();
+        public async Task RefreshAsync()
+        {
+            if (_calendarService != null)
+            {
+                try
+                {
+                    IsLoading = true;
+                    await _calendarService.SyncAllCalendarsAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[CalendarWidget] Sync Error: {ex.Message}");
+                }
+                finally
+                {
+                    IsLoading = false;
+                }
+            }
+            await LoadDataAsync();
+        }
 
         private async Task LoadDataAsync(bool showSpinner = true)
         {

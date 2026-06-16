@@ -142,26 +142,24 @@ namespace Daily.Services
         {
             try
             {
-                // Using ip-api.com (free, no key required for non-commercial)
-                // Note: HTTP only for free tier. iOS/Mac ATS might block this if not configured.
-                var ipInfo = await _httpClient.GetFromJsonAsync<IpLocationInfo>("http://ip-api.com/json/");
-                if (ipInfo != null && ipInfo.Status == "success")
+                // Using freeipapi.com (free, no key required, supports HTTPS)
+                var ipInfo = await _httpClient.GetFromJsonAsync<IpLocationInfo>("https://freeipapi.com/api/json");
+                if (ipInfo != null)
                 {
-                    return new Location(ipInfo.Lat, ipInfo.Lon);
+                    return new Location(ipInfo.Latitude, ipInfo.Longitude);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore
+                _syncService.Log($"[WeatherService] GetLocationFromIpAsync Error: {ex.Message}");
             }
             return null;
         }
 
         private class IpLocationInfo
         {
-            public string Status { get; set; }
-            public double Lat { get; set; }
-            public double Lon { get; set; }
+            public double Latitude { get; set; }
+            public double Longitude { get; set; }
         }
 
         // ... Existing Methods ...

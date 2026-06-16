@@ -317,12 +317,18 @@
                             </Button>
                         </StackPanel>
 
-                        <!-- Right side: View Switcher Pane -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="2" CornerRadius="6" Height="32" VerticalAlignment="Center">
-                            <Button x:Name="DayViewBtn" Click="ViewSwitcher_Click" Tag="Day" Content="Day" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
-                            <Button x:Name="WeekViewBtn" Click="ViewSwitcher_Click" Tag="Week" Content="Week" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
-                            <Button x:Name="WorkWeekViewBtn" Click="ViewSwitcher_Click" Tag="WorkWeek" Content="Work" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
-                            <Button x:Name="MonthViewBtn" Click="ViewSwitcher_Click" Tag="Month" Content="Month" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
+                        <!-- Right side: View Switcher Pane & Refresh Button -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="2" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="2" CornerRadius="6" Height="32" VerticalAlignment="Center">
+                                <Button x:Name="DayViewBtn" Click="ViewSwitcher_Click" Tag="Day" Content="Day" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
+                                <Button x:Name="WeekViewBtn" Click="ViewSwitcher_Click" Tag="Week" Content="Week" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
+                                <Button x:Name="WorkWeekViewBtn" Click="ViewSwitcher_Click" Tag="WorkWeek" Content="Work" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
+                                <Button x:Name="MonthViewBtn" Click="ViewSwitcher_Click" Tag="Month" Content="Month" CornerRadius="5" Padding="12,0" FontSize="11" Background="Transparent" BorderThickness="0" Height="26" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <Button x:Name="RefreshBtn" Click="Refresh_Click" Width="32" Height="32" Padding="0" CornerRadius="6" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" ToolTipService.ToolTip="Refresh Calendar">
+                                <FontIcon Glyph="&#xE72C;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
+                            </Button>
                         </StackPanel>
                     </Grid>
 

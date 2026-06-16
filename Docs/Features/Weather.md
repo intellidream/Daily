@@ -18,7 +18,7 @@ To obtain the user's location without blocking the application startup, the weat
 2. **Permission Check & Request**: Checks for the platform's location permissions (`Permissions.LocationWhenInUse`). If not granted, it requests permission on the main UI thread.
 3. **Last Known Location**: Queries the OS for the last cached GPS coordinates. This is instantaneous and does not spin up GPS hardware.
 4. **GPS Request**: Launches a GPS request with a strict 10-second timeout to avoid locking the thread if GPS satellite sync takes too long.
-5. **IP-based Geolocation Fallback**: If permissions are denied or GPS fails/times out, the app falls back to a free IP geolocation API (`http://ip-api.com/json/`) to get estimated coordinates based on the user's internet connection.
+5. **IP-based Geolocation Fallback**: If permissions are denied or GPS fails/times out, the app falls back to a free, HTTPS-capable IP geolocation API (`https://freeipapi.com/api/json`) to get estimated coordinates based on the user's internet connection.
 
 ---
 
