@@ -104,8 +104,10 @@ The local SQLite initialization creates:
 - **Today & Navigation Button Alignment**: Designed the custom Today, previous, and next navigation buttons to be squarer (`CornerRadius="6"`) and taller (`Height="32"`), matching the height and corner radius of the view switcher pane exactly, utilizing matching glassy backdrops (`AppGlassSubColorBrush` and `AppGlassBorderColorBrush` border).
 - **Add New Account Expander & Redesigned Connection Buttons**:
   - Renamed the connection panel header from **"Link New Calendar"** to **"Add New Account"**.
-  - Redesigned the Google, Microsoft, and Yahoo connection buttons inside the expander to just display **"Google"**, **"Microsoft"**, and **"Yahoo"** respectively.
-  - Styled the buttons to be larger and more prominent (`Height="48"`, `CornerRadius="10"`), utilizing larger brand icons (`FontSize="18"`), bold text, and vibrant color-tinted glassy backdrops.
+  - Set `HorizontalContentAlignment="Stretch"` on the expander so that the inner single-row Grid stretches to fill the full width of the sidebar.
+  - Made the connection buttons square (`Height="80"`, `CornerRadius="8"`) and aligned the brand icons on top of their labels. They stretch to fill the column space equally.
+  - Assigned appropriate color schemes matching each brand (Microsoft: Blue `#0078D4`, Google: Red `#EA4335`, Yahoo: Purple `#512BD4`) with a partially-transparent background tint (`#1E` or ~12% opacity) and borders (`#45` or ~27% opacity) that adapt and look highly visible in both light and dark themes.
+  - Configured the Expander Header background and the Connected Accounts list items' backgrounds to use the glassy theme resources (`AppGlassSubColorBrush` and `AppGlassBorderColorBrush`), ensuring they have consistent, elegant transparency in both Light and Dark modes instead of being opaquely white in Light mode.
 
 ### 5.4 Dashboard Widget Layout & State Fixes (June 2026)
 - **Overlapping Stacks Resolved**: Replaced the `<Grid>` layout panel in the widget's `SmallState` (1x1 view) with a standard vertical layout, stopping multiple upcoming items from drawing directly on top of each other.

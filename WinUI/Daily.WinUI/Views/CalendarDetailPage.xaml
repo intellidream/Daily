@@ -67,7 +67,7 @@
                 <Border.RenderTransform>
                     <TranslateTransform x:Name="SidebarTranslate" X="0" />
                 </Border.RenderTransform>
-            <Grid Width="308" HorizontalAlignment="Left">
+            <Grid HorizontalAlignment="Stretch">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -105,7 +105,7 @@
                         </ListView.ItemContainerStyle>
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="local:DisplayAccount">
-                                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10"
+                                <Border Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10"
                                         PointerEntered="AccountCard_PointerEntered" PointerExited="AccountCard_PointerExited">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -212,46 +212,55 @@
                 <Expander Grid.Row="2"
                           Header="Add New Account"
                           HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Stretch"
                           Background="Transparent"
                           BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
                           BorderThickness="1"
                           CornerRadius="8"
                           IsExpanded="False"
                           Padding="0">
-                    <StackPanel Spacing="8" Padding="12">
-                        <Button Click="ConnectGoogle_Click" HorizontalAlignment="Stretch" Height="48" CornerRadius="10" Background="#180078D4" BorderBrush="#350078D4" Padding="16,0">
-                            <Grid HorizontalAlignment="Stretch">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="&#xEC1F;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="#FF0078D4" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="Google" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF0078D4" />
-                            </Grid>
+                    <Expander.Resources>
+                        <ResourceDictionary>
+                            <ResourceDictionary.ThemeDictionaries>
+                                <ResourceDictionary x:Key="Light">
+                                    <StaticResource x:Key="ExpanderHeaderBackground" ResourceKey="AppGlassSubColorBrush" />
+                                    <StaticResource x:Key="ExpanderHeaderBorderBrush" ResourceKey="AppGlassBorderColorBrush" />
+                                </ResourceDictionary>
+                                <ResourceDictionary x:Key="Default">
+                                    <StaticResource x:Key="ExpanderHeaderBackground" ResourceKey="AppGlassSubColorBrush" />
+                                    <StaticResource x:Key="ExpanderHeaderBorderBrush" ResourceKey="AppGlassBorderColorBrush" />
+                                </ResourceDictionary>
+                            </ResourceDictionary.ThemeDictionaries>
+                        </ResourceDictionary>
+                    </Expander.Resources>
+                    <Grid Padding="12" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Click="ConnectGoogle_Click" HorizontalAlignment="Stretch" Height="80" CornerRadius="8" Background="#1EEA4335" BorderBrush="#45EA4335" BorderThickness="1" Padding="0">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                                <FontIcon Glyph="&#xEC1F;" FontFamily="{StaticResource TablerIconsFont}" FontSize="20" Foreground="#EA4335" HorizontalAlignment="Center" />
+                                <TextBlock Text="Google" FontSize="12" FontWeight="SemiBold" Foreground="#EA4335" HorizontalAlignment="Center" />
+                            </StackPanel>
                         </Button>
-                        
-                        <Button Click="ConnectMicrosoft_Click" HorizontalAlignment="Stretch" Height="48" CornerRadius="10" Background="#18107C41" BorderBrush="#35107C41" Padding="16,0">
-                            <Grid HorizontalAlignment="Stretch">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="&#xECD8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="#FF107C41" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="Microsoft" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF107C41" />
-                            </Grid>
+
+                        <Button Grid.Column="1" Click="ConnectMicrosoft_Click" HorizontalAlignment="Stretch" Height="80" CornerRadius="8" Background="#1E0078D4" BorderBrush="#450078D4" BorderThickness="1" Padding="0">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                                <FontIcon Glyph="&#xECD8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="20" Foreground="#0078D4" HorizontalAlignment="Center" />
+                                <TextBlock Text="Microsoft" FontSize="12" FontWeight="SemiBold" Foreground="#0078D4" HorizontalAlignment="Center" />
+                            </StackPanel>
                         </Button>
-                        
-                        <Button Click="ConnectYahoo_Click" HorizontalAlignment="Stretch" Height="48" CornerRadius="10" Background="#18512BD4" BorderBrush="#35512BD4" Padding="16,0">
-                            <Grid HorizontalAlignment="Stretch">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="&#xED73;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="#FF512BD4" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="Yahoo" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF512BD4" />
-                            </Grid>
+
+                        <Button Grid.Column="2" Click="ConnectYahoo_Click" HorizontalAlignment="Stretch" Height="80" CornerRadius="8" Background="#1E512BD4" BorderBrush="#45512BD4" BorderThickness="1" Padding="0">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                                <FontIcon Glyph="&#xED73;" FontFamily="{StaticResource TablerIconsFont}" FontSize="20" Foreground="#512BD4" HorizontalAlignment="Center" />
+                                <TextBlock Text="Yahoo" FontSize="12" FontWeight="SemiBold" Foreground="#512BD4" HorizontalAlignment="Center" />
+                            </StackPanel>
                         </Button>
-                    </StackPanel>
+                    </Grid>
                 </Expander>
             </Grid>
         </Border>
