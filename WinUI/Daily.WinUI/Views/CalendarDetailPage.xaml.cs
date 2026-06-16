@@ -1463,6 +1463,7 @@ namespace Daily_WinUI.Views
             var widthAnimation = new DoubleAnimation();
             widthAnimation.Duration = new Duration(TimeSpan.FromMilliseconds(250));
             widthAnimation.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
+            widthAnimation.EnableDependentAnimation = true;
             Storyboard.SetTarget(widthAnimation, SidebarContainer);
             Storyboard.SetTargetProperty(widthAnimation, "Width");
 

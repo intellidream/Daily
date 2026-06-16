@@ -342,19 +342,20 @@
                     </Grid>
 
                     <!-- SfScheduler Control -->
-                    <scheduler:SfScheduler Grid.Row="1"
-                                           x:Name="Scheduler" 
-                                           HeaderHeight="0"
-                                           ViewType="Month" 
-                                           Background="Transparent"
-                                           BorderThickness="0"
-                                           ItemsSource="{x:Bind Appointments, Mode=OneWay}"
-                                           AppointmentTapped="Scheduler_AppointmentTapped"
-                                           ViewChanged="Scheduler_ViewChanged">
+                    <Border Grid.Row="1" BorderBrush="{ThemeResource AppGlassSubColorBrush}" BorderThickness="1,0,0,0">
+                        <scheduler:SfScheduler
+                                               x:Name="Scheduler" 
+                                               HeaderHeight="0"
+                                               ViewType="Month" 
+                                               Background="Transparent"
+                                               BorderThickness="0"
+                                               ItemsSource="{x:Bind Appointments, Mode=OneWay}"
+                                               AppointmentTapped="Scheduler_AppointmentTapped"
+                                               ViewChanged="Scheduler_ViewChanged">
                         <scheduler:SfScheduler.Resources>
                             <!-- Style for View Header Control (displays days of week at top of cells) -->
                             <Style TargetType="scheduler:ViewHeaderControl">
-                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="Background" Value="{ThemeResource AppGlassSubColorBrush}" />
                                 <Setter Property="BorderBrush" Value="{ThemeResource AppGlassSubColorBrush}" />
                                 <Setter Property="BorderThickness" Value="0,0,0,1" />
                                 <Setter Property="Foreground" Value="{ThemeResource AppFgMutedColorBrush}" />
@@ -362,9 +363,9 @@
 
                             <!-- Override Syncfusion Scheduler Theme Brushes for Glassy Look -->
                             <SolidColorBrush x:Key="SyncfusionSchedulerBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="SyncfusionViewHeaderControlBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="SyncfusionViewHeaderBaseBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="SyncfusionTimeRulerCellBackground" Color="Transparent" />
+                            <StaticResource x:Key="SyncfusionViewHeaderControlBackground" ResourceKey="AppGlassSubColorBrush" />
+                            <StaticResource x:Key="SyncfusionViewHeaderBaseBackground" ResourceKey="AppGlassSubColorBrush" />
+                            <StaticResource x:Key="SyncfusionTimeRulerCellBackground" ResourceKey="AppGlassSubColorBrush" />
                             <SolidColorBrush x:Key="SyncfusionTimeSlotCellBackground" Color="Transparent" />
                             <SolidColorBrush x:Key="SyncfusionAllDayAppointmentViewControlBackground" Color="Transparent" />
                             <SolidColorBrush x:Key="SyncfusionResourceHeaderControlBackground" Color="Transparent" />
@@ -435,6 +436,7 @@
                             </scheduler:MonthViewSettings>
                         </scheduler:SfScheduler.MonthViewSettings>
                     </scheduler:SfScheduler>
+                    </Border>
                 </Grid>
             </Border>
         </Grid>
