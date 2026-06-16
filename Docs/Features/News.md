@@ -180,3 +180,4 @@ When retrieving recommendation feed items concurrently in the briefing engine or
 
 ### 6.1 Glassmorphic Visual Theme Integration
 - **Rss Widget Item Transparency**: Updated the article card templates in [RssFeedWidgetControl.xaml](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Controls/RssFeedWidgetControl.xaml) to use `{ThemeResource AppGlassSubColorBrush}` and `{ThemeResource AppGlassBorderColorBrush}` instead of opaque default card brushes, providing consistent transparency across both Light and Dark modes.
+- **Pivot Item Margin Override**: Added a local resource override (`PivotItemMargin = 0`) to `RssFeedDetailPage.xaml` to eliminate the default system margin on pivot items, aligning the RSS lists perfectly with the header area and search bar.

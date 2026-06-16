@@ -53,6 +53,9 @@
 
         <!-- Main Content -->
         <Pivot Grid.Row="1" x:Name="MainPivot" Margin="20,0,0,0">
+            <Pivot.Resources>
+                <Thickness x:Key="PivotItemMargin">0</Thickness>
+            </Pivot.Resources>
             
             <!-- WORLD / MACRO -->
             <PivotItem Header="World">

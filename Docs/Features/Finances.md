@@ -86,6 +86,9 @@ Finances data utilizes separate SQLite local structures and Supabase remote data
 - **Glassy Theme Adaptations in Light Mode**: Migrated list item borders, economic macro indicators, and top stock item borders in `FinancesWidgetControl.xaml` from opaque white brushes (`CardBackgroundFillColorDefaultBrush` / `CardStrokeColorDefaultBrush`) to semi-transparent theme-consistent glassy brushes (`AppGlassSubColorBrush` / `AppGlassBorderColorBrush`).
 - **Visual Uniformity**: Ensures finances list items and indicator widgets have elegant, theme-consistent transparency in both Light and Dark modes.
 
+### 3.3 Layout & Grid Padding Alignment (June 2026)
+- **Pivot Item Margin Override**: Added a local resource override (`PivotItemMargin = 0`) to `FinancesDetailPage.xaml` to eliminate the default system margin on pivot items. This aligns the content grids for "World", "Stocks", and "Money" perfectly with the page title and pivot headers at the left-hand margin boundary.
+
 ---
 
 ## 4. Platform Implementation Differences (WinUI vs. MAUI / Blazor Hybrid)
