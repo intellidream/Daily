@@ -244,42 +244,79 @@ namespace Daily_WinUI.Controls
                     IsLoading = true;
                 }
 
+                // Load accounts to map colors
+                var accounts = await _calendarService.GetAccountsAsync();
+                var accountColorMap = new Dictionary<string, string>();
+                foreach (var acc in accounts)
+                {
+                    if (!string.IsNullOrEmpty(acc.Id) && !accountColorMap.ContainsKey(acc.Id))
+                    {
+                        accountColorMap[acc.Id] = acc.Color;
+                    }
+                }
+
                 // Load events (next 7 days) and todos
                 var events = await _calendarService.GetCachedEventsAsync(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(7));
                 var todos = await _calendarService.GetCachedTodosAsync();
 
                 var combinedList = new List<CalendarWidgetItem>();
+                var now = DateTime.UtcNow;
 
-                // Add active events
+                // Add active events (only currently running or future ones)
                 foreach (var ev in events)
                 {
+                    if (ev.End < now) continue;
+
+                    string eventColor = "#512BD4";
+                    if (accountColorMap.TryGetValue(ev.AccountId, out var accColor) && !string.IsNullOrEmpty(accColor))
+                    {
+                        eventColor = accColor;
+                    }
+                    else if (!string.IsNullOrEmpty(ev.Color))
+                    {
+                        eventColor = ev.Color;
+                    }
+
                     combinedList.Add(new CalendarWidgetItem
                     {
                         Id = ev.Id,
                         Title = ev.Title,
                         Details = ev.IsAllDay ? "All Day" : $"{ev.Start.ToLocalTime():t} - {ev.End.ToLocalTime():t}",
                         SortDate = ev.Start,
-                        Color = string.IsNullOrEmpty(ev.Color) ? "#512BD4" : ev.Color,
+                        Color = eventColor,
                         IsTodo = false,
                         IsCompleted = false,
-                        IconGlyph = "\xE787;" // Calendar icon
+                        IconGlyph = "\xE787" // Calendar icon
                     });
                 }
 
-                // Add uncompleted todos
+                // Add uncompleted todos (only currently relevant ones)
+                var today = DateTime.UtcNow.Date;
                 foreach (var td in todos)
                 {
                     if (td.IsCompleted) continue;
+                    if (td.DueDate.HasValue && td.DueDate.Value.Date < today) continue;
+
+                    string todoColor = "#107C41";
+                    if (accountColorMap.TryGetValue(td.AccountId, out var accColor) && !string.IsNullOrEmpty(accColor))
+                    {
+                        todoColor = accColor;
+                    }
+                    else if (!string.IsNullOrEmpty(td.Color))
+                    {
+                        todoColor = td.Color;
+                    }
+
                     combinedList.Add(new CalendarWidgetItem
                     {
                         Id = td.Id,
                         Title = td.Title,
                         Details = td.DueDate.HasValue ? $"Due {td.DueDate.Value.ToLocalTime():g}" : "No due date",
                         SortDate = td.DueDate ?? DateTime.MaxValue,
-                        Color = string.IsNullOrEmpty(td.Color) ? "#107C41" : td.Color, // Default tasks green
+                        Color = todoColor,
                         IsTodo = true,
                         IsCompleted = false,
-                        IconGlyph = "\xE710;" // Add/task list icon or check list icon "\xE75C"
+                        IconGlyph = "\xEB28" // Check icon
                     });
                 }
 
@@ -322,9 +359,9 @@ namespace Daily_WinUI.Controls
             }
         }
 
-        private async void Todo_Checked(object sender, RoutedEventArgs e)
+        private async void TodoButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_calendarService == null || sender is not CheckBox cb || cb.DataContext is not CalendarWidgetItem item) return;
+            if (_calendarService == null || sender is not Button btn || btn.DataContext is not CalendarWidgetItem item) return;
             
             // Mark completed in background
             item.IsCompleted = true;
