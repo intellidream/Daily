@@ -173,3 +173,10 @@ If the client machine lacks the Evergreen WebView2 Runtime or if initialization 
 
 ### 5.6 Parallel Recommendations Retrieval Protection
 When retrieving recommendation feed items concurrently in the briefing engine or page UI, individual feed loading tasks must be wrapped in local try-catch blocks. This prevents a single network or feed-parse exception from aborting the entire parallel `Task.WhenAll` batch operations, ensuring that the remaining feeds load successfully.
+
+---
+
+## 6. Recent Improvements (June 2026)
+
+### 6.1 Glassmorphic Visual Theme Integration
+- **Rss Widget Item Transparency**: Updated the article card templates in [RssFeedWidgetControl.xaml](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Controls/RssFeedWidgetControl.xaml) to use `{ThemeResource AppGlassSubColorBrush}` and `{ThemeResource AppGlassBorderColorBrush}` instead of opaque default card brushes, providing consistent transparency across both Light and Dark modes.

@@ -123,3 +123,11 @@ Habit tracking telemetry is integrated directly into the **Local Smart Briefing*
 * **Significant Progress Delta (10% Threshold)**: Even if the completion status doesn't change, the briefing cache will be invalidated if:
   * **Water Intake (Bubbles)**: Progress *increases* by **10% or more** of the target goal relative to the last cached value (e.g. going from $400\text{ ml}$ to $\ge 600\text{ ml}$ under a $2000\text{ ml}$ goal).
   * **Smokes (Tobacco)**: Progress *increases* by **10% or more** of the daily baseline limit relative to the last cached value (e.g. going from $11$ smokes to $\ge 15$ smokes under a $40$ daily baseline).
+
+---
+
+## 6. Recent Improvements (June 2026)
+
+### 6.1 Glassmorphic Visual Theme Integration
+- **Widget Transparency Polish**: Refactored [HabitsWidgetControl.xaml](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Controls/HabitsWidgetControl.xaml) components (including Water and Smokes legends, graph borders, stats cards, and separator lines) to use the centralized theme resources (`AppGlassSubColorBrush` and `AppGlassBorderColorBrush`) instead of the opaque theme brushes (`CardBackgroundFillColorDefaultBrush` and `CardStrokeColorDefaultBrush`). This guarantees consistent, high-fidelity transparency in both Light and Dark modes.
+- **Today Expander Transparency in Detail Page**: Modified the Today log entries `Expander` in [HabitsDetailPage.xaml](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Views/HabitsDetailPage.xaml) to use transparent backgrounds and borders. This removes the opaque white block behind the log entries in Light mode, allowing the parent card's glassy theme color to show through perfectly.

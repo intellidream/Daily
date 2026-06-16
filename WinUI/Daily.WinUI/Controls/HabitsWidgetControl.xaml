@@ -530,7 +530,7 @@
                                                                             <TextBlock Text="ml" FontSize="11" VerticalAlignment="Center" />
                                                                         </StackPanel>
                                                                     </StackPanel>
-                                                                    <Border x:Name="WaterDetailedSeparator" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
+                                                                    <Border x:Name="WaterDetailedSeparator" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
                                                                     <ItemsControl x:Name="WaterDetailedList" ItemsSource="{x:Bind WaterBreakdown, Mode=OneWay}" ItemTemplate="{StaticResource DetailedListDefaultTemplate}" HorizontalAlignment="Stretch" Margin="8,0,8,8" />
                                                                 </StackPanel>
                                                             </ScrollViewer>
@@ -546,7 +546,7 @@
                             <!-- Legend & 2x2 Buttons -->
                             <StackPanel x:Name="WaterLegendAndButtons" Orientation="Vertical" Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <!-- Legend -->
-                                <Border x:Name="WaterLegend" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border x:Name="WaterLegend" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="12" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <StackPanel Spacing="6">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -578,7 +578,7 @@
                                                 <TextBlock Text="Tea" FontSize="12" Opacity="0.7" />
                                             </StackPanel>
                                         </Grid>
-                                        <Border Height="1" Background="{ThemeResource CardStrokeColorDefaultBrush}" Margin="0,4,0,4" />
+                                        <Border Height="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,4,0,4" />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
@@ -646,7 +646,7 @@
                         </Grid.RowDefinitions>
 
                         <!-- Graph -->
-                        <Border x:Name="WaterGraphBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12" Margin="0,0,0,12" Height="100">
+                        <Border x:Name="WaterGraphBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="12" Margin="0,0,0,12" Height="100">
                             <ItemsControl ItemsSource="{x:Bind History, Mode=OneWay}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
@@ -671,14 +671,14 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             
-                            <Border Grid.Column="0" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                            <Border Grid.Column="0" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="12">
                                 <StackPanel Spacing="4" VerticalAlignment="Center">
                                     <TextBlock Text="Hydration Rate" FontSize="11" Opacity="0.55" />
                                     <TextBlock Text="{x:Bind ProgressPercentageText, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Foreground="#FF2196F3" />
                                 </StackPanel>
                             </Border>
                             
-                            <Border Grid.Column="1" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                            <Border Grid.Column="1" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="12">
                                 <StackPanel Spacing="4" VerticalAlignment="Center">
                                     <TextBlock Text="Remaining" FontSize="11" Opacity="0.55" />
                                     <TextBlock Text="{x:Bind RemainingWaterText, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
@@ -758,7 +758,7 @@
                                                                              <TextBlock Text="smokes" FontSize="11" VerticalAlignment="Center" />
                                                                          </StackPanel>
                                                                      </StackPanel>
-                                                                     <Border x:Name="SmokesDetailedSeparator" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
+                                                                     <Border x:Name="SmokesDetailedSeparator" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" Height="1" Margin="0,2,0,2" HorizontalAlignment="Stretch" />
                                                                      <ItemsControl x:Name="SmokesDetailedList" ItemsSource="{x:Bind SmokesBreakdown, Mode=OneWay}" ItemTemplate="{StaticResource DetailedListDefaultTemplate}" HorizontalAlignment="Stretch" Margin="8,0,8,8" />
                                                                 </StackPanel>
                                                             </ScrollViewer>
@@ -774,7 +774,7 @@
                             <!-- Legend & Buttons -->
                             <StackPanel x:Name="SmokesLegendAndButtons" Orientation="Vertical" Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <!-- Legend -->
-                                <Border x:Name="SmokesLegend" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border x:Name="SmokesLegend" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="12" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <StackPanel Spacing="6">
                                         <TextBlock Text="Smokes Today" FontSize="12" Opacity="0.7" />
                                         <TextBlock Text="{x:Bind MoneySavedDisplay, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Foreground="{x:Bind GaugeColor, Mode=OneWay}" />
@@ -838,7 +838,7 @@
                         </Grid.RowDefinitions>
 
                         <!-- Graph -->
-                        <Border x:Name="SmokesGraphBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12" Margin="0,0,0,12" Height="100">
+                        <Border x:Name="SmokesGraphBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="12" Margin="0,0,0,12" Height="100">
                             <ItemsControl ItemsSource="{x:Bind History, Mode=OneWay}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
@@ -864,21 +864,21 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             
-                            <Border Grid.Column="0" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="8">
+                            <Border Grid.Column="0" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="8">
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="Smoke Free" FontSize="10" Opacity="0.55" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{x:Bind DaysSinceQuitShort, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="{x:Bind GaugeColor, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                             </Border>
                             
-                            <Border Grid.Column="1" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="8">
+                            <Border Grid.Column="1" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="8">
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="Avoided" FontSize="10" Opacity="0.55" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{x:Bind SmokesAvoidedShort, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="#FFF44336" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                             </Border>
                             
-                            <Border Grid.Column="2" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="8">
+                            <Border Grid.Column="2" CornerRadius="12" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="8">
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="Saved" FontSize="10" Opacity="0.55" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{x:Bind MoneySavedShort, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="#FF27AE60" TextTrimming="CharacterEllipsis" />

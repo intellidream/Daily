@@ -82,6 +82,10 @@ Finances data utilizes separate SQLite local structures and Supabase remote data
 - **Scroll-Wheel Page Cycles (WinUI)**: The Finances widget registers a `PointerWheelChanged` listener. Hovering and scrolling over the widget triggers cycling through accounts and watchlist pages in the `FinancesFlipView`, preventing outer scroll collisions. The default system FlipView side arrow buttons are hidden dynamically on load using a visual tree helper.
 - **Responsive Width Threshold (WinUI)**: The visual layout width threshold (`isWide`) is updated from `250px` to `450px` to maintain visual layout uniformity across different widget categories.
 
+### 3.2 Dashboard Widget Glassy Styling (June 2026)
+- **Glassy Theme Adaptations in Light Mode**: Migrated list item borders, economic macro indicators, and top stock item borders in `FinancesWidgetControl.xaml` from opaque white brushes (`CardBackgroundFillColorDefaultBrush` / `CardStrokeColorDefaultBrush`) to semi-transparent theme-consistent glassy brushes (`AppGlassSubColorBrush` / `AppGlassBorderColorBrush`).
+- **Visual Uniformity**: Ensures finances list items and indicator widgets have elegant, theme-consistent transparency in both Light and Dark modes.
+
 ---
 
 ## 4. Platform Implementation Differences (WinUI vs. MAUI / Blazor Hybrid)

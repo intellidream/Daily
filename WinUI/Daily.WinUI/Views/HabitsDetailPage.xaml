@@ -798,7 +798,18 @@
                 </Grid>
 
                 <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="24" Padding="20">
-                    <Expander HorizontalAlignment="Stretch" ExpandDirection="Down" IsExpanded="True">
+                    <Expander HorizontalAlignment="Stretch"
+                              ExpandDirection="Down"
+                              IsExpanded="True"
+                              Background="Transparent"
+                              BorderBrush="Transparent"
+                              BorderThickness="0">
+                        <Expander.Resources>
+                            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
+                        </Expander.Resources>
                         <Expander.Header>
                             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xeced;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="{ThemeResource AppFgMutedColorBrush}" />
