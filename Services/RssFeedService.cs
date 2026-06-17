@@ -25,13 +25,15 @@ namespace Daily.Services
         private readonly HttpClient _httpClient;
         private readonly IRenderedHtmlService? _renderedHtmlService;
         private readonly IDatabaseService? _databaseService;
+        private readonly ISyncService? _syncService;
         private readonly Guid _instanceId = Guid.NewGuid();
 
-        public RssFeedService(IRenderedHtmlService? renderedHtmlService = null, IDatabaseService? databaseService = null)
+        public RssFeedService(IRenderedHtmlService? renderedHtmlService = null, IDatabaseService? databaseService = null, ISyncService? syncService = null)
         {
             Console.WriteLine($"[RssFeedService] Constructor called. InstanceId: {_instanceId}");
             _renderedHtmlService = renderedHtmlService;
             _databaseService = databaseService;
+            _syncService = syncService;
             
             _ = InitializeCustomFeedsAsync();
             
@@ -109,6 +111,8 @@ namespace Daily.Services
                 await _databaseService.InitializeAsync();
                 var customFeeds = await _databaseService.Connection.Table<LocalRssSubscription>()
                                     .Where(x => !x.IsDeleted)
+                                    .OrderBy(x => x.DisplayOrder)
+                                    .ThenBy(x => x.CreatedAt)
                                     .ToListAsync();
                 
                 var distinctFeeds = customFeeds.GroupBy(f => f.Url).Select(g => g.First()).ToList();
@@ -144,20 +148,295 @@ namespace Daily.Services
             if (_databaseService == null) return;
             
             await _databaseService.InitializeAsync();
-            var newSub = new LocalRssSubscription
-            {
-                Id = Guid.NewGuid().ToString(),
-                UserId = userId,
-                Name = name,
-                Url = url,
-                Category = category,
-                IconUrl = $"https://www.google.com/s2/favicons?domain={new Uri(url).Host}&sz=64",
-                CreatedAt = DateTime.UtcNow,
-                SyncedAt = null
-            };
             
-            await _databaseService.Connection.InsertOrReplaceAsync(newSub);
+            // Get next display order
+            var maxOrderSub = await _databaseService.Connection.Table<LocalRssSubscription>()
+                                .OrderByDescending(x => x.DisplayOrder)
+                                .FirstOrDefaultAsync();
+            int nextOrder = (maxOrderSub != null) ? maxOrderSub.DisplayOrder + 1 : 0;
+            
+            // Check if we already have this URL for the user
+            var existing = await _databaseService.Connection.Table<LocalRssSubscription>()
+                            .Where(x => x.Url == url && x.UserId == userId)
+                            .FirstOrDefaultAsync();
+
+            if (existing != null)
+            {
+                existing.Name = name;
+                existing.Category = category;
+                existing.IsDeleted = false;
+                existing.SyncedAt = null;
+                existing.UpdatedAt = DateTime.UtcNow;
+                existing.DisplayOrder = nextOrder;
+                await _databaseService.Connection.UpdateAsync(existing);
+            }
+            else
+            {
+                var newSub = new LocalRssSubscription
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    UserId = userId,
+                    Name = name,
+                    Url = url,
+                    Category = category,
+                    IconUrl = $"https://www.google.com/s2/favicons?domain={new Uri(url).Host}&sz=64",
+                    CreatedAt = DateTime.UtcNow,
+                    SyncedAt = null,
+                    DisplayOrder = nextOrder
+                };
+                await _databaseService.Connection.InsertOrReplaceAsync(newSub);
+            }
+            
             await InitializeCustomFeedsAsync();
+            TriggerSync();
+        }
+
+        public async Task<List<LocalRssSubscription>> GetSubscriptionsAsync()
+        {
+            if (_databaseService == null) return new List<LocalRssSubscription>();
+            await _databaseService.InitializeAsync();
+            return await _databaseService.Connection.Table<LocalRssSubscription>()
+                .Where(x => !x.IsDeleted)
+                .OrderBy(x => x.DisplayOrder)
+                .ThenBy(x => x.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task SaveSubscriptionAsync(LocalRssSubscription subscription)
+        {
+            if (_databaseService == null) return;
+            await _databaseService.InitializeAsync();
+            subscription.UpdatedAt = DateTime.UtcNow;
+            subscription.SyncedAt = null; // Mark dirty
+            await _databaseService.Connection.InsertOrReplaceAsync(subscription);
+            await InitializeCustomFeedsAsync();
+            TriggerSync();
+        }
+
+        public async Task DeleteSubscriptionAsync(string id)
+        {
+            if (_databaseService == null) return;
+            await _databaseService.InitializeAsync();
+            var sub = await _databaseService.Connection.Table<LocalRssSubscription>().Where(x => x.Id == id).FirstOrDefaultAsync();
+            if (sub != null)
+            {
+                sub.IsDeleted = true;
+                sub.SyncedAt = null; // Mark dirty
+                sub.UpdatedAt = DateTime.UtcNow;
+                await _databaseService.Connection.UpdateAsync(sub);
+                await InitializeCustomFeedsAsync();
+                TriggerSync();
+            }
+        }
+
+        public async Task ReorderSubscriptionsAsync(List<LocalRssSubscription> subscriptions)
+        {
+            if (_databaseService == null) return;
+            await _databaseService.InitializeAsync();
+            
+            // Assign display orders sequentially
+            for (int i = 0; i < subscriptions.Count; i++)
+            {
+                var sub = subscriptions[i];
+                sub.DisplayOrder = i;
+                sub.SyncedAt = null; // Mark dirty
+                sub.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _databaseService.Connection.RunInTransactionAsync(tran =>
+            {
+                foreach (var sub in subscriptions)
+                {
+                    tran.Update(sub);
+                }
+            });
+
+            await InitializeCustomFeedsAsync();
+            TriggerSync();
+        }
+
+        public async Task<List<FeedSearchResult>> DiscoverFeedsAsync(string query)
+        {
+            var results = new List<FeedSearchResult>();
+            if (string.IsNullOrWhiteSpace(query)) return results;
+
+            // 1. Check if the query is a direct URL
+            string targetUrl = query.Trim();
+            if (targetUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || 
+                targetUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                Regex.IsMatch(targetUrl, @"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}(/.*)?$"))
+            {
+                if (!targetUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && 
+                    !targetUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetUrl = "https://" + targetUrl;
+                }
+
+                try
+                {
+                    var sniffedFeeds = await SniffFeedsFromUrlAsync(targetUrl);
+                    if (sniffedFeeds.Any())
+                    {
+                        return sniffedFeeds;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[RssFeedService] Error sniffing URL: {ex.Message}");
+                }
+            }
+
+            // 2. Query Feedly search API
+            try
+            {
+                string encodedQuery = Uri.EscapeDataString(query);
+                string apiUrl = $"https://cloud.feedly.com/v3/search/feeds?query={encodedQuery}";
+                var responseStr = await _httpClient.GetStringAsync(apiUrl);
+                var node = JsonNode.Parse(responseStr);
+                if (node != null && node["results"] is JsonArray jsonArray)
+                {
+                    foreach (var item in jsonArray)
+                    {
+                        if (item == null) continue;
+                        
+                        string feedId = item["feedId"]?.ToString() ?? item["id"]?.ToString() ?? "";
+                        if (string.IsNullOrEmpty(feedId)) continue;
+                        
+                        string feedUrl = feedId;
+                        if (feedId.StartsWith("feed/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            feedUrl = feedId.Substring(5);
+                        }
+
+                        string name = item["title"]?.ToString() ?? "";
+                        string iconUrl = item["iconUrl"]?.ToString() ?? item["visualUrl"]?.ToString() ?? "";
+                        string website = item["website"]?.ToString() ?? "";
+
+                        if (string.IsNullOrEmpty(iconUrl))
+                        {
+                            try
+                            {
+                                var uri = new Uri(feedUrl);
+                                iconUrl = $"https://www.google.com/s2/favicons?domain={uri.Host}&sz=64";
+                            }
+                            catch
+                            {
+                                iconUrl = "";
+                            }
+                        }
+
+                        results.Add(new FeedSearchResult
+                        {
+                            Name = name,
+                            Url = feedUrl,
+                            IconUrl = iconUrl,
+                            Website = website
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[RssFeedService] Feedly search error: {ex.Message}");
+            }
+
+            return results;
+        }
+
+        private async Task<List<FeedSearchResult>> SniffFeedsFromUrlAsync(string url)
+        {
+            var results = new List<FeedSearchResult>();
+            var html = await _httpClient.GetStringAsync(url);
+            
+            // Find alternate link tags
+            var linkMatches = Regex.Matches(html, @"<link[^>]+(?:type=[""'](application/rss\+xml|application/atom\+xml|application/json)[""']|rel=[""']alternate[""'])[^>]*>", RegexOptions.IgnoreCase);
+            
+            foreach (Match match in linkMatches)
+            {
+                var tag = match.Value;
+                var typeMatch = Regex.Match(tag, @"type=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+                var hrefMatch = Regex.Match(tag, @"href=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+                var titleMatch = Regex.Match(tag, @"title=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+
+                if (hrefMatch.Success)
+                {
+                    // Clean href value by extracting the string inside quotes
+                    var hrefValueMatch = Regex.Match(hrefMatch.Value, @"href=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+                    string href = hrefValueMatch.Groups[1].Value;
+
+                    if (!href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && 
+                        !href.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var baseUri = new Uri(url);
+                        var absoluteUri = new Uri(baseUri, href);
+                        href = absoluteUri.ToString();
+                    }
+
+                    string title = "Discovered Feed";
+                    if (titleMatch.Success)
+                    {
+                        var titleValueMatch = Regex.Match(titleMatch.Value, @"title=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+                        title = titleValueMatch.Groups[1].Value;
+                    }
+
+                    string iconUrl = $"https://www.google.com/s2/favicons?domain={new Uri(url).Host}&sz=64";
+
+                    results.Add(new FeedSearchResult
+                    {
+                        Name = title,
+                        Url = href,
+                        IconUrl = iconUrl,
+                        Website = url
+                    });
+                }
+            }
+
+            // Fallback: If no alternate tags, try common paths
+            if (!results.Any())
+            {
+                string[] commonPaths = { "/feed", "/rss", "/rss.xml", "/feed.xml", "/wp-json/wp/v2/posts" };
+                var baseUri = new Uri(url);
+                foreach (var path in commonPaths)
+                {
+                    try
+                    {
+                        var testUri = new Uri(baseUri, path);
+                        var response = await _httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, testUri));
+                        if (response.IsSuccessStatusCode)
+                        {
+                            results.Add(new FeedSearchResult
+                            {
+                                Name = $"{baseUri.Host} Feed ({path.TrimStart('/')})",
+                                Url = testUri.ToString(),
+                                IconUrl = $"https://www.google.com/s2/favicons?domain={baseUri.Host}&sz=64",
+                                Website = url
+                            });
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            return results;
+        }
+
+        private void TriggerSync()
+        {
+            if (_syncService != null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _syncService.SyncAsync(SyncScope.RssSubscriptions);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[RssFeedService] TriggerSync failed: {ex.Message}");
+                    }
+                });
+            }
         }
 
         private async Task LoadRssFeedAsync(FeedSource feed)

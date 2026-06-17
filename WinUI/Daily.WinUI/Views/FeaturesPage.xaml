@@ -11,6 +11,11 @@
 
     <Page.Resources>
         <converters:WidgetAgingDurationTooltipConverter x:Key="WidgetAgingDurationTooltipConverter" />
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+        <DataTemplate x:Key="TinyHeaderTemplate">
+            <TextBlock Text="{Binding}" FontSize="11" Opacity="0.8" Margin="0,0,0,2"/>
+        </DataTemplate>
     </Page.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,32">
@@ -282,6 +287,176 @@
                 </StackPanel>
             </Border>
 
+            <!-- SECTION: News Settings -->
+            <TextBlock Text="News Settings" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="16">
+                    <!-- News Auto-refresh -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="News: Auto-refresh on startup" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Automatically refresh your RSS feed subscriptions upon launching." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="NewsAutoRefreshSwitch" Toggled="NewsAutoRefreshSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+
+                    <!-- News Show article covers -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="News: Show article covers" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Render cover images for RSS stories in lists and reader view cards." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="NewsShowImagesSwitch" Toggled="NewsShowImagesSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                    
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <!-- Sub-section: News Feeds -->
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="News Feeds" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                        <TextBlock Text="Manage and subscribe to RSS or JSON news feeds. Drag to reorder, or click search to discover new feeds." FontSize="11" Opacity="0.6" />
+
+                        <!-- Feed Discover & Add -->
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <AutoSuggestBox x:Name="FeedSearchBox" 
+                                            QueryIcon="Find" 
+                                            PlaceholderText="Search feeds by name or enter URL (e.g. techcrunch.com)..." 
+                                            QuerySubmitted="FeedSearchBox_QuerySubmitted" 
+                                            KeyDown="FeedSearchBox_KeyDown" />
+                            <Button Grid.Column="1" x:Name="AddCustomFeedBtn" Content="Add Feed" Click="AddCustomFeedBtn_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        </Grid>
+
+                        <!-- Discovery Progress / Status -->
+                        <ProgressBar x:Name="FeedSearchProgressBar" IsIndeterminate="True" Visibility="Collapsed" Height="2" Margin="0,4" />
+                        <TextBlock x:Name="FeedSearchStatusText" FontSize="11" Opacity="0.7" Visibility="Collapsed" />
+
+                        <!-- Discovered Feeds List -->
+                        <ListView x:Name="DiscoveredFeedsListView" 
+                                  SelectionMode="None" 
+                                  Visibility="Collapsed" 
+                                  MaxHeight="250" 
+                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
+                                  BorderThickness="1" 
+                                  CornerRadius="6" 
+                                  Padding="4"
+                                  Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="8,6" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Image Source="{Binding IconUrl}" Width="20" Height="20" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" Margin="0,0,8,0">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Url}" FontSize="10" Opacity="0.6" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <ComboBox Grid.Column="2" x:Name="CategoryCombo" SelectedIndex="3" Width="100" VerticalAlignment="Center">
+                                            <ComboBoxItem Content="Local" Tag="Local" />
+                                            <ComboBoxItem Content="Markets" Tag="Markets" />
+                                            <ComboBoxItem Content="World" Tag="World" />
+                                            <ComboBoxItem Content="Tech" Tag="Tech" />
+                                        </ComboBox>
+                                        <Button Grid.Column="3" Content="Subscribe" Click="SubscribeDiscoveredFeed_Click" Style="{ThemeResource AccentButtonStyle}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <!-- Subscribed Feeds List -->
+                        <TextBlock Text="Subscribed Feeds" FontSize="12" FontWeight="SemiBold" Opacity="0.8" Margin="0,8,0,2"/>
+                        
+                        <ListView x:Name="CurrentFeedsListView" 
+                                  CanReorderItems="True" 
+                                  AllowDrop="True" 
+                                  DragItemsCompleted="CurrentFeedsListView_DragItemsCompleted"
+                                  SelectionMode="None"
+                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                  BorderThickness="1"
+                                  CornerRadius="6"
+                                  Padding="4"
+                                  Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="8,6" ColumnSpacing="12" HorizontalAlignment="Stretch">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <!-- Left Icon -->
+                                        <Image Source="{Binding IconUrl}" Width="24" Height="24" VerticalAlignment="Center" Margin="4,0" />
+                                        
+                                        <!-- Middle: Display vs Edit view -->
+                                        <Grid Grid.Column="1" VerticalAlignment="Center">
+                                            <!-- Display View (Visible when NOT editing) -->
+                                            <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}" Spacing="2">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" />
+                                                    <Border Background="{ThemeResource SystemControlBackgroundAccentBrush}" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Category}" FontSize="9" FontWeight="SemiBold" Foreground="White" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Url}" FontSize="10" Opacity="0.6" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                            
+                                            <!-- Edit View (Visible when EDITING) -->
+                                            <Grid Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}" ColumnSpacing="8" RowSpacing="6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="2*" />
+                                                    <ColumnDefinition Width="3*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Text="{Binding EditName, Mode=TwoWay}" PlaceholderText="Name" Header="Feed Name" HeaderTemplate="{StaticResource TinyHeaderTemplate}" FontSize="12"/>
+                                                <TextBox Grid.Column="1" Text="{Binding EditUrl, Mode=TwoWay}" PlaceholderText="URL" Header="Feed URL" HeaderTemplate="{StaticResource TinyHeaderTemplate}" FontSize="12"/>
+                                                <ComboBox Grid.Column="2" SelectedValue="{Binding EditCategory, Mode=TwoWay}" SelectedValuePath="Content" Header="Category" HeaderTemplate="{StaticResource TinyHeaderTemplate}" FontSize="12" Width="100">
+                                                    <ComboBoxItem Content="Local" />
+                                                    <ComboBoxItem Content="Markets" />
+                                                    <ComboBoxItem Content="World" />
+                                                    <ComboBoxItem Content="Tech" />
+                                                </ComboBox>
+                                            </Grid>
+                                        </Grid>
+                                        
+                                        <!-- Right Actions -->
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                            <!-- Display actions -->
+                                            <Button Content="&#xE70F;" FontFamily="{ThemeResource SymbolThemeFontFamily}" Click="EditFeed_Click" ToolTipService.ToolTip="Edit" Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}" Style="{ThemeResource DateTimePickerFlyoutButtonStyle}" Height="32" Width="32" Padding="0"/>
+                                            <Button Content="&#xE110;" FontFamily="{ThemeResource SymbolThemeFontFamily}" Click="MoveUpFeed_Click" ToolTipService.ToolTip="Move Up" Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}" Style="{ThemeResource DateTimePickerFlyoutButtonStyle}" Height="32" Width="32" Padding="0"/>
+                                            <Button Content="&#xE1FD;" FontFamily="{ThemeResource SymbolThemeFontFamily}" Click="MoveDownFeed_Click" ToolTipService.ToolTip="Move Down" Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}" Style="{ThemeResource DateTimePickerFlyoutButtonStyle}" Height="32" Width="32" Padding="0"/>
+                                            <Button Content="&#xE74D;" FontFamily="{ThemeResource SymbolThemeFontFamily}" Click="DeleteFeed_Click" ToolTipService.ToolTip="Delete" Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}" Style="{ThemeResource DateTimePickerFlyoutButtonStyle}" Height="32" Width="32" Padding="0" Foreground="Red"/>
+                                            
+                                            <!-- Editing actions -->
+                                            <Button Content="&#xE105;" FontFamily="{ThemeResource SymbolThemeFontFamily}" Click="SaveFeed_Click" ToolTipService.ToolTip="Save" Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}" Style="{ThemeResource DateTimePickerFlyoutButtonStyle}" Height="32" Width="32" Padding="0" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                            <Button Content="&#xE10A;" FontFamily="{ThemeResource SymbolThemeFontFamily}" Click="CancelEditFeed_Click" ToolTipService.ToolTip="Cancel" Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}" Style="{ThemeResource DateTimePickerFlyoutButtonStyle}" Height="32" Width="32" Padding="0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- SECTION 3: Configurable Traditional Features -->
             <TextBlock Text="Traditional Features" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
 
@@ -315,33 +490,6 @@
                             <ComboBoxItem Content="Metric (°C, m/s)" Tag="metric" />
                             <ComboBoxItem Content="Imperial (°F, mph)" Tag="imperial" />
                         </ComboBox>
-                    </Grid>
-                    
-                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-
-                    <!-- News -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Spacing="4" VerticalAlignment="Center">
-                            <TextBlock Text="News: Auto-refresh on startup" FontWeight="SemiBold" FontSize="13" />
-                            <TextBlock Text="Automatically refresh your RSS feed subscriptions upon launching." FontSize="11" Opacity="0.6" />
-                        </StackPanel>
-                        <ToggleSwitch Grid.Column="1" x:Name="NewsAutoRefreshSwitch" Toggled="NewsAutoRefreshSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
-                    </Grid>
-
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Spacing="4" VerticalAlignment="Center">
-                            <TextBlock Text="News: Show article covers" FontWeight="SemiBold" FontSize="13" />
-                            <TextBlock Text="Render cover images for RSS stories in lists and reader view cards." FontSize="11" Opacity="0.6" />
-                        </StackPanel>
-                        <ToggleSwitch Grid.Column="1" x:Name="NewsShowImagesSwitch" Toggled="NewsShowImagesSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
                     </Grid>
                     
                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />

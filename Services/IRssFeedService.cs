@@ -22,5 +22,11 @@ namespace Daily.Services
         Task<RssItem> FetchFullArticleAsync(string url);
         Task InitializeCustomFeedsAsync();
         Task<List<RssItem>> FetchFeedItemsAsync(FeedSource feed);
+        Task<List<LocalRssSubscription>> GetSubscriptionsAsync();
+        Task SaveSubscriptionAsync(LocalRssSubscription subscription);
+        Task DeleteSubscriptionAsync(string id);
+        Task ReorderSubscriptionsAsync(List<LocalRssSubscription> subscriptions);
+        Task<List<FeedSearchResult>> DiscoverFeedsAsync(string query);
+        Task AddFeedAsync(string url, string name, string category, string userId);
     }
 }

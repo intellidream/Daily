@@ -146,4 +146,12 @@ namespace Daily.Models
         public string? PublicationName { get; set; }
         public string? PublicationIconUrl { get; set; }
     }
+
+    public class FeedSearchResult
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
+        public string IconUrl { get; set; } = string.Empty;
+        public string Website { get; set; } = string.Empty;
+    }
 }

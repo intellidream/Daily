@@ -15,6 +15,8 @@ public sealed partial class FeaturesPage : Page
 {
     private readonly AppSettings _settings;
     private readonly IBehaviorService _behaviorService;
+    private readonly Daily.Services.IRssFeedService _rssService;
+    private readonly System.Collections.ObjectModel.ObservableCollection<SubscriptionItemViewModel> _feedsList = new();
     private bool _isInitializing = false;
 
     private static readonly int[] AgingIntervals = { 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 10800 };
@@ -25,6 +27,7 @@ public sealed partial class FeaturesPage : Page
         InitializeComponent();
         _settings = SettingsService.Load();
         _behaviorService = App.Current.Services.GetRequiredService<IBehaviorService>();
+        _rssService = App.Current.Services.GetRequiredService<Daily.Services.IRssFeedService>();
         Loaded += FeaturesPage_Loaded;
         Unloaded += FeaturesPage_Unloaded;
     }
@@ -185,6 +188,9 @@ public sealed partial class FeaturesPage : Page
 
             WidgetGrainIntensitySlider.Value = _settings.WidgetAgingGrainIntensity;
             WidgetGrainIntensityLabel.Text = $"{_settings.WidgetAgingGrainIntensity:F0}%";
+
+            // Load Subscribed Feeds list
+            _ = LoadFeedsListAsync();
         }
         catch (Exception ex)
         {
@@ -1051,5 +1057,491 @@ public sealed partial class FeaturesPage : Page
         _settings.WidgetAgingGrainIntensity = value;
         WidgetGrainIntensityLabel.Text = $"{value:F0}%";
         SettingsService.Save(_settings);
+    }
+
+    // ── NEWS FEEDS MANAGEMENT & DISCOVERY ──
+
+    private async Task LoadFeedsListAsync()
+    {
+        try
+        {
+            var subs = await _rssService.GetSubscriptionsAsync();
+            _feedsList.Clear();
+            foreach (var sub in subs)
+            {
+                _feedsList.Add(new SubscriptionItemViewModel(sub));
+            }
+            CurrentFeedsListView.ItemsSource = _feedsList;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] LoadFeedsListAsync Error: {ex}");
+        }
+    }
+
+    private async void FeedSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        string query = sender.Text;
+        await PerformFeedSearchAsync(query);
+    }
+
+    private async void FeedSearchBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            string query = FeedSearchBox.Text;
+            await PerformFeedSearchAsync(query);
+        }
+    }
+
+    private async Task PerformFeedSearchAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+
+        FeedSearchProgressBar.Visibility = Visibility.Visible;
+        FeedSearchStatusText.Visibility = Visibility.Visible;
+        FeedSearchStatusText.Text = "Searching for feeds...";
+        DiscoveredFeedsListView.Visibility = Visibility.Collapsed;
+
+        try
+        {
+            var results = await _rssService.DiscoverFeedsAsync(query);
+            
+            if (results != null && results.Any())
+            {
+                FeedSearchProgressBar.Visibility = Visibility.Collapsed;
+                FeedSearchStatusText.Visibility = Visibility.Collapsed;
+                
+                DiscoveredFeedsListView.ItemsSource = results;
+                DiscoveredFeedsListView.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                FeedSearchProgressBar.Visibility = Visibility.Collapsed;
+                FeedSearchStatusText.Text = "No feeds found. Check the URL or try another search term.";
+            }
+        }
+        catch (Exception ex)
+        {
+            FeedSearchProgressBar.Visibility = Visibility.Collapsed;
+            FeedSearchStatusText.Text = $"Error searching: {ex.Message}";
+        }
+    }
+
+    private async void AddCustomFeedBtn_Click(object sender, RoutedEventArgs e)
+    {
+        string url = FeedSearchBox.Text;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Empty URL",
+                Content = "Please enter a URL or feed name.",
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+            return;
+        }
+
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && 
+            !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            url = "https://" + url;
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Invalid URL",
+                Content = "Please enter a valid absolute URL.",
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+            return;
+        }
+
+        try
+        {
+            var uri = new Uri(url);
+            string defaultName = uri.Host;
+            
+            string userId = Daily_WinUI.App.SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
+            await _rssService.AddFeedAsync(url, defaultName, "Tech", userId);
+            await LoadFeedsListAsync();
+            FeedSearchBox.Text = "";
+        }
+        catch (Exception ex)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Subscription Error",
+                Content = $"Failed to add custom feed: {ex.Message}",
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+    }
+
+    private async void SubscribeDiscoveredFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is Daily.Models.FeedSearchResult result)
+        {
+            string category = "Tech"; // default
+            
+            var grid = FindVisualParent<Grid>(btn);
+            if (grid != null)
+            {
+                var combo = FindVisualChild<ComboBox>(grid, "CategoryCombo");
+                if (combo != null && combo.SelectedItem is ComboBoxItem item)
+                {
+                    category = item.Tag?.ToString() ?? "Tech";
+                }
+            }
+
+            try
+            {
+                btn.IsEnabled = false;
+                
+                string userId = Daily_WinUI.App.SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
+                await _rssService.AddFeedAsync(result.Url, result.Name, category, userId);
+                
+                await LoadFeedsListAsync();
+                
+                FeedSearchBox.Text = "";
+                DiscoveredFeedsListView.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = "Subscription Error",
+                    Content = $"Failed to subscribe to feed: {ex.Message}",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.XamlRoot
+                };
+                await dialog.ShowAsync();
+                btn.IsEnabled = true;
+            }
+        }
+    }
+
+    private void EditFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is SubscriptionItemViewModel vm)
+        {
+            vm.StartEdit();
+        }
+    }
+
+    private void CancelEditFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is SubscriptionItemViewModel vm)
+        {
+            vm.CancelEdit();
+        }
+    }
+
+    private async void SaveFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is SubscriptionItemViewModel vm)
+        {
+            try
+            {
+                if (!Uri.TryCreate(vm.EditUrl, UriKind.Absolute, out _))
+                {
+                    var dialog = new ContentDialog
+                    {
+                        Title = "Invalid URL",
+                        Content = "Please enter a valid absolute URL.",
+                        CloseButtonText = "OK",
+                        XamlRoot = this.XamlRoot
+                    };
+                    await dialog.ShowAsync();
+                    return;
+                }
+
+                vm.CommitEdit();
+                await _rssService.SaveSubscriptionAsync(vm.Model);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Error saving feed: {ex.Message}");
+            }
+        }
+    }
+
+    private async void DeleteFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is SubscriptionItemViewModel vm)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Delete Feed",
+                Content = $"Are you sure you want to delete the feed '{vm.Name}'?",
+                PrimaryButtonText = "Delete",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = this.XamlRoot
+            };
+
+            var res = await dialog.ShowAsync();
+            if (res == ContentDialogResult.Primary)
+            {
+                await _rssService.DeleteSubscriptionAsync(vm.Id);
+                _feedsList.Remove(vm);
+            }
+        }
+    }
+
+    private async void MoveUpFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is SubscriptionItemViewModel vm)
+        {
+            int index = _feedsList.IndexOf(vm);
+            if (index > 0)
+            {
+                _feedsList.RemoveAt(index);
+                _feedsList.Insert(index - 1, vm);
+                await SaveOrderAsync();
+            }
+        }
+    }
+
+    private async void MoveDownFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is SubscriptionItemViewModel vm)
+        {
+            int index = _feedsList.IndexOf(vm);
+            if (index < _feedsList.Count - 1)
+            {
+                _feedsList.RemoveAt(index);
+                _feedsList.Insert(index + 1, vm);
+                await SaveOrderAsync();
+            }
+        }
+    }
+
+    private async void CurrentFeedsListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+    {
+        await SaveOrderAsync();
+    }
+
+    private async Task SaveOrderAsync()
+    {
+        try
+        {
+            var orderedList = _feedsList.Select(x => x.Model).ToList();
+            await _rssService.ReorderSubscriptionsAsync(orderedList);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] SaveOrderAsync Error: {ex.Message}");
+        }
+    }
+
+    // Visual Tree Helpers
+    private T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject
+    {
+        var parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(child);
+        if (parent == null) return null;
+        if (parent is T t) return t;
+        return FindVisualParent<T>(parent);
+    }
+
+    private T? FindVisualChild<T>(DependencyObject parent, string name) where T : DependencyObject
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is T t && child is FrameworkElement fe && fe.Name == name)
+            {
+                return t;
+            }
+            var result = FindVisualChild<T>(child, name);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    // View Model for subscribed feed list items
+    public class SubscriptionItemViewModel : System.ComponentModel.INotifyPropertyChanged
+    {
+        private bool _isEditing;
+        private string _name = string.Empty;
+        private string _url = string.Empty;
+        private string _category = string.Empty;
+        private string _iconUrl = string.Empty;
+
+        private string _editName = string.Empty;
+        private string _editUrl = string.Empty;
+        private string _editCategory = string.Empty;
+
+        public Daily.Models.LocalRssSubscription Model { get; }
+
+        public SubscriptionItemViewModel(Daily.Models.LocalRssSubscription model)
+        {
+            Model = model;
+            Name = model.Name;
+            Url = model.Url;
+            Category = model.Category;
+            IconUrl = model.IconUrl;
+            
+            EditName = Name;
+            EditUrl = Url;
+            EditCategory = Category;
+        }
+
+        public string Id => Model.Id;
+
+        public bool IsEditing
+        {
+            get => _isEditing;
+            set
+            {
+                if (_isEditing != value)
+                {
+                    _isEditing = value;
+                    OnPropertyChanged(nameof(IsEditing));
+                }
+            }
+        }
+
+        public string Name
+        {
+            get => _name;
+            set
+            {
+                if (_name != value)
+                {
+                    _name = value;
+                    OnPropertyChanged(nameof(Name));
+                }
+            }
+        }
+
+        public string Url
+        {
+            get => _url;
+            set
+            {
+                if (_url != value)
+                {
+                    _url = value;
+                    OnPropertyChanged(nameof(Url));
+                }
+            }
+        }
+
+        public string Category
+        {
+            get => _category;
+            set
+            {
+                if (_category != value)
+                {
+                    _category = value;
+                    OnPropertyChanged(nameof(Category));
+                }
+            }
+        }
+
+        public string IconUrl
+        {
+            get => _iconUrl;
+            set
+            {
+                if (_iconUrl != value)
+                {
+                    _iconUrl = value;
+                    OnPropertyChanged(nameof(IconUrl));
+                }
+            }
+        }
+
+        public string EditName
+        {
+            get => _editName;
+            set
+            {
+                if (_editName != value)
+                {
+                    _editName = value;
+                    OnPropertyChanged(nameof(EditName));
+                }
+            }
+        }
+
+        public string EditUrl
+        {
+            get => _editUrl;
+            set
+            {
+                if (_editUrl != value)
+                {
+                    _editUrl = value;
+                    OnPropertyChanged(nameof(EditUrl));
+                }
+            }
+        }
+
+        public string EditCategory
+        {
+            get => _editCategory;
+            set
+            {
+                if (_editCategory != value)
+                {
+                    _editCategory = value;
+                    OnPropertyChanged(nameof(EditCategory));
+                }
+            }
+        }
+
+        public void StartEdit()
+        {
+            EditName = Name;
+            EditUrl = Url;
+            EditCategory = Category;
+            IsEditing = true;
+        }
+
+        public void CancelEdit()
+        {
+            IsEditing = false;
+        }
+
+        public void CommitEdit()
+        {
+            Name = EditName;
+            Url = EditUrl;
+            Category = EditCategory;
+            
+            Model.Name = Name;
+            Model.Url = Url;
+            Model.Category = Category;
+            
+            try
+            {
+                Model.IconUrl = $"https://www.google.com/s2/favicons?domain={new Uri(Url).Host}&sz=64";
+                IconUrl = Model.IconUrl;
+            }
+            catch
+            {
+                // Ignore Uri exception and retain old icon
+            }
+
+            IsEditing = false;
+        }
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
+        }
     }
 }

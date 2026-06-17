@@ -7,7 +7,10 @@ The News Reader is a core feature that provides users with a distraction-free, f
 ## 1. Functional Specification
 
 ### 1.1 Feed Subscription & Source Management
-- **Categorized News Picker**: Feeds are organized into predefined categories (e.g., Tech, Markets, World, Local) to help users browse their topics of interest.
+- **News Settings & Feeds Panel**: News settings are centralized in a standalone settings section, exposing toggles for auto-refresh on startup and cover images display, alongside a dedicated **News Feeds** panel.
+- **Feed Discovery & Search**: Users can discover feeds by typing keyword queries (which queries Feedly's public search API) or entering a website domain/URL directly. The app fetches the page and sniffs alternate `<link>` tags (`application/rss+xml`, `application/atom+xml`, or JSON feeds), resolving relative paths or falling back to checking common sub-paths (like `/feed`, `/rss`, or `/wp-json/wp/v2/posts`).
+- **Inline Editing & Management**: Subscribed feeds can be edited inline, allowing real-time changes to their Name, URL, and Category (Local, Markets, World, Tech).
+- **Flexible Reordering**: Subscribed feeds can be reordered using explicit **Move Up** / **Move Down** buttons or by dragging and dropping items directly in the list, updating the custom `DisplayOrder` database column.
 - **Custom RSS/WP-JSON Subscriptions**: Users can subscribe to custom sources by providing a feed URL and a display name. The app automatically fetches the website favicon (using the Google Favicon API fallback) and auto-detects whether the source uses a traditional XML RSS format or a WordPress JSON API (`wp-json`).
 - **Atomic Loading & Cycles**: Users can swap between active feeds, pull to refresh, or cycle through publications sequentially using cycle controls.
 

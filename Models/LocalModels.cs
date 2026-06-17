@@ -206,6 +206,8 @@ namespace Daily.Models
         [Indexed]
         public DateTime? SyncedAt { get; set; } // Null = Dirty
         public bool IsDeleted { get; set; }
+
+        public int DisplayOrder { get; set; }
     }
 
     [Table("vitals")]
