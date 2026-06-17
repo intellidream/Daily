@@ -290,7 +290,15 @@
                     </StackPanel>
                 </Pivot.RightHeader>
                 <!-- Tab 1: Live Feed -->
-                <PivotItem Header="Live Feed">
+                <PivotItem>
+                    <PivotItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="Live Feed" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="10" MinWidth="20" Height="20" Padding="6,0" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind Articles.Count, Mode=OneWay}" FontSize="10" FontWeight="Bold" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </PivotItem.Header>
                     <Grid>
                         <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
                             <ProgressRing IsActive="True" Width="56" Height="56"/>
@@ -310,7 +318,15 @@
                 </PivotItem>
 
                 <!-- Tab 2: Read Later -->
-                <PivotItem Header="Read Later">
+                <PivotItem>
+                    <PivotItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="Read Later" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Border Background="{ThemeResource AppErrorBrush}" CornerRadius="10" MinWidth="20" Height="20" Padding="6,0" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind ReadLaterArticles.Count, Mode=OneWay}" FontSize="10" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </PivotItem.Header>
                     <Grid>
                         <TextBlock x:Name="NoReadLaterTextBlock" 
                                    Text="No articles saved for later." 
@@ -332,7 +348,15 @@
                 </PivotItem>
 
                 <!-- Tab 3: Favorites -->
-                <PivotItem Header="Favorites">
+                <PivotItem>
+                    <PivotItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="Favorites" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Border Background="{ThemeResource AppWarningBrush}" CornerRadius="10" MinWidth="20" Height="20" Padding="6,0" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind FavoriteArticles.Count, Mode=OneWay}" FontSize="10" FontWeight="Bold" Foreground="{ThemeResource AppWarningForegroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </PivotItem.Header>
                     <Grid>
                         <TextBlock x:Name="NoFavoritesTextBlock" 
                                    Text="No favorite articles starred." 

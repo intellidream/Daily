@@ -81,6 +81,8 @@
                     </RadialGradientBrush>
                     <Color x:Key="LoginGlowColor">#FF4A9EFF</Color>
                     <SolidColorBrush x:Key="AppErrorBrush" Color="#FFFF6B6B"/>
+                    <SolidColorBrush x:Key="AppWarningBrush" Color="#FFFFD166"/>
+                    <SolidColorBrush x:Key="AppWarningForegroundBrush" Color="#FF1A1A1A"/>
                     <LinearGradientBrush x:Key="LeftFadeOverlayBrush" StartPoint="0,0" EndPoint="1,0">
                         <GradientStop Color="#FF030609" Offset="0.0" />
                         <GradientStop Color="#C0030609" Offset="0.3" />
@@ -171,6 +173,8 @@
                     </RadialGradientBrush>
                     <Color x:Key="LoginGlowColor">#FFFFA800</Color>
                     <SolidColorBrush x:Key="AppErrorBrush" Color="#D32F2F"/>
+                    <SolidColorBrush x:Key="AppWarningBrush" Color="#FFB37700"/>
+                    <SolidColorBrush x:Key="AppWarningForegroundBrush" Color="#FFFFFFFF"/>
                     <LinearGradientBrush x:Key="LeftFadeOverlayBrush" StartPoint="0,0" EndPoint="1,0">
                         <GradientStop Color="#FFD4C9B0" Offset="0.0" />
                         <GradientStop Color="#C0D4C9B0" Offset="0.3" />

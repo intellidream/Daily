@@ -22,6 +22,10 @@ public sealed partial class RssFeedDetailPage : Page
     private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _articles = new();
     private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _readLaterArticles = new();
     private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _favoriteArticles = new();
+
+    public ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> Articles => _articles;
+    public ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> ReadLaterArticles => _readLaterArticles;
+    public ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> FavoriteArticles => _favoriteArticles;
     private RssItem? _selectedItem;
     private RssItem? _currentRenderedArticle;
     private bool _isHeaderIconsMode;
