@@ -62,6 +62,8 @@ public sealed class AppSettings
     // ── News Configurations ──
     public bool AutoRefreshNewsOnStartup { get; set; } = true;
     public bool ShowNewsImages { get; set; } = true;
+    public string? MediumUsername { get; set; }
+    public string? MediumReadingListUrl { get; set; }
 
     // ── Health Configurations ──
     public bool HealthMockDataEnabled { get; set; } = false;

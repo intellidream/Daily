@@ -36,6 +36,12 @@ public sealed partial class RssFeedDetailPage : Page
         Url = "all_news",
         IconUrl = ""
     };
+    private readonly FeedSource _mediumReadingListSource = new FeedSource
+    {
+        Name = "Medium Reading List",
+        Url = "medium_reading_list",
+        IconUrl = ""
+    };
     private FeedSource? _currentLocalFeed;
 
     public RssFeedDetailPage()
@@ -244,6 +250,7 @@ public sealed partial class RssFeedDetailPage : Page
             var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
             var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
             await ReaderWebView.EnsureCoreWebView2Async(env);
+            await BackgroundWebView.EnsureCoreWebView2Async(env);
         }
         catch (Exception ex)
         {
@@ -845,6 +852,65 @@ public sealed partial class RssFeedDetailPage : Page
         }
     }
 
+    private async void SubscribeAuthorButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is Daily_WinUI.ViewModels.RssItemViewModel vm)
+        {
+            btn.IsEnabled = false;
+            try
+            {
+                var url = vm.Link;
+                var uri = new Uri(url);
+                string username = string.Empty;
+                var segments = uri.Segments;
+                foreach (var segment in segments)
+                {
+                    var cleanSegment = segment.Trim('/');
+                    if (cleanSegment.StartsWith("@"))
+                    {
+                        username = cleanSegment;
+                        break;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(username))
+                {
+                    throw new Exception("Could not resolve Medium username from article URL.");
+                }
+
+                string authorFeedUrl = $"https://medium.com/feed/{username}";
+                string authorName = vm.Author ?? username;
+
+                string userId = Daily_WinUI.App.SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
+                await _rssService.AddFeedAsync(authorFeedUrl, authorName, "Coding", userId);
+
+                var successDialog = new ContentDialog
+                {
+                    Title = "Subscribed Successfully",
+                    Content = $"You have subscribed to {authorName}'s Medium stories feed.",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.XamlRoot
+                };
+                await successDialog.ShowAsync();
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new ContentDialog
+                {
+                    Title = "Subscription Failed",
+                    Content = $"Failed to subscribe to author feed: {ex.Message}",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.XamlRoot
+                };
+                await errorDialog.ShowAsync();
+            }
+            finally
+            {
+                btn.IsEnabled = true;
+            }
+        }
+    }
+
     private async void ReaderFavoriteButton_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedItem != null)
@@ -892,6 +958,13 @@ public sealed partial class RssFeedDetailPage : Page
         {
             list.AddRange(_rssService.Feeds);
         }
+
+        var settings = SettingsService.Load();
+        if (!string.IsNullOrEmpty(settings.MediumUsername))
+        {
+            list.Add(_mediumReadingListSource);
+        }
+
         list.Add(_allNewsFeedSource);
         return list;
     }
@@ -948,6 +1021,24 @@ public sealed partial class RssFeedDetailPage : Page
             FeedMenuFlyout.Items.Add(menuItem);
         }
 
+        // Add "Medium Reading List" right before "All News" if MediumUsername is configured
+        var settings = SettingsService.Load();
+        if (!string.IsNullOrEmpty(settings.MediumUsername))
+        {
+            var mediumMenuItem = new MenuFlyoutItem
+            {
+                Text = "Medium Reading List",
+                DataContext = _mediumReadingListSource,
+                Icon = new FontIcon 
+                { 
+                    Glyph = "\uEC70", // brand-medium
+                    FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"] 
+                }
+            };
+            mediumMenuItem.Click += FeedMenuItem_Click;
+            FeedMenuFlyout.Items.Add(mediumMenuItem);
+        }
+
         // Add "All News" as the LAST entry always
         var allNewsMenuItem = new MenuFlyoutItem
         {
@@ -955,7 +1046,7 @@ public sealed partial class RssFeedDetailPage : Page
             DataContext = _allNewsFeedSource,
             Icon = new FontIcon 
             { 
-                Glyph = "\uEAFD", 
+                Glyph = "\uEAFD", // brand-news / icon-news
                 FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"] 
             }
         };
@@ -1021,6 +1112,10 @@ public sealed partial class RssFeedDetailPage : Page
         {
             await LoadAllNewsFeedAsync();
         }
+        else if (feed.Url == "medium_reading_list")
+        {
+            await LoadMediumReadingListAsync();
+        }
         else
         {
             if (_rssService.CurrentFeed == null || feed.Url != _rssService.CurrentFeed.Url)
@@ -1054,6 +1149,16 @@ public sealed partial class RssFeedDetailPage : Page
             if (SelectedFeedFontIcon != null)
             {
                 SelectedFeedFontIcon.Glyph = "\uEAFD";
+                SelectedFeedFontIcon.FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"];
+                SelectedFeedFontIcon.Visibility = Visibility.Visible;
+            }
+        }
+        else if (feed.Url == "medium_reading_list")
+        {
+            if (SelectedFeedIconBorder != null) SelectedFeedIconBorder.Visibility = Visibility.Collapsed;
+            if (SelectedFeedFontIcon != null)
+            {
+                SelectedFeedFontIcon.Glyph = "\uEC70";
                 SelectedFeedFontIcon.FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"];
                 SelectedFeedFontIcon.Visibility = Visibility.Visible;
             }
@@ -1748,5 +1853,195 @@ public sealed partial class RssFeedDetailPage : Page
     private void ArticleSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
         FilterArticles(sender.Text);
+    }
+
+    private async Task LoadMediumReadingListAsync()
+    {
+        LoadingPanel.Visibility = Visibility.Visible;
+        ArticlesListView.Visibility = Visibility.Collapsed;
+
+        var settings = SettingsService.Load();
+        var readingListUrl = settings.MediumReadingListUrl;
+        if (string.IsNullOrEmpty(readingListUrl))
+        {
+            if (!string.IsNullOrEmpty(settings.MediumUsername))
+            {
+                readingListUrl = $"https://medium.com/@{settings.MediumUsername}/list/reading-list";
+            }
+            else
+            {
+                LoadingPanel.Visibility = Visibility.Collapsed;
+                var dialog = new ContentDialog
+                {
+                    Title = "Medium Setup Required",
+                    Content = "Please link your Medium account in Settings -> Features to view your reading list.",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.XamlRoot
+                };
+                await dialog.ShowAsync();
+                return;
+            }
+        }
+
+        try
+        {
+            await EnsureWebViewInitializedAsync();
+
+            var navigationTcs = new TaskCompletionSource<bool>();
+            
+            Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? handler = null;
+            handler = (sender, args) =>
+            {
+                BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
+                if (args.IsSuccess)
+                {
+                    navigationTcs.TrySetResult(true);
+                }
+                else
+                {
+                    navigationTcs.TrySetException(new Exception($"Navigation failed with error status: {args.WebErrorStatus}"));
+                }
+            };
+            BackgroundWebView.CoreWebView2.NavigationCompleted += handler;
+
+            BackgroundWebView.Source = new Uri(readingListUrl);
+
+            var timeoutTask = Task.Delay(15000);
+            var completedTask = await Task.WhenAny(navigationTcs.Task, timeoutTask);
+
+            if (completedTask == timeoutTask)
+            {
+                BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
+                throw new TimeoutException("The request to load Medium Reading List timed out. Please check your connection.");
+            }
+
+            await navigationTcs.Task;
+            await Task.Delay(1500);
+
+            string javascript = @"
+(function() {
+    var articles = [];
+    var items = document.querySelectorAll('article');
+    items.forEach(function(item) {
+        try {
+            var titleEl = item.querySelector('h2');
+            var title = titleEl ? titleEl.innerText : '';
+            
+            var links = item.querySelectorAll('a');
+            var storyUrl = '';
+            var authorName = '';
+            var authorUrl = '';
+            
+            for (var i = 0; i < links.length; i++) {
+                var href = links[i].href;
+                if (href && href.includes('/@') && !storyUrl && (href.includes('/story') || href.split('/').length > 4)) {
+                    var urlObj = new URL(href);
+                    var pathname = urlObj.pathname;
+                    if (pathname.split('/').length > 2) {
+                        storyUrl = href;
+                    }
+                }
+                if (href && href.includes('/@') && !authorName) {
+                    var urlObj = new URL(href);
+                    var pathname = urlObj.pathname;
+                    if (pathname.split('/').length === 2) {
+                        authorUrl = href;
+                        authorName = links[i].innerText || links[i].textContent || '';
+                    }
+                }
+            }
+
+            if (!storyUrl) {
+                var articleLink = item.querySelector('a[href*=""/@""]');
+                if (articleLink) {
+                    storyUrl = articleLink.href;
+                }
+            }
+
+            if (!authorName) {
+                var authorEl = item.querySelector('p');
+                if (authorEl) {
+                    authorName = authorEl.innerText;
+                }
+            }
+            
+            var img = item.querySelector('img');
+            var imageUrl = img ? img.src : '';
+            
+            title = title.trim();
+            authorName = authorName.trim();
+            
+            if (title && storyUrl) {
+                articles.push({
+                    title: title,
+                    url: storyUrl,
+                    author: authorName || 'Unknown Author',
+                    authorUrl: authorUrl || '',
+                    imageUrl: imageUrl
+                });
+            }
+        } catch(e) { }
+    });
+    return JSON.stringify(articles);
+})();";
+
+            var jsonResult = await BackgroundWebView.ExecuteScriptAsync(javascript);
+            if (!string.IsNullOrEmpty(jsonResult) && jsonResult != "null" && jsonResult != "\"[]\"")
+            {
+                var json = System.Text.Json.JsonSerializer.Deserialize<string>(jsonResult);
+                if (!string.IsNullOrEmpty(json))
+                {
+                    var scrapedItems = System.Text.Json.JsonSerializer.Deserialize<List<ScrapedMediumArticle>>(json);
+                    if (scrapedItems != null && scrapedItems.Count > 0)
+                    {
+                        _articles.Clear();
+                        foreach (var scraped in scrapedItems)
+                        {
+                            var rssItem = new RssItem
+                            {
+                                Title = scraped.title,
+                                Link = scraped.url,
+                                Description = $"Author: {scraped.author}. Read this story on Medium.",
+                                Author = scraped.author,
+                                PublishDate = DateTime.Now,
+                                ImageUrl = scraped.imageUrl,
+                                PublicationName = "Medium Reading List",
+                                PublicationIconUrl = "https://www.google.com/s2/favicons?domain=medium.com&sz=64"
+                            };
+                            _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(rssItem));
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Medium Reading List] Load Error: {ex.Message}");
+            var dialog = new ContentDialog
+            {
+                Title = "Error Loading Reading List",
+                Content = $"Could not load reading list: {ex.Message}",
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+        finally
+        {
+            if (_currentLocalFeed != null && _currentLocalFeed.Url == "medium_reading_list")
+            {
+                LoadingPanel.Visibility = Visibility.Collapsed;
+                ArticlesListView.Visibility = Visibility.Visible;
+            }
+        }
+    }
+
+    public class ScrapedMediumArticle
+    {
+        public string title { get; set; } = string.Empty;
+        public string url { get; set; } = string.Empty;
+        public string author { get; set; } = string.Empty;
+        public string authorUrl { get; set; } = string.Empty;
+        public string imageUrl { get; set; } = string.Empty;
     }
 }

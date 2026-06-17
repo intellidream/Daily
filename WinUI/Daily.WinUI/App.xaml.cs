@@ -18,6 +18,7 @@ public partial class App : Application
     private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _centralAuthListener;
 
     private readonly System.Collections.Generic.List<Window> _activeSecondaryWindows = new();
+    public System.Collections.Generic.IReadOnlyList<Window> ActiveSecondaryWindows => _activeSecondaryWindows;
 
     public void RegisterSecondaryWindow(Window window)
     {

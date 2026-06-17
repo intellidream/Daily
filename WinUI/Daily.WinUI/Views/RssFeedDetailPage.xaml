@@ -14,6 +14,7 @@
 
     <Page.Resources>
         <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <!-- Dark navy background matching MainPage -->
         <LinearGradientBrush x:Key="RssPageBgBrush" StartPoint="0,0" EndPoint="0,1">
             <GradientStop Color="#FF0B1121" Offset="0" />
@@ -203,6 +204,22 @@
                                       FontFamily="Segoe Fluent Icons" 
                                       FontSize="16" 
                                       Foreground="{Binding ReadLaterBrush}"/>
+                        </Button>
+
+                        <!-- Subscribe to Author Button -->
+                        <Button Click="SubscribeAuthorButton_Click"
+                                Width="38" Height="38" 
+                                CornerRadius="19"
+                                Background="{ThemeResource AppGlassSubColorBrush}"
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                BorderThickness="1"
+                                Padding="0"
+                                ToolTipService.ToolTip="Subscribe to Author"
+                                Visibility="{Binding IsMediumItem, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <FontIcon Glyph="&#xE710;" 
+                                      FontFamily="Segoe Fluent Icons" 
+                                      FontSize="16" 
+                                      Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
                         </Button>
                     </StackPanel>
                 </Grid>
@@ -475,6 +492,7 @@
 
             <!-- WebView2 for Reader Content -->
             <WebView2 x:Name="ReaderWebView" Grid.Row="2" Margin="0" Visibility="Collapsed"/>
+            <WebView2 x:Name="BackgroundWebView" Grid.Row="2" Margin="0" Width="0" Height="0" Opacity="0" Visibility="Visible"/>
         </Grid>
     </Grid>
 </Page>

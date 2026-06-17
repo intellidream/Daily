@@ -192,3 +192,20 @@ When retrieving recommendation feed items concurrently in the briefing engine or
   - **Read Later Badge**: Styled with a red background (`{ThemeResource AppErrorBrush}`) and white text.
   - **Favorites Badge**: Styled with a yellow/gold background (`{ThemeResource AppWarningBrush}`) and high-contrast text (`{ThemeResource AppWarningForegroundBrush}`) that adapts automatically between light and dark modes to guarantee readability.
 - **Custom Warning Brushes**: Registered `AppWarningBrush` and `AppWarningForegroundBrush` in both `Default` (Dark) and `Light` theme dictionaries inside [App.xaml](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/App.xaml), defining appropriate high-contrast gold and white/gray colors respectively.
+ 
+### 6.3 Medium Integration & Paywall-Compliant Scraping (June 2026)
+- **Persistence Settings**: Added `MediumUsername` and `MediumReadingListUrl` properties to `AppSettings` in [SettingsService.cs](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Services/SettingsService.cs#L64-L67).
+- **Setup & Authentication Flow**:
+  - Added a "Medium Setup" subsection card in [FeaturesPage.xaml](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Views/FeaturesPage.xaml#L547-L581) to manage link states (Not Configured vs. Linked accounts), display the active username, allow URL customization, and support account disconnection.
+  - Added `MediumLoginBtn_Click` in [FeaturesPage.xaml.cs](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Views/FeaturesPage.xaml.cs#L1396-L1492) that launches a native, resizable `MediumLoginWindow` Window containing an embedded `WebView2` browser pointing to Medium's login page.
+  - **Native Window Titlebar Theme Adaptation**: Configured P/Invoke calls to Windows DWM API (`DwmSetWindowAttribute`) inside the programmatic `MediumLoginWindow` to dynamically apply `DWMWA_USE_IMMERSIVE_DARK_MODE` (attribute `20`/`19`) so the native title bar matches the light/dark mode. Registered the login window in `App.Current.RegisterSecondaryWindow` and updated `PropagateThemeToSubWindows` in `MainPage.xaml.cs` to dynamically propagate theme updates (Grid theme, WebView2 default background color, and DWM title bar colors) in real time.
+  - Listens to the `CoreWebView2.SourceChanged` event. When the user successfully signs in and is redirected to their profile (`medium.com/@username`), the username is automatically extracted, settings are saved, the window closes, and the UI transitions to the active link state.
+  - Automatically redirects a landing on the root page `/` or `/me` to the profile page to ensure username extraction occurs.
+  - Deletes session cookies for `https://medium.com` programmatically on disconnect.
+- **Compliant Background Scraper**:
+  - Added a hidden `BackgroundWebView` in [RssFeedDetailPage.xaml](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Views/RssFeedDetailPage.xaml#L476) sharing the same Edge User Data Folder (`%LocalAppData%\Daily.WinUI\WebView2`) as the main reader and login browser.
+  - Navigates to the reading list, waits for navigation completion using a `TypedEventHandler` task delay, and evaluates a DOM-scraping script using `ExecuteScriptAsync` to map `<article>` cards into `RssItem` ViewModels.
+  - **Paywall Compliance**: No bypasses or hacks are used. WebView2 shares the active authenticated login profile. If the logged-in user is a paid member, stories load in full. Otherwise, they see standard previews and Medium's paywall, matching edge/chrome behavior exactly.
+- **Author RSS Subscription Action**:
+  - Added a custom "+" button inside [RssFeedDetailPage.xaml](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Views/RssFeedDetailPage.xaml#L205-L220) for Medium items.
+  - Clicking it invokes `SubscribeAuthorButton_Click` in [RssFeedDetailPage.xaml.cs](file:///c:/Users/mihai/source/repos/Daily/WinUI/Daily.WinUI/Views/RssFeedDetailPage.xaml.cs#L848-L906) which parses the author's handle and subscribes to their official RSS feed (`https://medium.com/feed/@username`) under the "Coding" category.

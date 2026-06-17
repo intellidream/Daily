@@ -48,6 +48,8 @@ namespace Daily_WinUI.ViewModels
         public string? PublicationName => Item.PublicationName;
         public string? PublicationIconUrl => Item.PublicationIconUrl;
 
+        public bool IsMediumItem => PublicationName == "Medium Reading List";
+
         private bool _isFavorite;
         public bool IsFavorite
         {

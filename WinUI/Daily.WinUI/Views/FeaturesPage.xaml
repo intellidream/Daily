@@ -544,6 +544,39 @@
                             </ListView.ItemTemplate>
                         </ListView>
                     </StackPanel>
+
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <!-- Sub-section: Medium Setup -->
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Medium Setup" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                        <TextBlock Text="Link your Medium account to access your Reading List and read Member-only stories." FontSize="11" Opacity="0.6" />
+
+                        <Grid ColumnSpacing="12" RowSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Spacing="4" VerticalAlignment="Center">
+                                <TextBlock x:Name="MediumStatusText" Text="Status: Not Configured" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="MediumReadingListUrlHelpText" Text="Reading List URL will be automatically configured upon login." FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button x:Name="MediumLoginBtn" Content="Login to Medium" Click="MediumLoginBtn_Click" Style="{ThemeResource AccentButtonStyle}"/>
+                                <Button x:Name="MediumDisconnectBtn" Content="Disconnect" Click="MediumDisconnectBtn_Click" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </Grid>
+                        
+                        <TextBox x:Name="MediumReadingListUrlTextBox" 
+                                 Header="Reading List URL" 
+                                 HeaderTemplate="{StaticResource TinyHeaderTemplate}"
+                                 PlaceholderText="https://medium.com/@username/list/reading-list"
+                                 FontSize="12" 
+                                 LostFocus="MediumReadingListUrlTextBox_LostFocus"
+                                 Visibility="Collapsed"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

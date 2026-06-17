@@ -285,6 +285,14 @@ public sealed partial class MainPage : Page
             win.ApplyTheme(newTheme);
 
         _settingsWindow?.ApplyTheme(newTheme);
+
+        foreach (var win in App.Current.ActiveSecondaryWindows)
+        {
+            if (win is Daily_WinUI.Views.FeaturesPage.MediumLoginWindow loginWin)
+            {
+                loginWin.ApplyTheme(newTheme);
+            }
+        }
     }
 
     private async void SignOut_Click(object sender, RoutedEventArgs e)

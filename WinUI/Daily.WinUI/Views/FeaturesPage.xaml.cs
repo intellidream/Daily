@@ -191,6 +191,7 @@ public sealed partial class FeaturesPage : Page
 
             // Load Subscribed Feeds list
             _ = LoadFeedsListAsync();
+            UpdateMediumUi();
         }
         catch (Exception ex)
         {
@@ -1392,6 +1393,100 @@ public sealed partial class FeaturesPage : Page
         return null;
     }
 
+    private void UpdateMediumUi()
+    {
+        if (!string.IsNullOrEmpty(_settings.MediumUsername))
+        {
+            MediumStatusText.Text = $"Status: Linked as @{_settings.MediumUsername}";
+            MediumReadingListUrlHelpText.Text = "Your reading list has been successfully configured. You can customize the URL below if needed.";
+            MediumLoginBtn.Content = "Change Account";
+            MediumDisconnectBtn.Visibility = Visibility.Visible;
+            MediumReadingListUrlTextBox.Visibility = Visibility.Visible;
+            MediumReadingListUrlTextBox.Text = _settings.MediumReadingListUrl ?? $"https://medium.com/@{_settings.MediumUsername}/list/reading-list";
+        }
+        else
+        {
+            MediumStatusText.Text = "Status: Not Configured";
+            MediumReadingListUrlHelpText.Text = "Reading List URL will be automatically configured upon login.";
+            MediumLoginBtn.Content = "Login to Medium";
+            MediumDisconnectBtn.Visibility = Visibility.Collapsed;
+            MediumReadingListUrlTextBox.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void MediumLoginBtn_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var loginWindow = new MediumLoginWindow(_settings, UpdateMediumUi, this.ActualTheme);
+            loginWindow.Activate();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Error opening login window: {ex.Message}");
+        }
+    }
+
+    private async void MediumDisconnectBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Disconnect Medium",
+            Content = "Are you sure you want to disconnect your Medium account and log out?",
+            PrimaryButtonText = "Disconnect",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = this.XamlRoot
+        };
+
+        var res = await dialog.ShowAsync();
+        if (res == ContentDialogResult.Primary)
+        {
+            _settings.MediumUsername = null;
+            _settings.MediumReadingListUrl = null;
+            SettingsService.Save(_settings);
+            UpdateMediumUi();
+
+            try
+            {
+                var tempWebView = new WebView2();
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string userDataFolder = System.IO.Path.Combine(localAppData, "Daily.WinUI", "WebView2");
+                var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
+                var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
+                await tempWebView.EnsureCoreWebView2Async(env);
+                
+                var cookieManager = tempWebView.CoreWebView2.CookieManager;
+                var cookies = await cookieManager.GetCookiesAsync("https://medium.com");
+                foreach (var cookie in cookies)
+                {
+                    cookieManager.DeleteCookie(cookie);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Medium Disconnect] Cookie clearing failed: {ex.Message}");
+            }
+        }
+    }
+
+    private void MediumReadingListUrlTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb)
+        {
+            var text = tb.Text?.Trim();
+            if (!string.IsNullOrEmpty(text) && Uri.TryCreate(text, UriKind.Absolute, out _))
+            {
+                _settings.MediumReadingListUrl = text;
+                SettingsService.Save(_settings);
+            }
+            else
+            {
+                tb.Text = _settings.MediumReadingListUrl ?? "";
+            }
+        }
+    }
+
     // View Model for subscribed feed list items
     public class SubscriptionItemViewModel : System.ComponentModel.INotifyPropertyChanged
     {
@@ -1582,6 +1677,205 @@ public sealed partial class FeaturesPage : Page
         protected virtual void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public sealed class MediumLoginWindow : Window
+    {
+        private readonly WebView2 _webView;
+        private readonly ProgressRing _progressRing;
+        private readonly AppSettings _settings;
+        private readonly Action _onUiUpdate;
+        private Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2SourceChangedEventArgs>? _sourceChangedHandler;
+        private ElementTheme _theme;
+        private IntPtr _hWnd = IntPtr.Zero;
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+        private void SetTitleBarTheme(IntPtr hwnd, ElementTheme theme)
+        {
+            try
+            {
+                int darkMode = theme == ElementTheme.Dark ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+                DwmSetWindowAttribute(hwnd, 19, ref darkMode, sizeof(int));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MediumLoginWindow] SetTitleBarTheme error: {ex.Message}");
+            }
+        }
+
+        public MediumLoginWindow(AppSettings settings, Action onUiUpdate, ElementTheme theme)
+        {
+            _settings = settings;
+            _onUiUpdate = onUiUpdate;
+            _theme = theme;
+            
+            this.Title = "Login to Medium";
+            this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+            
+            App.Current.RegisterSecondaryWindow(this);
+            
+            _webView = new WebView2
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
+
+            if (theme == ElementTheme.Dark)
+            {
+                _webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0x1A, 0x14, 0x23);
+            }
+            else
+            {
+                _webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0xED, 0xE5, 0xD9);
+            }
+
+            _progressRing = new ProgressRing
+            {
+                IsActive = true,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Width = 50,
+                Height = 50
+            };
+
+            var grid = new Grid
+            {
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                RequestedTheme = theme
+            };
+            grid.Children.Add(_webView);
+            grid.Children.Add(_progressRing);
+
+            this.Content = grid;
+
+            _webView.NavigationCompleted += (s, args) =>
+            {
+                _progressRing.IsActive = false;
+                _progressRing.Visibility = Visibility.Collapsed;
+            };
+
+            this.Activated += MediumLoginWindow_Activated;
+            this.Closed += MediumLoginWindow_Closed;
+        }
+
+        public void ApplyTheme(ElementTheme theme)
+        {
+            _theme = theme;
+            if (Content is FrameworkElement root)
+            {
+                root.RequestedTheme = theme;
+            }
+            if (_webView != null)
+            {
+                if (theme == ElementTheme.Dark)
+                {
+                    _webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0x1A, 0x14, 0x23);
+                }
+                else
+                {
+                    _webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0xED, 0xE5, 0xD9);
+                }
+            }
+            if (_hWnd != IntPtr.Zero)
+            {
+                SetTitleBarTheme(_hWnd, theme);
+            }
+        }
+
+        private async void MediumLoginWindow_Activated(object sender, WindowActivatedEventArgs args)
+        {
+            this.Activated -= MediumLoginWindow_Activated;
+
+            try
+            {
+                _hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_hWnd);
+                var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+                
+                appWindow.SetIcon("Assets/AppIcon.ico");
+                appWindow.Resize(new Windows.Graphics.SizeInt32(850, 850));
+                
+                SetTitleBarTheme(_hWnd, _theme);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MediumLoginWindow] Sizing error: {ex.Message}");
+            }
+
+            try
+            {
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string userDataFolder = System.IO.Path.Combine(localAppData, "Daily.WinUI", "WebView2");
+                System.IO.Directory.CreateDirectory(userDataFolder);
+
+                var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
+                var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
+                await _webView.EnsureCoreWebView2Async(env);
+                
+                _sourceChangedHandler = async (senderCore, sourceArgs) =>
+                {
+                    var url = senderCore.Source;
+                    if (string.IsNullOrEmpty(url)) return;
+
+                    try
+                    {
+                        var uri = new Uri(url);
+                        if (uri.Host == "medium.com")
+                        {
+                            var path = uri.AbsolutePath;
+                            if (path.StartsWith("/@"))
+                            {
+                                var parts = path.Substring(2).Split('/');
+                                var username = parts[0];
+                                if (!string.IsNullOrEmpty(username))
+                                {
+                                    senderCore.SourceChanged -= _sourceChangedHandler;
+
+                                    _settings.MediumUsername = username;
+                                    _settings.MediumReadingListUrl = $"https://medium.com/@{username}/list/reading-list";
+                                    SettingsService.Save(_settings);
+
+                                    _onUiUpdate();
+
+                                    this.Close();
+                                }
+                            }
+                            else if (path == "/" || path == "" || path == "/?source=logo")
+                            {
+                                senderCore.Navigate("https://medium.com/me");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Medium Login] Error parsing URL {url}: {ex.Message}");
+                    }
+                };
+
+                _webView.CoreWebView2.SourceChanged += _sourceChangedHandler;
+                _webView.Source = new Uri("https://medium.com/m/signin");
+            }
+            catch (Exception ex)
+            {
+                _progressRing.IsActive = false;
+                _progressRing.Visibility = Visibility.Collapsed;
+                System.Diagnostics.Debug.WriteLine($"[MediumLoginWindow] WebView2 initialization failed: {ex.Message}");
+            }
+        }
+
+        private void MediumLoginWindow_Closed(object sender, WindowEventArgs args)
+        {
+            this.Closed -= MediumLoginWindow_Closed;
+            if (_webView != null && _webView.CoreWebView2 != null && _sourceChangedHandler != null)
+            {
+                _webView.CoreWebView2.SourceChanged -= _sourceChangedHandler;
+            }
         }
     }
 }
