@@ -1229,6 +1229,30 @@ public sealed partial class FeaturesPage : Page
         }
     }
 
+    private void FeedIcon_ImageFailed(object sender, ExceptionRoutedEventArgs e)
+    {
+        if (sender is Image img)
+        {
+            img.Visibility = Visibility.Collapsed;
+            if (img.DataContext is SubscriptionItemViewModel vm)
+            {
+                vm.HasIcon = false;
+            }
+            else
+            {
+                var grid = FindVisualParent<Grid>(img);
+                if (grid != null)
+                {
+                    var fallback = FindVisualChild<FontIcon>(grid, "FeedIconFallback");
+                    if (fallback != null)
+                    {
+                        fallback.Visibility = Visibility.Visible;
+                    }
+                }
+            }
+        }
+    }
+
     private void EditFeed_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.DataContext is SubscriptionItemViewModel vm)
@@ -1376,6 +1400,7 @@ public sealed partial class FeaturesPage : Page
         private string _url = string.Empty;
         private string _category = string.Empty;
         private string _iconUrl = string.Empty;
+        private bool _hasIcon = true;
 
         private string _editName = string.Empty;
         private string _editUrl = string.Empty;
@@ -1390,6 +1415,7 @@ public sealed partial class FeaturesPage : Page
             Url = model.Url;
             Category = model.Category;
             IconUrl = model.IconUrl;
+            _hasIcon = !string.IsNullOrWhiteSpace(model.IconUrl);
             
             EditName = Name;
             EditUrl = Url;
@@ -1463,6 +1489,19 @@ public sealed partial class FeaturesPage : Page
             }
         }
 
+        public bool HasIcon
+        {
+            get => _hasIcon;
+            set
+            {
+                if (_hasIcon != value)
+                {
+                    _hasIcon = value;
+                    OnPropertyChanged(nameof(HasIcon));
+                }
+            }
+        }
+
         public string EditName
         {
             get => _editName;
@@ -1529,6 +1568,7 @@ public sealed partial class FeaturesPage : Page
             {
                 Model.IconUrl = $"https://www.google.com/s2/favicons?domain={new Uri(Url).Host}&sz=64";
                 IconUrl = Model.IconUrl;
+                HasIcon = !string.IsNullOrWhiteSpace(IconUrl);
             }
             catch
             {

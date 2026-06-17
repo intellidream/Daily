@@ -107,9 +107,12 @@
                                 Height="32" Padding="6,0"
                                 ToolTipService.ToolTip="Select Feed">
                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <Border Width="16" Height="16" CornerRadius="8" Background="White" Padding="0.5" VerticalAlignment="Center">
-                                    <Image x:Name="SelectedFeedIcon" Width="14" Height="14" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
+                                <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                    <Border x:Name="SelectedFeedIconBorder" Width="16" Height="16" CornerRadius="8" Background="White" Padding="0.5">
+                                        <Image x:Name="SelectedFeedIcon" Width="14" Height="14" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" ImageFailed="SelectedFeedIcon_ImageFailed"/>
+                                    </Border>
+                                    <FontIcon x:Name="SelectedFeedFontIcon" Glyph="&#xEB19;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                </Grid>
                                 <TextBlock x:Name="SelectedFeedText" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" MaxWidth="55" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                             

@@ -15,7 +15,10 @@ namespace Daily.Models
         Local,
         Markets,
         World,
-        Tech
+        Tech,
+        Coding,
+        Space,
+        Other
     }
 
     public enum RssOverlayMode

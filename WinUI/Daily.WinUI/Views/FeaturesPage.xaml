@@ -13,6 +13,8 @@
         <converters:WidgetAgingDurationTooltipConverter x:Key="WidgetAgingDurationTooltipConverter" />
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+        <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
+        <converters:InverseStringToVisibilityConverter x:Key="InverseStringToVisibilityConverter" />
         <DataTemplate x:Key="TinyHeaderTemplate">
             <TextBlock Text="{Binding}" FontSize="11" Opacity="0.8" Margin="0,0,0,2"/>
         </DataTemplate>
@@ -364,16 +366,60 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <Image Source="{Binding IconUrl}" Width="20" Height="20" VerticalAlignment="Center" />
+                                        <Grid Width="20" Height="20" VerticalAlignment="Center">
+                                            <Image Source="{Binding IconUrl}" Width="20" Height="20" ImageFailed="FeedIcon_ImageFailed"
+                                                   Visibility="{Binding IconUrl, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
+                                            <FontIcon x:Name="FeedIconFallback" Glyph="&#xEB19;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" 
+                                                      Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                      Visibility="{Binding IconUrl, Converter={StaticResource InverseStringToVisibilityConverter}, Mode=OneWay}" />
+                                        </Grid>
                                         <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" Margin="0,0,8,0">
                                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Text="{Binding Url}" FontSize="10" Opacity="0.6" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
-                                        <ComboBox Grid.Column="2" x:Name="CategoryCombo" SelectedIndex="3" Width="100" VerticalAlignment="Center">
-                                            <ComboBoxItem Content="Local" Tag="Local" />
-                                            <ComboBoxItem Content="Markets" Tag="Markets" />
-                                            <ComboBoxItem Content="World" Tag="World" />
-                                            <ComboBoxItem Content="Tech" Tag="Tech" />
+                                        <ComboBox Grid.Column="2" x:Name="CategoryCombo" SelectedIndex="3" Width="120" VerticalAlignment="Center">
+                                            <ComboBoxItem Tag="Local">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xEAE8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                    <TextBlock Text="Local" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="Markets">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xEB43;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                    <TextBlock Text="Markets" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="World">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xEB54;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                    <TextBlock Text="World" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="Tech">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xEF8E;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                    <TextBlock Text="Tech" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="Coding">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xEA77;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                    <TextBlock Text="Coding" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="Space">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xEC45;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                    <TextBlock Text="Space" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="Other">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xEA45;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                    <TextBlock Text="Other" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
                                         </ComboBox>
                                         <Button Grid.Column="3" Content="Subscribe" Click="SubscribeDiscoveredFeed_Click" Style="{ThemeResource AccentButtonStyle}" VerticalAlignment="Center"/>
                                     </Grid>
@@ -403,8 +449,14 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         
-                                        <!-- Left Icon -->
-                                        <Image Source="{Binding IconUrl}" Width="24" Height="24" VerticalAlignment="Center" Margin="4,0" />
+                                        <!-- Left Icon container -->
+                                        <Grid Width="24" Height="24" VerticalAlignment="Center" Margin="4,0">
+                                            <Image Source="{Binding IconUrl}" Width="24" Height="24" ImageFailed="FeedIcon_ImageFailed"
+                                                   Visibility="{Binding HasIcon, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
+                                            <FontIcon x:Name="FeedIconFallback" Glyph="&#xEB19;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" 
+                                                      Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                      Visibility="{Binding HasIcon, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}" />
+                                        </Grid>
                                         
                                         <!-- Middle: Display vs Edit view -->
                                         <Grid Grid.Column="1" VerticalAlignment="Center">
@@ -428,11 +480,49 @@
                                                 </Grid.ColumnDefinitions>
                                                 <TextBox Text="{Binding EditName, Mode=TwoWay}" PlaceholderText="Name" Header="Feed Name" HeaderTemplate="{StaticResource TinyHeaderTemplate}" FontSize="12"/>
                                                 <TextBox Grid.Column="1" Text="{Binding EditUrl, Mode=TwoWay}" PlaceholderText="URL" Header="Feed URL" HeaderTemplate="{StaticResource TinyHeaderTemplate}" FontSize="12"/>
-                                                <ComboBox Grid.Column="2" SelectedValue="{Binding EditCategory, Mode=TwoWay}" SelectedValuePath="Content" Header="Category" HeaderTemplate="{StaticResource TinyHeaderTemplate}" FontSize="12" Width="100">
-                                                    <ComboBoxItem Content="Local" />
-                                                    <ComboBoxItem Content="Markets" />
-                                                    <ComboBoxItem Content="World" />
-                                                    <ComboBoxItem Content="Tech" />
+                                                <ComboBox Grid.Column="2" SelectedValue="{Binding EditCategory, Mode=TwoWay}" SelectedValuePath="Tag" Header="Category" HeaderTemplate="{StaticResource TinyHeaderTemplate}" FontSize="12" Width="120">
+                                                    <ComboBoxItem Tag="Local">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <FontIcon Glyph="&#xEAE8;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                            <TextBlock Text="Local" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </ComboBoxItem>
+                                                    <ComboBoxItem Tag="Markets">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <FontIcon Glyph="&#xEB43;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                            <TextBlock Text="Markets" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </ComboBoxItem>
+                                                    <ComboBoxItem Tag="World">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <FontIcon Glyph="&#xEB54;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                            <TextBlock Text="World" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </ComboBoxItem>
+                                                    <ComboBoxItem Tag="Tech">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <FontIcon Glyph="&#xEF8E;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                            <TextBlock Text="Tech" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </ComboBoxItem>
+                                                    <ComboBoxItem Tag="Coding">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <FontIcon Glyph="&#xEA77;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                            <TextBlock Text="Coding" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </ComboBoxItem>
+                                                    <ComboBoxItem Tag="Space">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <FontIcon Glyph="&#xEC45;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                            <TextBlock Text="Space" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </ComboBoxItem>
+                                                    <ComboBoxItem Tag="Other">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <FontIcon Glyph="&#xEA45;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                                                            <TextBlock Text="Other" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </ComboBoxItem>
                                                 </ComboBox>
                                             </Grid>
                                         </Grid>

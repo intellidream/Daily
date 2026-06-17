@@ -186,15 +186,40 @@ public sealed partial class RssFeedWidgetControl : UserControl
                 DataContext = feed
             };
 
-            try
+            if (string.IsNullOrWhiteSpace(feed.IconUrl))
             {
-                var icon = new ImageIcon
-                {
-                    Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(feed.IconUrl))
+                menuItem.Icon = new FontIcon 
+                { 
+                    Glyph = "\uEB19", 
+                    FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"] 
                 };
-                menuItem.Icon = icon;
             }
-            catch { }
+            else
+            {
+                try
+                {
+                    var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(feed.IconUrl));
+                    var icon = new ImageIcon { Source = bitmap };
+                    menuItem.Icon = icon;
+
+                    bitmap.ImageFailed += (imgSender, imgArgs) =>
+                    {
+                        menuItem.Icon = new FontIcon 
+                        { 
+                            Glyph = "\uEB19", 
+                            FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"] 
+                        };
+                    };
+                }
+                catch
+                {
+                    menuItem.Icon = new FontIcon 
+                    { 
+                        Glyph = "\uEB19", 
+                        FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"] 
+                    };
+                }
+            }
 
             menuItem.Click += FeedMenuItem_Click;
             FeedMenuFlyout.Items.Add(menuItem);
@@ -263,19 +288,53 @@ public sealed partial class RssFeedWidgetControl : UserControl
         if (feed == null)
         {
             SelectedFeedText.Text = "Select Feed";
-            SelectedFeedIcon.Source = null;
+            if (SelectedFeedIconBorder != null) SelectedFeedIconBorder.Visibility = Visibility.Collapsed;
+            if (SelectedFeedFontIcon != null) SelectedFeedFontIcon.Visibility = Visibility.Collapsed;
             return;
         }
 
         SelectedFeedText.Text = feed.Name;
-        try
+        if (string.IsNullOrWhiteSpace(feed.IconUrl))
         {
-            SelectedFeedIcon.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(feed.IconUrl));
+            if (SelectedFeedIconBorder != null) SelectedFeedIconBorder.Visibility = Visibility.Collapsed;
+            if (SelectedFeedFontIcon != null)
+            {
+                SelectedFeedFontIcon.Glyph = "\uEB19";
+                SelectedFeedFontIcon.FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"];
+                SelectedFeedFontIcon.Visibility = Visibility.Visible;
+            }
         }
-        catch (Exception ex)
+        else
         {
-            System.Diagnostics.Debug.WriteLine($"[RssFeedWidgetControl] Error loading icon: {ex.Message}");
-            SelectedFeedIcon.Source = null;
+            if (SelectedFeedFontIcon != null) SelectedFeedFontIcon.Visibility = Visibility.Collapsed;
+            if (SelectedFeedIconBorder != null) SelectedFeedIconBorder.Visibility = Visibility.Visible;
+            try
+            {
+                SelectedFeedIcon.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(feed.IconUrl));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RssFeedWidgetControl] Error loading icon: {ex.Message}");
+                SelectedFeedIcon.Source = null;
+                if (SelectedFeedIconBorder != null) SelectedFeedIconBorder.Visibility = Visibility.Collapsed;
+                if (SelectedFeedFontIcon != null)
+                {
+                    SelectedFeedFontIcon.Glyph = "\uEB19";
+                    SelectedFeedFontIcon.FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"];
+                    SelectedFeedFontIcon.Visibility = Visibility.Visible;
+                }
+            }
+        }
+    }
+
+    private void SelectedFeedIcon_ImageFailed(object sender, ExceptionRoutedEventArgs e)
+    {
+        if (SelectedFeedIconBorder != null) SelectedFeedIconBorder.Visibility = Visibility.Collapsed;
+        if (SelectedFeedFontIcon != null)
+        {
+            SelectedFeedFontIcon.Glyph = "\uEB19";
+            SelectedFeedFontIcon.FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"];
+            SelectedFeedFontIcon.Visibility = Visibility.Visible;
         }
     }
 
