@@ -159,8 +159,10 @@
                                        Foreground="{ThemeResource AppFgMutedColorBrush}"
                                        VerticalAlignment="Center"/>
                             <TextBlock Text="•" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
+                            <FontIcon Glyph="&#xEB4D;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding Author}"
                                        FontSize="13"
+                                       FontWeight="Medium"
                                        Foreground="{ThemeResource AppFgMutedColorBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>

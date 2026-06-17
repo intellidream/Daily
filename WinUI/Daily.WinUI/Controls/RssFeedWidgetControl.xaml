@@ -218,5 +218,8 @@
                 </Grid>
             </PivotItem>
         </Pivot>
+
+        <!-- Hidden WebView2 for background Medium Reading List scraping -->
+        <WebView2 x:Name="BackgroundWebView" Visibility="Collapsed" Width="0" Height="0" />
     </Grid>
 </UserControl>

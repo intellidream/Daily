@@ -329,20 +329,33 @@ public sealed partial class RssFeedDetailPage : Page
         // Step 1: Try the fast HttpClient + SmartReader path
         RssItem? fullArticle = null;
         bool needsWebViewFallback = false;
-        try
+
+        bool isMedium = !string.IsNullOrEmpty(item.Link) && 
+                         (item.Link.Contains("medium.com") || 
+                          (item.PublicationName != null && item.PublicationName.Contains("Medium")));
+
+        if (isMedium)
         {
-            fullArticle = await _rssService.FetchFullArticleAsync(item.Link);
-            
-            // FetchFullArticleAsync never throws — it returns Title="Error fetching article" on failure.
-            // Detect that and trigger the WebView2 fallback instead of showing the error.
-            if (fullArticle.Title == "Error fetching article" || string.IsNullOrWhiteSpace(fullArticle.Content))
+            System.Diagnostics.Debug.WriteLine($"[Reader] Forcing WebView2 fallback for Medium link to preserve cookie authentication: {item.Link}");
+            needsWebViewFallback = true;
+        }
+        else
+        {
+            try
+            {
+                fullArticle = await _rssService.FetchFullArticleAsync(item.Link);
+                
+                // FetchFullArticleAsync never throws — it returns Title="Error fetching article" on failure.
+                // Detect that and trigger the WebView2 fallback instead of showing the error.
+                if (fullArticle.Title == "Error fetching article" || string.IsNullOrWhiteSpace(fullArticle.Content))
+                {
+                    needsWebViewFallback = true;
+                }
+            }
+            catch
             {
                 needsWebViewFallback = true;
             }
-        }
-        catch
-        {
-            needsWebViewFallback = true;
         }
 
         // Step 2: If the fast path succeeded, render it
@@ -1105,6 +1118,7 @@ public sealed partial class RssFeedDetailPage : Page
             ArticleSearchBox.Text = string.Empty;
         }
 
+        var previousFeed = _currentLocalFeed;
         UpdateSelectedFeedUI(feed);
         _currentLocalFeed = feed;
 
@@ -1118,7 +1132,7 @@ public sealed partial class RssFeedDetailPage : Page
         }
         else
         {
-            if (_rssService.CurrentFeed == null || feed.Url != _rssService.CurrentFeed.Url)
+            if (previousFeed == null || feed.Url != previousFeed.Url)
             {
                 LoadingPanel.Visibility = Visibility.Visible;
                 ArticlesListView.Visibility = Visibility.Collapsed;
@@ -1922,41 +1936,84 @@ public sealed partial class RssFeedDetailPage : Page
 (function() {
     var articles = [];
     var items = document.querySelectorAll('article');
+    
+    function getStoryUrl(item) {
+        var titleEl = item.querySelector('h2');
+        if (titleEl) {
+            var a = titleEl.querySelector('a') || titleEl.closest('a');
+            if (a && a.href) return a.href;
+        }
+        
+        var links = item.querySelectorAll('a');
+        for (var i = 0; i < links.length; i++) {
+            var href = links[i].href;
+            if (!href) continue;
+            
+            var urlObj;
+            try {
+                urlObj = new URL(href);
+            } catch(e) {
+                continue;
+            }
+            var pathname = urlObj.pathname;
+            
+            if (pathname.includes('/tag/') || pathname.includes('/tagged/') || pathname.includes('/me') || pathname === '/' || pathname === '') {
+                continue;
+            }
+            
+            var parts = pathname.split('/').filter(Boolean);
+            if (parts.length === 1 && parts[0].startsWith('@')) {
+                continue;
+            }
+            
+            if (pathname.includes('/p/') || parts.length >= 2 || (parts.length === 1 && !parts[0].startsWith('@'))) {
+                return href;
+            }
+        }
+        return '';
+    }
+
+    function getAuthorInfo(item) {
+        var links = item.querySelectorAll('a');
+        for (var i = 0; i < links.length; i++) {
+            var href = links[i].href;
+            if (!href) continue;
+            
+            try {
+                var urlObj = new URL(href);
+                if (urlObj.hostname === 'medium.com' && urlObj.pathname.startsWith('/@')) {
+                    var parts = urlObj.pathname.split('/').filter(Boolean);
+                    if (parts.length === 1) {
+                        return {
+                            url: href,
+                            name: (links[i].innerText || links[i].textContent || '').trim()
+                        };
+                    }
+                }
+                if (urlObj.hostname.endsWith('.medium.com') && urlObj.hostname.split('.').length === 3) {
+                    var sub = urlObj.hostname.split('.')[0];
+                    if (sub !== 'www' && sub !== 'api' && urlObj.pathname === '/') {
+                        return {
+                            url: href,
+                            name: (links[i].innerText || links[i].textContent || '').trim()
+                        };
+                    }
+                }
+            } catch(e) {}
+        }
+        return null;
+    }
+
     items.forEach(function(item) {
         try {
             var titleEl = item.querySelector('h2');
             var title = titleEl ? titleEl.innerText : '';
             
-            var links = item.querySelectorAll('a');
-            var storyUrl = '';
-            var authorName = '';
-            var authorUrl = '';
+            var storyUrl = getStoryUrl(item);
+            var authorInfo = getAuthorInfo(item);
             
-            for (var i = 0; i < links.length; i++) {
-                var href = links[i].href;
-                if (href && href.includes('/@') && !storyUrl && (href.includes('/story') || href.split('/').length > 4)) {
-                    var urlObj = new URL(href);
-                    var pathname = urlObj.pathname;
-                    if (pathname.split('/').length > 2) {
-                        storyUrl = href;
-                    }
-                }
-                if (href && href.includes('/@') && !authorName) {
-                    var urlObj = new URL(href);
-                    var pathname = urlObj.pathname;
-                    if (pathname.split('/').length === 2) {
-                        authorUrl = href;
-                        authorName = links[i].innerText || links[i].textContent || '';
-                    }
-                }
-            }
-
-            if (!storyUrl) {
-                var articleLink = item.querySelector('a[href*=""/@""]');
-                if (articleLink) {
-                    storyUrl = articleLink.href;
-                }
-            }
+            var authorName = authorInfo ? authorInfo.name : '';
+            var authorUrl = authorInfo ? authorInfo.url : '';
 
             if (!authorName) {
                 var authorEl = item.querySelector('p');
@@ -1965,11 +2022,26 @@ public sealed partial class RssFeedDetailPage : Page
                 }
             }
             
+            var description = '';
+            var h3El = item.querySelector('h3');
+            if (h3El) {
+                description = h3El.innerText;
+            } else {
+                var pElements = item.querySelectorAll('p');
+                pElements.forEach(function(p) {
+                    var txt = p.innerText || '';
+                    if (txt.length > 30 && !txt.includes('min read') && !txt.includes('member-only')) {
+                        description = txt;
+                    }
+                });
+            }
+            
             var img = item.querySelector('img');
             var imageUrl = img ? img.src : '';
             
             title = title.trim();
-            authorName = authorName.trim();
+            authorName = (authorName || '').trim();
+            description = (description || '').trim();
             
             if (title && storyUrl) {
                 articles.push({
@@ -1977,7 +2049,8 @@ public sealed partial class RssFeedDetailPage : Page
                     url: storyUrl,
                     author: authorName || 'Unknown Author',
                     authorUrl: authorUrl || '',
-                    imageUrl: imageUrl
+                    imageUrl: imageUrl,
+                    description: description
                 });
             }
         } catch(e) { }
@@ -1995,21 +2068,35 @@ public sealed partial class RssFeedDetailPage : Page
                     if (scrapedItems != null && scrapedItems.Count > 0)
                     {
                         _articles.Clear();
+                        var itemsList = new List<RssItem>();
                         foreach (var scraped in scrapedItems)
                         {
+                            string author = scraped.author;
+                            string pubName = "Medium";
+                            int inIdx = author.IndexOf(" in ");
+                            if (inIdx > 0)
+                            {
+                                pubName = author.Substring(inIdx + 4).Trim();
+                                author = author.Substring(0, inIdx).Trim();
+                            }
+
                             var rssItem = new RssItem
                             {
                                 Title = scraped.title,
                                 Link = scraped.url,
-                                Description = $"Author: {scraped.author}. Read this story on Medium.",
-                                Author = scraped.author,
+                                Description = !string.IsNullOrEmpty(scraped.description) 
+                                    ? scraped.description 
+                                    : $"Author: {author}. Read this story on Medium.",
+                                Author = author,
                                 PublishDate = DateTime.Now,
-                                ImageUrl = scraped.imageUrl,
-                                PublicationName = "Medium Reading List",
+                                ImageUrl = Daily.Services.RssFeedService.OptimizeMediumImageUrl(scraped.imageUrl),
+                                PublicationName = pubName,
                                 PublicationIconUrl = "https://www.google.com/s2/favicons?domain=medium.com&sz=64"
                             };
                             _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(rssItem));
+                            itemsList.Add(rssItem);
                         }
+                        _rssService.SetItemsAndNotify(itemsList);
                     }
                 }
             }
@@ -2043,5 +2130,6 @@ public sealed partial class RssFeedDetailPage : Page
         public string author { get; set; } = string.Empty;
         public string authorUrl { get; set; } = string.Empty;
         public string imageUrl { get; set; } = string.Empty;
+        public string description { get; set; } = string.Empty;
     }
 }

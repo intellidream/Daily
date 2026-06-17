@@ -534,16 +534,37 @@ namespace Daily.Services
                         author = authorEl?.Elements().FirstOrDefault(e => e.Name.LocalName == "name")?.Value ?? authorEl?.Value;
                     }
 
+                    // Format Author and Publication (split "Author in Publication" if present)
+                    string authorName = author ?? string.Empty;
+                    string pubName = feed.Name;
+                    int inIdx = authorName.IndexOf(" in ");
+                    if (inIdx > 0)
+                    {
+                        pubName = authorName.Substring(inIdx + 4).Trim();
+                        authorName = authorName.Substring(0, inIdx).Trim();
+                    }
+
+                    // Clean description of HTML tags and fall back to content snippet if needed
+                    string cleanDescription = StripHtmlTags(description ?? string.Empty);
+                    if (string.IsNullOrWhiteSpace(cleanDescription) && !string.IsNullOrEmpty(contentEncoded))
+                    {
+                        var contentClean = StripHtmlTags(contentEncoded);
+                        if (contentClean.Length > 250)
+                            cleanDescription = contentClean.Substring(0, 250) + "...";
+                        else
+                            cleanDescription = contentClean;
+                    }
+
                     return new RssItem
                     {
                         Title = title,
                         Link = link,
                         PublishDate = DateTime.TryParse(pubDateStr, out var date) ? date : DateTime.Now,
-                        ImageUrl = imageUrl ?? channelImage ?? feed.IconUrl,
-                        Description = description,
+                        ImageUrl = OptimizeMediumImageUrl(imageUrl ?? channelImage ?? feed.IconUrl),
+                        Description = cleanDescription,
                         Content = contentEncoded,
-                        Author = author,
-                        PublicationName = feed.Name,
+                        Author = authorName,
+                        PublicationName = pubName,
                         PublicationIconUrl = feed.IconUrl
                     };
                 }).ToList();
@@ -755,10 +776,56 @@ namespace Daily.Services
                 Console.WriteLine($"Error fetching article: {ex.Message}");
             }
 
-            // Fallback: Return empty item or throw, but here we'll return null-like
-            // to indicate fetching failed, caller should handle it.
             // Actually, let's return a basic item
             return new RssItem { Link = url, Title = "Error fetching article" };
+        }
+
+        public void SetItemsAndNotify(List<RssItem> items)
+        {
+            Items.Clear();
+            Items.AddRange(items);
+            OnItemsUpdated?.Invoke();
+        }
+
+        public static string StripHtmlTags(string html)
+        {
+            if (string.IsNullOrEmpty(html)) return string.Empty;
+            var clean = html;
+            
+            // Remove style and script blocks
+            clean = Regex.Replace(clean, @"<style[^>]*>[\s\S]*?</style>", string.Empty, RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"<script[^>]*>[\s\S]*?</script>", string.Empty, RegexOptions.IgnoreCase);
+            
+            // Replace common block tags with spaces/newlines
+            clean = Regex.Replace(clean, @"<br\s*/?>", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"</p>", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"</div>", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"</td>", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"</th>", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"</tr>", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"</li>", " ", RegexOptions.IgnoreCase);
+            
+            // Remove all other HTML tags
+            clean = Regex.Replace(clean, @"<[^>]*>", string.Empty);
+            
+            // Decode HTML entities
+            clean = System.Net.WebUtility.HtmlDecode(clean);
+            
+            // Clean up multiple spaces/newlines
+            clean = Regex.Replace(clean, @"\s+", " ");
+            return clean.Trim();
+        }
+
+        public static string OptimizeMediumImageUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return url;
+            if (url.Contains("miro.medium.com"))
+            {
+                var pattern = @"v2/resize:[^/]+(/format:[^/]+)?";
+                var result = Regex.Replace(url, pattern, "v2/resize:fit:800");
+                return result;
+            }
+            return url;
         }
     }
 }

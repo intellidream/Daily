@@ -28,5 +28,6 @@ namespace Daily.Services
         Task ReorderSubscriptionsAsync(List<LocalRssSubscription> subscriptions);
         Task<List<FeedSearchResult>> DiscoverFeedsAsync(string query);
         Task AddFeedAsync(string url, string name, string category, string userId);
+        void SetItemsAndNotify(List<RssItem> items);
     }
 }
