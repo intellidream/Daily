@@ -82,7 +82,11 @@ public sealed partial class RssFeedDetailPage : Page
         PreFetchAllFeedsInBackground();
         
         // Put current feed items in cache if already loaded
-        if (_rssService.CurrentFeed != null && _rssService.Items != null && _rssService.Items.Count > 0)
+        if (_rssService.CurrentFeed != null && 
+            _rssService.CurrentFeed.Url != "all_news" && 
+            _rssService.CurrentFeed.Url != "medium_reading_list" &&
+            _rssService.Items != null && 
+            _rssService.Items.Count > 0)
         {
             lock (_allFeedsCache)
             {
@@ -159,9 +163,17 @@ public sealed partial class RssFeedDetailPage : Page
         {
             if (_rssService.CurrentFeed != null && _rssService.Items != null)
             {
-                lock (_allFeedsCache)
+                // ONLY cache under the feed URL if we are actually viewing that specific feed in the UI
+                // and it's not a custom/special feed like All News or Reading List!
+                if (_currentLocalFeed != null && 
+                    _currentLocalFeed.Url == _rssService.CurrentFeed.Url &&
+                    _currentLocalFeed.Url != "all_news" && 
+                    _currentLocalFeed.Url != "medium_reading_list")
                 {
-                    _allFeedsCache[_rssService.CurrentFeed.Url] = _rssService.Items;
+                    lock (_allFeedsCache)
+                    {
+                        _allFeedsCache[_rssService.CurrentFeed.Url] = _rssService.Items;
+                    }
                 }
             }
             UpdateArticles();
@@ -170,7 +182,7 @@ public sealed partial class RssFeedDetailPage : Page
 
     private void UpdateArticles()
     {
-        if (_currentLocalFeed != null && _currentLocalFeed.Url == "all_news")
+        if (_currentLocalFeed != null && (_currentLocalFeed.Url == "all_news" || _currentLocalFeed.Url == "medium_reading_list"))
         {
             return;
         }
@@ -1296,13 +1308,10 @@ public sealed partial class RssFeedDetailPage : Page
     private static readonly Dictionary<string, List<RssItem>> _allFeedsCache = new();
     private static bool _isPreFetchingAllFeeds = false;
 
-    private async void PreFetchAllFeedsInBackground()
+    private void PreFetchAllFeedsInBackground()
     {
         if (_isPreFetchingAllFeeds || _rssService.Feeds == null) return;
         _isPreFetchingAllFeeds = true;
-
-        var httpClient = new System.Net.Http.HttpClient();
-        httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
         foreach (var feed in _rssService.Feeds)
         {
@@ -1310,49 +1319,17 @@ public sealed partial class RssFeedDetailPage : Page
             if (_rssService.CurrentFeed != null && feed.Url == _rssService.CurrentFeed.Url)
                 continue;
 
-            if (_allFeedsCache.ContainsKey(feed.Url))
-                continue;
+            lock (_allFeedsCache)
+            {
+                if (_allFeedsCache.ContainsKey(feed.Url))
+                    continue;
+            }
 
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    var xml = await httpClient.GetStringAsync(feed.Url);
-                    var doc = System.Xml.Linq.XDocument.Parse(xml);
-                    System.Xml.Linq.XNamespace dc = "http://purl.org/dc/elements/1.1/";
-                    
-                    var items = doc.Descendants().Where(e => e.Name.LocalName == "item" || e.Name.LocalName == "entry").Select(item =>
-                    {
-                        var title = item.Elements().FirstOrDefault(e => e.Name.LocalName == "title")?.Value ?? "No Title";
-                        var linkEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "link");
-                        var link = linkEl?.Attribute("href")?.Value;
-                        if (string.IsNullOrEmpty(link)) link = linkEl?.Value ?? "";
-
-                        var description = item.Elements().FirstOrDefault(e => e.Name.LocalName == "description" || e.Name.LocalName == "summary")?.Value;
-                        var pubDateStr = item.Elements().FirstOrDefault(e => e.Name.LocalName == "pubDate" || e.Name.LocalName == "published" || e.Name.LocalName == "updated" || e.Name == dc + "date")?.Value;
-                        
-                        DateTime pubDate = DateTime.Now;
-                        if (DateTime.TryParse(pubDateStr, out var parsedDate)) pubDate = parsedDate;
-
-                        string? imageUrl = null;
-                        var enclosure = item.Elements().FirstOrDefault(e => e.Name.LocalName == "enclosure" || (e.Name.LocalName == "link" && e.Attribute("rel")?.Value == "enclosure"));
-                        if (enclosure != null)
-                        {
-                            imageUrl = enclosure.Attribute("url")?.Value ?? enclosure.Attribute("href")?.Value;
-                        }
-
-                        return new RssItem
-                        {
-                            Title = title,
-                            Link = link,
-                            PublishDate = pubDate,
-                            ImageUrl = imageUrl,
-                            Description = description,
-                            PublicationName = feed.Name,
-                            PublicationIconUrl = feed.IconUrl
-                        };
-                    }).ToList();
-
+                    var items = await _rssService.FetchFeedItemsAsync(feed);
                     lock (_allFeedsCache)
                     {
                         _allFeedsCache[feed.Url] = items;
@@ -1744,7 +1721,8 @@ public sealed partial class RssFeedDetailPage : Page
                 }
                 if (items != null)
                 {
-                    displayItems.AddRange(items.Take(2));
+                    var sorted = items.OrderByDescending(i => i.PublishDate).ToList();
+                    displayItems.AddRange(sorted.Take(2));
                 }
             }
 
@@ -1800,7 +1778,8 @@ public sealed partial class RssFeedDetailPage : Page
                         }
                         if (items != null)
                         {
-                            displayItems.AddRange(items.Take(2));
+                            var sorted = items.OrderByDescending(i => i.PublishDate).ToList();
+                            displayItems.AddRange(sorted.Take(2));
                         }
                     }
                 }
