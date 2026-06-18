@@ -227,4 +227,11 @@ When retrieving recommendation feed items concurrently in the briefing engine or
 - **URL-Based Deduplication & Merging**: Refactored the remote merge logic to use normalized URLs (case-insensitive, trailing slashes removed) instead of matching purely by ID. This ensures:
   - Old default feeds in Supabase (which have legacy random GUIDs) do not get duplicated in the local SQLite database as custom feeds.
   - Only genuine extra custom feeds created by the user on other devices are pulled down and merged into the local database.
-- **Guest Mode Resilience**: Maintained local-only seeding of default feeds when the user is not authenticated or running in guest mode (`local_user`).
+- **Feed Pull Synchronization Enhancements**: 
+  - **Full Subscription Sync**: Completely bypassed the `lastPull`/`updated_at` filter in `PullRssSubscriptionsAsync` inside [SyncService.cs](file:///c:/Users/mihai/source/repos/Daily/Services/SyncService.cs) so it pulls the entire set of subscriptions for the user on every sync. This guarantees that custom feeds added or edited on other machines are always pulled down, even if they have older updated timestamps or are not part of the local seeded set.
+  - **5-Minute Skew Buffer**: Added a 5-minute safety window subtraction from the client's `lastPull` timestamp when querying `updated_at` on other sync tables (Preferences, Saved Articles, Accounts, Transactions, etc.) to resolve race conditions and transaction commit delays near sync run boundaries.
+  - **LINQ Guid.Parse Expression Visitor Fix**: Extracted the evaluation of `Guid.Parse(userId)` to a local variable `userGuid` outside the Postgrest `.Where()` LINQ queries in `PullRssSubscriptionsAsync`, `PullCalendarAccountsAsync`, and `PullAccountsInternalAsync`. Previously, inline evaluation threw an `ArgumentException` inside the Postgrest Linq visitor, silently causing these sync pulls to fail and return 0.
+  - **OnRssSubscriptionsPulled Event & Reactive UI Reloading**: Introduced an `OnRssSubscriptionsPulled` event on `ISyncService` which is raised when subscription pulls complete. `RssFeedService` subscribes to this event to reload the custom feeds in memory and update the UI in real time.
+
+
+

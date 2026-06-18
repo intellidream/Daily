@@ -36,6 +36,15 @@ namespace Daily.Services
             _syncService = syncService;
             
             _ = InitializeCustomFeedsAsync();
+
+            if (_syncService != null)
+            {
+                _syncService.OnRssSubscriptionsPulled += () =>
+                {
+                    Console.WriteLine("[RssFeedService] SyncService pulled RSS Subscriptions. Reloading feeds...");
+                    _ = InitializeCustomFeedsAsync();
+                };
+            }
             
             var handler = new HttpClientHandler
             {

@@ -195,14 +195,14 @@ namespace Daily.Services
         {
             if (_syncTimer == null)
             {
-                // Sync every 15 minutes (900000 ms)
+                // Sync every 15 minutes, starting after 1 second (1000 ms) to load fresh cloud data almost immediately
                 _syncTimer = new System.Threading.Timer(_ =>
                 {
                     if (_supabase.Auth.CurrentSession != null)
                     {
                         _ = SafeBackgroundSyncAsync();
                     }
-                }, null, 10000, 900000);
+                }, null, 1000, 900000);
                 Console.WriteLine("[SyncService] Background Sync Started.");
             }
         }
@@ -417,6 +417,7 @@ namespace Daily.Services
                 int pulled = await PullRssSubscriptionsAsync(userId, lastPull);
                 totalPulled += pulled;
                 SetPreference(key, DateTime.UtcNow.ToString("O"));
+                OnRssSubscriptionsPulled?.Invoke();
             }
 
             if ((scope & SyncScope.CalendarAccounts) != 0)
@@ -551,6 +552,7 @@ namespace Daily.Services
         public string DebugLog { get; private set; } = "";
         public event Action OnDebugLogUpdated;
         public event Action OnPreferencesPulled;
+        public event Action OnRssSubscriptionsPulled;
         public event Action OnSavedArticlesPulled;
 
         private async Task PushRssSubscriptionsAsync(string userId)
@@ -586,11 +588,10 @@ namespace Daily.Services
         {
             try 
             {
-                var query = _supabase.From<RssSubscription>().Where(x => x.UserId == Guid.Parse(userId));
-                if (lastPull > DateTime.MinValue)
-                {
-                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
-                }
+                // Always pull all subscriptions for the user from the cloud to ensure all machines are fully synchronized
+                // with the complete set of feeds, bypassing any timestamp or delta sync gaps.
+                var userGuid = Guid.Parse(userId);
+                var query = _supabase.From<RssSubscription>().Where(x => x.UserId == userGuid);
                 var response = await query.Get();
                 int count = response.Models.Count;
                 if (count > 0)
@@ -649,10 +650,12 @@ namespace Daily.Services
             try 
             {
                 Console.WriteLine($"[SyncService] Pulling Calendar accounts for User: {userId}...");
-                var query = _supabase.From<CalendarAccount>().Where(x => x.UserId == Guid.Parse(userId));
+                var userGuid = Guid.Parse(userId);
+                var query = _supabase.From<CalendarAccount>().Where(x => x.UserId == userGuid);
                 if (lastPull > DateTime.MinValue)
                 {
-                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                    var queryDate = lastPull.AddMinutes(-5);
+                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
                 }
                 var response = await query.Get();
                 int count = response.Models.Count;
@@ -821,7 +824,11 @@ namespace Daily.Services
                 var query = _supabase.From<UserPreferences>()
                     .Where(x => x.Id == userId); // Valid for string ID
                     
-                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                if (lastPull > DateTime.MinValue)
+                {
+                    var queryDate = lastPull.AddMinutes(-5);
+                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                }
 
                 var response = await query.Get();
 
@@ -1033,7 +1040,11 @@ namespace Daily.Services
                       var query = _supabase.From<DailySummary>()
                          .Where(x => x.UserId == userGuid);
                       
-                      if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                      if (lastPull > DateTime.MinValue)
+                      {
+                          var queryDate = lastPull.AddMinutes(-5);
+                          query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                      }
 
                       var response = await query.Range(rangeStart, rangeEnd).Get();
 
@@ -1110,8 +1121,13 @@ namespace Daily.Services
         {
             try 
             {
-                var query = _supabase.From<Account>().Where(a => a.UserId == Guid.Parse(userId));
-                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                var userGuid = Guid.Parse(userId);
+                var query = _supabase.From<Account>().Where(a => a.UserId == userGuid);
+                if (lastPull > DateTime.MinValue)
+                {
+                    var queryDate = lastPull.AddMinutes(-5);
+                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                }
                 
                 var response = await query.Get();
                 int count = response.Models.Count;
@@ -1186,7 +1202,11 @@ namespace Daily.Services
             {
                 // Range logic for transactions if many?
                 var query = _supabase.From<Transaction>().Order("date", Supabase.Postgrest.Constants.Ordering.Descending);
-                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                if (lastPull > DateTime.MinValue)
+                {
+                    var queryDate = lastPull.AddMinutes(-5);
+                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                }
 
                 var response = await query.Limit(1000).Get();
                 int count = response.Models.Count;
@@ -1248,7 +1268,11 @@ namespace Daily.Services
             try 
             {
                 var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<Holding>)_supabase.From<Holding>(); // RLS handles userid via account join
-                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                if (lastPull > DateTime.MinValue)
+                {
+                    var queryDate = lastPull.AddMinutes(-5);
+                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                }
 
                 var response = await query.Limit(1000).Get();
                 int count = response.Models.Count;
@@ -1378,7 +1402,11 @@ namespace Daily.Services
                 Console.WriteLine($"[SyncService] Pulling Saved Articles for User: {userId}...");
 
                 var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<SavedArticle>)_supabase.From<SavedArticle>();
-                if (lastPull > DateTime.MinValue) query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, lastPull.ToString("O"));
+                if (lastPull > DateTime.MinValue)
+                {
+                    var queryDate = lastPull.AddMinutes(-5);
+                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                }
                 
                 var response = await query.Get();
 
