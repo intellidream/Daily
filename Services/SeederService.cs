@@ -1,6 +1,7 @@
 using Daily.Models;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Daily.Services
@@ -114,13 +115,19 @@ namespace Daily.Services
         }
         public async Task SeedRssFeedsAsync(string userId)
         {
-            var existingCount = await _databaseService.Connection.Table<LocalRssSubscription>()
-                                        .Where(r => r.UserId == userId && r.IsDeleted == false)
-                                        .CountAsync();
-            
-            if (existingCount > 0)
+            if (string.IsNullOrEmpty(userId) || userId == "local_user")
             {
-                return; // Already seeded or user has their own feeds
+                var localCount = await _databaseService.Connection.Table<LocalRssSubscription>()
+                                            .Where(r => r.UserId == userId && r.IsDeleted == false)
+                                            .CountAsync();
+                
+                if (localCount == 0)
+                {
+                    Console.WriteLine("[Seeder] Guest user. Seeding default RSS feeds locally...");
+                    var defaultFeeds = GetDefaultFeeds(userId);
+                    await _databaseService.Connection.InsertAllAsync(defaultFeeds);
+                }
+                return;
             }
 
             try 
@@ -131,50 +138,152 @@ namespace Daily.Services
                     try { await auth.RefreshSession(); } catch { }
                 }
 
-                // Check if user already has feeds in Supabase (logged into a new device)
-                var remoteFeeds = await _supabase.From<RssSubscription>().Select("id").Limit(1).Get();
-                if (remoteFeeds.Models.Count > 0)
+                // Check if user already has feeds in Supabase
+                var remoteResponse = await _supabase.From<RssSubscription>()
+                                            .Where(x => x.UserId == Guid.Parse(userId))
+                                            .Get();
+                var remoteFeeds = remoteResponse.Models;
+
+                if (remoteFeeds.Count == 0)
                 {
-                    Console.WriteLine("[Seeder] User has remote RSS feeds. Skipping default seed.");
-                    return; 
+                    Console.WriteLine("[Seeder] No RSS subscriptions in Supabase. Seeding defaults to Supabase and local...");
+                    var defaultFeedsLocal = GetDefaultFeeds(userId);
+                    
+                    // Map to domain and upsert to Supabase
+                    var remoteToInsert = defaultFeedsLocal.Select(f => f.ToDomain()).ToList();
+                    await _supabase.From<RssSubscription>().Upsert(remoteToInsert);
+
+                    // Mark as synced and write to local SQLite
+                    foreach (var localFeed in defaultFeedsLocal)
+                    {
+                        localFeed.SyncedAt = DateTime.UtcNow;
+                    }
+                    await _databaseService.Connection.InsertAllAsync(defaultFeedsLocal);
+                    Console.WriteLine("[Seeder] Successfully seeded defaults to Supabase and local SQLite.");
+                }
+                else
+                {
+                    Console.WriteLine($"[Seeder] Found {remoteFeeds.Count} RSS subscriptions in Supabase. Merging missing ones locally...");
+                    var localFeeds = await _databaseService.Connection.Table<LocalRssSubscription>()
+                                            .Where(x => x.UserId == userId)
+                                            .ToListAsync();
+
+                    var defaultFeeds = GetDefaultFeeds(userId);
+                    var defaultUrls = defaultFeeds.Select(f => NormalizeUrl(f.Url)).ToHashSet();
+                    var localUrls = localFeeds.Select(l => NormalizeUrl(l.Url)).ToHashSet();
+                    var localFeedsToInsert = new List<LocalRssSubscription>();
+
+                    foreach (var remoteFeed in remoteFeeds)
+                    {
+                        var remoteUrlNorm = NormalizeUrl(remoteFeed.Url);
+                        
+                        // 1. If it's a default feed URL, skip it (as we already have the local default version loaded)
+                        if (defaultUrls.Contains(remoteUrlNorm))
+                        {
+                            continue;
+                        }
+
+                        // 2. If the URL is already present locally, skip it to avoid duplicates
+                        if (localUrls.Contains(remoteUrlNorm))
+                        {
+                            continue;
+                        }
+
+                        // 3. Otherwise, it is a custom extra feed from Supabase. Bring it local!
+                        var localModel = remoteFeed.ToLocal();
+                        localModel.SyncedAt = DateTime.UtcNow; // Already on Supabase
+                        localFeedsToInsert.Add(localModel);
+                        Console.WriteLine($"[Seeder] Bringing extra feed from Supabase to local: {remoteFeed.Name} (URL: {remoteFeed.Url})");
+                    }
+
+                    if (localFeedsToInsert.Any())
+                    {
+                        await _databaseService.Connection.InsertAllAsync(localFeedsToInsert);
+                        Console.WriteLine($"[Seeder] Successfully inserted {localFeedsToInsert.Count} extra feeds locally.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("[Seeder] Local SQLite is already fully synchronized with Supabase subscriptions.");
+                    }
                 }
             }
-            catch { /* Ignore network errors, fall back to seeding if empty */ }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Seeder] SeedRssFeedsAsync Error: {ex.Message}");
+                // Fallback: If network/Supabase fails, but we don't have local feeds, we seed them locally
+                var localCount = await _databaseService.Connection.Table<LocalRssSubscription>()
+                                            .Where(r => r.UserId == userId && r.IsDeleted == false)
+                                            .CountAsync();
+                if (localCount == 0)
+                {
+                    Console.WriteLine("[Seeder] Supabase offline and local empty. Seeding defaults locally as fallback...");
+                    var defaultFeeds = GetDefaultFeeds(userId);
+                    await _databaseService.Connection.InsertAllAsync(defaultFeeds);
+                }
+            }
+        }
 
-            Console.WriteLine("[Seeder] Seeding default RSS Feeds...");
-            
-            var defaultFeeds = new List<LocalRssSubscription>
+        private static string NormalizeUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+            var normalized = url.Trim().ToLowerInvariant();
+            if (normalized.EndsWith("/"))
+            {
+                normalized = normalized.TrimEnd('/');
+            }
+            return normalized;
+        }
+
+        private List<LocalRssSubscription> GetDefaultFeeds(string userId)
+        {
+            var defaultFeedsData = new List<(string Name, string Url, string Category)>
             {
                 // 🇷🇴 Local
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Republica", Url = "https://republica.ro/rss", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=republica.ro&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Digi24", Url = "https://www.digi24.ro/rss", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=digi24.ro&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Ziarul Financiar", Url = "https://www.zf.ro/rss/", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=zf.ro&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "HotNews", Url = "https://www.hotnews.ro/rss", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=hotnews.ro&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Biziday", Url = "https://www.biziday.ro/feed/", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=biziday.ro&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Economica.net", Url = "https://www.economica.net/rss", Category = "Local", IconUrl = "https://www.google.com/s2/favicons?domain=economica.net&sz=64", CreatedAt = DateTime.UtcNow },
+                ("Republica", "https://republica.ro/rss", "Local"),
+                ("Digi24", "https://www.digi24.ro/rss", "Local"),
+                ("Ziarul Financiar", "https://www.zf.ro/rss/", "Local"),
+                ("HotNews", "https://www.hotnews.ro/rss", "Local"),
+                ("Biziday", "https://www.biziday.ro/feed/", "Local"),
+                ("Economica.net", "https://www.economica.net/rss", "Local"),
 
                 // 📈 Markets
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "CNBC", Url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", Category = "Markets", IconUrl = "https://www.google.com/s2/favicons?domain=cnbc.com&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "The Economist", Url = "https://www.economist.com/finance-and-economics/rss.xml", Category = "Markets", IconUrl = "https://www.google.com/s2/favicons?domain=economist.com&sz=64", CreatedAt = DateTime.UtcNow },
+                ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html", "Markets"),
+                ("The Economist", "https://www.economist.com/finance-and-economics/rss.xml", "Markets"),
 
                 // 🌍 World
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "BBC News", Url = "https://feeds.bbci.co.uk/news/rss.xml", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=bbc.com&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "NPR", Url = "https://feeds.npr.org/1001/rss.xml", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=npr.org&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Politico Europe", Url = "https://www.politico.eu/feed/", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=politico.eu&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Deutsche Welle", Url = "https://rss.dw.com/rdf/rss-en-all", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=dw.com&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Google News", Url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", Category = "World", IconUrl = "https://www.google.com/s2/favicons?domain=news.google.com&sz=64", CreatedAt = DateTime.UtcNow },
+                ("BBC News", "https://feeds.bbci.co.uk/news/rss.xml", "World"),
+                ("NPR", "https://feeds.npr.org/1001/rss.xml", "World"),
+                ("Politico Europe", "https://www.politico.eu/feed/", "World"),
+                ("Deutsche Welle", "https://rss.dw.com/rdf/rss-en-all", "World"),
+                ("Google News", "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", "World"),
 
                 // 💡 Tech
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "TechCrunch", Url = "https://techcrunch.com/feed/", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=techcrunch.com&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "The Verge", Url = "https://www.theverge.com/rss/index.xml", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=theverge.com&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Ars Technica", Url = "https://feeds.arstechnica.com/arstechnica/index", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=arstechnica.com&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Zona IT", Url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=zonait.ro&sz=64", CreatedAt = DateTime.UtcNow },
-                new LocalRssSubscription { Id = Guid.NewGuid().ToString(), UserId = userId, Name = "Windows Central", Url = "https://www.windowscentral.com/feeds.xml", Category = "Tech", IconUrl = "https://www.google.com/s2/favicons?domain=windowscentral.com&sz=64", CreatedAt = DateTime.UtcNow }
+                ("TechCrunch", "https://techcrunch.com/feed/", "Tech"),
+                ("The Verge", "https://www.theverge.com/rss/index.xml", "Tech"),
+                ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index", "Tech"),
+                ("Zona IT", "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", "Tech"),
+                ("Windows Central", "https://www.windowscentral.com/feeds.xml", "Tech")
             };
 
-            await _databaseService.Connection.InsertAllAsync(defaultFeeds);
-            await _syncService.SyncAsync(SyncScope.RssSubscriptions); // Push to Supabase immediately
-            Console.WriteLine("[Seeder] Successfully seeded default RSS Feeds.");
+            var list = new List<LocalRssSubscription>();
+            for (int i = 0; i < defaultFeedsData.Count; i++)
+            {
+                var f = defaultFeedsData[i];
+                var id = GenerateGuid(f.Url).ToString(); // Deterministic URL-based ID
+                list.Add(new LocalRssSubscription
+                {
+                    Id = id,
+                    UserId = userId,
+                    Name = f.Name,
+                    Url = f.Url,
+                    Category = f.Category,
+                    IconUrl = $"https://www.google.com/s2/favicons?domain={new Uri(f.Url).Host}&sz=64",
+                    CreatedAt = DateTime.UtcNow,
+                    DisplayOrder = i
+                });
+            }
+            return list;
         }
     }
 }
+
