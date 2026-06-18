@@ -595,6 +595,15 @@ namespace Daily.Services
                     var date = DateTime.TryParse(dateStr, out var d) ? d : DateTime.Now;
                     var content = post["content"]?["rendered"]?.ToString();
                     var excerpt = post["excerpt"]?["rendered"]?.ToString();
+                    string cleanDescription = StripHtmlTags(excerpt ?? string.Empty);
+                    if (string.IsNullOrWhiteSpace(cleanDescription) && !string.IsNullOrEmpty(content))
+                    {
+                        var contentClean = StripHtmlTags(content);
+                        if (contentClean.Length > 250)
+                            cleanDescription = contentClean.Substring(0, 250) + "...";
+                        else
+                            cleanDescription = contentClean;
+                    }
 
                     string? author = null;
                     var embedded = post["_embedded"];
@@ -625,7 +634,7 @@ namespace Daily.Services
                          Link = link,
                          PublishDate = date,
                          ImageUrl = imageUrl ?? feed.IconUrl,
-                         Description = excerpt,
+                         Description = cleanDescription,
                          Content = content,
                          Author = author,
                          PublicationName = feed.Name,
