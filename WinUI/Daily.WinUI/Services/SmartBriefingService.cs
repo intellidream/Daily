@@ -837,22 +837,19 @@ namespace Daily_WinUI.Services
                     }
                 }
 
-                foreach (var sel in selected)
-                {
-                    data.NewsRecommendations.Add(new NewsRecommendationData
-                    {
-                        Title = sel.Item.Title,
-                        Source = sel.Item.PublicationName ?? "RSS Feed",
-                        Reason = sel.Reason,
-                        RssItem = sel.Item
-                    });
-                }
-
-                // Populate TopNewsHeadlines with exactly the 5 newest headlines using Round-Robin selection
+                // Populate TopNewsHeadlines and NewsRecommendations with exactly the 5 newest headlines using Round-Robin selection
                 var roundRobinHeadlines = await ExtractRoundRobinHeadlinesAsync();
+                data.NewsRecommendations.Clear();
                 foreach (var h in roundRobinHeadlines)
                 {
                     data.TopNewsHeadlines.Add($"- {h.Title} (Source: {h.PublicationName ?? "Feed"})");
+                    data.NewsRecommendations.Add(new NewsRecommendationData
+                    {
+                        Title = h.Title,
+                        Source = h.PublicationName ?? "RSS Feed",
+                        Reason = $"Top headline from {h.PublicationName ?? "Feed"}",
+                        RssItem = h
+                    });
                 }
             }
 
@@ -1041,12 +1038,12 @@ namespace Daily_WinUI.Services
                                                "Rules:\n" +
                                                "- You MUST explicitly reference steps as \"steps\", sleep as \"hours of sleep\", and water as \"ml of water\". Never output numbers without their units.\n" +
                                                "- Assess the step count realistically: under 5,000 steps is low, while 10,000 steps is the target. If steps are low (e.g. 2,000 steps), do not congratulate the user; instead, gently encourage them to walk more.\n" +
-                                               "- Assess sleep duration realistically: under 7 hours of sleep is low.\n" +
+                                               "- Assess sleep duration realistically: 7 to 9 hours is optimal and healthy. If the user slept 7 hours or more (e.g. 8.3 hours), praise their sleep as sufficient and good; do NOT claim it is insufficient, low, or over-target.\n" +
                                                "- Treat smoking cigarettes as a negative habit to reduce or eliminate. If the user smoked, do not congratulate them; encourage reduction or staying below their daily limit.";
                         
                         string userPrompt = $"Here are the user's health metrics for today:\n" +
                                             $"- Steps taken: {metrics.HealthSteps} steps (Target: 10,000 steps)\n" +
-                                            $"- Sleep last night: {metrics.HealthSleepHours:F1} hours (Target: 7-8 hours)\n" +
+                                            $"- Sleep last night: {metrics.HealthSleepHours:F1} hours (Target: 7-9 hours)\n" +
                                             $"- Water intake: {metrics.HabitsWaterProgress:F0} ml (Goal: {metrics.HabitsWaterGoal:F0} ml)\n" +
                                             $"- Cigarettes smoked: {metrics.HabitsSmokesProgress:F0} cigarettes (Limit: {metrics.HabitsSmokesGoal:F0} cigarettes)";
 

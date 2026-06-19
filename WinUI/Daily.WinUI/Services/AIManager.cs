@@ -27,6 +27,9 @@ namespace Daily_WinUI.Services
         private string _activeEngineName = "Uninitialized";
         private IntPtr _cpuBackendHandle = IntPtr.Zero;
 
+        private bool _isInitialized;
+        private readonly System.Threading.SemaphoreSlim _initSemaphore = new(1, 1);
+
         public ISmartBriefingEngine? ActiveEngine => _activeEngine;
         public string ActiveEngineName => _activeEngineName;
         public bool HasDedicatedGpu => DetectDedicatedGpu(out _);
@@ -45,71 +48,99 @@ namespace Daily_WinUI.Services
 
         public async Task InitializeAsync()
         {
-            var settings = SettingsService.Load();
-            string selectedAcc = settings.SelectedAiAccelerator ?? "Auto";
-            Console.WriteLine($"[AIManager] Initializing AI Manager. Selected Accelerator: {selectedAcc}");
-
-            // Route 1: Explicit CPU Selection
-            if (selectedAcc.Equals("CPU", StringComparison.OrdinalIgnoreCase))
+            if (_isInitialized)
             {
-                await InitializeCpuEngineAsync();
                 return;
             }
 
-            // Route 2: Explicit Qualcomm NPU Selection
-            if (selectedAcc.Equals("NPU", StringComparison.OrdinalIgnoreCase))
+            await _initSemaphore.WaitAsync();
+            try
             {
-                if (await TryInitializeNpuAsync())
-                {
-                    return;
-                }
-                Console.WriteLine("[AIManager] NPU not supported/failed. Falling back to CPU.");
-                await InitializeCpuEngineAsync();
-                return;
-            }
-
-            // Route 3: Explicit GPU Selection
-            if (selectedAcc.Equals("GPU", StringComparison.OrdinalIgnoreCase))
-            {
-                if (await TryInitializeGpuAsync(forceGpuCheck: true))
-                {
-                    return;
-                }
-                Console.WriteLine("[AIManager] GPU initialization failed. Falling back to CPU.");
-                await InitializeCpuEngineAsync();
-                return;
-            }
-
-            // Route 4: Intel/AMD NPU Selection (Not supported locally, fallback to CPU)
-            if (selectedAcc.Equals("NPU_IntelAmd", StringComparison.OrdinalIgnoreCase))
-            {
-                Console.WriteLine("[AIManager] Intel/AMD NPU is not supported directly yet. Falling back to CPU...");
-                await InitializeCpuEngineAsync();
-                return;
-            }
-
-            // Route 5: Auto selection (best available)
-            if (selectedAcc.Equals("Auto", StringComparison.OrdinalIgnoreCase))
-            {
-                // 1. Try Qualcomm NPU first
-                if (await TryInitializeNpuAsync())
+                if (_isInitialized)
                 {
                     return;
                 }
 
-                // 2. Try GPU
-                if (await TryInitializeGpuAsync(forceGpuCheck: true))
+                var settings = SettingsService.Load();
+                string selectedAcc = settings.SelectedAiAccelerator ?? "Auto";
+                Console.WriteLine($"[AIManager] Initializing AI Manager. Selected Accelerator: {selectedAcc}");
+
+                // Route 1: Explicit CPU Selection
+                if (selectedAcc.Equals("CPU", StringComparison.OrdinalIgnoreCase))
                 {
+                    await InitializeCpuEngineAsync();
+                    _isInitialized = true;
                     return;
                 }
 
-                // 3. Fallback to CPU
-                await InitializeCpuEngineAsync();
-                return;
-            }
+                // Route 2: Explicit Qualcomm NPU Selection
+                if (selectedAcc.Equals("NPU", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (await TryInitializeNpuAsync())
+                    {
+                        _isInitialized = true;
+                        return;
+                    }
+                    Console.WriteLine("[AIManager] NPU not supported/failed. Falling back to CPU.");
+                    await InitializeCpuEngineAsync();
+                    _isInitialized = true;
+                    return;
+                }
 
-            // Fallback for any other case
-            await InitializeCpuEngineAsync();
+                // Route 3: Explicit GPU Selection
+                if (selectedAcc.Equals("GPU", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (await TryInitializeGpuAsync(forceGpuCheck: true))
+                    {
+                        _isInitialized = true;
+                        return;
+                    }
+                    Console.WriteLine("[AIManager] GPU initialization failed. Falling back to CPU.");
+                    await InitializeCpuEngineAsync();
+                    _isInitialized = true;
+                    return;
+                }
+
+                // Route 4: Intel/AMD NPU Selection (Not supported locally, fallback to CPU)
+                if (selectedAcc.Equals("NPU_IntelAmd", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine("[AIManager] Intel/AMD NPU is not supported directly yet. Falling back to CPU...");
+                    await InitializeCpuEngineAsync();
+                    _isInitialized = true;
+                    return;
+                }
+
+                // Route 5: Auto selection (best available)
+                if (selectedAcc.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+                {
+                    // 1. Try Qualcomm NPU first
+                    if (await TryInitializeNpuAsync())
+                    {
+                        _isInitialized = true;
+                        return;
+                    }
+
+                    // 2. Try GPU
+                    if (await TryInitializeGpuAsync(forceGpuCheck: true))
+                    {
+                        _isInitialized = true;
+                        return;
+                    }
+
+                    // 3. Fallback to CPU
+                    await InitializeCpuEngineAsync();
+                    _isInitialized = true;
+                    return;
+                }
+
+                // Fallback for any other case
+                await InitializeCpuEngineAsync();
+                _isInitialized = true;
+            }
+            finally
+            {
+                _initSemaphore.Release();
+            }
         }
 
         private void SetActiveEngine(ISmartBriefingEngine engine, string name)
@@ -261,7 +292,15 @@ namespace Daily_WinUI.Services
                 {
                     PreloadCpuBackend();
                     Console.WriteLine($"[AIManager] Configuring LLamaSharp to load GPU backend: {gpuMode} ({gpuPath})");
-                    LLama.Native.NativeLibraryConfig.All.WithLibrary(gpuPath, null);
+                    try
+                    {
+                        LLama.Native.NativeLibraryConfig.All.WithLibrary(gpuPath, null);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[AIManager] Warning: could not configure NativeLibraryConfig (library may already be loaded): {ex.Message}");
+                        LlmDebugLogger.InitializationError += $"[GPU Config Warning] Could not set WithLibrary: {ex.Message}\n\n";
+                    }
                     
                     await _gpuEngine.InitializeAsync();
                     SetActiveEngine(_gpuEngine, $"GPU Acceleration ({gpuMode})");
@@ -481,6 +520,8 @@ namespace Daily_WinUI.Services
                 FreeLibrary(_cpuBackendHandle);
                 _cpuBackendHandle = IntPtr.Zero;
             }
+
+            _initSemaphore.Dispose();
 
             _activeEngine = null;
             _activeEngineName = "Disposed";
