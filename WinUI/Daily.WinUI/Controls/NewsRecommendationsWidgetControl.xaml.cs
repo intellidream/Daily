@@ -26,14 +26,14 @@ namespace Daily_WinUI.Controls
             _recs = recs ?? new List<NewsRecommendationData>();
             if (_recs.Count > 0)
             {
-                RecommendationsItemsControl.ItemsSource = _recs.Take(4).ToList();
-                RecommendationsItemsControl.Visibility = Visibility.Visible;
+                RecommendationsItemsControl.ItemsSource = _recs.Take(5).ToList();
+                RecommendationsScrollViewer.Visibility = Visibility.Visible;
                 NoDataText.Visibility = Visibility.Collapsed;
             }
             else
             {
                 NoDataText.Visibility = Visibility.Visible;
-                RecommendationsItemsControl.Visibility = Visibility.Collapsed;
+                RecommendationsScrollViewer.Visibility = Visibility.Collapsed;
             }
             LoadingRing.IsActive = false;
             LoadingRing.Visibility = Visibility.Collapsed;

@@ -312,6 +312,7 @@
                                 <TextBlock x:Name="BriefingTypedText" 
                                            Text="" 
                                            FontSize="16" 
+                                           FontFamily="Segoe UI, Segoe Fluent Icons"
                                            Foreground="{ThemeResource AppFgColorBrush}" 
                                            TextWrapping="Wrap" 
                                            LineHeight="26"
@@ -572,7 +573,7 @@
 
                             <!-- Card 5: Calendar (Row 2, Col 0) -->
                             <Border x:Name="BriefingCalendarCard" Grid.Row="2" Grid.Column="0" 
-                                    Height="140"
+                                    Height="160"
                                     Background="{ThemeResource AppGlassSubColorBrush}" 
                                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
                                     BorderThickness="1" 
@@ -603,7 +604,7 @@
 
                             <!-- Card 6: Tasks/Todos (Row 2, Col 1) -->
                             <Border x:Name="BriefingTodosCard" Grid.Row="2" Grid.Column="1" 
-                                    Height="140"
+                                    Height="160"
                                     Background="{ThemeResource AppGlassSubColorBrush}" 
                                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
                                     BorderThickness="1" 
@@ -634,6 +635,7 @@
 
                             <!-- Card 7: News recommendations (Row 3, Col 0, ColSpan 2) -->
                             <Border x:Name="BriefingNewsCard" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" 
+                                    Height="160"
                                     Background="{ThemeResource AppGlassSubColorBrush}" 
                                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
                                     BorderThickness="1" 

@@ -426,9 +426,10 @@ The 6 slots utilize strict, tiny, and targeted prompts to eliminate attention co
    - **72% Progress**: Calendar Events widget fades in.
    - **84% Progress**: Todos Checklist widget fades in.
    - **94% Progress**: News Recommendations widget fades in.
-4. **Layout Grid Positioning & Height Restrictions**: In wide view, the Calendar and Todos widgets occupy grid Row 2 side-by-side (each half width) and are restricted to a height of 140px with internal ScrollViewers to stay compact. In narrow layouts, they stack vertically (Rows 4 & 5).
+4. **Layout Grid Positioning & Height Restrictions**: In wide view, the Calendar and Todos widgets occupy grid Row 2 side-by-side (each half width), and the News Recommendations card occupies Row 3. All three widgets are restricted to a height of 160px (matching the Weather, Vitals, Finances, and Habits cards) and are equipped with internal ScrollViewers to stay compact. In narrow layouts, they stack vertically.
 5. **Scrollable Height Propagation**: Layout size updates are captured via `BriefingCardBorder_SizeChanged` to dynamically adjust the outer content grid height. In wide layout, this propagates constraints down to both the left narrative scroll viewer and the right widgets panel, preventing clipping and enabling complete vertical scrollability.
 6. **Programmatic Theme Brush Resolution**: Code-behind widgets retrieve theme colors via a custom `GetThemeBrush(resourceKey)` helper, checking active theme dictionaries to prevent a `COMException` when searching for `AppFgMutedColorBrush` or `AppFgColorBrush`.
+7. **Narrative Icon Prefixes & Formatting**: The typewriter `TextBlock` is configured with `FontFamily="Segoe UI, Segoe Fluent Icons"` to support Category Glyphs. Before rendering, LLM responses are sanitized by stripping out markdown bold asterisks (`**`). Each major subject is prefixed with its Segoe Fluent Icons category glyph: Weather (`\uE706`), Calendar (`\uE787`), Todos (`\uE73A`), Vitals (`\uEC92`), Finances (`\uE8C7`), and News (`\uE7C3`). The News Headlines summary is formatted with an elegant paragraph indentation (`Headlines Summary:\n    [SummaryText]`).
 
 ---
 

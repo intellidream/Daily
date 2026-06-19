@@ -876,7 +876,19 @@ namespace Daily_WinUI.Services
             data.WeatherHourlyDetails = hourlyWeatherDetails;
             data.WeatherFiveDayDetails = fiveDayWeatherDetails;
 
-            string fallbackBriefing = $"{weatherSentence} {healthSentence}\n\n{calendarSummary} {todoSummary}\n\n{financeSentence} {habitsSentence}\n\nLastly, we found a couple of interesting articles in your feed you might like: \"{(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Source : "N/A")}, and \"{(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Source : "N/A")}.";
+            string wBrief = weatherSentence;
+            string cBrief = calendarSummary;
+            string tBrief = todoSummary;
+            string hBrief = healthSentence;
+            string fBrief = financeSentence;
+            string hbBrief = habitsSentence;
+            
+            // Combine health and habits
+            string healthHabitsCombined = $"{hBrief} {hbBrief}".Trim();
+            
+            string nBrief = $"We found a couple of interesting articles in your feed you might like: \"{(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Source : "N/A")}, and \"{(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Source : "N/A")}.";
+
+            string fallbackBriefing = $"\uE706  {wBrief}\n\n\uE787  {cBrief}\n\n\uE73A  {tBrief}\n\n\uEC92  {healthHabitsCombined}\n\n\uE8C7  {fBrief}\n\n\uE7C3  Headlines Summary:\n    {nBrief}";
             data.BriefingText = fallbackBriefing;
             data.IntroText = "";
             data.OutroText = "Have a highly productive day!";
@@ -1153,13 +1165,36 @@ namespace Daily_WinUI.Services
 
             await Task.WhenAll(weatherTask, calendarTask, todosTask, healthTask, financeTask, newsTask);
 
-            // Assign values to slots
-            metrics.WeatherBriefing = weatherTask.Result;
-            metrics.CalendarBriefing = calendarTask.Result;
-            metrics.TodosBriefing = todosTask.Result;
-            metrics.HealthHabitsBriefing = healthTask.Result;
-            metrics.FinanceBriefing = financeTask.Result;
-            metrics.NewsBriefing = newsTask.Result;
+            // Assign values to slots (stripping asterisks and prefixing icons)
+            string weatherClean = (weatherTask.Result ?? "").Replace("**", "").Trim();
+            string calendarClean = (calendarTask.Result ?? "").Replace("**", "").Trim();
+            string todosClean = (todosTask.Result ?? "").Replace("**", "").Trim();
+            string healthClean = (healthTask.Result ?? "").Replace("**", "").Trim();
+            string financeClean = (financeTask.Result ?? "").Replace("**", "").Trim();
+            string newsClean = (newsTask.Result ?? "").Replace("**", "").Trim();
+
+            metrics.WeatherBriefing = $"\uE706  {weatherClean}";
+            metrics.CalendarBriefing = $"\uE787  {calendarClean}";
+            metrics.TodosBriefing = $"\uE73A  {todosClean}";
+            metrics.HealthHabitsBriefing = $"\uEC92  {healthClean}";
+            metrics.FinanceBriefing = $"\uE8C7  {financeClean}";
+
+            // Format News with elegant indent
+            string newsBody = newsClean;
+            if (newsBody.StartsWith("Headlines Summary:", StringComparison.OrdinalIgnoreCase))
+            {
+                newsBody = newsBody.Substring("Headlines Summary:".Length).Trim();
+            }
+            else if (newsBody.StartsWith("Headlines:", StringComparison.OrdinalIgnoreCase))
+            {
+                newsBody = newsBody.Substring("Headlines:".Length).Trim();
+            }
+            else if (newsBody.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
+            {
+                newsBody = newsBody.Substring("Summary:".Length).Trim();
+            }
+
+            metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n    {newsBody}";
 
             // Concatenate all 6 parts
             metrics.BriefingText = $"{metrics.WeatherBriefing}\n\n{metrics.CalendarBriefing}\n\n{metrics.TodosBriefing}\n\n{metrics.HealthHabitsBriefing}\n\n{metrics.FinanceBriefing}\n\n{metrics.NewsBriefing}";
