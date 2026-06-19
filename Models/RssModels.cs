@@ -132,6 +132,9 @@ namespace Daily.Models
         [Column("is_deleted")]
         public bool IsDeleted { get; set; }
 
+        [Column("display_order")]
+        public int DisplayOrder { get; set; }
+
         [Newtonsoft.Json.JsonIgnore]
         public DateTime? SyncedAt { get; set; }
     }

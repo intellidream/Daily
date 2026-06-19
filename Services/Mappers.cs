@@ -266,7 +266,8 @@ namespace Daily.Services
                 CreatedAt = SafeUtc(local.CreatedAt),
                 UpdatedAt = SafeUtc(local.UpdatedAt),
                 IsDeleted = local.IsDeleted,
-                SyncedAt = SafeUtc(local.SyncedAt)
+                SyncedAt = SafeUtc(local.SyncedAt),
+                DisplayOrder = local.DisplayOrder
             };
         }
 
@@ -283,7 +284,8 @@ namespace Daily.Services
                 CreatedAt = domain.CreatedAt.ToUniversalTime(),
                 UpdatedAt = domain.UpdatedAt?.ToUniversalTime(),
                 IsDeleted = domain.IsDeleted,
-                SyncedAt = domain.SyncedAt?.ToUniversalTime()
+                SyncedAt = domain.SyncedAt?.ToUniversalTime(),
+                DisplayOrder = domain.DisplayOrder
             };
         }
 

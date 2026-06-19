@@ -562,7 +562,7 @@ namespace Daily.Services
                                 .ToListAsync();
             if (dirty.Any())
             {
-                Console.WriteLine($"[SyncService] Pushing {dirty.Count} dirty RSS subscriptions...");
+                LogDebug($"[SyncService] Pushing {dirty.Count} dirty RSS subscriptions...");
                 try 
                 {
                     var remote = new List<RssSubscription>();
@@ -578,9 +578,14 @@ namespace Daily.Services
                             l.SyncedAt = DateTime.UtcNow;
                             await _databaseService.Connection.UpdateAsync(l);
                         }
+                        LogDebug($"[SyncService] Successfully pushed {remote.Count} RSS subscriptions.");
                     }
                 }
-                catch(Exception ex) { Console.WriteLine($"[SyncService] Push RssSubscriptions Failed: {ex.Message}"); }
+                catch(Exception ex) 
+                { 
+                    LogDebug($"[SyncService] Push RssSubscriptions Failed: {ex.Message}");
+                    LogSyncException("PushRssSubscriptionsAsync", ex);
+                }
             }
         }
 
@@ -588,31 +593,58 @@ namespace Daily.Services
         {
             try 
             {
-                // Always pull all subscriptions for the user from the cloud to ensure all machines are fully synchronized
-                // with the complete set of feeds, bypassing any timestamp or delta sync gaps.
+                LogDebug("[SyncService] PullRssSubscriptionsAsync Started");
                 var userGuid = Guid.Parse(userId);
                 var query = _supabase.From<RssSubscription>().Where(x => x.UserId == userGuid);
                 var response = await query.Get();
                 int count = response.Models.Count;
+                LogDebug($"[SyncService] Pulled {count} RSS subscriptions from Supabase.");
                 if (count > 0)
                 {
-                    var localBatch = response.Models.Select(m => {
-                        var l = m.ToLocal();
-                        l.SyncedAt = DateTime.UtcNow;
-                        return l;
-                    }).ToList();
+                    var localSubscriptions = await _databaseService.Connection.Table<LocalRssSubscription>()
+                                                .Where(x => x.UserId == userId)
+                                                .ToListAsync();
 
-                    await _databaseService.Connection.RunInTransactionAsync(tran => 
+                    var localLookup = localSubscriptions.ToDictionary(x => x.Id);
+                    var toSave = new List<LocalRssSubscription>();
+
+                    foreach (var remote in response.Models)
                     {
-                        foreach(var item in localBatch)
+                        var localSub = remote.ToLocal();
+                        localSub.SyncedAt = DateTime.UtcNow;
+
+                        if (localLookup.TryGetValue(localSub.Id, out var existingLocal))
                         {
-                            tran.InsertOrReplace(item);
+                            // If local is dirty (SyncedAt == null) and local was updated after remote, keep local
+                            if (existingLocal.SyncedAt == null && existingLocal.UpdatedAt >= remote.UpdatedAt)
+                            {
+                                LogDebug($"[SyncService] Pull Ignored for feed '{remote.Name}': Local is dirty and newer/equal (Local Updated: {existingLocal.UpdatedAt}, Remote Updated: {remote.UpdatedAt})");
+                                continue;
+                            }
                         }
-                    });
+                        toSave.Add(localSub);
+                    }
+
+                    if (toSave.Any())
+                    {
+                        await _databaseService.Connection.RunInTransactionAsync(tran => 
+                        {
+                            foreach(var item in toSave)
+                            {
+                                tran.InsertOrReplace(item);
+                            }
+                        });
+                        LogDebug($"[SyncService] Saved {toSave.Count} RSS subscriptions to local SQLite DB.");
+                    }
                 }
                 return count;
             }
-            catch(Exception ex) { Console.WriteLine($"[SyncService] Pull RssSubscriptions Failed: {ex.Message}"); return 0; }
+            catch(Exception ex) 
+            { 
+                LogDebug($"[SyncService] Pull RssSubscriptions Failed: {ex.Message}");
+                LogSyncException("PullRssSubscriptionsAsync", ex);
+                return 0; 
+            }
         }
 
         private async Task PushCalendarAccountsAsync(string userId)

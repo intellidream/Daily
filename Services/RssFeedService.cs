@@ -163,6 +163,15 @@ namespace Daily.Services
             }
         }
 
+        private Guid GenerateGuid(string input)
+        {
+            using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
+            {
+                byte[] hash = md5.ComputeHash(System.Text.Encoding.Default.GetBytes(input));
+                return new Guid(hash);
+            }
+        }
+
         public async Task AddFeedAsync(string url, string name, string category, string userId)
         {
             if (_databaseService == null) return;
@@ -194,7 +203,7 @@ namespace Daily.Services
             {
                 var newSub = new LocalRssSubscription
                 {
-                    Id = Guid.NewGuid().ToString(),
+                    Id = GenerateGuid(url).ToString(),
                     UserId = userId,
                     Name = name,
                     Url = url,

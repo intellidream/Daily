@@ -18,6 +18,8 @@ public sealed partial class FeaturesPage : Page
     private readonly Daily.Services.IRssFeedService _rssService;
     private readonly System.Collections.ObjectModel.ObservableCollection<SubscriptionItemViewModel> _feedsList = new();
     private bool _isInitializing = false;
+    private bool _isUpdatingFeedsList = false;
+    private System.Threading.CancellationTokenSource? _reorderDts;
 
     private static readonly int[] AgingIntervals = { 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 10800 };
     private static readonly string[] AgingLabels = { "10s", "30s", "1m", "2m", "5m", "10m", "30m", "1h", "2h", "3h" };
@@ -28,6 +30,8 @@ public sealed partial class FeaturesPage : Page
         _settings = SettingsService.Load();
         _behaviorService = App.Current.Services.GetRequiredService<IBehaviorService>();
         _rssService = App.Current.Services.GetRequiredService<Daily.Services.IRssFeedService>();
+        _rssService.OnFeedChanged += RssService_OnFeedChanged;
+        _feedsList.CollectionChanged += FeedsList_CollectionChanged;
         Loaded += FeaturesPage_Loaded;
         Unloaded += FeaturesPage_Unloaded;
     }
@@ -807,6 +811,8 @@ public sealed partial class FeaturesPage : Page
     {
         try
         {
+            _rssService.OnFeedChanged -= RssService_OnFeedChanged;
+            _feedsList.CollectionChanged -= FeedsList_CollectionChanged;
             var downloadManager = App.Current.Services.GetRequiredService<ModelDownloadManager>();
             downloadManager.ProgressChanged -= DownloadManager_ProgressChanged;
             downloadManager.StatusChanged -= DownloadManager_StatusChanged;
@@ -1064,19 +1070,75 @@ public sealed partial class FeaturesPage : Page
 
     private async Task LoadFeedsListAsync()
     {
+        _isUpdatingFeedsList = true;
         try
         {
             var subs = await _rssService.GetSubscriptionsAsync();
-            _feedsList.Clear();
-            foreach (var sub in subs)
+            var subIds = subs.Select(x => x.Id).ToHashSet();
+            
+            // 1. Remove items that are no longer present
+            for (int i = _feedsList.Count - 1; i >= 0; i--)
             {
-                _feedsList.Add(new SubscriptionItemViewModel(sub));
+                if (!subIds.Contains(_feedsList[i].Id))
+                {
+                    _feedsList.RemoveAt(i);
+                }
+            }
+            
+            // 2. Insert, move, or update items
+            for (int i = 0; i < subs.Count; i++)
+            {
+                var sub = subs[i];
+                var existingIndex = -1;
+                for (int j = 0; j < _feedsList.Count; j++)
+                {
+                    if (_feedsList[j].Id == sub.Id)
+                    {
+                        existingIndex = j;
+                        break;
+                    }
+                }
+                
+                if (existingIndex == -1)
+                {
+                    // Add new item at the correct index
+                    var vm = new SubscriptionItemViewModel(sub);
+                    _feedsList.Insert(i, vm);
+                }
+                else
+                {
+                    // Update existing item model data
+                    var vm = _feedsList[existingIndex];
+                    
+                    // Update model properties if they changed
+                    if (vm.Name != sub.Name) { vm.Name = sub.Name; }
+                    if (vm.Url != sub.Url) { vm.Url = sub.Url; }
+                    if (vm.Category != sub.Category) { vm.Category = sub.Category; }
+                    
+                    // Copy new model instance fields to keep references correct
+                    vm.Model.Name = sub.Name;
+                    vm.Model.Url = sub.Url;
+                    vm.Model.Category = sub.Category;
+                    vm.Model.DisplayOrder = sub.DisplayOrder;
+                    vm.Model.SyncedAt = sub.SyncedAt;
+                    vm.Model.UpdatedAt = sub.UpdatedAt;
+                    
+                    // Move if index changed
+                    if (existingIndex != i)
+                    {
+                        _feedsList.Move(existingIndex, i);
+                    }
+                }
             }
             CurrentFeedsListView.ItemsSource = _feedsList;
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[FeaturesPage] LoadFeedsListAsync Error: {ex}");
+        }
+        finally
+        {
+            _isUpdatingFeedsList = false;
         }
     }
 
@@ -1322,49 +1384,83 @@ public sealed partial class FeaturesPage : Page
         }
     }
 
-    private async void MoveUpFeed_Click(object sender, RoutedEventArgs e)
+    private void RssService_OnFeedChanged()
     {
-        if (sender is Button btn && btn.DataContext is SubscriptionItemViewModel vm)
+        DispatcherQueue.TryEnqueue(() =>
         {
-            int index = _feedsList.IndexOf(vm);
-            if (index > 0)
+            if (!_feedsList.Any(x => x.IsEditing))
             {
-                _feedsList.RemoveAt(index);
-                _feedsList.Insert(index - 1, vm);
-                await SaveOrderAsync();
+                _ = LoadFeedsListAsync();
             }
+        });
+    }
+
+    private void CurrentFeedsListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListView lv && lv.SelectedIndex != -1)
+        {
+            lv.SelectedIndex = -1;
         }
     }
 
-    private async void MoveDownFeed_Click(object sender, RoutedEventArgs e)
+    private async void FeedsList_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        if (sender is Button btn && btn.DataContext is SubscriptionItemViewModel vm)
+        try
         {
-            int index = _feedsList.IndexOf(vm);
-            if (index < _feedsList.Count - 1)
+            var logDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+            if (!System.IO.Directory.Exists(logDir)) System.IO.Directory.CreateDirectory(logDir);
+            var logPath = System.IO.Path.Combine(logDir, "reorder_log.txt");
+            
+            var currentItems = "null";
+            if (sender is System.Collections.ObjectModel.ObservableCollection<SubscriptionItemViewModel> coll)
             {
-                _feedsList.RemoveAt(index);
-                _feedsList.Insert(index + 1, vm);
-                await SaveOrderAsync();
+                currentItems = string.Join(", ", coll.Select(x => x.Name));
             }
+            
+            System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] CollectionChanged: Action={e.Action}, OldIndex={e.OldStartingIndex}, NewIndex={e.NewStartingIndex}, IsUpdating={_isUpdatingFeedsList}, Items={currentItems}\n");
         }
-    }
+        catch { }
 
-    private async void CurrentFeedsListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
-    {
+        if (_isUpdatingFeedsList) return;
         await SaveOrderAsync();
     }
 
     private async Task SaveOrderAsync()
     {
+        _reorderDts?.Cancel();
+        _reorderDts = new System.Threading.CancellationTokenSource();
+        var token = _reorderDts.Token;
+
         try
         {
+            await Task.Delay(300, token);
+            var names = string.Join(", ", _feedsList.Select(x => x.Name));
+            
+            try
+            {
+                var logDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+                var logPath = System.IO.Path.Combine(logDir, "reorder_log.txt");
+                System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] SaveOrderAsync ordered list: {names}\n");
+            }
+            catch { }
+
             var orderedList = _feedsList.Select(x => x.Model).ToList();
             await _rssService.ReorderSubscriptionsAsync(orderedList);
+        }
+        catch (TaskCanceledException)
+        {
+            // Cancelled by a subsequent reorder event
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[FeaturesPage] SaveOrderAsync Error: {ex.Message}");
+            try
+            {
+                var logDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp");
+                var logPath = System.IO.Path.Combine(logDir, "reorder_log.txt");
+                System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] SaveOrderAsync Exception: {ex.Message}\n");
+            }
+            catch { }
         }
     }
 
