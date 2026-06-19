@@ -23,6 +23,7 @@ namespace Daily.Services
         public event Action? OnItemsUpdated;
 
         private readonly HttpClient _httpClient;
+        private readonly HttpClient _browserHttpClient;
         private readonly IRenderedHtmlService? _renderedHtmlService;
         private readonly IDatabaseService? _databaseService;
         private readonly ISyncService? _syncService;
@@ -54,6 +55,16 @@ namespace Daily.Services
             _httpClient.Timeout = TimeSpan.FromSeconds(15);
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/rss+xml, application/xml, text/xml, */*");
+
+            var browserHandler = new HttpClientHandler
+            {
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+            };
+            _browserHttpClient = new HttpClient(browserHandler);
+            _browserHttpClient.Timeout = TimeSpan.FromSeconds(15);
+            _browserHttpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            _browserHttpClient.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8");
+            _browserHttpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.9");
         }
 
         public void SelectFeed(FeedSource feed)
@@ -355,7 +366,7 @@ namespace Daily.Services
         private async Task<List<FeedSearchResult>> SniffFeedsFromUrlAsync(string url)
         {
             var results = new List<FeedSearchResult>();
-            var html = await _httpClient.GetStringAsync(url);
+            var html = await GetStringWithFallbackAsync(url);
             
             // Find alternate link tags
             var linkMatches = Regex.Matches(html, @"<link[^>]+(?:type=[""'](application/rss\+xml|application/atom\+xml|application/json)[""']|rel=[""']alternate[""'])[^>]*>", RegexOptions.IgnoreCase);
@@ -462,7 +473,7 @@ namespace Daily.Services
         {
             if (feed.Type == FeedType.Rss)
             {
-                var xml = await _httpClient.GetStringAsync(feed.Url);
+                var xml = await GetStringWithFallbackAsync(feed.Url);
                 var doc = XDocument.Parse(xml);
                 XNamespace media = "http://search.yahoo.com/mrss/";
                 XNamespace contentNs = "http://purl.org/rss/1.0/modules/content/";
@@ -580,7 +591,7 @@ namespace Daily.Services
             }
             else if (feed.Type == FeedType.WpJson)
             {
-                var json = await _httpClient.GetStringAsync(feed.Url);
+                var json = await GetStringWithFallbackAsync(feed.Url);
                 var node = JsonNode.Parse(json);
                 var posts = node?.AsArray();
 
@@ -679,7 +690,7 @@ namespace Daily.Services
                 }
 
                 // OPTIMIZATION: Use shared HttpClient for fetching to ensure Handler/DNS reuse and speed
-                var html = await _httpClient.GetStringAsync(url);
+                var html = await GetStringWithFallbackAsync(url);
                 var reader = new SmartReader.Reader(url, html);
                 var article = reader.GetArticle(); // Synchronous parse of provided content
 
@@ -844,6 +855,19 @@ namespace Daily.Services
                 return result;
             }
             return url;
+        }
+
+        private async Task<string> GetStringWithFallbackAsync(string url)
+        {
+            try
+            {
+                return await _httpClient.GetStringAsync(url);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden || ex.StatusCode == System.Net.HttpStatusCode.NotAcceptable)
+            {
+                Console.WriteLine($"[RssFeedService] {ex.StatusCode} when fetching {url}. Retrying with browser headers...");
+                return await _browserHttpClient.GetStringAsync(url);
+            }
         }
     }
 }
