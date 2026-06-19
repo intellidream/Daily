@@ -111,6 +111,7 @@
     <Page Remove="SettingsWindow.xaml" />
     <Page Remove="Views\AboutPage.xaml" />
     <Page Remove="Views\SettingsPage.xaml" />
+    <Page Remove="Views\DebugSettingsPage.xaml" />
 
     <!-- New Settings/About pages registered as Window/Page -->
     <Page Include="SettingsWindow.xaml">
@@ -122,6 +123,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Views\SettingsPage.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\DebugSettingsPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

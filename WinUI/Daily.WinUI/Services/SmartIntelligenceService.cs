@@ -68,7 +68,26 @@ namespace Daily_WinUI.Services
         {
             // Format using llama format (standard GGUF fallback format)
             string prompt = $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{userPrompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
-            return await _aiManager.GenerateBriefingAsync(prompt);
+
+            LlmDebugLogger.SystemPrompt = systemPrompt;
+            LlmDebugLogger.UserPrompt = userPrompt;
+            LlmDebugLogger.FormattedPrompt = prompt;
+            LlmDebugLogger.ActiveEngine = _aiManager.ActiveEngineName;
+            LlmDebugLogger.LastExecutionTime = DateTime.Now;
+            LlmDebugLogger.LastError = string.Empty;
+            LlmDebugLogger.Response = string.Empty;
+
+            try
+            {
+                string response = await _aiManager.GenerateBriefingAsync(prompt);
+                LlmDebugLogger.Response = response;
+                return response;
+            }
+            catch (Exception ex)
+            {
+                LlmDebugLogger.LastError = ex.ToString();
+                throw;
+            }
         }
     }
 
@@ -146,14 +165,31 @@ namespace Daily_WinUI.Services
                 };
             }
 
-            string response = await _aiManager.GenerateBriefingAsync(prompt);
+            LlmDebugLogger.SystemPrompt = systemPrompt;
+            LlmDebugLogger.UserPrompt = userPrompt;
+            LlmDebugLogger.FormattedPrompt = prompt;
+            LlmDebugLogger.ActiveEngine = _aiManager.ActiveEngineName;
+            LlmDebugLogger.LastExecutionTime = DateTime.Now;
+            LlmDebugLogger.LastError = string.Empty;
+            LlmDebugLogger.Response = string.Empty;
 
-            // Save active engine explanation
-            settings = SettingsService.Load();
-            settings.LastExecutionExplanation = $"Executed successfully using dynamic strategy: {_aiManager.ActiveEngineName}.";
-            SettingsService.Save(settings);
+            try
+            {
+                string response = await _aiManager.GenerateBriefingAsync(prompt);
+                LlmDebugLogger.Response = response;
 
-            return response;
+                // Save active engine explanation
+                settings = SettingsService.Load();
+                settings.LastExecutionExplanation = $"Executed successfully using dynamic strategy: {_aiManager.ActiveEngineName}.";
+                SettingsService.Save(settings);
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                LlmDebugLogger.LastError = ex.ToString();
+                throw;
+            }
         }
     }
 }

@@ -56,6 +56,12 @@
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
 
+            <NavigationViewItem Tag="Debug" Content="Debug">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xEBE8;" FontFamily="Segoe Fluent Icons"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
             <!-- ── About ───────────────────────────────── -->
             <NavigationViewItemHeader Content="About" />
 

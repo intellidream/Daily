@@ -14,6 +14,7 @@ public sealed partial class SettingsPage : Page
         { "Notifications", typeof(AboutPage) },
         { "Account",       typeof(AboutPage) },
         { "Data",          typeof(AboutPage) },
+        { "Debug",         typeof(DebugSettingsPage) },
     };
 
     public SettingsPage()
