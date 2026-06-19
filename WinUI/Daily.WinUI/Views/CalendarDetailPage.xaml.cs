@@ -705,6 +705,22 @@ namespace Daily_WinUI.Views
             if (sender is Button btn && btn.DataContext is DisplayAccount acc)
             {
                 acc.IsEditing = true;
+
+                // Find the parent Grid of the list item template
+                var parentGrid = FindParent<Grid>(btn);
+                if (parentGrid != null)
+                {
+                    // Enqueue to the dispatcher to let layout render the TextBox first
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        var textBox = FindVisualChild<TextBox>(parentGrid);
+                        if (textBox != null)
+                        {
+                            textBox.Focus(FocusState.Programmatic);
+                            textBox.SelectAll();
+                        }
+                    });
+                }
             }
         }
 
@@ -758,6 +774,24 @@ namespace Daily_WinUI.Views
             if (parentObject == null) return null;
             if (parentObject is T parent) return parent;
             return FindParent<T>(parentObject);
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T target)
+                {
+                    return target;
+                }
+                T? childOfChild = FindVisualChild<T>(child);
+                if (childOfChild != null)
+                {
+                    return childOfChild;
+                }
+            }
+            return null;
         }
 
         private async void DeleteAccount_Click(object sender, RoutedEventArgs e)
