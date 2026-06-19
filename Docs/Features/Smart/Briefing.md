@@ -394,12 +394,12 @@ The 6 slots utilize strict, tiny, and targeted prompts to eliminate attention co
   - *User*: `"Weather: [Condition], [Temp]°C. Hourly forecast: [Details]. 5-day forecast: [Details]."`
 
 - **Calendar**:
-  - *System*: `"System: Summarize the user's calendar events for today into one concise sentence."`
-  - *User*: `"Events: [List of title, time, location]"`
+  - *System*: `"System: Write exactly one concise, encouraging sentence commenting on the user's upcoming calendar events today. CRITICAL: Do NOT list or enumerate the events (do not write down event names, times, or locations). Instead, write a natural statement mentioning the number of upcoming events (e.g. 'You have 3 events scheduled for today' or 'You have only 2 more events today') or comment on their workload/importance (e.g. 'Your schedule is looking very light today' or 'You have a busy afternoon ahead')."`
+  - *User*: `"Upcoming events starting from current time ([CurrentTime]):\n[Filtered list of top 5 events ending after current time]"`
 
 - **Todos & Notes**:
-  - *System*: `"System: Summarize the user's active tasks and priorities into one concise sentence focusing on urgent ones."`
-  - *User*: `"Tasks: [List of title, priority, notes]"`
+  - *System*: `"System: Write exactly one concise, encouraging sentence commenting on the user's active tasks. CRITICAL: Do NOT list or enumerate the tasks (do not write down task titles or details). Instead, write a natural statement mentioning the number of pending tasks (e.g. 'You still have 3 tasks to complete today' or 'You have 4 active tasks left on your agenda') or comment on their workload/importance (e.g. 'You have a few high-priority tasks to focus on' or 'You have a light task list today')."`
+  - *User*: `"Active tasks:\n[Filtered list of top 5 active/due-today tasks ordered by high importance/due date]"`
 
 - **Health & Habits**:
   - *System*: `"System: Write one encouraging sentence about the user's habits and health metrics. Treat smoking as a negative habit to reduce."`
@@ -419,11 +419,16 @@ The 6 slots utilize strict, tiny, and targeted prompts to eliminate attention co
 1. **AI Engine Resolution**: `SmartIntelligenceService` coordinates the dynamic loading. If NPU is enabled, it uses `PhiSilicaNpuEngine` (handling the Microsoft Limited Access Features token registration). Otherwise, it delegates to `LLamaUniversalEngine` using local GGUF models.
 2. **C# Template Fallback**: If `IsModelReadyAsync()` is false or generation throws an exception, `SmartBriefingService` constructs a rich, rule-based text template merging the coordinates, weather metrics, vitals, ledger balance, and habit checklists.
 3. **UI Sequencing (Typewriter Milestones)**: Inside [MainPage.xaml.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/MainPage.xaml.cs), a `DispatcherTimer` runs at a rapid 20ms interval, outputting the narrative word-by-word. As specific milestones are reached, the corresponding UI cards fade and slide up:
-   - **20% Progress**: Weather card fades in.
-   - **40% Progress**: Health Vitals card fades in.
-   - **60% Progress**: Finances & Stock Watchlist card fades in.
-   - **80% Progress**: Habits completion list card fades in.
-   - **92% Progress**: News Recommendations widget fades in.
+   - **15% Progress**: Weather card fades in.
+   - **30% Progress**: Health Vitals card fades in.
+   - **45% Progress**: Finances & Stock Watchlist card fades in.
+   - **60% Progress**: Habits completion list card fades in.
+   - **72% Progress**: Calendar Events widget fades in.
+   - **84% Progress**: Todos Checklist widget fades in.
+   - **94% Progress**: News Recommendations widget fades in.
+4. **Layout Grid Positioning & Height Restrictions**: In wide view, the Calendar and Todos widgets occupy grid Row 2 side-by-side (each half width) and are restricted to a height of 140px with internal ScrollViewers to stay compact. In narrow layouts, they stack vertically (Rows 4 & 5).
+5. **Scrollable Height Propagation**: Layout size updates are captured via `BriefingCardBorder_SizeChanged` to dynamically adjust the outer content grid height. In wide layout, this propagates constraints down to both the left narrative scroll viewer and the right widgets panel, preventing clipping and enabling complete vertical scrollability.
+6. **Programmatic Theme Brush Resolution**: Code-behind widgets retrieve theme colors via a custom `GetThemeBrush(resourceKey)` helper, checking active theme dictionaries to prevent a `COMException` when searching for `AppFgMutedColorBrush` or `AppFgColorBrush`.
 
 ---
 

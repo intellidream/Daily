@@ -106,6 +106,7 @@ Rather than executing a separate child process for dry-running DLLs, `AIManager`
 3. **GPU Acceleration**: Attempts to load the GPU version of `llama.dll` (utilizing `cuda12` for NVIDIA and `vulkan` for AMD/fallback).
 4. **CPU Mode**: If NPU and GPU checks fail or are bypassed, the system falls back to the CPU engine using optimized `ggml-cpu.dll` libraries (auto-detecting `avx2`, `avx`, or `noavx` CPU instruction support).
 5. **Basic Template Fallback**: If no engines are loadable or the user selects "Fallback Template Engine" in settings, the briefing defaults immediately to C# procedural narrative generation.
+6. **Thread-Safe Initialization & Configuration Guarding**: To prevent concurrent initialization requests from causing race conditions or crashes when preloading GGUF native libraries, the engine initialization sequence is protected by a `SemaphoreSlim` double-checked lock pattern. Any exceptions occurring from native library configuration pre-locks (e.g., trying to modify settings after the library has loaded) are captured, logged to `LlmDebugLogger`, and routed to safe fallbacks.
 
 ---
 

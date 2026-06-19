@@ -813,6 +813,165 @@ public sealed partial class MainPage : Page
             BriefingHabit2Panel.Visibility = Visibility.Collapsed;
         }
 
+        // Bind Calendar Card programmatically
+        if (BriefingCalendarEventsPanel != null)
+        {
+            BriefingCalendarEventsPanel.Children.Clear();
+            var now = DateTime.Now;
+            var upcomingEvents = data.CalendarEventsToday
+                .Where(e => e.IsAllDay || e.End.ToLocalTime() >= now)
+                .OrderBy(e => e.IsAllDay ? 0 : 1)
+                .ThenBy(e => e.Start)
+                .Take(5)
+                .ToList();
+
+            if (upcomingEvents.Count == 0)
+            {
+                var noEventsTxt = new Microsoft.UI.Xaml.Controls.TextBlock
+                {
+                    Text = "No upcoming events today.",
+                    FontSize = 11,
+                    Foreground = GetThemeBrush("AppFgMutedColorBrush"),
+                    Opacity = 0.7,
+                    TextAlignment = Microsoft.UI.Xaml.TextAlignment.Center,
+                    Margin = new Thickness(0, 8, 0, 8)
+                };
+                BriefingCalendarEventsPanel.Children.Add(noEventsTxt);
+            }
+            else
+            {
+                foreach (var ev in upcomingEvents)
+                {
+                    var eventGrid = new Microsoft.UI.Xaml.Controls.Grid { Margin = new Thickness(0, 2, 0, 2) };
+                    eventGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    eventGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+
+                    var leftStack = new Microsoft.UI.Xaml.Controls.StackPanel { Spacing = 2 };
+                    var titleTxt = new Microsoft.UI.Xaml.Controls.TextBlock
+                    {
+                        Text = ev.Title,
+                        FontSize = 11,
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                        Foreground = GetThemeBrush("AppFgColorBrush"),
+                        TextTrimming = TextTrimming.CharacterEllipsis
+                    };
+                    leftStack.Children.Add(titleTxt);
+
+                    if (!string.IsNullOrEmpty(ev.Location))
+                    {
+                        var locTxt = new Microsoft.UI.Xaml.Controls.TextBlock
+                        {
+                            Text = ev.Location,
+                            FontSize = 9,
+                            Foreground = GetThemeBrush("AppFgMutedColorBrush"),
+                            Opacity = 0.7,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        };
+                        leftStack.Children.Add(locTxt);
+                    }
+
+                    Grid.SetColumn(leftStack, 0);
+                    eventGrid.Children.Add(leftStack);
+
+                    string timeStr = ev.IsAllDay ? "All Day" : ev.Start.ToLocalTime().ToString("t");
+                    var timeTxt = new Microsoft.UI.Xaml.Controls.TextBlock
+                    {
+                        Text = timeStr,
+                        FontSize = 10,
+                        Foreground = GetThemeBrush("AppFgMutedColorBrush"),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(8, 0, 0, 0)
+                    };
+                    Grid.SetColumn(timeTxt, 1);
+                    eventGrid.Children.Add(timeTxt);
+
+                    BriefingCalendarEventsPanel.Children.Add(eventGrid);
+                }
+            }
+        }
+
+        // Bind Todos Card programmatically
+        if (BriefingTodosListPanel != null)
+        {
+            BriefingTodosListPanel.Children.Clear();
+            var now = DateTime.Now;
+            var upcomingTodos = data.ActiveTodos
+                .Where(t => !t.DueDate.HasValue || t.DueDate.Value.ToLocalTime() >= now || t.DueDate.Value.ToLocalTime().Date == now.Date)
+                .OrderByDescending(t => t.Importance?.ToLower() == "high")
+                .ThenBy(t => t.DueDate ?? DateTime.MaxValue)
+                .Take(5)
+                .ToList();
+
+            if (upcomingTodos.Count == 0)
+            {
+                var noTodosTxt = new Microsoft.UI.Xaml.Controls.TextBlock
+                {
+                    Text = "No pending tasks.",
+                    FontSize = 11,
+                    Foreground = GetThemeBrush("AppFgMutedColorBrush"),
+                    Opacity = 0.7,
+                    TextAlignment = Microsoft.UI.Xaml.TextAlignment.Center,
+                    Margin = new Thickness(0, 8, 0, 8)
+                };
+                BriefingTodosListPanel.Children.Add(noTodosTxt);
+            }
+            else
+            {
+                foreach (var td in upcomingTodos)
+                {
+                    var todoGrid = new Microsoft.UI.Xaml.Controls.Grid { Margin = new Thickness(0, 2, 0, 2) };
+                    todoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    todoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+
+                    var leftStack = new Microsoft.UI.Xaml.Controls.StackPanel { Spacing = 2 };
+                    var titleTxt = new Microsoft.UI.Xaml.Controls.TextBlock
+                    {
+                        Text = td.Title,
+                        FontSize = 11,
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                        Foreground = GetThemeBrush("AppFgColorBrush"),
+                        TextTrimming = TextTrimming.CharacterEllipsis
+                    };
+                    leftStack.Children.Add(titleTxt);
+
+                    if (!string.IsNullOrEmpty(td.Notes))
+                    {
+                        var notesTxt = new Microsoft.UI.Xaml.Controls.TextBlock
+                        {
+                            Text = td.Notes,
+                            FontSize = 9,
+                            Foreground = GetThemeBrush("AppFgMutedColorBrush"),
+                            Opacity = 0.7,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        };
+                        leftStack.Children.Add(notesTxt);
+                    }
+
+                    Grid.SetColumn(leftStack, 0);
+                    todoGrid.Children.Add(leftStack);
+
+                    string dueStr = string.Empty;
+                    if (td.DueDate.HasValue)
+                    {
+                        dueStr = td.DueDate.Value.ToLocalTime().Date == now.Date ? "Today" : td.DueDate.Value.ToLocalTime().ToString("M/d");
+                    }
+                    var dueTxt = new Microsoft.UI.Xaml.Controls.TextBlock
+                    {
+                        Text = dueStr,
+                        FontSize = 10,
+                        Foreground = td.Importance?.ToLower() == "high" ? redBrush : GetThemeBrush("AppFgMutedColorBrush"),
+                        FontWeight = td.Importance?.ToLower() == "high" ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(8, 0, 0, 0)
+                    };
+                    Grid.SetColumn(dueTxt, 1);
+                    todoGrid.Children.Add(dueTxt);
+
+                    BriefingTodosListPanel.Children.Add(todoGrid);
+                }
+            }
+        }
+
         // Bind News recommendations control directly
         BriefingNewsWidget.Populate(data.NewsRecommendations);
 
@@ -825,6 +984,10 @@ public sealed partial class MainPage : Page
         FinancesCardTransform.Y = 30;
         BriefingHabitsCard.Opacity = 0;
         HabitsCardTransform.Y = 30;
+        BriefingCalendarCard.Opacity = 0;
+        CalendarCardTransform.Y = 30;
+        BriefingTodosCard.Opacity = 0;
+        TodosCardTransform.Y = 30;
         BriefingNewsCard.Opacity = 0;
         NewsCardTransform.Y = 30;
 
@@ -871,15 +1034,19 @@ public sealed partial class MainPage : Page
                 double percent = (double)_typewriterIndex / _briefingWords.Length;
 
                 // Animate visual cards in as typewriter milestones are reached
-                if (percent >= 0.20 && BriefingWeatherCard.Opacity == 0)
+                if (percent >= 0.15 && BriefingWeatherCard.Opacity == 0)
                     FadeInWeatherStoryboard.Begin();
-                if (percent >= 0.40 && BriefingHealthCard.Opacity == 0)
+                if (percent >= 0.30 && BriefingHealthCard.Opacity == 0)
                     FadeInHealthStoryboard.Begin();
-                if (percent >= 0.60 && BriefingFinancesCard.Opacity == 0)
+                if (percent >= 0.45 && BriefingFinancesCard.Opacity == 0)
                     FadeInFinancesStoryboard.Begin();
-                if (percent >= 0.80 && BriefingHabitsCard.Opacity == 0)
+                if (percent >= 0.60 && BriefingHabitsCard.Opacity == 0)
                     FadeInHabitsStoryboard.Begin();
-                if (percent >= 0.92 && BriefingNewsCard.Opacity == 0)
+                if (percent >= 0.72 && BriefingCalendarCard.Opacity == 0)
+                    FadeInCalendarStoryboard.Begin();
+                if (percent >= 0.84 && BriefingTodosCard.Opacity == 0)
+                    FadeInTodosStoryboard.Begin();
+                if (percent >= 0.94 && BriefingNewsCard.Opacity == 0)
                     FadeInNewsStoryboard.Begin();
             }
             else
@@ -922,10 +1089,61 @@ public sealed partial class MainPage : Page
                 if (BriefingHealthCard.Opacity == 0) FadeInHealthStoryboard.Begin();
                 if (BriefingFinancesCard.Opacity == 0) FadeInFinancesStoryboard.Begin();
                 if (BriefingHabitsCard.Opacity == 0) FadeInHabitsStoryboard.Begin();
+                if (BriefingCalendarCard.Opacity == 0) FadeInCalendarStoryboard.Begin();
+                if (BriefingTodosCard.Opacity == 0) FadeInTodosStoryboard.Begin();
                 if (BriefingNewsCard.Opacity == 0) FadeInNewsStoryboard.Begin();
             }
         };
         _typewriterTimer.Start();
+    }
+
+    private Microsoft.UI.Xaml.Media.Brush GetThemeBrush(string resourceKey)
+    {
+        // Try to get from Application-level theme dictionaries first based on actual theme
+        var themeKey = this.ActualTheme switch
+        {
+            ElementTheme.Light => "Light",
+            ElementTheme.Dark => "Dark",
+            _ => App.Current.RequestedTheme == ApplicationTheme.Light ? "Light" : "Dark"
+        };
+
+        if (Application.Current.Resources.ThemeDictionaries.TryGetValue(themeKey, out var dictObj) &&
+            dictObj is ResourceDictionary themeDict &&
+            themeDict.TryGetValue(resourceKey, out var brushObj) &&
+            brushObj is Microsoft.UI.Xaml.Media.Brush themeBrush)
+        {
+            return themeBrush;
+        }
+
+        // Try default/fallback theme dictionary
+        if (Application.Current.Resources.ThemeDictionaries.TryGetValue("Default", out var defDictObj) &&
+            defDictObj is ResourceDictionary defThemeDict &&
+            defThemeDict.TryGetValue(resourceKey, out var defBrushObj) &&
+            defBrushObj is Microsoft.UI.Xaml.Media.Brush defThemeBrush)
+        {
+            return defThemeBrush;
+        }
+
+        // Try direct Application Resources
+        if (Application.Current.Resources.TryGetValue(resourceKey, out var appResObj) &&
+            appResObj is Microsoft.UI.Xaml.Media.Brush appBrush)
+        {
+            return appBrush;
+        }
+
+        // Hardcoded fallback colors based on the requested resource key
+        if (resourceKey == "AppFgColorBrush")
+        {
+            return themeKey == "Light"
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x1A, 0x1A, 0x1A))
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White);
+        }
+        else // AppFgMutedColorBrush
+        {
+            return themeKey == "Light"
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xBB, 0x1A, 0x1A, 0x1A))
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xBB, 255, 255, 255));
+        }
     }
 
     private void CloseBriefing_Click(object sender, RoutedEventArgs e)
@@ -947,6 +1165,11 @@ public sealed partial class MainPage : Page
         UpdateBriefingLayout(e.NewSize.Width);
     }
 
+    private void BriefingCardBorder_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateBriefingLayout(ActualWidth);
+    }
+
     private void UpdateBriefingLayout(double width)
     {
         if (BriefingGrid == null || BriefingNarrativePanel == null || BriefingWidgetsPanel == null || 
@@ -954,8 +1177,11 @@ public sealed partial class MainPage : Page
             BriefingWidgetsGrid == null || BriefingTextScrollViewer == null ||
             BriefingHeaderGrid == null || BriefingIconContainer == null || BriefingHeaderTextPanel == null ||
             BriefingGreetingText == null || BriefingIntroText == null ||
-            AIIconGlow == null || SmartBriefAIIcon == null)
+            AIIconGlow == null || SmartBriefAIIcon == null ||
+            BriefingCalendarCard == null || BriefingTodosCard == null)
             return;
+
+        double availableHeight = BriefingCardBorder.ActualHeight - BriefingCardBorder.Padding.Top - BriefingCardBorder.Padding.Bottom;
 
         if (width < 850)
         {
@@ -970,6 +1196,9 @@ public sealed partial class MainPage : Page
             
             BriefingWidgetsPanel.VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled;
             BriefingWidgetsPanel.VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Disabled;
+
+            BriefingGrid.Height = double.NaN;
+            BriefingOuterScrollViewer.Height = double.NaN;
 
             // 2. Stack Narrative and Widgets Grid in BriefingGrid (using Auto height for both rows)
             if (BriefingGrid.ColumnDefinitions.Count > 1)
@@ -1029,7 +1258,7 @@ public sealed partial class MainPage : Page
             BriefingWidgetsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             BriefingWidgetsGrid.RowDefinitions.Clear();
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 7; i++)
             {
                 BriefingWidgetsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             }
@@ -1050,7 +1279,15 @@ public sealed partial class MainPage : Page
             Grid.SetColumn(BriefingHabitsCard, 0);
             Grid.SetColumnSpan(BriefingHabitsCard, 1);
 
-            Grid.SetRow(BriefingNewsCard, 4);
+            Grid.SetRow(BriefingCalendarCard, 4);
+            Grid.SetColumn(BriefingCalendarCard, 0);
+            Grid.SetColumnSpan(BriefingCalendarCard, 1);
+
+            Grid.SetRow(BriefingTodosCard, 5);
+            Grid.SetColumn(BriefingTodosCard, 0);
+            Grid.SetColumnSpan(BriefingTodosCard, 1);
+
+            Grid.SetRow(BriefingNewsCard, 6);
             Grid.SetColumn(BriefingNewsCard, 0);
             Grid.SetColumnSpan(BriefingNewsCard, 1);
 
@@ -1073,6 +1310,12 @@ public sealed partial class MainPage : Page
             
             BriefingWidgetsPanel.VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto;
             BriefingWidgetsPanel.VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Auto;
+
+            if (availableHeight > 0)
+            {
+                BriefingGrid.Height = availableHeight;
+                BriefingOuterScrollViewer.Height = availableHeight;
+            }
 
             // 2. Put Narrative (Col 0) and Widgets (Col 1) side-by-side
             if (BriefingGrid.ColumnDefinitions.Count < 2)
@@ -1134,6 +1377,7 @@ public sealed partial class MainPage : Page
             BriefingWidgetsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             BriefingWidgetsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             BriefingWidgetsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            BriefingWidgetsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             Grid.SetRow(BriefingWeatherCard, 0);
             Grid.SetColumn(BriefingWeatherCard, 0);
@@ -1151,7 +1395,15 @@ public sealed partial class MainPage : Page
             Grid.SetColumn(BriefingHabitsCard, 1);
             Grid.SetColumnSpan(BriefingHabitsCard, 1);
 
-            Grid.SetRow(BriefingNewsCard, 2);
+            Grid.SetRow(BriefingCalendarCard, 2);
+            Grid.SetColumn(BriefingCalendarCard, 0);
+            Grid.SetColumnSpan(BriefingCalendarCard, 1);
+
+            Grid.SetRow(BriefingTodosCard, 2);
+            Grid.SetColumn(BriefingTodosCard, 1);
+            Grid.SetColumnSpan(BriefingTodosCard, 1);
+
+            Grid.SetRow(BriefingNewsCard, 3);
             Grid.SetColumn(BriefingNewsCard, 0);
             Grid.SetColumnSpan(BriefingNewsCard, 2);
 

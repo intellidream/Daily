@@ -216,6 +216,7 @@
         <Grid x:Name="SmartBriefingOverlay" Visibility="Collapsed" Opacity="0.0" Background="{ThemeResource AppBriefingBackdropBrush}" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
             <!-- Glass Overlay Card -->
             <Border x:Name="BriefingCardBorder" MaxWidth="1400" MaxHeight="900" Margin="24"
+                    SizeChanged="BriefingCardBorder_SizeChanged"
                     Background="{ThemeResource AppGlassColorBrush}"
                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
                     BorderThickness="1" CornerRadius="24" Padding="32" Translation="0,0,32"
@@ -569,8 +570,70 @@
                             </Grid>
                         </Border>
 
-                            <!-- Card 5: News recommendations (Row 2, Col 0, ColSpan 2) -->
-                            <Border x:Name="BriefingNewsCard" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" 
+                            <!-- Card 5: Calendar (Row 2, Col 0) -->
+                            <Border x:Name="BriefingCalendarCard" Grid.Row="2" Grid.Column="0" 
+                                    Height="140"
+                                    Background="{ThemeResource AppGlassSubColorBrush}" 
+                                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                    BorderThickness="1" 
+                                    CornerRadius="16" 
+                                    Margin="6" 
+                                    Padding="16"
+                                    Opacity="0" 
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="CalendarCardTransform" Y="30"/>
+                                </Border.RenderTransform>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                        <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF594AE2"/>
+                                        <TextBlock Text="Calendar" FontSize="13" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <StackPanel x:Name="BriefingCalendarEventsPanel" Spacing="6" Padding="0,0,4,0">
+                                            <!-- Populated programmatically -->
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Border>
+
+                            <!-- Card 6: Tasks/Todos (Row 2, Col 1) -->
+                            <Border x:Name="BriefingTodosCard" Grid.Row="2" Grid.Column="1" 
+                                    Height="140"
+                                    Background="{ThemeResource AppGlassSubColorBrush}" 
+                                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
+                                    BorderThickness="1" 
+                                    CornerRadius="16" 
+                                    Margin="6" 
+                                    Padding="16"
+                                    Opacity="0" 
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="TodosCardTransform" Y="30"/>
+                                </Border.RenderTransform>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                        <FontIcon Glyph="&#xE73A;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00BCD4"/>
+                                        <TextBlock Text="Tasks" FontSize="13" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <StackPanel x:Name="BriefingTodosListPanel" Spacing="6" Padding="0,0,4,0">
+                                            <!-- Populated programmatically -->
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Border>
+
+                            <!-- Card 7: News recommendations (Row 3, Col 0, ColSpan 2) -->
+                            <Border x:Name="BriefingNewsCard" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" 
                                     Background="{ThemeResource AppGlassSubColorBrush}" 
                                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}" 
                                     BorderThickness="1" 
@@ -668,6 +731,26 @@
                 <Storyboard x:Name="FadeInHabitsStoryboard">
                     <DoubleAnimation Storyboard.TargetName="BriefingHabitsCard" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.5"/>
                     <DoubleAnimation Storyboard.TargetName="HabitsCardTransform" Storyboard.TargetProperty="Y" From="30" To="0" Duration="0:0:0.5">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+
+                <!-- Storyboard for Calendar Card -->
+                <Storyboard x:Name="FadeInCalendarStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="BriefingCalendarCard" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.5"/>
+                    <DoubleAnimation Storyboard.TargetName="CalendarCardTransform" Storyboard.TargetProperty="Y" From="30" To="0" Duration="0:0:0.5">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+
+                <!-- Storyboard for Todos Card -->
+                <Storyboard x:Name="FadeInTodosStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="BriefingTodosCard" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.5"/>
+                    <DoubleAnimation Storyboard.TargetName="TodosCardTransform" Storyboard.TargetProperty="Y" From="30" To="0" Duration="0:0:0.5">
                         <DoubleAnimation.EasingFunction>
                             <CubicEase EasingMode="EaseOut"/>
                         </DoubleAnimation.EasingFunction>

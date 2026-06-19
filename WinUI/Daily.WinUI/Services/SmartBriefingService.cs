@@ -941,28 +941,38 @@ namespace Daily_WinUI.Services
 
             var calendarTask = Task.Run(async () =>
             {
-                if (metrics.CalendarEventsToday == null || metrics.CalendarEventsToday.Count == 0)
+                var now = DateTime.Now;
+                var upcomingEvents = metrics.CalendarEventsToday
+                    .Where(e => e.IsAllDay || e.End.ToLocalTime() >= now)
+                    .OrderBy(e => e.IsAllDay ? 0 : 1)
+                    .ThenBy(e => e.Start)
+                    .Take(5)
+                    .ToList();
+
+                if (upcomingEvents.Count == 0)
                 {
                     return "Your calendar is clear today. Enjoy your free time!";
                 }
 
                 var sbEvents = new StringBuilder();
-                foreach (var ev in metrics.CalendarEventsToday)
+                foreach (var ev in upcomingEvents)
                 {
                     string timeStr = ev.IsAllDay ? "All Day" : $"{ev.Start.ToLocalTime():t} - {ev.End.ToLocalTime():t}";
                     sbEvents.AppendLine($"- {ev.Title} ({timeStr}){(string.IsNullOrEmpty(ev.Location) ? "" : $" at {ev.Location}")}");
                 }
                 string eventsList = sbEvents.ToString();
 
-                string fallback = $"You have {metrics.CalendarEventsToday.Count} calendar event(s) scheduled for today: " +
-                                  string.Join(", ", metrics.CalendarEventsToday.Select(e => $"{e.Title} at {(e.IsAllDay ? "All Day" : e.Start.ToLocalTime().ToString("t"))}")) + ".";
+                int remainingEvents = metrics.CalendarEventsToday.Count - upcomingEvents.Count;
+                string fallback = remainingEvents > 0
+                    ? $"You have {upcomingEvents.Count} upcoming calendar events scheduled starting next, and {remainingEvents} more later today."
+                    : $"You have {upcomingEvents.Count} upcoming calendar event(s) scheduled for today.";
 
                 if (useAi)
                 {
                     try
                     {
-                        string systemPrompt = "System: Summarize the user's calendar events for today into one concise sentence.";
-                        string userPrompt = $"Events:\n{eventsList}";
+                        string systemPrompt = "System: Write exactly one concise, encouraging sentence commenting on the user's upcoming calendar events today. CRITICAL: Do NOT list or enumerate the events (do not write down event names, times, or locations). Instead, write a natural statement mentioning the number of upcoming events (e.g. 'You have 3 events scheduled for today' or 'You have only 2 more events today') or comment on their workload/importance (e.g. 'Your schedule is looking very light today' or 'You have a busy afternoon ahead').";
+                        string userPrompt = $"Upcoming events starting from current time ({now:t}):\n{eventsList}";
                         string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
                         if (!string.IsNullOrWhiteSpace(result))
                         {
@@ -979,28 +989,38 @@ namespace Daily_WinUI.Services
 
             var todosTask = Task.Run(async () =>
             {
-                if (metrics.ActiveTodos == null || metrics.ActiveTodos.Count == 0)
+                var now = DateTime.Now;
+                var upcomingTodos = metrics.ActiveTodos
+                    .Where(t => !t.DueDate.HasValue || t.DueDate.Value.ToLocalTime() >= now || t.DueDate.Value.ToLocalTime().Date == now.Date)
+                    .OrderByDescending(t => t.Importance?.ToLower() == "high")
+                    .ThenBy(t => t.DueDate ?? DateTime.MaxValue)
+                    .Take(5)
+                    .ToList();
+
+                if (upcomingTodos.Count == 0)
                 {
                     return "You have no pending tasks today.";
                 }
 
                 var sbTodos = new StringBuilder();
-                foreach (var td in metrics.ActiveTodos.OrderByDescending(t => t.Importance?.ToLower() == "high"))
+                foreach (var td in upcomingTodos)
                 {
                     string dueStr = td.DueDate.HasValue ? $"Due: {td.DueDate.Value.ToLocalTime():d}" : "No due date";
                     sbTodos.AppendLine($"- {td.Title} ({dueStr}, Priority: {td.Importance}) - Notes: {td.Notes}");
                 }
                 string todosList = sbTodos.ToString();
 
-                string fallback = $"You have {metrics.ActiveTodos.Count} active task(s) on your agenda: " +
-                                  string.Join(", ", metrics.ActiveTodos.Take(3).Select(t => t.Title)) + (metrics.ActiveTodos.Count > 3 ? "..." : "") + ".";
+                int remainingTodos = metrics.ActiveTodos.Count - upcomingTodos.Count;
+                string fallback = remainingTodos > 0
+                    ? $"You have {upcomingTodos.Count} active tasks on your immediate agenda, and {remainingTodos} other tasks."
+                    : $"You have {upcomingTodos.Count} active task(s) on your agenda today.";
 
                 if (useAi)
                 {
                     try
                     {
-                        string systemPrompt = "System: Summarize the user's active tasks and priorities into one concise sentence focusing on urgent ones.";
-                        string userPrompt = $"Tasks:\n{todosList}";
+                        string systemPrompt = "System: Write exactly one concise, encouraging sentence commenting on the user's active tasks. CRITICAL: Do NOT list or enumerate the tasks (do not write down task titles or details). Instead, write a natural statement mentioning the number of pending tasks (e.g. 'You still have 3 tasks to complete today' or 'You have 4 active tasks left on your agenda') or comment on their workload/importance (e.g. 'You have a few high-priority tasks to focus on' or 'You have a light task list today').";
+                        string userPrompt = $"Active tasks:\n{todosList}";
                         string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
                         if (!string.IsNullOrWhiteSpace(result))
                         {
