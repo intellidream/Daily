@@ -1,5 +1,11 @@
 using Daily.Models;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace Daily.Services
 {
@@ -22,10 +28,114 @@ namespace Daily.Services
 
         private string? GetUserId() => _supabase.Auth.CurrentUser?.Id;
 
+        private Guid GenerateGuid(string input)
+        {
+            using (MD5 md5 = MD5.Create())
+            {
+                byte[] hash = md5.ComputeHash(Encoding.Default.GetBytes(input));
+                return new Guid(hash);
+            }
+        }
+
+        private async Task DeduplicateSavedArticlesAsync()
+        {
+            var userId = GetUserId();
+            if (userId == null) return;
+
+            try
+            {
+                // Fetch all non-deleted saved articles for the user
+                var all = await _databaseService.Connection.Table<LocalSavedArticle>()
+                    .Where(a => a.UserId == userId && !a.IsDeleted)
+                    .ToListAsync();
+
+                // Group by ArticleUrl and ArticleType to find duplicates
+                var groups = all.GroupBy(a => (a.ArticleUrl, a.ArticleType))
+                                .Where(g => g.Count() > 1)
+                                .ToList();
+
+                if (!groups.Any()) return;
+
+                Console.WriteLine($"[RssArticleService] Found {groups.Count} duplicated saved article groups. Starting deduplication...");
+
+                var toInsert = new List<LocalSavedArticle>();
+                var toUpdate = new List<LocalSavedArticle>();
+
+                foreach (var group in groups)
+                {
+                    var articleUrl = group.Key.ArticleUrl;
+                    var articleType = group.Key.ArticleType;
+                    var deterministicId = GenerateGuid(userId + ":" + articleUrl + ":" + articleType).ToString();
+
+                    var items = group.ToList();
+                    var canonical = items.FirstOrDefault(x => x.Id == deterministicId);
+
+                    if (canonical == null)
+                    {
+                        // Select the best item (newest UpdatedAt or CreatedAt)
+                        var best = items.OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt).First();
+
+                        // Create canonical entry with the deterministic GUID
+                        canonical = new LocalSavedArticle
+                        {
+                            Id = deterministicId,
+                            UserId = best.UserId,
+                            ArticleUrl = best.ArticleUrl,
+                            Title = best.Title,
+                            ImageUrl = best.ImageUrl,
+                            Description = best.Description,
+                            Author = best.Author,
+                            PublicationName = best.PublicationName,
+                            PublicationIconUrl = best.PublicationIconUrl,
+                            ArticleType = best.ArticleType,
+                            ArticleDate = best.ArticleDate,
+                            CreatedAt = best.CreatedAt,
+                            UpdatedAt = DateTime.UtcNow,
+                            SyncedAt = null // Needs to sync to Supabase
+                        };
+                        toInsert.Add(canonical);
+                    }
+
+                    // Mark all other duplicates as deleted
+                    foreach (var item in items)
+                    {
+                        if (item.Id != deterministicId)
+                        {
+                            item.IsDeleted = true;
+                            item.UpdatedAt = DateTime.UtcNow;
+                            item.SyncedAt = null; // Needs to sync deletion to Supabase
+                            toUpdate.Add(item);
+                        }
+                    }
+                }
+
+                if (toInsert.Any() || toUpdate.Any())
+                {
+                    await _databaseService.Connection.RunInTransactionAsync(tran =>
+                    {
+                        foreach (var item in toInsert)
+                        {
+                            tran.InsertOrReplace(item);
+                        }
+                        foreach (var item in toUpdate)
+                        {
+                            tran.Update(item);
+                        }
+                    });
+                    Console.WriteLine($"[RssArticleService] Deduplicated: inserted/replaced {toInsert.Count} canonical entries and marked {toUpdate.Count} duplicates as deleted.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[RssArticleService] Deduplication failed: {ex.Message}");
+            }
+        }
+
         public async Task InitializeAsync()
         {
             if (_initialized) return;
             await _databaseService.InitializeAsync();
+            await DeduplicateSavedArticlesAsync();
             await RefreshLocalCacheAsync();
             _initialized = true;
         }
@@ -86,9 +196,10 @@ namespace Daily.Services
             }
             else
             {
+                var id = GenerateGuid(userId + ":" + item.Link + ":" + articleType).ToString();
                 var saved = new LocalSavedArticle
                 {
-                    Id = Guid.NewGuid().ToString(),
+                    Id = id,
                     UserId = userId,
                     ArticleUrl = item.Link,
                     Title = item.Title,
@@ -104,7 +215,7 @@ namespace Daily.Services
                     SyncedAt = null // Dirty
                 };
 
-                await _databaseService.Connection.InsertAsync(saved);
+                await _databaseService.Connection.InsertOrReplaceAsync(saved);
             }
 
             await RefreshLocalCacheAsync();
