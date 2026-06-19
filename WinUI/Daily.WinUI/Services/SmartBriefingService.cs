@@ -44,6 +44,14 @@ namespace Daily_WinUI.Services
         public string IntroText { get; set; } = string.Empty;
         public string BriefingText { get; set; } = string.Empty;
         public string OutroText { get; set; } = string.Empty;
+
+        // Micro-inference slots
+        public string WeatherBriefing { get; set; } = string.Empty;
+        public string CalendarBriefing { get; set; } = string.Empty;
+        public string TodosBriefing { get; set; } = string.Empty;
+        public string HealthHabitsBriefing { get; set; } = string.Empty;
+        public string FinanceBriefing { get; set; } = string.Empty;
+        public string NewsBriefing { get; set; } = string.Empty;
         
         // Weather
         public string WeatherSummary { get; set; } = string.Empty;
@@ -97,6 +105,12 @@ namespace Daily_WinUI.Services
         public bool WasRegenerated { get; set; }
     }
 
+    public sealed class UserData
+    {
+        public string UserName { get; set; } = string.Empty;
+        public SmartBriefingData Metrics { get; set; } = new();
+    }
+
     public sealed class SmartBriefingService
     {
         private readonly WeatherClient _weatherClient = new();
@@ -132,10 +146,52 @@ namespace Daily_WinUI.Services
             }
         }
 
+        public async Task<List<RssItem>> ExtractRoundRobinHeadlinesAsync()
+        {
+            if (_rssFeedService == null || _rssFeedService.Feeds == null || _rssFeedService.Feeds.Count == 0)
+            {
+                return new List<RssItem>();
+            }
+
+            var tasks = _rssFeedService.Feeds.Select(async feed =>
+            {
+                try
+                {
+                    var items = await _rssFeedService.FetchFeedItemsAsync(feed);
+                    return items ?? new List<RssItem>();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SmartBriefingService News Extract] Error fetching {feed.Name}: {ex.Message}");
+                    return new List<RssItem>();
+                }
+            }).ToList();
+
+            var results = await Task.WhenAll(tasks);
+            var displayItems = new List<RssItem>();
+
+            int maxItemsPerFeed = results.Any() ? results.Max(r => r.Count) : 0;
+            for (int i = 0; i < maxItemsPerFeed; i++)
+            {
+                foreach (var items in results)
+                {
+                    if (i < items.Count)
+                    {
+                        displayItems.Add(items[i]);
+                    }
+                }
+                if (displayItems.Count >= 15) // Stop early to avoid taking too many
+                    break;
+            }
+
+            return displayItems.OrderByDescending(i => i.PublishDate).Take(5).ToList();
+        }
+
         public async Task<SmartBriefingData> GenerateBriefingDataAsync(string userName)
         {
             var data = await LoadBriefingMetricsAsync(userName);
-            return await GenerateAiNarrativeAsync(data, userName);
+            var userData = new UserData { UserName = userName, Metrics = data };
+            return await GenerateSmartBriefingAsync(userData);
         }
 
         public async Task<SmartBriefingData> LoadBriefingMetricsAsync(string userName, bool onlyLocal = false)
@@ -792,11 +848,11 @@ namespace Daily_WinUI.Services
                     });
                 }
 
-                // Populate TopNewsHeadlines with top 5 scored headlines
-                var topHeadlines = ordered.Take(5).ToList();
-                foreach (var h in topHeadlines)
+                // Populate TopNewsHeadlines with exactly the 5 newest headlines using Round-Robin selection
+                var roundRobinHeadlines = await ExtractRoundRobinHeadlinesAsync();
+                foreach (var h in roundRobinHeadlines)
                 {
-                    data.TopNewsHeadlines.Add($"- {h.Item.Title} (Source: {h.Item.PublicationName ?? "Feed"})");
+                    data.TopNewsHeadlines.Add($"- {h.Title} (Source: {h.PublicationName ?? "Feed"})");
                 }
             }
 
@@ -830,221 +886,308 @@ namespace Daily_WinUI.Services
             return data;
         }
 
-        public async Task<SmartBriefingData> GenerateAiNarrativeAsync(SmartBriefingData data, string userName)
+        public async Task<SmartBriefingData> GenerateSmartBriefingAsync(UserData data)
         {
-            string fallbackBriefing = data.BriefingText ?? string.Empty;
+            if (data == null) throw new ArgumentNullException(nameof(data));
+
+            LlmDebugLogger.Clear();
+
+            var metrics = data.Metrics;
+            string userName = data.UserName;
 
             bool useAi = false;
             try
             {
                 useAi = await _smartService.IsModelReadyAsync();
-            }
-            catch { }
-
-            string weatherAdvice = "";
-            string healthAdvice = "";
-            string financeAdvice = "";
-            string habitsAdvice = "";
-
-            if (useAi)
-            {
-                try
+                if (useAi)
                 {
-                    // Initialize active engine to get accurate info (e.g. if we are using Phi Silica NPU)
                     await _smartService.InitializeAsync();
-                    
-                    int budgetLimit = _smartService.IsPhiSilicaActive ? 1500 : 5000;
-                    string behaviorSummary = await _behaviorService.GetWeeklyBehaviorSummaryAsync();
-                    
-                    var promptBuilder = new SmartBriefingPromptBuilder();
-                    promptBuilder.Build(data, userName, behaviorSummary, budgetLimit);
-                    
-                    string systemPrompt = promptBuilder.SystemPrompt;
-                    string userPrompt = promptBuilder.UserPrompt;
-
-                    Console.WriteLine($"[SmartBriefingService] Calling GenerateResponseAsync...");
-                    string responseText = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                    Console.WriteLine($"[SmartBriefingService] Response received. Length: {responseText?.Length ?? 0}");
-                    Console.WriteLine($"[SmartBriefingService] Raw Response:\n{responseText}\n[End Raw Response]");
-                    
-                    // Parse insights tag
-                    string cleanBriefingText = responseText ?? string.Empty;
-                    int startIndex = cleanBriefingText.IndexOf("<insights>");
-                    int endIndex = cleanBriefingText.IndexOf("</insights>");
-                    string jsonContent = "";
-                    
-                    if (startIndex >= 0)
-                    {
-                        if (endIndex > startIndex)
-                        {
-                            jsonContent = cleanBriefingText.Substring(startIndex + 10, endIndex - (startIndex + 10)).Trim();
-                        }
-                        else
-                        {
-                            jsonContent = cleanBriefingText.Substring(startIndex + 10).Trim();
-                        }
-                        
-                        // Strip any potential trailing tag if it was partially generated or present
-                        if (jsonContent.EndsWith("</insights>"))
-                        {
-                            jsonContent = jsonContent.Substring(0, jsonContent.Length - 11).Trim();
-                        }
-                        else if (jsonContent.Contains("</insights>"))
-                        {
-                            int idx = jsonContent.IndexOf("</insights>");
-                            jsonContent = jsonContent.Substring(0, idx).Trim();
-                        }
-
-                        Console.WriteLine($"[SmartBriefingService] Extracted JSON content:\n{jsonContent}\n[End JSON content]");
-                        cleanBriefingText = cleanBriefingText.Substring(0, startIndex).Trim();
-                        
-                        // Clean up trailing metadata transition lines (e.g. "Here is the JSON block...", "Below are the insights...")
-                        var lines = cleanBriefingText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
-                        while (lines.Count > 0)
-                        {
-                            var lastLine = lines.Last().Trim();
-                            if (string.IsNullOrWhiteSpace(lastLine))
-                            {
-                                lines.RemoveAt(lines.Count - 1);
-                                continue;
-                            }
-                            
-                            if (lastLine.Contains("json", StringComparison.OrdinalIgnoreCase) || 
-                                lastLine.Contains("insights", StringComparison.OrdinalIgnoreCase) || 
-                                lastLine.Contains("enclosed", StringComparison.OrdinalIgnoreCase) ||
-                                lastLine.Contains("below", StringComparison.OrdinalIgnoreCase) ||
-                                lastLine.Contains("<insights", StringComparison.OrdinalIgnoreCase))
-                            {
-                                lines.RemoveAt(lines.Count - 1);
-                            }
-                            else
-                            {
-                                break;
-                            }
-                        }
-                        cleanBriefingText = string.Join("\n", lines).Trim();
-                        
-                        bool parsed = false;
-                        try
-                        {
-                            using var doc = System.Text.Json.JsonDocument.Parse(jsonContent);
-                            var root = doc.RootElement;
-                            if (root.TryGetProperty("weatherAdvice", out var w)) weatherAdvice = w.GetString() ?? "";
-                            if (root.TryGetProperty("healthAdvice", out var h)) healthAdvice = h.GetString() ?? "";
-                            if (root.TryGetProperty("financeAdvice", out var f)) financeAdvice = f.GetString() ?? "";
-                            if (root.TryGetProperty("habitsAdvice", out var hb)) habitsAdvice = hb.GetString() ?? "";
-                            parsed = true;
-                        }
-                        catch
-                        {
-                            Console.WriteLine("[SmartBriefingService] JSON parsing failed. Attempting robust line-based key-value extraction for insights.");
-                        }
-
-                        if (!parsed)
-                        {
-                            try
-                            {
-                                var jsonLines = jsonContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                                foreach (var line in jsonLines)
-                                {
-                                    int colonIdx = line.IndexOf(':');
-                                    if (colonIdx > 0)
-                                    {
-                                        string key = line.Substring(0, colonIdx).Trim(' ', '"', '\'', '{', '}', ',', '\t');
-                                        string val = line.Substring(colonIdx + 1).Trim(' ', '"', '\'', '{', '}', ',', '\t');
-                                        
-                                        if (key.Equals("weatherAdvice", StringComparison.OrdinalIgnoreCase)) weatherAdvice = val;
-                                        else if (key.Equals("healthAdvice", StringComparison.OrdinalIgnoreCase)) healthAdvice = val;
-                                        else if (key.Equals("financeAdvice", StringComparison.OrdinalIgnoreCase)) financeAdvice = val;
-                                        else if (key.Equals("habitsAdvice", StringComparison.OrdinalIgnoreCase)) habitsAdvice = val;
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"[SmartBriefingService] Robust parsing also failed: {ex.Message}");
-                            }
-                        }
-                    }
-                    
-                    if (string.IsNullOrWhiteSpace(cleanBriefingText) || cleanBriefingText.Length < 20)
-                    {
-                        Console.WriteLine("[SmartBriefingService] AI narrative is empty, whitespace, or too short. Falling back to template.");
-                        cleanBriefingText = fallbackBriefing;
-                    }
-
-                    data.IntroText = "";
-                    data.BriefingText = cleanBriefingText;
-                    data.OutroText = "Have a highly productive day!";
                 }
-                catch (Exception ex)
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartBriefingService] AI initialization error: {ex.Message}");
+            }
+
+            // Generate slots in parallel
+            var weatherTask = Task.Run(async () =>
+            {
+                string fallback = string.IsNullOrEmpty(metrics.WeatherSummary) 
+                    ? "Weather information is currently unavailable." 
+                    : metrics.WeatherSummary;
+
+                bool isWeatherEmpty = metrics.WeatherTemp == 0 && string.IsNullOrEmpty(metrics.WeatherCondition);
+                if (isWeatherEmpty)
                 {
-                    Console.WriteLine($"[SmartBriefingService] AI Generation failed: {ex.Message}. Falling back to template.");
+                    return "Weather information is currently unavailable.";
+                }
+
+                if (useAi)
+                {
                     try
                     {
-                        var settings = SettingsService.Load();
-                        settings.LastExecutionExplanation = $"AI Generation failed: {ex.Message}\n{ex.StackTrace}";
-                        SettingsService.Save(settings);
+                        string systemPrompt = "System: You are a weather briefing assistant. Summarize today's weather in one concise, natural, and encouraging sentence.";
+                        string userPrompt = $"Weather: {metrics.WeatherCondition}, {metrics.WeatherTemp}°C. Hourly forecast:\n{metrics.WeatherHourlyDetails}\n5-day forecast:\n{metrics.WeatherFiveDayDetails}";
+                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                        if (!string.IsNullOrWhiteSpace(result))
+                        {
+                            return result.Trim();
+                        }
                     }
-                    catch { }
-
-                    data.IntroText = "";
-                    data.BriefingText = fallbackBriefing;
-                    data.OutroText = "Have a highly productive day!";
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SmartBriefingService] Weather AI Prompt Error: {ex.Message}");
+                    }
                 }
-            }
+                return fallback;
+            });
+
+            var calendarTask = Task.Run(async () =>
+            {
+                if (metrics.CalendarEventsToday == null || metrics.CalendarEventsToday.Count == 0)
+                {
+                    return "Your calendar is clear today. Enjoy your free time!";
+                }
+
+                var sbEvents = new StringBuilder();
+                foreach (var ev in metrics.CalendarEventsToday)
+                {
+                    string timeStr = ev.IsAllDay ? "All Day" : $"{ev.Start.ToLocalTime():t} - {ev.End.ToLocalTime():t}";
+                    sbEvents.AppendLine($"- {ev.Title} ({timeStr}){(string.IsNullOrEmpty(ev.Location) ? "" : $" at {ev.Location}")}");
+                }
+                string eventsList = sbEvents.ToString();
+
+                string fallback = $"You have {metrics.CalendarEventsToday.Count} calendar event(s) scheduled for today: " +
+                                  string.Join(", ", metrics.CalendarEventsToday.Select(e => $"{e.Title} at {(e.IsAllDay ? "All Day" : e.Start.ToLocalTime().ToString("t"))}")) + ".";
+
+                if (useAi)
+                {
+                    try
+                    {
+                        string systemPrompt = "System: Summarize the user's calendar events for today into one concise sentence.";
+                        string userPrompt = $"Events:\n{eventsList}";
+                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                        if (!string.IsNullOrWhiteSpace(result))
+                        {
+                            return result.Trim();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SmartBriefingService] Calendar AI Prompt Error: {ex.Message}");
+                    }
+                }
+                return fallback;
+            });
+
+            var todosTask = Task.Run(async () =>
+            {
+                if (metrics.ActiveTodos == null || metrics.ActiveTodos.Count == 0)
+                {
+                    return "You have no pending tasks today.";
+                }
+
+                var sbTodos = new StringBuilder();
+                foreach (var td in metrics.ActiveTodos.OrderByDescending(t => t.Importance?.ToLower() == "high"))
+                {
+                    string dueStr = td.DueDate.HasValue ? $"Due: {td.DueDate.Value.ToLocalTime():d}" : "No due date";
+                    sbTodos.AppendLine($"- {td.Title} ({dueStr}, Priority: {td.Importance}) - Notes: {td.Notes}");
+                }
+                string todosList = sbTodos.ToString();
+
+                string fallback = $"You have {metrics.ActiveTodos.Count} active task(s) on your agenda: " +
+                                  string.Join(", ", metrics.ActiveTodos.Take(3).Select(t => t.Title)) + (metrics.ActiveTodos.Count > 3 ? "..." : "") + ".";
+
+                if (useAi)
+                {
+                    try
+                    {
+                        string systemPrompt = "System: Summarize the user's active tasks and priorities into one concise sentence focusing on urgent ones.";
+                        string userPrompt = $"Tasks:\n{todosList}";
+                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                        if (!string.IsNullOrWhiteSpace(result))
+                        {
+                            return result.Trim();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SmartBriefingService] Todos AI Prompt Error: {ex.Message}");
+                    }
+                }
+                return fallback;
+            });
+
+            var healthTask = Task.Run(async () =>
+            {
+                bool isHealthEmpty = metrics.HealthSteps == 0 && metrics.HealthSleepHours == 0 &&
+                                     metrics.HabitsWaterProgress == 0 && metrics.HabitsSmokesProgress == 0;
+                if (isHealthEmpty)
+                {
+                    return "Keep moving and remember to stay hydrated today!";
+                }
+
+                string fallback = $"You've taken {metrics.HealthSteps:N0} steps, slept {metrics.HealthSleepHours:F1} hours, and drank {metrics.HabitsWaterProgress:F0}/{metrics.HabitsWaterGoal:F0} ml of water.";
+                if (metrics.HabitsSmokesGoal > 0 || metrics.HabitsSmokesProgress > 0)
+                {
+                    fallback += $" Smoked {metrics.HabitsSmokesProgress} out of limit {metrics.HabitsSmokesGoal}.";
+                }
+
+                if (useAi)
+                {
+                    try
+                    {
+                        string systemPrompt = "System: Write exactly one concise, encouraging sentence analyzing the user's health metrics.\n" +
+                                               "Rules:\n" +
+                                               "- You MUST explicitly reference steps as \"steps\", sleep as \"hours of sleep\", and water as \"ml of water\". Never output numbers without their units.\n" +
+                                               "- Assess the step count realistically: under 5,000 steps is low, while 10,000 steps is the target. If steps are low (e.g. 2,000 steps), do not congratulate the user; instead, gently encourage them to walk more.\n" +
+                                               "- Assess sleep duration realistically: under 7 hours of sleep is low.\n" +
+                                               "- Treat smoking cigarettes as a negative habit to reduce or eliminate. If the user smoked, do not congratulate them; encourage reduction or staying below their daily limit.";
+                        
+                        string userPrompt = $"Here are the user's health metrics for today:\n" +
+                                            $"- Steps taken: {metrics.HealthSteps} steps (Target: 10,000 steps)\n" +
+                                            $"- Sleep last night: {metrics.HealthSleepHours:F1} hours (Target: 7-8 hours)\n" +
+                                            $"- Water intake: {metrics.HabitsWaterProgress:F0} ml (Goal: {metrics.HabitsWaterGoal:F0} ml)\n" +
+                                            $"- Cigarettes smoked: {metrics.HabitsSmokesProgress:F0} cigarettes (Limit: {metrics.HabitsSmokesGoal:F0} cigarettes)";
+
+                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                        if (!string.IsNullOrWhiteSpace(result))
+                        {
+                            return result.Trim();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SmartBriefingService] Health AI Prompt Error: {ex.Message}");
+                    }
+                }
+                return fallback;
+            });
+
+            var financeTask = Task.Run(async () =>
+            {
+                if (!metrics.HasLedgerData)
+                {
+                    return "You haven't set up your financial ledger yet. Add accounts to start tracking your net worth!";
+                }
+
+                var sbStocks = new StringBuilder();
+                foreach (var stock in metrics.WatchlistStocks)
+                {
+                    sbStocks.Append($"{stock.Symbol}: {stock.Price:C2} ({stock.FormattedChange}), ");
+                }
+                string stocksList = sbStocks.ToString().TrimEnd(',', ' ');
+
+                string fallback = $"Your ledger net worth is looking healthy at {metrics.NetWorth:C0}.";
+                if (metrics.WatchlistStocks.Count > 0)
+                {
+                    fallback += $" Watchlist: " + string.Join(", ", metrics.WatchlistStocks.Select(s => $"{s.Symbol} ({s.FormattedChange})")) + ".";
+                }
+
+                if (useAi)
+                {
+                    try
+                    {
+                        string systemPrompt = "System: Summarize the user's financial state into one concise sentence based on net worth and stock tickers.";
+                        string userPrompt = $"Net Worth: {metrics.NetWorth:C0}. Stocks: {stocksList}";
+                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                        if (!string.IsNullOrWhiteSpace(result))
+                        {
+                            return result.Trim();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SmartBriefingService] Finance AI Prompt Error: {ex.Message}");
+                    }
+                }
+                return fallback;
+            });
+
+            var newsTask = Task.Run(async () =>
+            {
+                if (metrics.TopNewsHeadlines == null || metrics.TopNewsHeadlines.Count == 0)
+                {
+                    return "No new articles in your feeds today.";
+                }
+
+                string headlinesList = string.Join("\n", metrics.TopNewsHeadlines);
+                string fallback = "Your top headlines today: " + string.Join("; ", metrics.TopNewsHeadlines.Select(h => h.TrimStart('-', ' '))) + ".";
+
+                if (useAi)
+                {
+                    try
+                    {
+                        string systemPrompt = "System: Summarize these 5 headlines into one concise sentence extracting the main topic.";
+                        string userPrompt = $"Headlines:\n{headlinesList}";
+                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                        if (!string.IsNullOrWhiteSpace(result))
+                        {
+                            return result.Trim();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SmartBriefingService] News AI Prompt Error: {ex.Message}");
+                    }
+                }
+                return fallback;
+            });
+
+            await Task.WhenAll(weatherTask, calendarTask, todosTask, healthTask, financeTask, newsTask);
+
+            // Assign values to slots
+            metrics.WeatherBriefing = weatherTask.Result;
+            metrics.CalendarBriefing = calendarTask.Result;
+            metrics.TodosBriefing = todosTask.Result;
+            metrics.HealthHabitsBriefing = healthTask.Result;
+            metrics.FinanceBriefing = financeTask.Result;
+            metrics.NewsBriefing = newsTask.Result;
+
+            // Concatenate all 6 parts
+            metrics.BriefingText = $"{metrics.WeatherBriefing}\n\n{metrics.CalendarBriefing}\n\n{metrics.TodosBriefing}\n\n{metrics.HealthHabitsBriefing}\n\n{metrics.FinanceBriefing}\n\n{metrics.NewsBriefing}";
+
+            metrics.IntroText = "";
+            metrics.OutroText = "Have a highly productive day!";
+
+            // Maintain advice using rule-based fallbacks since they are extremely reliable
+            string weatherAdvice = string.Empty;
+            string healthAdvice = string.Empty;
+            string financeAdvice = string.Empty;
+            string habitsAdvice = string.Empty;
+
+            if (metrics.WeatherCondition.Contains("rain", StringComparison.OrdinalIgnoreCase) || metrics.WeatherCondition.Contains("drizzle", StringComparison.OrdinalIgnoreCase))
+                weatherAdvice = "Rain expected today, keep an umbrella handy.";
+            else if (metrics.WeatherTemp < 10)
+                weatherAdvice = "It's cold today, dress in warm layers.";
             else
-            {
-                data.IntroText = "";
-                data.BriefingText = fallbackBriefing;
-                data.OutroText = "Have a highly productive day!";
-            }
+                weatherAdvice = "Weather looks pleasant for outdoor activities.";
 
-            // Apply rule-based fallbacks for advice if they are empty
-            if (string.IsNullOrEmpty(weatherAdvice))
-            {
-                if (data.WeatherCondition.Contains("rain", StringComparison.OrdinalIgnoreCase) || data.WeatherCondition.Contains("drizzle", StringComparison.OrdinalIgnoreCase))
-                    weatherAdvice = "Rain expected today, keep an umbrella handy.";
-                else if (data.WeatherTemp < 10)
-                    weatherAdvice = "It's cold today, dress in warm layers.";
-                else
-                    weatherAdvice = "Weather looks pleasant for outdoor activities.";
-            }
+            if (metrics.HealthSteps < 4000)
+                healthAdvice = "You are behind on steps today. Let's aim to reach your target baseline!";
+            else if (metrics.HealthSleepHours < 7 && metrics.HealthSleepHours > 0)
+                healthAdvice = "You got less than 7 hours of sleep. Prioritize rest and recovery.";
+            else
+                healthAdvice = "Vitals are looking good. Keep up the active baseline!";
 
-            if (string.IsNullOrEmpty(healthAdvice))
-            {
-                if (data.HealthSteps < 4000)
-                    healthAdvice = "You are behind on steps today. Let's aim to reach your target baseline!";
-                else if (data.HealthSleepHours < 7 && data.HealthSleepHours > 0)
-                    healthAdvice = "You got less than 7 hours of sleep. Prioritize rest and recovery.";
-                else
-                    healthAdvice = "Vitals are looking good. Keep up the active baseline!";
-            }
+            if (!metrics.HasLedgerData)
+                financeAdvice = "Your ledger is empty. Tap the widget to configure your accounts!";
+            else
+                financeAdvice = "Watchlist is active. Markets are showing movements.";
 
-            if (string.IsNullOrEmpty(financeAdvice))
-            {
-                if (!data.HasLedgerData)
-                    financeAdvice = "Your ledger is empty. Tap the widget to configure your accounts!";
-                else
-                    financeAdvice = "Watchlist is active. Markets are showing movements.";
-            }
+            if (metrics.HabitsWaterProgress < metrics.HabitsWaterGoal)
+                habitsAdvice = $"Hydration: you need {(metrics.HabitsWaterGoal - metrics.HabitsWaterProgress):F0} ml more water today.";
+            else if (metrics.HabitsSmokesProgress > metrics.HabitsSmokesGoal && metrics.HabitsSmokesGoal > 0)
+                habitsAdvice = "Smokes limit exceeded! Try to resist logging any more units today.";
+            else
+                habitsAdvice = "Habits are on track today. Stay consistent!";
 
-            if (string.IsNullOrEmpty(habitsAdvice))
-            {
-                if (data.HabitsWaterProgress < data.HabitsWaterGoal)
-                    habitsAdvice = $"Hydration: you need {(data.HabitsWaterGoal - data.HabitsWaterProgress):F0} ml more water today.";
-                else if (data.HabitsSmokesProgress > data.HabitsSmokesGoal && data.HabitsSmokesGoal > 0)
-                    habitsAdvice = "Smokes limit exceeded! Try to resist logging any more units today.";
-                else
-                    habitsAdvice = "Habits are on track today. Stay consistent!";
-            }
+            metrics.WeatherAdvice = weatherAdvice;
+            metrics.HealthAdvice = healthAdvice;
+            metrics.FinanceAdvice = financeAdvice;
+            metrics.HabitsAdvice = habitsAdvice;
 
-            data.WeatherAdvice = weatherAdvice;
-            data.HealthAdvice = healthAdvice;
-            data.FinanceAdvice = financeAdvice;
-            data.HabitsAdvice = habitsAdvice;
-
-            return data;
+            return metrics;
         }
     }
 }

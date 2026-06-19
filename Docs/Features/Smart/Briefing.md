@@ -350,99 +350,68 @@ flowchart TD
 
 ---
 
-### 5.3 Prompting Structures & Constraints
-If the system decides to regenerate the briefing and the AI engine is ready, the system compiles data from multiple services and prompts the model inside [SmartBriefingService.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Services/SmartBriefingService.cs).
+### 5.3 Prompting Structures & Constraints (Micro-Inference)
+To maximize edge hardware throughput, prevent context size limitations (KV cache bounds on Snapdragon NPU), and completely avoid JSON formatting hallucinations/crashes, the system shifts completely away from monolithic zero-shot prompts to a **Hybrid Micro-Inference & C# Templating** architecture.
 
-#### 5.3.1 System Prompt
-```text
-You are DayOne, a helpful personal assistant AI running locally on the user's device. 
-Generate a concise, natural, and friendly daily briefing narrative based on the user's data. 
-Analyze their weather, calendar events, active tasks/todos, habits, finances, health, and 7-day behavior logs to provide cohesive insights and encouraging advice.
+The orchestrator service [SmartBriefingService.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Services/SmartBriefingService.cs) evaluates the user's data payload using parallel micro-prompt tasks.
 
-Rules:
-- Do NOT write any greeting (like 'Good morning', 'Good evening', 'Hello', etc.) or introductory filler (like 'Here is your briefing' or 'Based on your data'). Start directly with the weather and calendar analysis.
-- Keep the briefing structured in 2-3 short, focused paragraphs of conversational flowing text. Keep descriptions extremely concise and direct to stay on point and avoid hallucinating details. Do not use markdown headers or lists.
-- Format your paragraphs clearly, using double newlines (\n\n) to separate them.
-- Integrate the user's scheduled calendar events and active tasks (todos) with their notes naturally, suggesting when they might focus on tasks or highlighting busy periods.
-- If finance data is marked as UNINITIALIZED, do not congratulate the user on net worth or mention a $0 net worth. Suggest setting up their ledger or adding an account instead.
-- If smoking habit data is present, treat it as a negative target (reduction/cessation). Do NOT congratulate the user for smoking or logging smokes; instead, encourage reduction or praise staying under limit.
-- Evaluate the weather forecast over the next hours and next 5 days, highlighting key transitions (e.g. if it will rain later, recommend taking an umbrella or exercising indoors).
-- Evaluate the news headlines provided and concisely summarize the most important trends or events in a paragraph.
+#### 5.3.1 Architectural Pillars
 
-At the very end of your response, you MUST append a JSON block enclosed in <insights> and </insights> tags. The JSON must contain short advice strings (1 sentence each) for the widgets: 
-{
-  "weatherAdvice": "short advice based on weather forecast",
-  "healthAdvice": "short advice based on vitals/sleep",
-  "financeAdvice": "short advice based on ledger/watchlist",
-  "habitsAdvice": "short advice based on water/smoking"
-}
-Do not write any introductory or transition text before or after the JSON block. Go directly from the end of your narrative text to the <insights> tag. Do not write any text after the </insights> tag.
-```
+1. **Dual-Mode Template Slots**:
+   The briefing narrative is divided into 6 distinct text fields within `SmartBriefingData`:
+   - `WeatherBriefing` (Weather)
+   - `CalendarBriefing` (Calendar Events)
+   - `TodosBriefing` (Tasks & Notes)
+   - `HealthHabitsBriefing` (Health Vitals & Habit Metrics)
+   - `FinanceBriefing` (Financial Ledger & Stock Watchlist)
+   - `NewsBriefing` (RSS/WordPress Articles)
+   
+2. **Deterministic Fallbacks**:
+   Prior to calling the local LLM, C# natively evaluates whether a slot's telemetry metrics are empty, invalid, or uninitialized. If so, it instantly assigns a hardcoded deterministic string (e.g. *"Your calendar is clear today. Enjoy your free time!"*), completely bypassing AI execution.
 
-#### 5.3.2 Dynamic Prompt Budgeting and Pruning
-To prevent context size failures (specifically the `PromptLargerThanContext` error on Snapdragon NPU Phi Silica models which have a native 2048-token context window limit), prompt construction is managed by the `SmartBriefingPromptBuilder`. 
+3. **Isolated try/catch gates & Concurrent Task.WhenAll()**:
+   Each active slot's micro-prompt runs inside its own `Task.Run` thread. All 6 tasks execute concurrently using `Task.WhenAll()`. Each AI call is wrapped in a `try/catch` block. If one micro-prompt fails (e.g. due to hardware timeout or NPU reset), only that specific slot falls back to its deterministic C# summary string, keeping the remaining AI-generated slot briefs fully intact.
 
-The builder calculates prompt length using a token estimation heuristic:
-$$\text{Estimated Tokens} = \lceil\text{Characters} / 3.8\rceil$$
+4. **Concatenation UI Presentation**:
+   The final slots are joined using double newlines (`\n\n`) into `data.BriefingText` so that they flow natively as a single typed narrative inside the typewriter animation in `MainPage.xaml.cs`.
 
-##### Target Budgets by Active Engine:
-- **Built-in Phi Silica NPU**: Capped at **1,500 tokens** to leave adequate context headroom for the generated narrative response.
-- **Local GGUF Engines (GPU/CPU)**: Capped at **5,000 tokens** (since context size is configured up to 8,192).
+---
 
-##### Dynamic Pruning Sequence:
-If the estimated token count of the combined prompts exceeds the engine's budget limit, the builder runs an iterative loop, downgrading elements step-by-step until it fits:
-1. **Drop Behavior Telemetry**: Remove the weekly behavior summary string.
-2. **Reduce Headlines**: Cap news headlines from 5 down to 2.
-3. **Reduce Watchlist**: Cap watchlist stocks from 10 down to 5.
-4. **Reduce Todos**: Cap active todos from 8 down to 4.
-5. **Reduce Events**: Cap calendar events from 5 down to 2.
-6. **Shorten Text Bounds**: Truncate calendar descriptions and todo notes from 120 down to 60 characters.
-7. **Drop Hourly Weather**: Remove the hourly forecast list, preserving only the 5-day outlook.
-8. **Remove Headlines entirely**: Cap news headlines to 0.
-9. **Remove Watchlist entirely**: Cap watchlist stocks to 0.
-10. **Minimize Todos**: Cap active todos to 1.
-11. **Minimize Events**: Cap calendar events to 1.
+#### 5.3.2 News Round-Robin Selection
+Before prompt generation, the system runs the Round-Robin headline selection algorithm:
+1. Iterates over all of the user's subscribed publications in parallel, pulling a sequential list of recent articles from each.
+2. Selects the first item from each publication source, then the second, etc., up to 15 items.
+3. Orders them chronologically and extracts exactly the top 5 articles.
+4. Sends only these 5 source-diverse headlines to the AI for summarization, eliminating single-feed attention contamination.
 
-#### 5.3.3 User Prompt Structure
-The user prompt aggregates the data payload dynamically:
-```text
-User Name: [Name]
-Current Time: [Local Time]
+---
 
---- WEATHER DATA ---
-Condition: [Condition] (Temp: [Temp]°C)
-Hourly Forecast (next 8 hours): [List of hourly labels, temp, feels like, precipitation %]
-5-Day Forecast: [List of days, max/min temps, conditions]
+#### 5.3.3 Micro-Prompt System & User Instructions
+The 6 slots utilize strict, tiny, and targeted prompts to eliminate attention contamination:
 
---- CALENDAR EVENTS TODAY ---
-[Capped at top 5 events. Time ranges, locations, and descriptions are included. Descriptions are truncated to 120 chars maximum to prevent context window overflow.]
+- **Weather**:
+  - *System*: `"System: You are a weather briefing assistant. Summarize today's weather in one concise, natural, and encouraging sentence."`
+  - *User*: `"Weather: [Condition], [Temp]°C. Hourly forecast: [Details]. 5-day forecast: [Details]."`
 
---- ACTIVE TASKS & TODOS ---
-[Capped at top 8 tasks, sorted by high importance first. Due dates and task notes are included. Notes are truncated to 120 chars maximum to prevent context window overflow.]
+- **Calendar**:
+  - *System*: `"System: Summarize the user's calendar events for today into one concise sentence."`
+  - *User*: `"Events: [List of title, time, location]"`
 
---- NEWS HEADLINES ---
-[Capped at top 5 scored feed headlines, e.g. "- Title (Source: Publication)"]
+- **Todos & Notes**:
+  - *System*: `"System: Summarize the user's active tasks and priorities into one concise sentence focusing on urgent ones."`
+  - *User*: `"Tasks: [List of title, priority, notes]"`
 
---- HEALTH DATA ---
-Steps Today: [Count]
-Sleep Last Night: [Hours]
-Average Heart Rate: [BPM]
-[Optional: Weight, Active Energy Burned, HRV, Blood Pressure, SpO2]
+- **Health & Habits**:
+  - *System*: `"System: Write one encouraging sentence about the user's habits and health metrics. Treat smoking as a negative habit to reduce."`
+  - *User*: `"Steps: [Steps], Sleep: [Sleep] hours, Water: [Water]/[WaterGoal] ml, Smokes: [Smokes]/[SmokesGoal]"`
 
---- FINANCE DATA ---
-[If HasLedgerData]: Net Worth: [Amount] | Watchlist Stocks: [Ticker: Price (Change)] (Capped at top 10 stocks in watchlist details)
-[If Uninitialized]: Ledger status: UNINITIALIZED (No accounts or transactions logged yet...)
+- **Finances**:
+  - *System*: `"System: Summarize the user's financial state into one concise sentence based on net worth and stock tickers."`
+  - *User*: `"Net Worth: [NetWorth]. Stocks: [Watchlist tickers]"`
 
---- HABITS DATA ---
-Water target: [Goal] ml, Drank today: [Progress] ml
-[Optional]: Cigarettes limit/baseline: [Goal] today, Smoked today: [Progress]
-
---- RECENT USER BEHAVIOR TELEMETRY (Last 7 Days) ---
-[Aggregated event frequency strings from BehaviorService, e.g., "Feature: News * ReadArticle: 5 times"]
-```
-
-#### 5.3.3 Parsing & Extraction
-The response is parsed by finding the index of `<insights>` and `</insights>` tags. The text prior to the tags is cleaned of trailing metadata filler and used for the main briefing text, while the block inside is parsed via `JsonDocument.Parse` (or falls back to a robust line-based key-value regex-like parser if JSON syntax is broken) to populate the widget advice properties.
+- **News**:
+  - *System*: `"System: Summarize these 5 headlines into one concise sentence extracting the main topic."`
+  - *User*: `"Headlines: [Round-Robin 5 headlines]"`
 
 ---
 

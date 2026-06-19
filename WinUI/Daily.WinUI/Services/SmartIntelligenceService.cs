@@ -69,23 +69,26 @@ namespace Daily_WinUI.Services
             // Format using llama format (standard GGUF fallback format)
             string prompt = $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{userPrompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
 
-            LlmDebugLogger.SystemPrompt = systemPrompt;
-            LlmDebugLogger.UserPrompt = userPrompt;
-            LlmDebugLogger.FormattedPrompt = prompt;
-            LlmDebugLogger.ActiveEngine = _aiManager.ActiveEngineName;
-            LlmDebugLogger.LastExecutionTime = DateTime.Now;
-            LlmDebugLogger.LastError = string.Empty;
-            LlmDebugLogger.Response = string.Empty;
+            var log = new LlmExecutionLog
+            {
+                SystemPrompt = systemPrompt,
+                UserPrompt = userPrompt,
+                FormattedPrompt = prompt,
+                ActiveEngine = _aiManager.ActiveEngineName,
+                Timestamp = DateTime.Now
+            };
 
             try
             {
                 string response = await _aiManager.GenerateBriefingAsync(prompt);
-                LlmDebugLogger.Response = response;
+                log.Response = response;
+                LlmDebugLogger.Log(log);
                 return response;
             }
             catch (Exception ex)
             {
-                LlmDebugLogger.LastError = ex.ToString();
+                log.Error = ex.ToString();
+                LlmDebugLogger.Log(log);
                 throw;
             }
         }
@@ -165,18 +168,20 @@ namespace Daily_WinUI.Services
                 };
             }
 
-            LlmDebugLogger.SystemPrompt = systemPrompt;
-            LlmDebugLogger.UserPrompt = userPrompt;
-            LlmDebugLogger.FormattedPrompt = prompt;
-            LlmDebugLogger.ActiveEngine = _aiManager.ActiveEngineName;
-            LlmDebugLogger.LastExecutionTime = DateTime.Now;
-            LlmDebugLogger.LastError = string.Empty;
-            LlmDebugLogger.Response = string.Empty;
+            var log = new LlmExecutionLog
+            {
+                SystemPrompt = systemPrompt,
+                UserPrompt = userPrompt,
+                FormattedPrompt = prompt,
+                ActiveEngine = _aiManager.ActiveEngineName,
+                Timestamp = DateTime.Now
+            };
 
             try
             {
                 string response = await _aiManager.GenerateBriefingAsync(prompt);
-                LlmDebugLogger.Response = response;
+                log.Response = response;
+                LlmDebugLogger.Log(log);
 
                 // Save active engine explanation
                 settings = SettingsService.Load();
@@ -187,7 +192,8 @@ namespace Daily_WinUI.Services
             }
             catch (Exception ex)
             {
-                LlmDebugLogger.LastError = ex.ToString();
+                log.Error = ex.ToString();
+                LlmDebugLogger.Log(log);
                 throw;
             }
         }

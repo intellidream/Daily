@@ -157,6 +157,7 @@ namespace Daily_WinUI.Services
                 if (!settings.UseWindowsInternalAi)
                 {
                     Console.WriteLine("[AIManager] NPU engine requested but UseWindowsInternalAi is disabled in settings.");
+                    LlmDebugLogger.InitializationError += "[NPU Status] UseWindowsInternalAi is disabled in settings.\n\n";
                     return false;
                 }
 
@@ -167,10 +168,15 @@ namespace Daily_WinUI.Services
                     SetActiveEngine(_npuEngine, "Qualcomm Hexagon NPU (Phi Silica)");
                     return true;
                 }
+                else
+                {
+                    LlmDebugLogger.InitializationError += "[NPU Status] Phi Silica NPU engine is not supported on this device.\n\n";
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[AIManager] NPU Engine initialization failed: {ex.Message}");
+                LlmDebugLogger.InitializationError += $"[NPU Init Error] {ex.Message}\n{ex.StackTrace}\n\n";
             }
             return false;
         }
@@ -217,6 +223,7 @@ namespace Daily_WinUI.Services
                         else
                         {
                             Console.WriteLine($"[AIManager] Verification failed for {targetBackend}.");
+                            LlmDebugLogger.InitializationError += $"[GPU Verification Failed] Verification failed for target backend: {targetBackend}.\n";
                             // If Nvidia failed, try Vulkan as a fallback
                             if (isNvidia)
                             {
@@ -228,18 +235,24 @@ namespace Daily_WinUI.Services
                                     gpuPath = vulkanDllPath;
                                     Console.WriteLine("[AIManager] NVIDIA failed to load CUDA, but Vulkan verified successfully.");
                                 }
+                                else
+                                {
+                                    LlmDebugLogger.InitializationError += "[GPU Verification Failed] Fallback Vulkan verification also failed or DLL not found.\n\n";
+                                }
                             }
                         }
                     }
                     else
                     {
                         Console.WriteLine($"[AIManager] GPU backend DLL not found at: {dllPath}");
+                        LlmDebugLogger.InitializationError += $"[GPU DLL Not Found] DLL not found at: {dllPath}\n\n";
                     }
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[AIManager] Error during GPU detection or verification: {ex.Message}");
+                LlmDebugLogger.InitializationError += $"[GPU Detection Error] {ex.Message}\n{ex.StackTrace}\n\n";
             }
 
             if (gpuSelected)
@@ -257,6 +270,7 @@ namespace Daily_WinUI.Services
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[AIManager] Failed to initialize GPU engine even after successful child process dry-run: {ex.Message}");
+                    LlmDebugLogger.InitializationError += $"[GPU Init Error] Failed to initialize GPU engine: {ex.Message}\n{ex.StackTrace}\n\n";
                 }
             }
 

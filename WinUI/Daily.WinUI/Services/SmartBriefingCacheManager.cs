@@ -179,7 +179,7 @@ namespace Daily_WinUI.Services
 
             // 3. Generate new narrative via AI (either forced refresh, stale age, or changed metrics)
             Debug.WriteLine("[SmartBriefingCacheManager] Telemetry metrics changed or cache is stale. Regenerating AI narrative...");
-            var regeneratedBriefing = await _briefingService.GenerateAiNarrativeAsync(currentMetrics, userName);
+            var regeneratedBriefing = await _briefingService.GenerateSmartBriefingAsync(new UserData { UserName = userName, Metrics = currentMetrics });
             regeneratedBriefing.WasRegenerated = true; // Mark as regenerated
 
             // Save to local SQLite, settings, and push to Supabase
