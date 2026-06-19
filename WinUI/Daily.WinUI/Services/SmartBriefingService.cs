@@ -887,8 +887,9 @@ namespace Daily_WinUI.Services
             string healthHabitsCombined = $"{hBrief} {hbBrief}".Trim();
             
             string nBrief = $"We found a couple of interesting articles in your feed you might like: \"{(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Source : "N/A")}, and \"{(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Source : "N/A")}.";
+            string indentedBrief = nBrief.Replace("\n", "\n    ");
 
-            string fallbackBriefing = $"\uE706  {wBrief}\n\n\uE787  {cBrief}\n\n\uE73A  {tBrief}\n\n\uEC92  {healthHabitsCombined}\n\n\uE8C7  {fBrief}\n\n\uE7C3  Headlines Summary:\n_{nBrief}_";
+            string fallbackBriefing = $"\uE706  {wBrief}\n\n\uE787  {cBrief}\n\n\uE73A  {tBrief}\n\n\uEC92  {healthHabitsCombined}\n\n\uE8C7  {fBrief}\n\n\uE7C3  Headlines Summary:\n    _\"{indentedBrief}\"_";
             data.BriefingText = fallbackBriefing;
             data.IntroText = "";
             data.OutroText = "Have a highly productive day!";
@@ -1240,7 +1241,8 @@ namespace Daily_WinUI.Services
                 }
             }
 
-            metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n_{newsBody}_";
+            string indentedBody = newsBody.Replace("\n", "\n    ");
+            metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n    _\"{indentedBody}\"_";
 
             // Concatenate all 6 parts
             metrics.BriefingText = $"{metrics.WeatherBriefing}\n\n{metrics.CalendarBriefing}\n\n{metrics.TodosBriefing}\n\n{metrics.HealthHabitsBriefing}\n\n{metrics.FinanceBriefing}\n\n{metrics.NewsBriefing}";

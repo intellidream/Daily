@@ -83,7 +83,7 @@ namespace Daily_WinUI.Services
                 string response = await _aiManager.GenerateBriefingAsync(prompt);
                 log.Response = response;
                 LlmDebugLogger.Log(log);
-                return response;
+                return SmartIntelligenceHelper.SanitizeResponse(response, systemPrompt, userPrompt, prompt);
             }
             catch (Exception ex)
             {
@@ -188,7 +188,7 @@ namespace Daily_WinUI.Services
                 settings.LastExecutionExplanation = $"Executed successfully using dynamic strategy: {_aiManager.ActiveEngineName}.";
                 SettingsService.Save(settings);
 
-                return response;
+                return SmartIntelligenceHelper.SanitizeResponse(response, systemPrompt, userPrompt, prompt);
             }
             catch (Exception ex)
             {
@@ -196,6 +196,94 @@ namespace Daily_WinUI.Services
                 LlmDebugLogger.Log(log);
                 throw;
             }
+        }
+    }
+
+    internal static class SmartIntelligenceHelper
+    {
+        public static string SanitizeResponse(string response, string systemPrompt, string userPrompt, string prompt)
+        {
+            if (string.IsNullOrEmpty(response)) return string.Empty;
+
+            string cleanResponse = response.Trim();
+
+            // 1. Strip exact formatted prompt if leaked
+            if (cleanResponse.StartsWith(prompt))
+            {
+                cleanResponse = cleanResponse.Substring(prompt.Length).Trim();
+            }
+
+            // 2. Strip user prompt if leaked
+            int userPromptIdx = cleanResponse.IndexOf(userPrompt);
+            if (userPromptIdx >= 0)
+            {
+                cleanResponse = cleanResponse.Substring(userPromptIdx + userPrompt.Length).Trim();
+            }
+
+            // 3. Strip system prompt if leaked
+            int systemPromptIdx = cleanResponse.IndexOf(systemPrompt);
+            if (systemPromptIdx >= 0)
+            {
+                cleanResponse = cleanResponse.Substring(systemPromptIdx + systemPrompt.Length).Trim();
+            }
+
+            // 4. Strip common delimiters/headers/assistant tags/system prompt repeats
+            string[] prefixToStrip = new[]
+            {
+                "<|start_header_id|>assistant<|end_header_id|>",
+                "<|assistant|>",
+                "<|im_start|>assistant",
+                "<|im_end|>",
+                "<|eot_id|>",
+                "<|end|>",
+                "assistant\n",
+                "assistant:\n",
+                "assistant:",
+                "system\n",
+                "system:\n",
+                "system:",
+                "user\n",
+                "user:\n",
+                "user:",
+                "System: Write exactly one concise, encouraging sentence commenting on the user's active tasks. CRITICAL: Do NOT list or enumerate the tasks (do not write down task titles or details). Instead, write a natural statement mentioning the number of pending tasks (e.g. 'You still have 3 tasks to complete today' or 'You have 4 active tasks left on your agenda') or comment on their workload/importance (e.g. 'You have a few high-priority tasks to focus on' or 'You have a light task list today').",
+                "System: Write exactly one concise, encouraging sentence commenting on the user's upcoming calendar events today. CRITICAL: Do NOT list or enumerate the events (do not write down event names, times, or locations). Instead, write a natural statement mentioning the number of upcoming events (e.g. 'You have 3 events scheduled for today' or 'You have only 2 more events today') or comment on their workload/importance (e.g. 'Your schedule is looking very light today' or 'You have a busy afternoon ahead').",
+                "System: You are a weather briefing assistant. Summarize today's weather in one concise, natural, and encouraging sentence.",
+                "System: Summarize the user's financial state into one concise sentence based on net worth and stock tickers.",
+                "System: Summarize these 5 headlines into one concise sentence extracting the main topic. CRITICAL: Do NOT output any introductory text, prefix, or conversational phrases (such as \"Here's a concise sentence...\", \"Here is a summary...\", \"Headlines Summary:\", or \"The main topic is...\"). Start directly with the summary sentence itself.",
+                "Active tasks:\n",
+                "Active tasks:",
+                "Headlines:\n",
+                "Headlines:",
+                "Upcoming events:\n",
+                "Upcoming events:",
+                "Weather:\n",
+                "Weather:"
+            };
+
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                foreach (var prefix in prefixToStrip)
+                {
+                    if (cleanResponse.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        cleanResponse = cleanResponse.Substring(prefix.Length).Trim();
+                        changed = true;
+                        break;
+                    }
+                }
+                
+                // Trim trailing tags/chars
+                string oldClean = cleanResponse;
+                cleanResponse = cleanResponse.Trim(':', ' ', '\n', '\r', '\t', '•', '-', '*', '<', '>');
+                if (cleanResponse != oldClean)
+                {
+                    changed = true;
+                }
+            }
+
+            return cleanResponse;
         }
     }
 }
