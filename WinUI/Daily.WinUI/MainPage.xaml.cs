@@ -30,6 +30,8 @@ public sealed partial class MainPage : Page
     private DispatcherTimer? _typewriterTimer;
     private string _fullBriefingText = string.Empty;
     private int _typewriterIndex = 0;
+    private bool _isItalicState = false;
+    private Microsoft.UI.Xaml.Documents.Run? _currentRun = null;
     private string[] _briefingWords = System.Array.Empty<string>();
     private System.Threading.Tasks.Task<SmartBriefingData>? _pregeneratedBriefingTask;
     private string? _pregeneratedAccelerator;
@@ -1001,7 +1003,9 @@ public sealed partial class MainPage : Page
         BriefingOutroText.Text = data.OutroText;
         BriefingOutroText.Opacity = 0.0; // Hide initially
 
-        BriefingTypedText.Text = string.Empty;
+        BriefingTypedText.Inlines.Clear();
+        _currentRun = null;
+        _isItalicState = false;
         _fullBriefingText = data.BriefingText;
         _briefingWords = _fullBriefingText.Split(' ');
         _typewriterIndex = 0;
@@ -1012,7 +1016,33 @@ public sealed partial class MainPage : Page
         {
             if (_typewriterIndex < _briefingWords.Length)
             {
-                BriefingTypedText.Text += _briefingWords[_typewriterIndex] + " ";
+                string rawWord = _briefingWords[_typewriterIndex];
+                var (cleanWord, starts, ends) = ParseFormatting(rawWord);
+
+                if (starts)
+                {
+                    _isItalicState = true;
+                }
+
+                bool wordIsItalic = _isItalicState;
+
+                // Check if we need to start a new Run
+                if (_currentRun == null || BriefingTypedText.Inlines.Count == 0 || _currentRun.FontStyle != (wordIsItalic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal))
+                {
+                    _currentRun = new Microsoft.UI.Xaml.Documents.Run
+                    {
+                        FontStyle = wordIsItalic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal
+                    };
+                    BriefingTypedText.Inlines.Add(_currentRun);
+                }
+
+                _currentRun.Text += cleanWord + " ";
+
+                if (ends)
+                {
+                    _isItalicState = false;
+                }
+
                 _typewriterIndex++;
 
                 // Pulsate and glow effect for the AI Icon (slowed down for a "thinking" feel)
@@ -1144,6 +1174,28 @@ public sealed partial class MainPage : Page
                 ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xBB, 0x1A, 0x1A, 0x1A))
                 : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xBB, 255, 255, 255));
         }
+    }
+
+    private (string word, bool startsItalic, bool endsItalic) ParseFormatting(string rawWord)
+    {
+        string word = rawWord;
+        bool starts = false;
+        bool ends = false;
+
+        if (word.StartsWith('_'))
+        {
+            starts = true;
+            word = word.Substring(1);
+        }
+
+        int underscoreIndex = word.IndexOf('_');
+        if (underscoreIndex >= 0)
+        {
+            ends = true;
+            word = word.Remove(underscoreIndex, 1);
+        }
+
+        return (word, starts, ends);
     }
 
     private void CloseBriefing_Click(object sender, RoutedEventArgs e)

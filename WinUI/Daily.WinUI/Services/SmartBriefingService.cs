@@ -888,7 +888,7 @@ namespace Daily_WinUI.Services
             
             string nBrief = $"We found a couple of interesting articles in your feed you might like: \"{(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 0 ? data.NewsRecommendations[0].Source : "N/A")}, and \"{(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Title : "No recommendations")}\" from {(data.NewsRecommendations.Count > 1 ? data.NewsRecommendations[1].Source : "N/A")}.";
 
-            string fallbackBriefing = $"\uE706  {wBrief}\n\n\uE787  {cBrief}\n\n\uE73A  {tBrief}\n\n\uEC92  {healthHabitsCombined}\n\n\uE8C7  {fBrief}\n\n\uE7C3  Headlines Summary:\n    {nBrief}";
+            string fallbackBriefing = $"\uE706  {wBrief}\n\n\uE787  {cBrief}\n\n\uE73A  {tBrief}\n\n\uEC92  {healthHabitsCombined}\n\n\uE8C7  {fBrief}\n\n\uE7C3  Headlines Summary:\n_{nBrief}_";
             data.BriefingText = fallbackBriefing;
             data.IntroText = "";
             data.OutroText = "Have a highly productive day!";
@@ -1147,7 +1147,7 @@ namespace Daily_WinUI.Services
                 {
                     try
                     {
-                        string systemPrompt = "System: Summarize these 5 headlines into one concise sentence extracting the main topic.";
+                        string systemPrompt = "System: Summarize these 5 headlines into one concise sentence extracting the main topic. CRITICAL: Do NOT output any introductory text, prefix, or conversational phrases (such as \"Here's a concise sentence...\", \"Here is a summary...\", \"Headlines Summary:\", or \"The main topic is...\"). Start directly with the summary sentence itself.";
                         string userPrompt = $"Headlines:\n{headlinesList}";
                         string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
                         if (!string.IsNullOrWhiteSpace(result))
@@ -1165,13 +1165,13 @@ namespace Daily_WinUI.Services
 
             await Task.WhenAll(weatherTask, calendarTask, todosTask, healthTask, financeTask, newsTask);
 
-            // Assign values to slots (stripping asterisks and prefixing icons)
-            string weatherClean = (weatherTask.Result ?? "").Replace("**", "").Trim();
-            string calendarClean = (calendarTask.Result ?? "").Replace("**", "").Trim();
-            string todosClean = (todosTask.Result ?? "").Replace("**", "").Trim();
-            string healthClean = (healthTask.Result ?? "").Replace("**", "").Trim();
-            string financeClean = (financeTask.Result ?? "").Replace("**", "").Trim();
-            string newsClean = (newsTask.Result ?? "").Replace("**", "").Trim();
+            // Assign values to slots (stripping asterisks, replacing bullet points, and prefixing icons)
+            string weatherClean = (weatherTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
+            string calendarClean = (calendarTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
+            string todosClean = (todosTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
+            string healthClean = (healthTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
+            string financeClean = (financeTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
+            string newsClean = (newsTask.Result ?? "").Replace("**", "").Replace("*", "•").Replace("_", "").Trim();
 
             metrics.WeatherBriefing = $"\uE706  {weatherClean}";
             metrics.CalendarBriefing = $"\uE787  {calendarClean}";
@@ -1179,22 +1179,68 @@ namespace Daily_WinUI.Services
             metrics.HealthHabitsBriefing = $"\uEC92  {healthClean}";
             metrics.FinanceBriefing = $"\uE8C7  {financeClean}";
 
-            // Format News with elegant indent
+            // Format News (cleaning intros and placing summary on next line in italics)
             string newsBody = newsClean;
-            if (newsBody.StartsWith("Headlines Summary:", StringComparison.OrdinalIgnoreCase))
+            
+            // Clean up common conversational prefix patterns ending in colons first
+            int colonIndex = newsBody.IndexOf(':');
+            if (colonIndex > 0 && colonIndex < 120)
             {
-                newsBody = newsBody.Substring("Headlines Summary:".Length).Trim();
-            }
-            else if (newsBody.StartsWith("Headlines:", StringComparison.OrdinalIgnoreCase))
-            {
-                newsBody = newsBody.Substring("Headlines:".Length).Trim();
-            }
-            else if (newsBody.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
-            {
-                newsBody = newsBody.Substring("Summary:".Length).Trim();
+                string possibleIntro = newsBody.Substring(0, colonIndex);
+                if (possibleIntro.Contains("summariz", StringComparison.OrdinalIgnoreCase) ||
+                    possibleIntro.Contains("sentence", StringComparison.OrdinalIgnoreCase) ||
+                    possibleIntro.Contains("headline", StringComparison.OrdinalIgnoreCase) ||
+                    possibleIntro.Contains("article", StringComparison.OrdinalIgnoreCase) ||
+                    possibleIntro.Contains("news", StringComparison.OrdinalIgnoreCase) ||
+                    possibleIntro.Contains("here's", StringComparison.OrdinalIgnoreCase) ||
+                    possibleIntro.Contains("here is", StringComparison.OrdinalIgnoreCase) ||
+                    possibleIntro.Contains("summary", StringComparison.OrdinalIgnoreCase))
+                {
+                    newsBody = newsBody.Substring(colonIndex + 1).Trim();
+                }
             }
 
-            metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n    {newsBody}";
+            string[] intros = new[]
+            {
+                "Here's a concise sentence summarizing the headlines:",
+                "Here's a concise sentence summarizing the headlines today:",
+                "Here's a concise sentence summarizing the headlines",
+                "Here is a concise sentence summarizing the headlines:",
+                "Here is a concise sentence summarizing the headlines",
+                "Here's a concise sentence summarizing the articles:",
+                "Here is a concise sentence summarizing the articles:",
+                "Here's a concise sentence summarizing the news:",
+                "Here is a concise sentence summarizing the news:",
+                "Here's a concise sentence summarizing",
+                "Here is a concise sentence summarizing",
+                "Concise sentence summarizing the headlines:",
+                "Headlines Summary:",
+                "Headlines:",
+                "Summary:"
+            };
+
+            bool replaced = true;
+            while (replaced)
+            {
+                replaced = false;
+                foreach (var intro in intros)
+                {
+                    if (newsBody.StartsWith(intro, StringComparison.OrdinalIgnoreCase))
+                    {
+                        newsBody = newsBody.Substring(intro.Length).Trim();
+                        replaced = true;
+                        break;
+                    }
+                }
+                string newBody = newsBody.TrimStart(':', ' ', '-', '•', '_', '*');
+                if (newBody != newsBody)
+                {
+                    newsBody = newBody;
+                    replaced = true;
+                }
+            }
+
+            metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n_{newsBody}_";
 
             // Concatenate all 6 parts
             metrics.BriefingText = $"{metrics.WeatherBriefing}\n\n{metrics.CalendarBriefing}\n\n{metrics.TodosBriefing}\n\n{metrics.HealthHabitsBriefing}\n\n{metrics.FinanceBriefing}\n\n{metrics.NewsBriefing}";
