@@ -39,6 +39,10 @@ The Local Smart Briefing feature integrates lightweight, privacy-first, on-devic
 - **Behavior-Aware Narrative**: Integrates aggregated 7-day semantic behavior profile statistics (e.g., hydration trends, preferred news topics) to personalize the daily narrative.
 - **Dynamic Recommendations**: Tailors news feed suggestions and habit streak warnings based on user pattern history. For full details on database schemas and sync mechanisms, refer to the [Smart Behavior Guide](Behavior.md).
 
+#### 1.2.7 Interactive Briefing Chat
+- **Follow-up Prompting**: Once the typewriter briefing narrative completes, an interactive follow-up chat panel is seamlessly presented.
+- **Contextual Q&A**: Users can type questions about the generated briefing context (e.g., *"What is my schedule like?"*, *"Why am I behind on water?"*). The query is processed on-device by the NPU/GPU model, maintaining full conversation history for sequential follow-up queries.
+
 ---
 
 ## 2. Technical Architecture & Data Model
@@ -431,6 +435,7 @@ The 6 slots utilize strict, tiny, and targeted prompts to eliminate attention co
 6. **Programmatic Theme Brush Resolution**: Code-behind widgets retrieve theme colors via a custom `GetThemeBrush(resourceKey)` helper, checking active theme dictionaries to prevent a `COMException` when searching for `AppFgMutedColorBrush` or `AppFgColorBrush`.
 7. **Narrative Icon Prefixes & Formatting**: The typewriter `TextBlock` is configured with `FontFamily="Segoe UI, Segoe Fluent Icons"` to support Category Glyphs. Before rendering, LLM responses are sanitized by stripping out markdown bold asterisks (`**`) and replacing single asterisks (`*`) with standard bullet points (`•`). Each major subject is prefixed with its Segoe Fluent Icons category glyph: Weather (`\uE706`), Calendar (`\uE787`), Todos (`\uE73A`), Vitals (`\uEC92`), Finances (`\uE8C7`), and News (`\uE7C3`). The News Headlines summary is formatted on the next line indented by four spaces, in italics, and enclosed in double quotes (`Headlines Summary:\n    _"[SummaryText]"_`) after stripping standard conversational introductory phrases (e.g. "Here's a concise sentence summarizing the headlines:").
 8. **AI Prompt Leak Sanitization**: To prevent local SLMs from repeating or leaking prompt instructions into the narrative output (such as repeating the system prompt rules or user-provided lists), all generated responses are intercepted by a static `SmartIntelligenceHelper.SanitizeResponse` method. This method aggressively strips matching prompts, user prompt contexts, assistant tags, system prompt instructions, and leftover tokens from the text before it is returned.
+9. **Interactive Briefing Chat**: Under the narrative outro, a `BriefingChatPanel` holds the follow-up prompt container. On typewriter completion, it resets chat history, clears inputs, and shifts to `Visibility.Visible`. Submissions are caught via `BriefingChatInput_KeyDown` and `BriefingChatSendButton_Click`, forwarding the briefing body and chat transcript history to `ISmartIntelligenceService` for context-preserved local AI execution.
 
 ---
 

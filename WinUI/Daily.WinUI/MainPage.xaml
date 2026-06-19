@@ -325,6 +325,37 @@
                                            Foreground="{ThemeResource AppFgMutedColorBrush}" 
                                            Opacity="0.0" 
                                            Margin="0,8,0,0"/>
+
+                                <!-- Smart Briefing interactive chat area -->
+                                <StackPanel x:Name="BriefingChatPanel" Visibility="Collapsed" Spacing="12" Margin="0,16,0,16">
+                                    <TextBlock Text="Do you want us to elaborate on any of these points?" 
+                                               FontSize="14" 
+                                               Foreground="{ThemeResource AppFgMutedColorBrush}" 
+                                               FontStyle="Italic"/>
+                                    
+                                    <!-- Conversation history panel -->
+                                    <StackPanel x:Name="BriefingChatHistory" Spacing="12" />
+                                    
+                                    <!-- Input area -->
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                                        <TextBox x:Name="BriefingChatInput" 
+                                                 PlaceholderText="Ask a follow-up question..."
+                                                 KeyDown="BriefingChatInput_KeyDown"
+                                                 CornerRadius="8"
+                                                 BorderThickness="1"
+                                                 BorderBrush="{ThemeResource AppFgMutedColorBrush}"/>
+                                        <Button x:Name="BriefingChatSendButton" 
+                                                Content="Ask"
+                                                Click="BriefingChatSendButton_Click"
+                                                Grid.Column="1"
+                                                Margin="8,0,0,0"
+                                                CornerRadius="8"
+                                                Style="{ThemeResource AccentButtonStyle}"/>
+                                    </Grid>
+                                    
+                                    <!-- Progress/Thinking indicator -->
+                                    <ProgressBar x:Name="BriefingChatProgressBar" IsIndeterminate="True" Visibility="Collapsed" Height="3"/>
+                                </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
                         

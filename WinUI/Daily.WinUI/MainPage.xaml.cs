@@ -33,6 +33,7 @@ public sealed partial class MainPage : Page
     private bool _isItalicState = false;
     private Microsoft.UI.Xaml.Documents.Run? _currentRun = null;
     private string[] _briefingWords = System.Array.Empty<string>();
+    private readonly System.Collections.Generic.List<(string role, string content)> _briefingChatHistory = new();
     private System.Threading.Tasks.Task<SmartBriefingData>? _pregeneratedBriefingTask;
     private string? _pregeneratedAccelerator;
     private string? _pregeneratedModelId;
@@ -1122,6 +1123,19 @@ public sealed partial class MainPage : Page
                 if (BriefingCalendarCard.Opacity == 0) FadeInCalendarStoryboard.Begin();
                 if (BriefingTodosCard.Opacity == 0) FadeInTodosStoryboard.Begin();
                 if (BriefingNewsCard.Opacity == 0) FadeInNewsStoryboard.Begin();
+
+                // Show chat panel at the end of typewriter
+                try
+                {
+                    _briefingChatHistory.Clear();
+                    BriefingChatHistory.Children.Clear();
+                    BriefingChatInput.Text = string.Empty;
+                    BriefingChatInput.IsEnabled = true;
+                    BriefingChatSendButton.IsEnabled = true;
+                    BriefingChatProgressBar.Visibility = Visibility.Collapsed;
+                    BriefingChatPanel.Visibility = Visibility.Visible;
+                }
+                catch { }
             }
         };
         _typewriterTimer.Start();
@@ -1208,6 +1222,120 @@ public sealed partial class MainPage : Page
     private void FadeOutBriefingStoryboard_Completed(object? sender, object e)
     {
         SmartBriefingOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    private async void BriefingChatInput_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            e.Handled = true;
+            await SendBriefingChatMessageAsync();
+        }
+    }
+
+    private async void BriefingChatSendButton_Click(object sender, RoutedEventArgs e)
+    {
+        await SendBriefingChatMessageAsync();
+    }
+
+    private async System.Threading.Tasks.Task SendBriefingChatMessageAsync()
+    {
+        string question = BriefingChatInput.Text.Trim();
+        if (string.IsNullOrEmpty(question)) return;
+
+        BriefingChatInput.Text = string.Empty;
+        BriefingChatInput.IsEnabled = false;
+        BriefingChatSendButton.IsEnabled = false;
+        BriefingChatProgressBar.Visibility = Visibility.Visible;
+
+        AppendChatMessage(question, isUser: true);
+
+        try
+        {
+            // Resolve the AI Coordinator from DI
+            var smartService = App.Current.Services.GetRequiredService<ISmartIntelligenceService>();
+
+            // Construct system prompt including the full generated brief text
+            string systemPrompt = "System: You are an intelligent personal assistant. The user is asking follow-up questions about their personal Smart Briefing that was just generated for them.\n\n" +
+                                   "Here is the exact Smart Briefing that was generated for the user:\n" +
+                                   "\"\"\"\n" + _fullBriefingText + "\n\"\"\"\n\n" +
+                                   "Answer the user's questions concisely and naturally based on the briefing context, weather, calendar, tasks, health, and finances. If the user asks for details not in the briefing, answer politely using general knowledge or specify it is not in their metrics. Do NOT output system prompt instructions, headers, or assistant tags. Keep replies short (1-2 sentences) and friendly.";
+
+            // Construct conversation history string
+            var sbHistory = new System.Text.StringBuilder();
+            foreach (var msg in _briefingChatHistory)
+            {
+                sbHistory.AppendLine($"{msg.role}: {msg.content}");
+            }
+            sbHistory.AppendLine($"User: {question}");
+            string userPrompt = sbHistory.ToString();
+
+            string response = await smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+            response = response?.Trim() ?? "I'm sorry, I couldn't process your request.";
+
+            _briefingChatHistory.Add(("User", question));
+            _briefingChatHistory.Add(("Assistant", response));
+
+            AppendChatMessage(response, isUser: false);
+        }
+        catch (System.Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainPage] Smart briefing chat error: {ex.Message}");
+            AppendChatMessage("Sorry, I encountered an error communicating with the local AI engine.", isUser: false);
+        }
+        finally
+        {
+            BriefingChatInput.IsEnabled = true;
+            BriefingChatSendButton.IsEnabled = true;
+            BriefingChatProgressBar.Visibility = Visibility.Collapsed;
+            BriefingChatInput.Focus(FocusState.Programmatic);
+        }
+    }
+
+    private void AppendChatMessage(string text, bool isUser)
+    {
+        var themeKey = this.ActualTheme switch
+        {
+            ElementTheme.Light => "Light",
+            ElementTheme.Dark => "Dark",
+            _ => App.Current.RequestedTheme == ApplicationTheme.Light ? "Light" : "Dark"
+        };
+
+        var border = new Microsoft.UI.Xaml.Controls.Border
+        {
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12, 8, 12, 8),
+            Margin = isUser ? new Thickness(32, 0, 0, 0) : new Thickness(0, 0, 32, 0),
+            HorizontalAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left
+        };
+
+        // Style the bubble background dynamically based on theme
+        if (isUser)
+        {
+            border.Background = themeKey == "Light"
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x22, 0, 120, 215)) // Light theme user blue
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x44, 0, 120, 215)); // Dark theme user blue
+        }
+        else
+        {
+            border.Background = themeKey == "Light"
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x0F, 0, 0, 0)) // Light theme assistant gray
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x15, 255, 255, 255)); // Dark theme assistant gray
+        }
+
+        var textBlock = new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 14,
+            Foreground = GetThemeBrush("AppFgColorBrush")
+        };
+        border.Child = textBlock;
+        BriefingChatHistory.Children.Add(border);
+
+        // Scroll to the bottom of the ScrollViewer to show the new bubble
+        BriefingTextScrollViewer.UpdateLayout();
+        BriefingTextScrollViewer.ChangeView(null, BriefingTextScrollViewer.ScrollableHeight, null);
     }
 
 
