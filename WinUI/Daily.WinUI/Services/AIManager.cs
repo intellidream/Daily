@@ -316,6 +316,8 @@ namespace Daily_WinUI.Services
             return false;
         }
 
+        private readonly System.Threading.SemaphoreSlim _inferenceSemaphore = new(1, 1);
+
         public async Task<string> GenerateBriefingAsync(string prompt)
         {
             if (_activeEngine == null)
@@ -329,7 +331,15 @@ namespace Daily_WinUI.Services
                 throw new InvalidOperationException("Failed to initialize any local AI briefing engines.");
             }
 
-            return await _activeEngine.GenerateBriefingAsync(prompt);
+            await _inferenceSemaphore.WaitAsync();
+            try
+            {
+                return await _activeEngine.GenerateBriefingAsync(prompt);
+            }
+            finally
+            {
+                _inferenceSemaphore.Release();
+            }
         }
 
         private bool DetectDedicatedGpu(out string gpuName)

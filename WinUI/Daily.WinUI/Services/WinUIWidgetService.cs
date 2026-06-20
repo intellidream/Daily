@@ -24,10 +24,10 @@ namespace Daily_WinUI.Services
             {
                 new WidgetModel { Title = "Weather", ComponentType = "WeatherWidget", ColumnSpan = 2, RowSpan = 1 },
                 new WidgetModel { Title = "Finances", ComponentType = "FinancesWidget", ColumnSpan = 1, RowSpan = 1 },
-                new WidgetModel { Title = "Habits", ComponentType = "HabitsWidget", ColumnSpan = 1, RowSpan = 1 },
-                new WidgetModel { Title = "News", ComponentType = "RssFeedWidget", ColumnSpan = 1, RowSpan = 2 },
                 new WidgetModel { Title = "Vitals", ComponentType = "HealthWidget", ColumnSpan = 1, RowSpan = 1 },
-                new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", ColumnSpan = 1, RowSpan = 1 }
+                new WidgetModel { Title = "Habits", ComponentType = "HabitsWidget", ColumnSpan = 1, RowSpan = 1 },
+                new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", ColumnSpan = 1, RowSpan = 1 },
+                new WidgetModel { Title = "News", ComponentType = "RssFeedWidget", ColumnSpan = 1, RowSpan = 2 }
             };
         }
 

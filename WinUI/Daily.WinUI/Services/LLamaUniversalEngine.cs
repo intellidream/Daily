@@ -87,7 +87,8 @@ namespace Daily_WinUI.Services
                     AntiPrompts = new[] { "<|eot_id|>", "<|end|>" },
                     SamplingPipeline = new DefaultSamplingPipeline
                     {
-                        Temperature = 0.7f
+                        Temperature = 0.2f,
+                        TopP = 0.9f
                     }
                 };
 

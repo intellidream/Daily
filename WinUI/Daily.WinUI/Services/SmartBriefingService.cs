@@ -49,7 +49,8 @@ namespace Daily_WinUI.Services
         public string WeatherBriefing { get; set; } = string.Empty;
         public string CalendarBriefing { get; set; } = string.Empty;
         public string TodosBriefing { get; set; } = string.Empty;
-        public string HealthHabitsBriefing { get; set; } = string.Empty;
+        public string HealthBriefing { get; set; } = string.Empty;
+        public string HabitsBriefing { get; set; } = string.Empty;
         public string FinanceBriefing { get; set; } = string.Empty;
         public string NewsBriefing { get; set; } = string.Empty;
         
@@ -62,6 +63,10 @@ namespace Daily_WinUI.Services
         // Health
         public int HealthSteps { get; set; }
         public double HealthSleepHours { get; set; }
+        public double HealthSleepDeep { get; set; }
+        public double HealthSleepLight { get; set; }
+        public double HealthSleepRem { get; set; }
+        public double HealthSleepAwake { get; set; }
         public int HealthAvgHr { get; set; }
         public double HealthWeight { get; set; }
         public double HealthActiveEnergy { get; set; }
@@ -213,6 +218,10 @@ namespace Daily_WinUI.Services
             var hrTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.HeartRate) : Task.FromResult<VitalMetric?>(null);
             var weightTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.Weight) : Task.FromResult<VitalMetric?>(null);
             var activeEnergyTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.ActiveEnergy) : Task.FromResult<VitalMetric?>(null);
+            var sleepDeepTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.SleepDeep) : Task.FromResult<VitalMetric?>(null);
+            var sleepLightTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.SleepLight) : Task.FromResult<VitalMetric?>(null);
+            var sleepRemTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.SleepREM) : Task.FromResult<VitalMetric?>(null);
+            var sleepAwakeTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.SleepAwake) : Task.FromResult<VitalMetric?>(null);
             var hrvTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.HeartRateVariabilitySDNN) : Task.FromResult<VitalMetric?>(null);
             var bpSystolicTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.BloodPressureSystolic) : Task.FromResult<VitalMetric?>(null);
             var bpDiastolicTask = _healthService != null ? _healthService.GetLatestMetricAsync(VitalType.BloodPressureDiastolic) : Task.FromResult<VitalMetric?>(null);
@@ -404,7 +413,7 @@ namespace Daily_WinUI.Services
 
             try
             {
-                await Task.WhenAll(stepsTask, sleepTask, hrTask, weightTask, activeEnergyTask, hrvTask, bpSystolicTask, bpDiastolicTask, oxygenTask);
+                await Task.WhenAll(stepsTask, sleepTask, hrTask, weightTask, activeEnergyTask, hrvTask, bpSystolicTask, bpDiastolicTask, oxygenTask, sleepDeepTask, sleepLightTask, sleepRemTask, sleepAwakeTask);
                 
                 var stepsMetric = stepsTask.Result;
                 if (stepsMetric != null) steps = (int)stepsMetric.Value;
@@ -432,6 +441,18 @@ namespace Daily_WinUI.Services
 
                 var oxMetric = oxygenTask.Result;
                 if (oxMetric != null) oxygenVal = oxMetric.Value;
+
+                var deepMetric = sleepDeepTask.Result;
+                if (deepMetric != null) data.HealthSleepDeep = deepMetric.Value;
+
+                var lightMetric = sleepLightTask.Result;
+                if (lightMetric != null) data.HealthSleepLight = lightMetric.Value;
+
+                var remMetric = sleepRemTask.Result;
+                if (remMetric != null) data.HealthSleepRem = remMetric.Value;
+
+                var awakeMetric = sleepAwakeTask.Result;
+                if (awakeMetric != null) data.HealthSleepAwake = awakeMetric.Value;
             }
             catch (Exception ex)
             {
@@ -936,18 +957,12 @@ namespace Daily_WinUI.Services
                 {
                     try
                     {
-                        string systemPrompt = "System: You are a weather briefing assistant. Summarize today's weather in one concise, natural, and encouraging sentence.";
-                        string userPrompt = $"Weather: {metrics.WeatherCondition}, {metrics.WeatherTemp}°C. Hourly forecast:\n{metrics.WeatherHourlyDetails}\n5-day forecast:\n{metrics.WeatherFiveDayDetails}";
+                        string systemPrompt = "System: You are a weather briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize today's weather in one concise, natural, and realistic phrase. Summarize 5-day forecast in one concise, natural, and realistic sentence. Advice on normal weather patterns. Warn on any extraordinary weather events.";
+                        string userPrompt = $"Weather today: {metrics.WeatherCondition}, {metrics.WeatherTemp}°C.\n5-day forecast:\n{metrics.WeatherFiveDayDetails}\nAlerts/Events: None reported.";
                         string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result))
-                        {
-                            return result.Trim();
-                        }
+                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SmartBriefingService] Weather AI Prompt Error: {ex.Message}");
-                    }
+                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Weather AI Prompt Error: {ex.Message}"); }
                 }
                 return fallback;
             });
@@ -957,45 +972,36 @@ namespace Daily_WinUI.Services
                 var now = DateTime.Now;
                 var upcomingEvents = metrics.CalendarEventsToday
                     .Where(e => e.IsAllDay || e.End.ToLocalTime() >= now)
+                    .Where(e => e.Start.ToLocalTime() <= now.AddDays(7))
                     .OrderBy(e => e.IsAllDay ? 0 : 1)
                     .ThenBy(e => e.Start)
-                    .Take(5)
                     .ToList();
 
                 if (upcomingEvents.Count == 0)
                 {
-                    return "Your calendar is clear today. Enjoy your free time!";
+                    return "Your calendar is clear. Enjoy your free time!";
                 }
 
                 var sbEvents = new StringBuilder();
                 foreach (var ev in upcomingEvents)
                 {
                     string timeStr = ev.IsAllDay ? "All Day" : $"{ev.Start.ToLocalTime():t} - {ev.End.ToLocalTime():t}";
-                    sbEvents.AppendLine($"- {ev.Title} ({timeStr}){(string.IsNullOrEmpty(ev.Location) ? "" : $" at {ev.Location}")}");
+                    sbEvents.AppendLine($"- {ev.Title} ({timeStr})");
                 }
                 string eventsList = sbEvents.ToString();
 
-                int remainingEvents = metrics.CalendarEventsToday.Count - upcomingEvents.Count;
-                string fallback = remainingEvents > 0
-                    ? $"You have {upcomingEvents.Count} upcoming calendar events scheduled starting next, and {remainingEvents} more later today."
-                    : $"You have {upcomingEvents.Count} upcoming calendar event(s) scheduled for today.";
+                string fallback = $"You have {upcomingEvents.Count} upcoming calendar events scheduled.";
 
                 if (useAi)
                 {
                     try
                     {
-                        string systemPrompt = "System: Write exactly one concise, encouraging sentence commenting on the user's upcoming calendar events today. CRITICAL: Do NOT list or enumerate the events (do not write down event names, times, or locations). Instead, write a natural statement mentioning the number of upcoming events (e.g. 'You have 3 events scheduled for today' or 'You have only 2 more events today') or comment on their workload/importance (e.g. 'Your schedule is looking very light today' or 'You have a busy afternoon ahead').";
-                        string userPrompt = $"Upcoming events starting from current time ({now:t}):\n{eventsList}";
+                        string systemPrompt = "System: You are a calendar events helper and briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize and analyze the data you are given, realistically, considering these rules:\n- If there are no events, just mention that and encourage the user to enjoy his free time or find pleasant, healthy, satisfactory and useful activities.\n- Only look at events during or starting from the current time, for a maximum of 7 days ahead, analize only their titles, not the whole contents, and summarize on them and their importance, relationships, load on the user's day or week and possible urgencies. Also advice on how to prepare for them, if any require that. Do as well a sentiment analysis on their data (titles, load on current day or week, but not full contents). If nothing better to say then just mention their existence briefly and their total counts and their spread over the day or week (those 7 days max).";
+                        string userPrompt = $"Upcoming events (titles only):\n{eventsList}";
                         string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result))
-                        {
-                            return result.Trim();
-                        }
+                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SmartBriefingService] Calendar AI Prompt Error: {ex.Message}");
-                    }
+                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Calendar AI Prompt Error: {ex.Message}"); }
                 }
                 return fallback;
             });
@@ -1004,60 +1010,69 @@ namespace Daily_WinUI.Services
             {
                 var now = DateTime.Now;
                 var upcomingTodos = metrics.ActiveTodos
-                    .Where(t => !t.DueDate.HasValue || t.DueDate.Value.ToLocalTime() >= now || t.DueDate.Value.ToLocalTime().Date == now.Date)
+                    .Where(t => !t.DueDate.HasValue || (t.DueDate.Value.ToLocalTime() >= now && t.DueDate.Value.ToLocalTime() <= now.AddDays(7)))
                     .OrderByDescending(t => t.Importance?.ToLower() == "high")
                     .ThenBy(t => t.DueDate ?? DateTime.MaxValue)
-                    .Take(5)
                     .ToList();
 
                 if (upcomingTodos.Count == 0)
                 {
-                    return "You have no pending tasks today.";
+                    return "You have no pending tasks or notes.";
                 }
 
-                var sbTodos = new StringBuilder();
-                foreach (var td in upcomingTodos)
-                {
-                    string dueStr = td.DueDate.HasValue ? $"Due: {td.DueDate.Value.ToLocalTime():d}" : "No due date";
-                    sbTodos.AppendLine($"- {td.Title} ({dueStr}, Priority: {td.Importance}) - Notes: {td.Notes}");
-                }
-                string todosList = sbTodos.ToString();
+                var titles = upcomingTodos.Take(5).Select(t => t.Title).ToList();
+                string todosList = string.Join(", ", titles);
+                if (upcomingTodos.Count > 5) todosList += $" and {upcomingTodos.Count - 5} more.";
 
-                int remainingTodos = metrics.ActiveTodos.Count - upcomingTodos.Count;
-                string fallback = remainingTodos > 0
-                    ? $"You have {upcomingTodos.Count} active tasks on your immediate agenda, and {remainingTodos} other tasks."
-                    : $"You have {upcomingTodos.Count} active task(s) on your agenda today.";
+                string fallback = $"You have {upcomingTodos.Count} active tasks on your agenda: {todosList}";
 
                 if (useAi)
                 {
                     try
                     {
-                        string systemPrompt = "System: Write exactly one concise, encouraging sentence commenting on the user's active tasks. CRITICAL: Do NOT list or enumerate the tasks (do not write down task titles or details). Instead, write a natural statement mentioning the number of pending tasks (e.g. 'You still have 3 tasks to complete today' or 'You have 4 active tasks left on your agenda') or comment on their workload/importance (e.g. 'You have a few high-priority tasks to focus on' or 'You have a light task list today').";
-                        string userPrompt = $"Active tasks:\n{todosList}";
+                        string systemPrompt = "System: You are a calendar tasks/todos/notes helper and briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize and analyze the data you are given, realistically, considering these rules:\n- If there are no tasks/todos or notes, just mention that and encourage the user to enjoy his free time and use it to rest, read or take a walk or a bike ride.\n- Only look at tasks/todos or notes during or starting from the current time, for a maximum of 7 days ahead, analize only their titles, not the whole contents, and summarize on them and their importance, relationships, load on the user's day or week and possible urgencies. Also advice on how to prepare for them, if any require that. Do as well a sentiment analysis on their data (titles, load on current day or week, but not full contents). If nothing better to say then just mention their existence briefly and their total counts and their spread over the day or week (those 7 days max).";
+                        string userPrompt = $"Active tasks/notes (titles only):\n{todosList}";
                         string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result))
-                        {
-                            return result.Trim();
-                        }
+                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SmartBriefingService] Todos AI Prompt Error: {ex.Message}");
-                    }
+                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Todos AI Prompt Error: {ex.Message}"); }
                 }
                 return fallback;
             });
 
             var healthTask = Task.Run(async () =>
             {
-                bool isHealthEmpty = metrics.HealthSteps == 0 && metrics.HealthSleepHours == 0 &&
-                                     metrics.HabitsWaterProgress == 0 && metrics.HabitsSmokesProgress == 0;
+                bool isHealthEmpty = metrics.HealthSteps == 0 && metrics.HealthSleepHours == 0;
                 if (isHealthEmpty)
                 {
-                    return "Keep moving and remember to stay hydrated today!";
+                    return "Keep moving and stay active today!";
                 }
 
-                string fallback = $"You've taken {metrics.HealthSteps:N0} steps, slept {metrics.HealthSleepHours:F1} hours, and drank {metrics.HabitsWaterProgress:F0}/{metrics.HabitsWaterGoal:F0} ml of water.";
+                string fallback = $"You've taken {metrics.HealthSteps:N0} steps, slept {metrics.HealthSleepHours:F1} hours.";
+
+                if (useAi)
+                {
+                    try
+                    {
+                        string systemPrompt = "System: You are a health/vitals briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize and analyze the metrics you are given, realistically, considering these rules:\n- Assess sleep duration realistically: 7 to 9 hours is optimal and healthy. Anything below means being tired, anything above can be too much.\n- Assess steps count realistically: under 5,000 steps is low, while 10,000 steps is the better target. Assess their progress based on the time of day. Consider walking happens during wake hours (normally 9 AM to 9 PM), and then treat the percentual progress towards the better target based on that.\n- Assess any other metrics like HRV and other realistically and either congratulate or warn the user to take a break.";
+                        string userPrompt = $"Health/Vitals Data:\n- Steps: {metrics.HealthSteps} (Target: 10,000)\n- Sleep: {metrics.HealthSleepHours:F1} hours (Deep: {metrics.HealthSleepDeep:F1}m, Light: {metrics.HealthSleepLight:F1}m, REM: {metrics.HealthSleepRem:F1}m, Awake: {metrics.HealthSleepAwake:F1}m)";
+                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
+                    }
+                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Health AI Prompt Error: {ex.Message}"); }
+                }
+                return fallback;
+            });
+
+            var habitsTask = Task.Run(async () =>
+            {
+                bool isHabitsEmpty = metrics.HabitsWaterProgress == 0 && metrics.HabitsSmokesProgress == 0;
+                if (isHabitsEmpty)
+                {
+                    return "Remember to track your daily habits and stay hydrated!";
+                }
+
+                string fallback = $"You drank {metrics.HabitsWaterProgress:F0}/{metrics.HabitsWaterGoal:F0} ml of water.";
                 if (metrics.HabitsSmokesGoal > 0 || metrics.HabitsSmokesProgress > 0)
                 {
                     fallback += $" Smoked {metrics.HabitsSmokesProgress} out of limit {metrics.HabitsSmokesGoal}.";
@@ -1067,29 +1082,12 @@ namespace Daily_WinUI.Services
                 {
                     try
                     {
-                        string systemPrompt = "System: Write exactly one concise, encouraging sentence analyzing the user's health metrics.\n" +
-                                               "Rules:\n" +
-                                               "- You MUST explicitly reference steps as \"steps\", sleep as \"hours of sleep\", and water as \"ml of water\". Never output numbers without their units.\n" +
-                                               "- Assess the step count realistically: under 5,000 steps is low, while 10,000 steps is the target. If steps are low (e.g. 2,000 steps), do not congratulate the user; instead, gently encourage them to walk more.\n" +
-                                               "- Assess sleep duration realistically: 7 to 9 hours is optimal and healthy. If the user slept 7 hours or more (e.g. 8.3 hours), praise their sleep as sufficient and good; do NOT claim it is insufficient, low, or over-target.\n" +
-                                               "- Treat smoking cigarettes as a negative habit to reduce or eliminate. If the user smoked, do not congratulate them; encourage reduction or staying below their daily limit.";
-                        
-                        string userPrompt = $"Here are the user's health metrics for today:\n" +
-                                            $"- Steps taken: {metrics.HealthSteps} steps (Target: 10,000 steps)\n" +
-                                            $"- Sleep last night: {metrics.HealthSleepHours:F1} hours (Target: 7-9 hours)\n" +
-                                            $"- Water intake: {metrics.HabitsWaterProgress:F0} ml (Goal: {metrics.HabitsWaterGoal:F0} ml)\n" +
-                                            $"- Cigarettes smoked: {metrics.HabitsSmokesProgress:F0} cigarettes (Limit: {metrics.HabitsSmokesGoal:F0} cigarettes)";
-
+                        string systemPrompt = "System: You are a habits (that also impact health) briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize and analyze the metrics you are given, realistically, considering these rules:\n- Assess water intake realistically based on the time of day, current intake and total goal. Consider water intake happens during wake hours (normally 9 AM to 9 PM), and then treat the percentual progress towards the total goal based on that.\n- Treat smoking as a negative habit to reduce or eliminate. If the user smoked, do not congratulate them; encourage reduction or staying below half of their daily limit. Consider smoking also happens during wake hours but can go deeper into the night (9 AM to 11 PM) and treat it percentually based on current number of smokes, half of their total limit as max, and time of day, and asses if it's already too much or the user managed to keep it under control. If the user exagerated, write a concise sentence on the dangers of smoking!";
+                        string userPrompt = $"Habits Data:\n- Liquids intake: {metrics.HabitsWaterProgress:F0} ml (Target: {metrics.HabitsWaterGoal:F0} ml)\n- Smokes: {metrics.HabitsSmokesProgress:F0} (Limit: {metrics.HabitsSmokesGoal:F0})";
                         string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result))
-                        {
-                            return result.Trim();
-                        }
+                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SmartBriefingService] Health AI Prompt Error: {ex.Message}");
-                    }
+                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Habits AI Prompt Error: {ex.Message}"); }
                 }
                 return fallback;
             });
@@ -1118,18 +1116,12 @@ namespace Daily_WinUI.Services
                 {
                     try
                     {
-                        string systemPrompt = "System: Summarize the user's financial state into one concise sentence based on net worth and stock tickers.";
-                        string userPrompt = $"Net Worth: {metrics.NetWorth:C0}. Stocks: {stocksList}";
+                        string systemPrompt = "System: You are a finances advisory and briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize the finance data given, see if the user's ledger is used and comment on them realistically and provide concise advices. Extrapolate on any market changes and what the user could/should do to improve his financial status.";
+                        string userPrompt = $"Ledger Net Worth: {metrics.NetWorth:C0}.\nWatchlist Stocks:\n{stocksList}";
                         string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result))
-                        {
-                            return result.Trim();
-                        }
+                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SmartBriefingService] Finance AI Prompt Error: {ex.Message}");
-                    }
+                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Finance AI Prompt Error: {ex.Message}"); }
                 }
                 return fallback;
             });
@@ -1141,43 +1133,40 @@ namespace Daily_WinUI.Services
                     return "No new articles in your feeds today.";
                 }
 
-                string headlinesList = string.Join("\n", metrics.TopNewsHeadlines);
-                string fallback = "Your top headlines today: " + string.Join("; ", metrics.TopNewsHeadlines.Select(h => h.TrimStart('-', ' '))) + ".";
+                var top5 = metrics.TopNewsHeadlines.Take(5).ToList();
+                string headlinesList = string.Join("\n", top5);
+                string fallback = "Your top headlines today: " + string.Join("; ", top5.Select(h => h.TrimStart('-', ' '))) + ".";
 
                 if (useAi)
                 {
                     try
                     {
-                        string systemPrompt = "System: Summarize these 5 headlines into one concise sentence extracting the main topic. CRITICAL: Do NOT output any introductory text, prefix, or conversational phrases (such as \"Here's a concise sentence...\", \"Here is a summary...\", \"Headlines Summary:\", or \"The main topic is...\"). Start directly with the summary sentence itself.";
+                        string systemPrompt = "System: You are a news briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize these 5 headlines into one phrase extracting the main topics. Extrapolate on any relations between the topics and offer a sentiment analysis based on their contents..";
                         string userPrompt = $"Headlines:\n{headlinesList}";
                         string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result))
-                        {
-                            return result.Trim();
-                        }
+                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SmartBriefingService] News AI Prompt Error: {ex.Message}");
-                    }
+                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] News AI Prompt Error: {ex.Message}"); }
                 }
                 return fallback;
             });
 
-            await Task.WhenAll(weatherTask, calendarTask, todosTask, healthTask, financeTask, newsTask);
+            await Task.WhenAll(weatherTask, calendarTask, todosTask, healthTask, habitsTask, financeTask, newsTask);
 
             // Assign values to slots (stripping asterisks, replacing bullet points, and prefixing icons)
             string weatherClean = (weatherTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
             string calendarClean = (calendarTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
             string todosClean = (todosTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
             string healthClean = (healthTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
+            string habitsClean = (habitsTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
             string financeClean = (financeTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
             string newsClean = (newsTask.Result ?? "").Replace("**", "").Replace("*", "•").Replace("_", "").Trim();
 
             metrics.WeatherBriefing = $"\uE706  {weatherClean}";
             metrics.CalendarBriefing = $"\uE787  {calendarClean}";
             metrics.TodosBriefing = $"\uE73A  {todosClean}";
-            metrics.HealthHabitsBriefing = $"\uEC92  {healthClean}";
+            metrics.HealthBriefing = $"\uEC92  {healthClean}";
+            metrics.HabitsBriefing = $"\uE1A5  {habitsClean}";
             metrics.FinanceBriefing = $"\uE8C7  {financeClean}";
 
             // Format News (cleaning intros and placing summary on next line in italics)
@@ -1244,8 +1233,8 @@ namespace Daily_WinUI.Services
             string indentedBody = newsBody.Replace("\n", "\n    ");
             metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n    _\"{indentedBody}\"_";
 
-            // Concatenate all 6 parts
-            metrics.BriefingText = $"{metrics.WeatherBriefing}\n\n{metrics.CalendarBriefing}\n\n{metrics.TodosBriefing}\n\n{metrics.HealthHabitsBriefing}\n\n{metrics.FinanceBriefing}\n\n{metrics.NewsBriefing}";
+            // Concatenate all parts in the requested order: Weather, Finances, Vitals, Habits, Calendar, Todos, News
+            metrics.BriefingText = $"{metrics.WeatherBriefing}\n\n{metrics.FinanceBriefing}\n\n{metrics.HealthBriefing}\n\n{metrics.HabitsBriefing}\n\n{metrics.CalendarBriefing}\n\n{metrics.TodosBriefing}\n\n{metrics.NewsBriefing}";
 
             metrics.IntroText = "";
             metrics.OutroText = "Have a highly productive day!";

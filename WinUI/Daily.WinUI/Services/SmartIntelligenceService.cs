@@ -152,20 +152,24 @@ namespace Daily_WinUI.Services
             else
             {
                 // Format for GGUF model
-                prompt = selectedModelId switch
+                string lowerId = selectedModelId.ToLowerInvariant();
+                if (lowerId.Contains("qwen") || lowerId.Contains("chatml"))
                 {
-                    "qwen25_15b" => 
-                        $"<|im_start|>system\n{systemPrompt}<|im_end|>\n<|im_start|>user\n{userPrompt}<|im_end|>\n<|im_start|>assistant\n",
-                    
-                    "gemma3_1b" => 
-                        $"<start_of_turn>system\n{systemPrompt}<end_of_turn>\n<start_of_turn>user\n{userPrompt}<end_of_turn>\n<start_of_turn>assistant\n",
-                    
-                    "phi35_mini" => 
-                        $"<|system|>\n{systemPrompt}<|end|>\n<|user|>\n{userPrompt}<|end|>\n<|assistant|>\n",
-                    
-                    "llama32_1b" or _ => 
-                        $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{userPrompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-                };
+                    prompt = $"<|im_start|>system\n{systemPrompt}<|im_end|>\n<|im_start|>user\n{userPrompt}<|im_end|>\n<|im_start|>assistant\n";
+                }
+                else if (lowerId.Contains("gemma"))
+                {
+                    prompt = $"<start_of_turn>system\n{systemPrompt}<end_of_turn>\n<start_of_turn>user\n{userPrompt}<end_of_turn>\n<start_of_turn>assistant\n";
+                }
+                else if (lowerId.Contains("phi"))
+                {
+                    prompt = $"<|system|>\n{systemPrompt}<|end|>\n<|user|>\n{userPrompt}<|end|>\n<|assistant|>\n";
+                }
+                else
+                {
+                    // Llama 3 format is the safest fallback for most modern models
+                    prompt = $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{userPrompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
+                }
             }
 
             var log = new LlmExecutionLog
