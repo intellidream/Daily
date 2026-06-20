@@ -1451,6 +1451,11 @@ namespace Daily.Services
                     await _databaseService.Connection.InsertOrReplaceAsync(local);
                 }
 
+                if (response.Models.Count > 0)
+                {
+                    OnSavedArticlesPulled?.Invoke();
+                }
+
                 Console.WriteLine("[SyncService] Pull Saved Articles Complete.");
                 return response.Models.Count;
             }

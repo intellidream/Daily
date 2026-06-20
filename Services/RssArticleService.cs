@@ -13,6 +13,7 @@ namespace Daily.Services
     {
         private readonly IDatabaseService _databaseService;
         private readonly Supabase.Client _supabase;
+        private readonly ISyncService _syncService;
         private bool _initialized = false;
 
         public List<LocalSavedArticle> ReadLaterItems { get; private set; } = new();
@@ -20,10 +21,11 @@ namespace Daily.Services
 
         public event Action? OnItemsChanged;
 
-        public RssArticleService(IDatabaseService databaseService, Supabase.Client supabase)
+        public RssArticleService(IDatabaseService databaseService, Supabase.Client supabase, ISyncService syncService)
         {
             _databaseService = databaseService;
             _supabase = supabase;
+            _syncService = syncService;
         }
 
         private string? GetUserId() => _supabase.Auth.CurrentUser?.Id;
@@ -32,7 +34,7 @@ namespace Daily.Services
         {
             using (MD5 md5 = MD5.Create())
             {
-                byte[] hash = md5.ComputeHash(Encoding.Default.GetBytes(input));
+                byte[] hash = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
                 return new Guid(hash);
             }
         }
@@ -137,6 +139,16 @@ namespace Daily.Services
             await _databaseService.InitializeAsync();
             await DeduplicateSavedArticlesAsync();
             await RefreshLocalCacheAsync();
+
+            _syncService.OnSavedArticlesPulled += () =>
+            {
+                _ = Task.Run(async () =>
+                {
+                    await RefreshLocalCacheAsync();
+                    OnItemsChanged?.Invoke();
+                });
+            };
+
             _initialized = true;
         }
 

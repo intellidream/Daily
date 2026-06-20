@@ -34,6 +34,9 @@ The Local Smart Briefing feature integrates lightweight, privacy-first, on-devic
 #### 1.2.5 Weather & Daily Narrative Briefing
 - **Dynamic Morning Narrative**: Merges weather forecast, calendar events, high-priority tasks, and habits into a cohesive "Daily Briefing".
 - **Example output**: *"It's going to be rainy (18°C) today, so we recommend doing your daily cardio habit indoors. You have 3 high-priority tasks due today, and a meeting at 2 PM. Let's make it a productive day!"*
+- **Strict Payload & Prompting**: To ensure fast load times and prevent model hallucinations, the briefing generation uses 7 parallel AI tasks. The payload is heavily optimized (e.g., extracting only event/task titles and limiting lookahead to 7 days, capping news to 5 items).
+- **Sentiment & Salutation Removal**: AI system prompts strictly forbid conversational salutations (e.g., "Good morning") and subjective sentiment analysis to ensure a dense, highly factual briefing.
+- **UI Widget Ordering**: The Dashboard dynamically aligns with the structured briefing flow: Weather -> Finances -> Vitals -> Habits -> Calendar -> News.
 
 #### 1.2.6 Smart Behavior Personalization
 - **Behavior-Aware Narrative**: Integrates aggregated 7-day semantic behavior profile statistics (e.g., hydration trends, preferred news topics) to personalize the daily narrative.

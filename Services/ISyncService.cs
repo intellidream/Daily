@@ -37,6 +37,7 @@ namespace Daily.Services
         event Action? OnDebugLogUpdated;
         event Action? OnPreferencesPulled;
         event Action? OnRssSubscriptionsPulled;
+        event Action? OnSavedArticlesPulled;
         void Log(string message);
     }
 }
