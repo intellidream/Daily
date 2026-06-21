@@ -713,6 +713,14 @@ namespace Daily.Services
                     {
                         foreach(var item in localBatch)
                         {
+                            if (item.IsDeleted)
+                            {
+                                tran.Delete<LocalCalendarAccount>(item.Id);
+                                tran.Table<LocalCalendarEvent>().Where(x => x.AccountId == item.Id).Delete();
+                                tran.Table<LocalCalendarTodo>().Where(x => x.AccountId == item.Id).Delete();
+                                continue;
+                            }
+
                             var existing = tran.Find<LocalCalendarAccount>(item.Id);
                             if (existing != null)
                             {

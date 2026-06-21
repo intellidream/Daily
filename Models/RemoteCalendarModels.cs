@@ -51,5 +51,8 @@ namespace Daily.Models
 
         [Newtonsoft.Json.JsonIgnore]
         public DateTime? SyncedAt { get; set; }
+
+        [Column("is_deleted")]
+        public bool IsDeleted { get; set; }
     }
 }

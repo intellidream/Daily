@@ -38,6 +38,8 @@ namespace Daily.Models
 
         [Indexed]
         public DateTime? SyncedAt { get; set; } // Null = Dirty
+
+        public bool IsDeleted { get; set; }
     }
 
     [Table("calendar_events")]

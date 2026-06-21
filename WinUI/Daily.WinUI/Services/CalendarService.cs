@@ -28,7 +28,7 @@ namespace Daily_WinUI.Services
         public async Task<List<LocalCalendarAccount>> GetAccountsAsync()
         {
             await _databaseService.InitializeAsync();
-            var accounts = await _databaseService.Connection.Table<LocalCalendarAccount>().OrderBy(x => x.DisplayOrder).ToListAsync();
+            var accounts = await _databaseService.Connection.Table<LocalCalendarAccount>().Where(x => !x.IsDeleted).OrderBy(x => x.DisplayOrder).ToListAsync();
             foreach (var account in accounts)
             {
                 if (string.IsNullOrEmpty(account.IdentifiedName))
@@ -66,14 +66,16 @@ namespace Daily_WinUI.Services
             var account = await _databaseService.Connection.Table<LocalCalendarAccount>().Where(x => x.Id == id).FirstOrDefaultAsync();
             if (account != null)
             {
-                // In SQLite we can just delete, but we should mark deleted or just delete and let sync handle it.
-                // For simplicity, we delete local account, events, and todos.
-                await _databaseService.Connection.DeleteAsync(account);
+                account.IsDeleted = true;
+                account.SyncedAt = null; // Mark dirty
+                account.UpdatedAt = DateTime.UtcNow;
+                await _databaseService.Connection.UpdateAsync(account);
+
                 await _databaseService.Connection.Table<LocalCalendarEvent>().Where(x => x.AccountId == id).DeleteAsync();
                 await _databaseService.Connection.Table<LocalCalendarTodo>().Where(x => x.AccountId == id).DeleteAsync();
                 
-                // Trigger Supabase sync to delete/propagate
-                // We'll mark the synced accounts state
+                // Let SyncService handle pushing the IsDeleted flag to Supabase.
+                
                 OnCalendarDataChanged?.Invoke();
             }
         }

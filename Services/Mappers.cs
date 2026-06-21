@@ -353,6 +353,7 @@ namespace Daily.Services
                 IdentifiedName = local.IdentifiedName,
                 DisplayOrder = local.DisplayOrder,
                 IsActive = local.IsActive,
+                IsDeleted = local.IsDeleted,
                 CreatedAt = SafeUtc(local.CreatedAt),
                 UpdatedAt = SafeUtc(local.UpdatedAt),
                 SyncedAt = SafeUtc(local.SyncedAt)
@@ -377,6 +378,7 @@ namespace Daily.Services
                 IdentifiedName = domain.IdentifiedName ?? string.Empty,
                 DisplayOrder = domain.DisplayOrder,
                 IsActive = domain.IsActive,
+                IsDeleted = domain.IsDeleted,
                 CreatedAt = domain.CreatedAt.ToUniversalTime(),
                 UpdatedAt = domain.UpdatedAt?.ToUniversalTime() ?? DateTime.UtcNow,
                 SyncedAt = domain.SyncedAt?.ToUniversalTime()
