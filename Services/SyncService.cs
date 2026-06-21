@@ -685,6 +685,14 @@ namespace Daily.Services
             {
                 Console.WriteLine($"[SyncService] Pulling Calendar accounts for User: {userId}...");
                 var userGuid = Guid.Parse(userId);
+                
+                // Self-healing: if local table is empty, force a full pull
+                var localCount = await _databaseService.Connection.Table<LocalCalendarAccount>().CountAsync();
+                if (localCount == 0)
+                {
+                    lastPull = DateTime.MinValue;
+                }
+
                 var query = _supabase.From<CalendarAccount>().Where(x => x.UserId == userGuid);
                 if (lastPull > DateTime.MinValue)
                 {
@@ -1534,9 +1542,23 @@ namespace Daily.Services
         {
             try 
             {
-                var remote = await _supabase.From<SmartLedger>()
-                    .Where(x => x.UserId == Guid.Parse(userId) && x.UpdatedAt > lastPull)
-                    .Get();
+                var userGuid = Guid.Parse(userId);
+                
+                // Self-healing: if local table is empty, force a full pull
+                var localCount = await _databaseService.Connection.Table<LocalSmartLedger>().CountAsync();
+                if (localCount == 0)
+                {
+                    lastPull = DateTime.MinValue;
+                }
+
+                var query = _supabase.From<SmartLedger>().Where(x => x.UserId == userGuid);
+                
+                if (lastPull > DateTime.MinValue)
+                {
+                    query = query.Where(x => x.UpdatedAt > lastPull);
+                }
+
+                var remote = await query.Get();
 
                 if (remote.Models.Any())
                 {
