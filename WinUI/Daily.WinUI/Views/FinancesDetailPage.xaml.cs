@@ -69,6 +69,27 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
     // Using object here since PortfolioItem inherits from StockQuote but we might just use StockQuote
     public ObservableCollection<object> Holdings { get; } = new();
 
+    // Smart Ledger
+    private string _smartLedgerText = string.Empty;
+    public string SmartLedgerText
+    {
+        get => _smartLedgerText;
+        set 
+        { 
+            if (_smartLedgerText != value)
+            {
+                _smartLedgerText = value; 
+                OnPropertyChanged(); 
+                
+                // Auto-save and recalculate headers
+                _ = SaveSmartLedgerAsync();
+                UpdateSmartLedgerHeaders();
+            }
+        }
+    }
+
+    public ObservableCollection<string> SmartLedgerChatHistory { get; } = new();
+
     public FinancesDetailPage()
     {
         this.InitializeComponent();
@@ -150,6 +171,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             var allStocks = await _financesService.GetStockQuotesAsync(allSymbols);
 
             // Money
+            var ledger = await _financesService.GetSmartLedgerAsync();
             var nw = await _financesService.GetNetWorthAsync();
             var accounts = await _financesService.GetAccountsAsync();
 
@@ -171,12 +193,15 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
                 }
             }
             
-            string currentFilter = "stock";
-            if (CryptoBtn.IsChecked == true) currentFilter = "crypto";
-            else if (ForexBtn.IsChecked == true) currentFilter = "forex";
-            
-            await FilterWatchlistAsync(currentFilter, showLoadingSpinner);
+            _ = FilterWatchlistAsync(StocksBtn.IsChecked == true ? "stock" : CryptoBtn.IsChecked == true ? "crypto" : "forex", showLoadingSpinner: false);
 
+            if (ledger != null)
+            {
+                _smartLedgerText = ledger.LedgerText;
+                OnPropertyChanged(nameof(SmartLedgerText));
+                UpdateSmartLedgerHeaders();
+            }
+            
             NetWorthDisplay = nw.ToString("C0");
 
             decimal cash = accounts.Sum(a => a.CurrentBalance);
@@ -295,6 +320,83 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             {
                 IsStocksLoading = false;
             }
+        }
+    }
+
+    private async Task SaveSmartLedgerAsync()
+    {
+        if (_financesService == null) return;
+        
+        // Use the parser to ensure totals are re-calculated
+        var recalculated = Daily.Services.Finances.SmartLedgerParser.RecalculateTotals(_smartLedgerText);
+        if (_smartLedgerText != recalculated)
+        {
+            _smartLedgerText = recalculated;
+            OnPropertyChanged(nameof(SmartLedgerText));
+        }
+
+        await _financesService.SaveSmartLedgerAsync(_smartLedgerText);
+    }
+
+    private void UpdateSmartLedgerHeaders()
+    {
+        var headers = Daily.Services.Finances.SmartLedgerParser.ExtractHeaders(_smartLedgerText);
+        NetWorthDisplay = headers.NetWorth;
+        CashDisplay = headers.Cash;
+        InvestmentsDisplay = headers.Investments;
+    }
+
+    private void LedgerChatInput_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            SendLedgerChatBtn_Click(sender, null);
+            e.Handled = true;
+        }
+    }
+
+    private async void SendLedgerChatBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(LedgerChatInput.Text)) return;
+        
+        string userText = LedgerChatInput.Text;
+        LedgerChatInput.Text = string.Empty;
+        
+        SmartLedgerChatHistory.Add($"You: {userText}");
+        SmartLedgerChatHistory.Add("AI: Processing...");
+        
+        try 
+        {
+            var briefingEngine = App.Current.Services.GetRequiredService<Daily_WinUI.Services.ISmartBriefingEngine>();
+            
+            // System prompt instructing to output JSON command
+            string prompt = $@"
+You are a financial AI assistant. The user will tell you about an expense or a transfer they made.
+Return a JSON command using this structure ONLY: {{ ""action"": ""transfer"", ""source"": ""Card"", ""target"": ""Mega"", ""amount"": 5 }}
+If the source is not specified, assume 'Card'. If it's a new income, assume target is 'Card' and action is 'transfer'.
+Just the JSON, nothing else.
+
+User Input: {userText}
+";
+            
+            var aiResponse = await briefingEngine.GenerateBriefingAsync(prompt);
+            SmartLedgerChatHistory[^1] = $"AI: {aiResponse}";
+            
+            // Try parse JSON
+            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var command = System.Text.Json.JsonSerializer.Deserialize<Daily.Services.Finances.SmartLedgerParser.LedgerCommand>(aiResponse, options);
+            
+            if (command != null && command.action != null)
+            {
+                var newText = Daily.Services.Finances.SmartLedgerParser.ExecuteCommand(SmartLedgerText, command);
+                SmartLedgerText = newText; // Triggers setter, which saves and recalculates
+                SmartLedgerChatHistory.Add($"AI: Updated ledger successfully.");
+            }
+        }
+        catch (Exception ex)
+        {
+            SmartLedgerChatHistory[^1] = $"AI: Failed to process command.";
+            System.Diagnostics.Debug.WriteLine($"Smart Ledger AI error: {ex}");
         }
     }
 }

@@ -561,6 +561,46 @@ namespace Daily.Services.Finances
             return aggregated;
         }
 
+        // ==========================================
+        // SMART LEDGER
+        // ==========================================
+
+        public async Task<LocalSmartLedger?> GetSmartLedgerAsync()
+        {
+            var user = _supabaseClient.Auth.CurrentUser;
+            if (user == null) return null;
+
+            return await _databaseService.Connection.Table<LocalSmartLedger>()
+                .Where(l => l.UserId == user.Id)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task SaveSmartLedgerAsync(string ledgerText)
+        {
+            var user = _supabaseClient.Auth.CurrentUser;
+            if (user == null) return;
+
+            var existing = await GetSmartLedgerAsync();
+            if (existing == null)
+            {
+                var newLedger = new LocalSmartLedger
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    UserId = user.Id,
+                    LedgerText = ledgerText,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                await _databaseService.Connection.InsertAsync(newLedger);
+            }
+            else
+            {
+                existing.LedgerText = ledgerText;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await _databaseService.Connection.UpdateAsync(existing);
+            }
+        }
+
         public async Task<decimal> GetNetWorthAsync()
         {
             var accounts = await GetAccountsAsync();

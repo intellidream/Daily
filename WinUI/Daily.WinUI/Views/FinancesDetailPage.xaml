@@ -359,67 +359,56 @@
                             </StackPanel>
                         </Border>
 
-                        <TabView IsAddTabButtonVisible="False" TabWidthMode="SizeToContent" Margin="0,0,0,24">
-                            <TabView.TabItems>
-                                <!-- Accounts Tab -->
-                                <TabViewItem Header="Accounts">
-                                    <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="0,0,16,16" Padding="20">
-                                        <ListView ItemsSource="{x:Bind Accounts, Mode=OneWay}" SelectionMode="None">
-                                            <ListView.ItemTemplate>
-                                                <DataTemplate x:DataType="models:LocalAccount">
-                                                    <Grid Margin="0,0,0,16" Padding="0,0,0,16" BorderBrush="#1A808080" BorderThickness="0,0,0,1">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel Grid.Column="0">
-                                                            <TextBlock Text="{x:Bind Name}" FontSize="16" FontWeight="SemiBold" />
-                                                            <TextBlock Text="{x:Bind Type}" FontSize="12" Opacity="0.6" />
-                                                        </StackPanel>
-                                                        <TextBlock Grid.Column="1" Text="{x:Bind CurrentBalance, Converter={StaticResource CurrencyConverter}}" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ListView.ItemTemplate>
-                                        </ListView>
-                                    </Border>
-                                </TabViewItem>
 
-                                <!-- Investments Tab -->
-                                <TabViewItem Header="Investments">
-                                    <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="0,0,16,16" Padding="20">
-                                        <ListView ItemsSource="{x:Bind Holdings, Mode=OneWay}" SelectionMode="None">
-                                            <ListView.ItemTemplate>
-                                                <DataTemplate x:DataType="models:StockQuote">
-                                                    <Grid Margin="0,0,0,16" Padding="0,0,0,16" BorderBrush="#1A808080" BorderThickness="0,0,0,1">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <Border Grid.Column="0" Width="32" Height="32" CornerRadius="16" Margin="0,0,16,0" Background="Transparent">
-                                                            <Image Source="{Binding LogoUrl}" Stretch="UniformToFill" Width="32" Height="32" />
-                                                        </Border>
-                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                            <TextBlock Text="{Binding Symbol}" FontSize="16" FontWeight="SemiBold" />
-                                                            <TextBlock Text="{Binding CompanyName}" FontSize="12" Opacity="0.6" />
-                                                        </StackPanel>
-                                                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,24,0">
-                                                            <TextBlock Text="Price" FontSize="10" Opacity="0.5" />
-                                                            <TextBlock Text="{Binding CurrentPrice, Converter={StaticResource CurrencyConverter}}" FontSize="14" FontWeight="SemiBold" />
-                                                        </StackPanel>
-                                                        <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                                            <TextBlock Text="Total Value" FontSize="10" Opacity="0.5" HorizontalAlignment="Right"/>
-                                                            <TextBlock Text="{Binding TotalValue, Converter={StaticResource CurrencyConverter}}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ListView.ItemTemplate>
-                                        </ListView>
-                                    </Border>
-                                </TabViewItem>
-                            </TabView.TabItems>
-                        </TabView>
+
+                        <Grid Margin="0,24,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Raw Ledger Editor -->
+                            <Border Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16" Margin="0,0,16,0">
+                                <TextBox AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" 
+                                         Text="{x:Bind SmartLedgerText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="Transparent" BorderThickness="0"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto" MinHeight="400" />
+                            </Border>
+
+                            <!-- AI Chat -->
+                            <Border Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    
+                                    <TextBlock Text="Smart AI Assistant" FontWeight="SemiBold" Margin="0,0,0,16" Opacity="0.8" />
+                                    
+                                    <ListView Grid.Row="1" ItemsSource="{x:Bind SmartLedgerChatHistory, Mode=OneWay}" SelectionMode="None">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{x:Bind}" TextWrapping="Wrap" Margin="0,0,0,12" Opacity="0.8" />
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                    
+                                    <Grid Grid.Row="2" Margin="0,16,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="LedgerChatInput" PlaceholderText="Ask AI or say 'spent 5 at Mega'..." 
+                                                 KeyDown="LedgerChatInput_KeyDown" />
+                                        <Button Grid.Column="1" Style="{StaticResource AccentButtonStyle}" Margin="8,0,0,0"
+                                                Click="SendLedgerChatBtn_Click">
+                                            <FontIcon Glyph="&#xE122;" FontSize="14" />
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </Grid>
 
                     </StackPanel>
                 </ScrollViewer>

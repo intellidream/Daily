@@ -6,7 +6,10 @@ The Finances feature provides an integrated ledger system for tracking bank acco
 
 ## 1. Functional Specification
 
-### 1.1 Ledger Accounts & Transactions
+> [!WARNING]
+> **Architecture Update (June 2026):** The traditional tabular Accounts and Transactions lists have been deprecated in favor of the [Smart Ledger](SmartLedger.md) system. The underlying SQLite tables (`LocalAccount`, `LocalTransaction`) remain in the codebase for historical data retention, but the primary user interface now relies on a unified text-based AST parser and SLM Chat.
+
+### 1.1 Ledger Accounts & Transactions (Legacy)
 - **Multiple Account Types**: Supports checking, savings, credit card, and investment accounts. Each account is assigned a user currency and maintains a rolling balance.
 - **Transaction Entry**: Users can log transactions (income or expenses) by entering the date, amount, category, and description. Adding or removing a transaction automatically triggers database updates to recalculate the parent account's balance.
 

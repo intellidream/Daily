@@ -333,10 +333,11 @@ namespace Daily.Services
             
             if ((scope & SyncScope.Finances) != 0)
             {
-                // 4. Push Finances (Accounts & Transactions & Holdings)
+                // 4. Push Finances (Accounts & Transactions & Holdings & Smart Ledger)
                 await PushAccountsAsync(userId);
                 await PushTransactionsAsync(userId);
                 await PushHoldingsAsync(userId);
+                await PushSmartLedgerAsync(userId);
             }
 
             if ((scope & SyncScope.SavedArticles) != 0)
@@ -441,6 +442,7 @@ namespace Daily.Services
                 pulled += await PullAccountsInternalAsync(userId, lastPull);
                 pulled += await PullTransactionsInternalAsync(userId, lastPull);
                 pulled += await PullHoldingsInternalAsync(userId, lastPull);
+                pulled += await PullSmartLedgerInternalAsync(userId, lastPull);
 
                 totalPulled += pulled;
                 SetPreference(key, DateTime.UtcNow.ToString("O"));
@@ -1499,6 +1501,59 @@ namespace Daily.Services
 #else
             return Microsoft.Maui.Storage.FileSystem.CacheDirectory;
 #endif
+        }
+
+        // ==========================================
+        // SMART LEDGER SYNC
+        // ==========================================
+
+        private async Task PushSmartLedgerAsync(string userId)
+        {
+            var dirty = await _databaseService.Connection.Table<LocalSmartLedger>()
+                                .Where(a => a.SyncedAt == null && a.UserId == userId)
+                                .ToListAsync();
+            if (dirty.Any())
+            {
+                LogDebug($"[SyncService] Pushing {dirty.Count} Smart Ledgers...");
+                var remoteList = dirty.Select(Mappers.ToDomain).ToList();
+                try 
+                {
+                    await _supabase.From<SmartLedger>().Upsert(remoteList);
+                    foreach (var a in dirty)
+                    {
+                        a.SyncedAt = DateTime.UtcNow;
+                        await _databaseService.Connection.UpdateAsync(a);
+                    }
+                    LogDebug("[SyncService] Push Smart Ledgers Success.");
+                }
+                catch(Exception ex) { LogDebug($"[SyncService] Push Smart Ledgers Failed: {ex.Message}"); }
+            }
+        }
+
+        private async Task<int> PullSmartLedgerInternalAsync(string userId, DateTime lastPull)
+        {
+            try 
+            {
+                var remote = await _supabase.From<SmartLedger>()
+                    .Where(x => x.UserId == Guid.Parse(userId) && x.UpdatedAt > lastPull)
+                    .Get();
+
+                if (remote.Models.Any())
+                {
+                    LogDebug($"[SyncService] Pulled {remote.Models.Count} Smart Ledgers.");
+                    foreach (var rm in remote.Models)
+                    {
+                        var local = Mappers.ToLocal(rm);
+                        await _databaseService.Connection.InsertOrReplaceAsync(local);
+                    }
+                    return remote.Models.Count;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogSyncException("PullSmartLedgerInternalAsync", ex);
+            }
+            return 0;
         }
     }
 }

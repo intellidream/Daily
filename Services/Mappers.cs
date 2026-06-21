@@ -1,4 +1,5 @@
 using Daily.Models;
+using Daily.Models.Finances;
 
 namespace Daily.Services
 {
@@ -379,6 +380,41 @@ namespace Daily.Services
                 CreatedAt = domain.CreatedAt.ToUniversalTime(),
                 UpdatedAt = domain.UpdatedAt?.ToUniversalTime() ?? DateTime.UtcNow,
                 SyncedAt = domain.SyncedAt?.ToUniversalTime()
+            };
+        }
+
+        // ==========================================
+        // SMART LEDGER
+        // ==========================================
+
+        public static SmartLedger ToDomain(this LocalSmartLedger local)
+        {
+            if (!Guid.TryParse(local.Id, out Guid parsedId))
+                parsedId = Guid.Empty;
+                
+            if (!Guid.TryParse(local.UserId, out Guid parsedUserId))
+                parsedUserId = Guid.Empty;
+
+            return new SmartLedger
+            {
+                Id = parsedId,
+                UserId = parsedUserId,
+                LedgerText = local.LedgerText,
+                CreatedAt = SafeUtc(local.CreatedAt),
+                UpdatedAt = SafeUtc(local.UpdatedAt)
+            };
+        }
+
+        public static LocalSmartLedger ToLocal(this SmartLedger domain)
+        {
+            return new LocalSmartLedger
+            {
+                Id = domain.Id.ToString(),
+                UserId = domain.UserId.ToString(),
+                LedgerText = domain.LedgerText ?? string.Empty,
+                CreatedAt = SafeUtc(domain.CreatedAt),
+                UpdatedAt = SafeUtc(domain.UpdatedAt),
+                SyncedAt = DateTime.UtcNow
             };
         }
     }

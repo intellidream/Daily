@@ -55,6 +55,7 @@ namespace Daily.Services
                 var res9 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalWatchlist>().ConfigureAwait(false);
                 var res10 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalMacroIndicator>().ConfigureAwait(false);
                 var res11 = await _connection.CreateTableAsync<Daily.Models.Finances.LocalCountryEconomicData>().ConfigureAwait(false);
+                var res11b = await _connection.CreateTableAsync<Daily.Models.Finances.LocalSmartLedger>().ConfigureAwait(false);
                 
                 // Smart Agent
                 await _connection.CreateTableAsync<LocalBehaviorEvent>().ConfigureAwait(false);

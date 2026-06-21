@@ -154,6 +154,7 @@
         <!-- Finances Services -->
     <Compile Include="..\..\Services\Finances\IFinancesService.cs" Link="Services\Finances\IFinancesService.cs" />
     <Compile Include="..\..\Services\Finances\FinancesService.cs" Link="Services\Finances\FinancesService.cs" />
+    <Compile Include="..\..\Services\Finances\SmartLedgerParser.cs" Link="Services\Finances\SmartLedgerParser.cs" />
     <Compile Include="..\..\Services\Finances\IMacroService.cs" Link="Services\Finances\IMacroService.cs" />
     <Compile Include="..\..\Services\Finances\MacroService.cs" Link="Services\Finances\MacroService.cs" />
     <Compile Include="..\..\Services\Finances\IHeatmapService.cs" Link="Services\Finances\IHeatmapService.cs" />
