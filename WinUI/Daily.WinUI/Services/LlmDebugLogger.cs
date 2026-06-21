@@ -14,6 +14,7 @@ namespace Daily_WinUI.Services
         public string Error { get; set; } = string.Empty;
         public string ActiveEngine { get; set; } = string.Empty;
         public DateTime Timestamp { get; set; }
+        public long DurationMs { get; set; }
     }
 
     public static class LlmDebugLogger
@@ -63,7 +64,7 @@ namespace Daily_WinUI.Services
                 lock (_lock)
                 {
                     if (Logs.Count == 0) return string.Empty;
-                    return string.Join("\n\n=========================================\n\n", Logs.Select((l, i) => $"[Prompt #{i+1} ({l.Timestamp:T})]\n{l.SystemPrompt}"));
+                    return string.Join("\n\n=========================================\n\n", Logs.Select((l, i) => $"[Prompt #{i+1} ({l.Timestamp:T}) - {l.SystemPrompt.Length} chars]\n{l.SystemPrompt}"));
                 }
             }
             set
@@ -84,7 +85,7 @@ namespace Daily_WinUI.Services
                 lock (_lock)
                 {
                     if (Logs.Count == 0) return string.Empty;
-                    return string.Join("\n\n=========================================\n\n", Logs.Select((l, i) => $"[Prompt #{i+1} ({l.Timestamp:T})]\n{l.UserPrompt}"));
+                    return string.Join("\n\n=========================================\n\n", Logs.Select((l, i) => $"[Prompt #{i+1} ({l.Timestamp:T}) - {l.UserPrompt.Length} chars]\n{l.UserPrompt}"));
                 }
             }
             set
@@ -126,7 +127,7 @@ namespace Daily_WinUI.Services
                 lock (_lock)
                 {
                     if (Logs.Count == 0) return string.Empty;
-                    return string.Join("\n\n=========================================\n\n", Logs.Select((l, i) => $"[Prompt #{i+1} ({l.Timestamp:T})]\n{l.Response}"));
+                    return string.Join("\n\n=========================================\n\n", Logs.Select((l, i) => $"[Prompt #{i+1} ({l.Timestamp:T}) - {l.DurationMs} ms]\n{l.Response}"));
                 }
             }
             set

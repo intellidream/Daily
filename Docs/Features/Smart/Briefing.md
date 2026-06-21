@@ -34,9 +34,10 @@ The Local Smart Briefing feature integrates lightweight, privacy-first, on-devic
 #### 1.2.5 Weather & Daily Narrative Briefing
 - **Dynamic Morning Narrative**: Merges weather forecast, calendar events, high-priority tasks, and habits into a cohesive "Daily Briefing".
 - **Example output**: *"It's going to be rainy (18°C) today, so we recommend doing your daily cardio habit indoors. You have 3 high-priority tasks due today, and a meeting at 2 PM. Let's make it a productive day!"*
-- **Strict Payload & Prompting**: To ensure fast load times and prevent model hallucinations, the briefing generation uses 7 parallel AI tasks. The payload is heavily optimized (e.g., extracting only event/task titles and limiting lookahead to 7 days, capping news to 5 items).
+- **Consolidated AI Prompting**: To prevent `SemaphoreSlim` initialization bottlenecks and maximize execution speed on 1B-3B SLMs, the system aggregates all 7 sections (Weather, Finances, Vitals, Habits, Calendar, Todos, News) into a single unified prompt structure using precise markers.
+- **Strict Payload & Prompting**: To ensure the combined payload fits safely within the 8K context window, the data is heavily trimmed: extracting only event/task titles, limiting lookahead to 7 days (max 5 items), and capping news to 3 items.
 - **Sentiment & Salutation Removal**: AI system prompts strictly forbid conversational salutations (e.g., "Good morning") and subjective sentiment analysis to ensure a dense, highly factual briefing.
-- **UI Widget Ordering**: The Dashboard dynamically aligns with the structured briefing flow: Weather -> Finances -> Vitals -> Habits -> Calendar -> News.
+- **UI Widget Ordering**: The Dashboard dynamically aligns with the structured briefing flow: Weather -> Finances -> Vitals -> Habits -> Calendar -> Todos -> News.
 
 #### 1.2.6 Smart Behavior Personalization
 - **Behavior-Aware Narrative**: Integrates aggregated 7-day semantic behavior profile statistics (e.g., hydration trends, preferred news topics) to personalize the daily narrative.
@@ -357,27 +358,33 @@ flowchart TD
 
 ---
 
-### 5.3 Prompting Structures & Constraints (Micro-Inference)
-To maximize edge hardware throughput, prevent context size limitations (KV cache bounds on Snapdragon NPU), and completely avoid JSON formatting hallucinations/crashes, the system shifts completely away from monolithic zero-shot prompts to a **Hybrid Micro-Inference & C# Templating** architecture.
+### 5.3 Prompting Structures & Constraints (Consolidated Unified Prompt)
+To maximize edge hardware throughput, mitigate thread starvation, and avoid `SemaphoreSlim` queueing delays inherent to concurrent LLamaSharp initializations on low-VRAM devices, the system shifted from parallel micro-prompts to a **Consolidated Unified Prompt** architecture.
 
-The orchestrator service [SmartBriefingService.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Services/SmartBriefingService.cs) evaluates the user's data payload using parallel micro-prompt tasks.
+The orchestrator service [SmartBriefingService.cs](file:///c:/Users/Mihai/source/Repos/Daily/WinUI/Daily.WinUI/Services/SmartBriefingService.cs) aggregates the user's data payload into a single structured query.
 
 #### 5.3.1 Architectural Pillars
 
-1. **Dual-Mode Template Slots**:
-   The briefing narrative is divided into 6 distinct text fields within `SmartBriefingData`:
-   - `WeatherBriefing` (Weather)
-   - `CalendarBriefing` (Calendar Events)
-   - `TodosBriefing` (Tasks & Notes)
-   - `HealthHabitsBriefing` (Health Vitals & Habit Metrics)
-   - `FinanceBriefing` (Financial Ledger & Stock Watchlist)
-   - `NewsBriefing` (RSS/WordPress Articles)
+1. **Strict Marker Outputs**:
+   The LLM is instructed to respond using rigid text markers to delineate sections:
+   - `[WEATHER]`
+   - `[FINANCES]`
+   - `[VITALS]`
+   - `[HABITS]`
+   - `[CALENDAR]`
+   - `[TODOS]`
+   - `[NEWS]`
    
-2. **Deterministic Fallbacks**:
-   Prior to calling the local LLM, C# natively evaluates whether a slot's telemetry metrics are empty, invalid, or uninitialized. If so, it instantly assigns a hardcoded deterministic string (e.g. *"Your calendar is clear today. Enjoy your free time!"*), completely bypassing AI execution.
+   A custom C# `ExtractSection` parser rips these markers out, formats the outputs cleanly, and populates the `SmartBriefingData` fields natively. The user NEVER sees these internal tags.
 
-3. **Isolated try/catch gates & Concurrent Task.WhenAll()**:
-   Each active slot's micro-prompt runs inside its own `Task.Run` thread. All 6 tasks execute concurrently using `Task.WhenAll()`. Each AI call is wrapped in a `try/catch` block. If one micro-prompt fails (e.g. due to hardware timeout or NPU reset), only that specific slot falls back to its deterministic C# summary string, keeping the remaining AI-generated slot briefs fully intact.
+2. **Deterministic Fallbacks**:
+   Prior to calling the local LLM, C# natively constructs fallback strings for every section. If the LLM generation fails, skips a tag, or throws an NPU reset exception, the parser automatically injects the fallback strings into the missing slots, keeping the briefing UI intact.
+
+3. **Context Window Safety Limits**:
+   Because consolidating all 7 datasets into a single prompt significantly inflates token usage, aggressive string trimmers protect the 8192 context window:
+   - **Calendar/Todos**: Max 5 items each, titles trimmed to 50 chars.
+   - **News**: Max 3 headlines.
+   - Total string length capped at 10,000 chars as a final safety boundary.
 
 4. **Concatenation UI Presentation**:
    The final slots are joined using double newlines (`\n\n`) into `data.BriefingText` so that they flow natively as a single typed narrative inside the typewriter animation in `MainPage.xaml.cs`.
@@ -387,38 +394,19 @@ The orchestrator service [SmartBriefingService.cs](file:///c:/Users/Mihai/source
 #### 5.3.2 News Round-Robin Selection
 Before prompt generation, the system runs the Round-Robin headline selection algorithm:
 1. Iterates over all of the user's subscribed publications in parallel, pulling a sequential list of recent articles from each.
-2. Selects the first item from each publication source, then the second, etc., up to 15 items.
-3. Orders them chronologically and extracts exactly the top 5 articles.
-4. Sends only these 5 source-diverse headlines to the AI for summarization, eliminating single-feed attention contamination.
+2. Selects the first item from each publication source, then the second, etc.
+3. Orders them chronologically and extracts exactly the top 3 articles for the context window.
+4. Sends only these 3 source-diverse headlines to the AI for summarization, eliminating single-feed attention contamination.
 
 ---
 
-#### 5.3.3 Micro-Prompt System & User Instructions
-The 6 slots utilize strict, tiny, and targeted prompts to eliminate attention contamination:
+#### 5.3.3 Unified Prompt System & Instructions
+The unified system prompt strictly injects formatting rules directly from the `Prompting.md` guidelines.
 
-- **Weather**:
-  - *System*: `"System: You are a weather briefing assistant. Summarize today's weather in one concise, natural, and encouraging sentence."`
-  - *User*: `"Weather: [Condition], [Temp]°C. Hourly forecast: [Details]. 5-day forecast: [Details]."`
+**System Prompt Excerpt:**
+`"System: Do not include any of the prompting as a formulation inside the summary. Do not salute me or get conversational, we do that separately. Do not say any other things that suggest you are prompted, talk to the me naturally, using second person and/or my name! ... Format your response EXACTLY as follows: [WEATHER] ... [FINANCES] ..."`
 
-- **Calendar**:
-  - *System*: `"System: Write exactly one concise, encouraging sentence commenting on the user's upcoming calendar events today. CRITICAL: Do NOT list or enumerate the events (do not write down event names, times, or locations). Instead, write a natural statement mentioning the number of upcoming events (e.g. 'You have 3 events scheduled for today' or 'You have only 2 more events today') or comment on their workload/importance (e.g. 'Your schedule is looking very light today' or 'You have a busy afternoon ahead')."`
-  - *User*: `"Upcoming events starting from current time ([CurrentTime]):\n[Filtered list of top 5 events ending after current time]"`
-
-- **Todos & Notes**:
-  - *System*: `"System: Write exactly one concise, encouraging sentence commenting on the user's active tasks. CRITICAL: Do NOT list or enumerate the tasks (do not write down task titles or details). Instead, write a natural statement mentioning the number of pending tasks (e.g. 'You still have 3 tasks to complete today' or 'You have 4 active tasks left on your agenda') or comment on their workload/importance (e.g. 'You have a few high-priority tasks to focus on' or 'You have a light task list today')."`
-  - *User*: `"Active tasks:\n[Filtered list of top 5 active/due-today tasks ordered by high importance/due date]"`
-
-- **Health & Habits**:
-  - *System*: `"System: Write one encouraging sentence about the user's habits and health metrics. Treat smoking as a negative habit to reduce."`
-  - *User*: `"Steps: [Steps], Sleep: [Sleep] hours, Water: [Water]/[WaterGoal] ml, Smokes: [Smokes]/[SmokesGoal]"`
-
-- **Finances**:
-  - *System*: `"System: Summarize the user's financial state into one concise sentence based on net worth and stock tickers."`
-  - *User*: `"Net Worth: [NetWorth]. Stocks: [Watchlist tickers]"`
-
-- **News**:
-  - *System*: `"System: Summarize these 5 headlines into one concise sentence extracting the main topic."`
-  - *User*: `"Headlines: [Round-Robin 5 headlines]"`
+Each section dictates precise constraints (e.g. "Assess my sleep duration: 7 to 9 hours is optimal and healthy." and "Treat smoking as a negative habit to reduce").
 
 ---
 

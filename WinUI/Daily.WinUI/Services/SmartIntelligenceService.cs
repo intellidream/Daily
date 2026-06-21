@@ -80,7 +80,10 @@ namespace Daily_WinUI.Services
 
             try
             {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 string response = await _aiManager.GenerateBriefingAsync(prompt);
+                sw.Stop();
+                log.DurationMs = sw.ElapsedMilliseconds;
                 log.Response = response;
                 LlmDebugLogger.Log(log);
                 return SmartIntelligenceHelper.SanitizeResponse(response, systemPrompt, userPrompt, prompt);
@@ -183,7 +186,10 @@ namespace Daily_WinUI.Services
 
             try
             {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 string response = await _aiManager.GenerateBriefingAsync(prompt);
+                sw.Stop();
+                log.DurationMs = sw.ElapsedMilliseconds;
                 log.Response = response;
                 LlmDebugLogger.Log(log);
 

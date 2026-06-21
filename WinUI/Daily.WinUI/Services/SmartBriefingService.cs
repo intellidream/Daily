@@ -108,6 +108,7 @@ namespace Daily_WinUI.Services
 
         // Caching metadata
         public bool WasRegenerated { get; set; }
+        public string RawContext { get; set; } = string.Empty;
     }
 
     public sealed class UserData
@@ -940,301 +941,147 @@ namespace Daily_WinUI.Services
                 Console.WriteLine($"[SmartBriefingService] AI initialization error: {ex.Message}");
             }
 
-            // Generate slots in parallel
-            var weatherTask = Task.Run(async () =>
+            // Fallback generation logic (used if AI is disabled or fails)
+            string weatherFallback = string.IsNullOrEmpty(metrics.WeatherSummary) ? "Weather information is currently unavailable." : metrics.WeatherSummary;
+            if (metrics.WeatherTemp == 0 && string.IsNullOrEmpty(metrics.WeatherCondition)) weatherFallback = "Weather information is currently unavailable.";
+            
+            var now = DateTime.Now;
+            var upcomingEvents = metrics.CalendarEventsToday
+                .Where(e => e.IsAllDay || e.End.ToLocalTime() >= now)
+                .Where(e => e.Start.ToLocalTime() <= now.AddDays(7))
+                .OrderBy(e => e.IsAllDay ? 0 : 1).ThenBy(e => e.Start).ToList();
+            string calendarFallback = upcomingEvents.Count == 0 ? "Your calendar is clear. Enjoy your free time!" : $"You have {upcomingEvents.Count} upcoming calendar events scheduled.";
+
+            var upcomingTodos = metrics.ActiveTodos
+                .Where(t => !t.DueDate.HasValue || (t.DueDate.Value.ToLocalTime() >= now && t.DueDate.Value.ToLocalTime() <= now.AddDays(7)))
+                .OrderByDescending(t => t.Importance?.ToLower() == "high").ThenBy(t => t.DueDate ?? DateTime.MaxValue).ToList();
+            string todosFallback = "You have no pending tasks or notes.";
+            if (upcomingTodos.Count > 0)
             {
-                string fallback = string.IsNullOrEmpty(metrics.WeatherSummary) 
-                    ? "Weather information is currently unavailable." 
-                    : metrics.WeatherSummary;
+                var titles = upcomingTodos.Take(5).Select(t => t.Title).ToList();
+                todosFallback = $"You have {upcomingTodos.Count} active tasks on your agenda: {string.Join(", ", titles)}" + (upcomingTodos.Count > 5 ? $" and {upcomingTodos.Count - 5} more." : "");
+            }
 
-                bool isWeatherEmpty = metrics.WeatherTemp == 0 && string.IsNullOrEmpty(metrics.WeatherCondition);
-                if (isWeatherEmpty)
-                {
-                    return "Weather information is currently unavailable.";
-                }
+            string healthFallback = (metrics.HealthSteps == 0 && metrics.HealthSleepHours == 0) ? "Keep moving and stay active today!" : $"You've taken {metrics.HealthSteps:N0} steps, slept {metrics.HealthSleepHours:F1} hours.";
+            
+            string habitsFallback = (metrics.HabitsWaterProgress == 0 && metrics.HabitsSmokesProgress == 0) ? "Remember to track your daily habits and stay hydrated!" : $"You drank {metrics.HabitsWaterProgress:F0}/{metrics.HabitsWaterGoal:F0} ml of water.";
+            if (metrics.HabitsSmokesGoal > 0 || metrics.HabitsSmokesProgress > 0) habitsFallback += $" Smoked {metrics.HabitsSmokesProgress} out of limit {metrics.HabitsSmokesGoal}.";
 
-                if (useAi)
-                {
-                    try
-                    {
-                        string systemPrompt = "System: You are a weather briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize today's weather in one concise, natural, and realistic phrase. Summarize 5-day forecast in one concise, natural, and realistic sentence. Advice on normal weather patterns. Warn on any extraordinary weather events.";
-                        string userPrompt = $"Weather today: {metrics.WeatherCondition}, {metrics.WeatherTemp}°C.\n5-day forecast:\n{metrics.WeatherFiveDayDetails}\nAlerts/Events: None reported.";
-                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
-                    }
-                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Weather AI Prompt Error: {ex.Message}"); }
-                }
-                return fallback;
-            });
-
-            var calendarTask = Task.Run(async () =>
+            string financeFallback = "You haven't set up your financial ledger yet. Add accounts to start tracking your net worth!";
+            if (metrics.HasLedgerData)
             {
-                var now = DateTime.Now;
-                var upcomingEvents = metrics.CalendarEventsToday
-                    .Where(e => e.IsAllDay || e.End.ToLocalTime() >= now)
-                    .Where(e => e.Start.ToLocalTime() <= now.AddDays(7))
-                    .OrderBy(e => e.IsAllDay ? 0 : 1)
-                    .ThenBy(e => e.Start)
-                    .ToList();
+                financeFallback = $"Your ledger net worth is looking healthy at {metrics.NetWorth:C0}.";
+                if (metrics.WatchlistStocks.Count > 0) financeFallback += $" Watchlist: " + string.Join(", ", metrics.WatchlistStocks.Select(s => $"{s.Symbol} ({s.FormattedChange})")) + ".";
+            }
 
-                if (upcomingEvents.Count == 0)
-                {
-                    return "Your calendar is clear. Enjoy your free time!";
-                }
+            string newsFallback = "No new articles in your feeds today.";
+            if (metrics.TopNewsHeadlines != null && metrics.TopNewsHeadlines.Count > 0)
+            {
+                var top5 = metrics.TopNewsHeadlines.Take(5).ToList();
+                newsFallback = "Your top headlines today: " + string.Join("; ", top5.Select(h => h.TrimStart('-', ' '))) + ".";
+            }
 
+            string wBrief = weatherFallback;
+            string cBrief = calendarFallback;
+            string tBrief = todosFallback;
+            string hBrief = healthFallback;
+            string hbBrief = habitsFallback;
+            string fBrief = financeFallback;
+            string nBrief = newsFallback;
+
+            if (useAi)
+            {
+                // Trimming Strategy: Cap events, todos, and news text lengths.
                 var sbEvents = new StringBuilder();
-                foreach (var ev in upcomingEvents)
+                foreach (var ev in upcomingEvents.Take(5)) // Max 5 events
                 {
                     string timeStr = ev.IsAllDay ? "All Day" : $"{ev.Start.ToLocalTime():t} - {ev.End.ToLocalTime():t}";
-                    sbEvents.AppendLine($"- {ev.Title} ({timeStr})");
+                    string titleStr = ev.Title.Length > 50 ? ev.Title.Substring(0, 47) + "..." : ev.Title;
+                    sbEvents.AppendLine($"- {titleStr} ({timeStr})");
                 }
-                string eventsList = sbEvents.ToString();
+                string eventsList = sbEvents.Length > 0 ? sbEvents.ToString() : "None";
 
-                string fallback = $"You have {upcomingEvents.Count} upcoming calendar events scheduled.";
-
-                if (useAi)
+                var sbTodos = new StringBuilder();
+                foreach (var t in upcomingTodos.Take(5)) // Max 5 tasks
                 {
-                    try
+                    string titleStr = t.Title.Length > 50 ? t.Title.Substring(0, 47) + "..." : t.Title;
+                    sbTodos.AppendLine($"- {titleStr}");
+                }
+                string todosList = sbTodos.Length > 0 ? sbTodos.ToString() : "None";
+
+                var sbNews = new StringBuilder();
+                if (metrics.TopNewsHeadlines != null)
+                {
+                    foreach (var h in metrics.TopNewsHeadlines.Take(3)) // Max 3 news headlines for AI context safety
                     {
-                        string systemPrompt = "System: You are a calendar events helper and briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize and analyze the data you are given, realistically, considering these rules:\n- If there are no events, just mention that and encourage the user to enjoy his free time or find pleasant, healthy, satisfactory and useful activities.\n- Only look at events during or starting from the current time, for a maximum of 7 days ahead, analize only their titles, not the whole contents, and summarize on them and their importance, relationships, load on the user's day or week and possible urgencies. Also advice on how to prepare for them, if any require that. Do as well a sentiment analysis on their data (titles, load on current day or week, but not full contents). If nothing better to say then just mention their existence briefly and their total counts and their spread over the day or week (those 7 days max).";
-                        string userPrompt = $"Upcoming events (titles only):\n{eventsList}";
-                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
+                        string headlineStr = h.Length > 100 ? h.Substring(0, 97) + "..." : h;
+                        sbNews.AppendLine(headlineStr);
                     }
-                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Calendar AI Prompt Error: {ex.Message}"); }
                 }
-                return fallback;
-            });
-
-            var todosTask = Task.Run(async () =>
-            {
-                var now = DateTime.Now;
-                var upcomingTodos = metrics.ActiveTodos
-                    .Where(t => !t.DueDate.HasValue || (t.DueDate.Value.ToLocalTime() >= now && t.DueDate.Value.ToLocalTime() <= now.AddDays(7)))
-                    .OrderByDescending(t => t.Importance?.ToLower() == "high")
-                    .ThenBy(t => t.DueDate ?? DateTime.MaxValue)
-                    .ToList();
-
-                if (upcomingTodos.Count == 0)
-                {
-                    return "You have no pending tasks or notes.";
-                }
-
-                var titles = upcomingTodos.Take(5).Select(t => t.Title).ToList();
-                string todosList = string.Join(", ", titles);
-                if (upcomingTodos.Count > 5) todosList += $" and {upcomingTodos.Count - 5} more.";
-
-                string fallback = $"You have {upcomingTodos.Count} active tasks on your agenda: {todosList}";
-
-                if (useAi)
-                {
-                    try
-                    {
-                        string systemPrompt = "System: You are a calendar tasks/todos/notes helper and briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize and analyze the data you are given, realistically, considering these rules:\n- If there are no tasks/todos or notes, just mention that and encourage the user to enjoy his free time and use it to rest, read or take a walk or a bike ride.\n- Only look at tasks/todos or notes during or starting from the current time, for a maximum of 7 days ahead, analize only their titles, not the whole contents, and summarize on them and their importance, relationships, load on the user's day or week and possible urgencies. Also advice on how to prepare for them, if any require that. Do as well a sentiment analysis on their data (titles, load on current day or week, but not full contents). If nothing better to say then just mention their existence briefly and their total counts and their spread over the day or week (those 7 days max).";
-                        string userPrompt = $"Active tasks/notes (titles only):\n{todosList}";
-                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
-                    }
-                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Todos AI Prompt Error: {ex.Message}"); }
-                }
-                return fallback;
-            });
-
-            var healthTask = Task.Run(async () =>
-            {
-                bool isHealthEmpty = metrics.HealthSteps == 0 && metrics.HealthSleepHours == 0;
-                if (isHealthEmpty)
-                {
-                    return "Keep moving and stay active today!";
-                }
-
-                string fallback = $"You've taken {metrics.HealthSteps:N0} steps, slept {metrics.HealthSleepHours:F1} hours.";
-
-                if (useAi)
-                {
-                    try
-                    {
-                        string systemPrompt = "System: You are a health/vitals briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize and analyze the metrics you are given, realistically, considering these rules:\n- Assess sleep duration realistically: 7 to 9 hours is optimal and healthy. Anything below means being tired, anything above can be too much.\n- Assess steps count realistically: under 5,000 steps is low, while 10,000 steps is the better target. Assess their progress based on the time of day. Consider walking happens during wake hours (normally 9 AM to 9 PM), and then treat the percentual progress towards the better target based on that.\n- Assess any other metrics like HRV and other realistically and either congratulate or warn the user to take a break.";
-                        string userPrompt = $"Health/Vitals Data:\n- Steps: {metrics.HealthSteps} (Target: 10,000)\n- Sleep: {metrics.HealthSleepHours:F1} hours (Deep: {metrics.HealthSleepDeep:F1}m, Light: {metrics.HealthSleepLight:F1}m, REM: {metrics.HealthSleepRem:F1}m, Awake: {metrics.HealthSleepAwake:F1}m)";
-                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
-                    }
-                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Health AI Prompt Error: {ex.Message}"); }
-                }
-                return fallback;
-            });
-
-            var habitsTask = Task.Run(async () =>
-            {
-                bool isHabitsEmpty = metrics.HabitsWaterProgress == 0 && metrics.HabitsSmokesProgress == 0;
-                if (isHabitsEmpty)
-                {
-                    return "Remember to track your daily habits and stay hydrated!";
-                }
-
-                string fallback = $"You drank {metrics.HabitsWaterProgress:F0}/{metrics.HabitsWaterGoal:F0} ml of water.";
-                if (metrics.HabitsSmokesGoal > 0 || metrics.HabitsSmokesProgress > 0)
-                {
-                    fallback += $" Smoked {metrics.HabitsSmokesProgress} out of limit {metrics.HabitsSmokesGoal}.";
-                }
-
-                if (useAi)
-                {
-                    try
-                    {
-                        string systemPrompt = "System: You are a habits (that also impact health) briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize and analyze the metrics you are given, realistically, considering these rules:\n- Assess water intake realistically based on the time of day, current intake and total goal. Consider water intake happens during wake hours (normally 9 AM to 9 PM), and then treat the percentual progress towards the total goal based on that.\n- Treat smoking as a negative habit to reduce or eliminate. If the user smoked, do not congratulate them; encourage reduction or staying below half of their daily limit. Consider smoking also happens during wake hours but can go deeper into the night (9 AM to 11 PM) and treat it percentually based on current number of smokes, half of their total limit as max, and time of day, and asses if it's already too much or the user managed to keep it under control. If the user exagerated, write a concise sentence on the dangers of smoking!";
-                        string userPrompt = $"Habits Data:\n- Liquids intake: {metrics.HabitsWaterProgress:F0} ml (Target: {metrics.HabitsWaterGoal:F0} ml)\n- Smokes: {metrics.HabitsSmokesProgress:F0} (Limit: {metrics.HabitsSmokesGoal:F0})";
-                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
-                    }
-                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Habits AI Prompt Error: {ex.Message}"); }
-                }
-                return fallback;
-            });
-
-            var financeTask = Task.Run(async () =>
-            {
-                if (!metrics.HasLedgerData)
-                {
-                    return "You haven't set up your financial ledger yet. Add accounts to start tracking your net worth!";
-                }
+                string headlinesList = sbNews.Length > 0 ? sbNews.ToString() : "None";
 
                 var sbStocks = new StringBuilder();
                 foreach (var stock in metrics.WatchlistStocks)
                 {
                     sbStocks.Append($"{stock.Symbol}: {stock.Price:C2} ({stock.FormattedChange}), ");
                 }
-                string stocksList = sbStocks.ToString().TrimEnd(',', ' ');
+                string stocksList = sbStocks.Length > 0 ? sbStocks.ToString().TrimEnd(',', ' ') : "None";
 
-                string fallback = $"Your ledger net worth is looking healthy at {metrics.NetWorth:C0}.";
-                if (metrics.WatchlistStocks.Count > 0)
+                string systemPrompt = @"System: Do not include any of the prompting as a formulation inside the summary. Do not salute me or get conversational, we do that separately. Do not say any other things that suggest you are prompted, talk to the me naturally, using second person and/or my name!
+
+You are an intelligent personal assistant. Review the user's daily data and write a single, natural, and highly engaging paragraph (2-3 sentences max) summarizing the day. Do not list the data points. Pick out the 2 most interesting or critical anomalies across all data points (e.g., bad weather, an important meeting, or falling behind on habits) and weave them into a conversational morning greeting.
+
+CRITICAL INSTRUCTION: Do NOT mix up values from different categories. For example, never compare sleep hours to step targets, and never mention hydration limits when talking about finances. Keep the metrics isolated to their respective categories.
+
+EXAMPLE RESPONSE 1 (BUSY DAY):
+It looks like a clear day with a high of 31°C, perfect for outdoor activities! However, you have a busy schedule today with several high-priority tasks, so let's focus up and get them done.
+
+EXAMPLE RESPONSE 2 (EMPTY CALENDAR/TASKS):
+Expect a rainy afternoon with temperatures dropping to 15°C, so grab an umbrella. You have a completely free schedule today and no pending tasks, giving you a chance to relax and enjoy your free time!";
+
+                string userPrompt = $"Data:\n[WEATHER]\nCondition: {metrics.WeatherCondition}, {metrics.WeatherTemp}°C. Forecast: {metrics.WeatherFiveDayDetails}\n\n[FINANCES]\nLedger Net Worth: {metrics.NetWorth:C0}. Stocks: {stocksList}\n\n[VITALS]\nSteps: {metrics.HealthSteps} (Target: 10,000). Sleep: {metrics.HealthSleepHours:F1} hours.\n\n[HABITS]\nLiquids: {metrics.HabitsWaterProgress:F0}/{metrics.HabitsWaterGoal:F0} ml. Smokes: {metrics.HabitsSmokesProgress:F0}/{metrics.HabitsSmokesGoal:F0}.\n\n[CALENDAR]\nUpcoming:\n{eventsList}\n\n[TODOS]\nActive tasks:\n{todosList}\n\n[NEWS]\nHeadlines:\n{headlinesList}";
+
+                metrics.RawContext = userPrompt;
+
+                // Fallback to safety trim if total length is absurdly high (unlikely, but safe)
+                if (userPrompt.Length > 10000)
                 {
-                    fallback += $" Watchlist: " + string.Join(", ", metrics.WatchlistStocks.Select(s => $"{s.Symbol} ({s.FormattedChange})")) + ".";
+                    userPrompt = userPrompt.Substring(0, 10000) + "... (truncated)";
                 }
 
-                if (useAi)
+                try
                 {
-                    try
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                    sw.Stop();
+                    System.Diagnostics.Debug.WriteLine($"[SmartBriefing-DEBUG] CONSOLIDATED Task | Duration: {sw.ElapsedMilliseconds} ms | SysPrompt Len: {systemPrompt.Length} | UserPrompt Len: {userPrompt.Length}");
+
+                    if (!string.IsNullOrWhiteSpace(result))
                     {
-                        string systemPrompt = "System: You are a finances advisory and briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize the finance data given, see if the user's ledger is used and comment on them realistically and provide concise advices. Extrapolate on any market changes and what the user could/should do to improve his financial status.";
-                        string userPrompt = $"Ledger Net Worth: {metrics.NetWorth:C0}.\nWatchlist Stocks:\n{stocksList}";
-                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
+                        metrics.BriefingText = result.Trim();
                     }
-                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] Finance AI Prompt Error: {ex.Message}"); }
                 }
-                return fallback;
-            });
-
-            var newsTask = Task.Run(async () =>
-            {
-                if (metrics.TopNewsHeadlines == null || metrics.TopNewsHeadlines.Count == 0)
+                catch (Exception ex)
                 {
-                    return "No new articles in your feeds today.";
+                    Console.WriteLine($"[SmartBriefingService] Consolidated AI Prompt Error: {ex.Message}");
                 }
+            }
 
-                var top5 = metrics.TopNewsHeadlines.Take(5).ToList();
-                string headlinesList = string.Join("\n", top5);
-                string fallback = "Your top headlines today: " + string.Join("; ", top5.Select(h => h.TrimStart('-', ' '))) + ".";
-
-                if (useAi)
-                {
-                    try
-                    {
-                        string systemPrompt = "System: You are a news briefing assistant. Do not include any of the prompting as a formulation inside the summary. Do not salute or get conversational, we do that separately. Summarize these 5 headlines into one phrase extracting the main topics. Extrapolate on any relations between the topics and offer a sentiment analysis based on their contents..";
-                        string userPrompt = $"Headlines:\n{headlinesList}";
-                        string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
-                        if (!string.IsNullOrWhiteSpace(result)) return result.Trim();
-                    }
-                    catch (Exception ex) { Console.WriteLine($"[SmartBriefingService] News AI Prompt Error: {ex.Message}"); }
-                }
-                return fallback;
-            });
-
-            await Task.WhenAll(weatherTask, calendarTask, todosTask, healthTask, habitsTask, financeTask, newsTask);
-
-            // Assign values to slots (stripping asterisks, replacing bullet points, and prefixing icons)
-            string weatherClean = (weatherTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
-            string calendarClean = (calendarTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
-            string todosClean = (todosTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
-            string healthClean = (healthTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
-            string habitsClean = (habitsTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
-            string financeClean = (financeTask.Result ?? "").Replace("**", "").Replace("*", "•").Trim();
-            string newsClean = (newsTask.Result ?? "").Replace("**", "").Replace("*", "•").Replace("_", "").Trim();
-
-            metrics.WeatherBriefing = $"\uE706  {weatherClean}";
-            metrics.CalendarBriefing = $"\uE787  {calendarClean}";
-            metrics.TodosBriefing = $"\uE73A  {todosClean}";
-            metrics.HealthBriefing = $"\uEC92  {healthClean}";
-            metrics.HabitsBriefing = $"\uE1A5  {habitsClean}";
-            metrics.FinanceBriefing = $"\uE8C7  {financeClean}";
-
-            // Format News (cleaning intros and placing summary on next line in italics)
-            string newsBody = newsClean;
+            metrics.WeatherBriefing = $"\uE706  {wBrief}";
+            metrics.FinanceBriefing = $"\uE8C7  {fBrief}";
+            metrics.HealthBriefing = $"\uEC92  {hBrief}";
+            metrics.HabitsBriefing = $"\uE1A5  {hbBrief}";
+            metrics.CalendarBriefing = $"\uE787  {cBrief}";
+            metrics.TodosBriefing = $"\uE73A  {tBrief}";
             
-            // Clean up common conversational prefix patterns ending in colons first
-            int colonIndex = newsBody.IndexOf(':');
-            if (colonIndex > 0 && colonIndex < 120)
-            {
-                string possibleIntro = newsBody.Substring(0, colonIndex);
-                if (possibleIntro.Contains("summariz", StringComparison.OrdinalIgnoreCase) ||
-                    possibleIntro.Contains("sentence", StringComparison.OrdinalIgnoreCase) ||
-                    possibleIntro.Contains("headline", StringComparison.OrdinalIgnoreCase) ||
-                    possibleIntro.Contains("article", StringComparison.OrdinalIgnoreCase) ||
-                    possibleIntro.Contains("news", StringComparison.OrdinalIgnoreCase) ||
-                    possibleIntro.Contains("here's", StringComparison.OrdinalIgnoreCase) ||
-                    possibleIntro.Contains("here is", StringComparison.OrdinalIgnoreCase) ||
-                    possibleIntro.Contains("summary", StringComparison.OrdinalIgnoreCase))
-                {
-                    newsBody = newsBody.Substring(colonIndex + 1).Trim();
-                }
-            }
-
-            string[] intros = new[]
-            {
-                "Here's a concise sentence summarizing the headlines:",
-                "Here's a concise sentence summarizing the headlines today:",
-                "Here's a concise sentence summarizing the headlines",
-                "Here is a concise sentence summarizing the headlines:",
-                "Here is a concise sentence summarizing the headlines",
-                "Here's a concise sentence summarizing the articles:",
-                "Here is a concise sentence summarizing the articles:",
-                "Here's a concise sentence summarizing the news:",
-                "Here is a concise sentence summarizing the news:",
-                "Here's a concise sentence summarizing",
-                "Here is a concise sentence summarizing",
-                "Concise sentence summarizing the headlines:",
-                "Headlines Summary:",
-                "Headlines:",
-                "Summary:"
-            };
-
-            bool replaced = true;
-            while (replaced)
-            {
-                replaced = false;
-                foreach (var intro in intros)
-                {
-                    if (newsBody.StartsWith(intro, StringComparison.OrdinalIgnoreCase))
-                    {
-                        newsBody = newsBody.Substring(intro.Length).Trim();
-                        replaced = true;
-                        break;
-                    }
-                }
-                string newBody = newsBody.TrimStart(':', ' ', '-', '•', '_', '*');
-                if (newBody != newsBody)
-                {
-                    newsBody = newBody;
-                    replaced = true;
-                }
-            }
-
-            string indentedBody = newsBody.Replace("\n", "\n    ");
-            metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n    _\"{indentedBody}\"_";
+            string indentedNews = nBrief.Replace("\n", "\n    ");
+            metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n    _\"{indentedNews}\"_";
 
             // Concatenate all parts in the requested order: Weather, Finances, Vitals, Habits, Calendar, Todos, News
-            metrics.BriefingText = $"{metrics.WeatherBriefing}\n\n{metrics.FinanceBriefing}\n\n{metrics.HealthBriefing}\n\n{metrics.HabitsBriefing}\n\n{metrics.CalendarBriefing}\n\n{metrics.TodosBriefing}\n\n{metrics.NewsBriefing}";
+            if (string.IsNullOrEmpty(metrics.BriefingText))
+            {
+                metrics.BriefingText = $"{metrics.WeatherBriefing}\n\n{metrics.FinanceBriefing}\n\n{metrics.HealthBriefing}\n\n{metrics.HabitsBriefing}\n\n{metrics.CalendarBriefing}\n\n{metrics.TodosBriefing}\n\n{metrics.NewsBriefing}";
+            }
 
             metrics.IntroText = "";
             metrics.OutroText = "Have a highly productive day!";

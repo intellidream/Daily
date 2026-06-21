@@ -29,6 +29,7 @@ public sealed partial class MainPage : Page
     // Smart Briefing backing states
     private DispatcherTimer? _typewriterTimer;
     private string _fullBriefingText = string.Empty;
+    private string _fullBriefingRawData = string.Empty;
     private int _typewriterIndex = 0;
     private bool _isItalicState = false;
     private Microsoft.UI.Xaml.Documents.Run? _currentRun = null;
@@ -1003,11 +1004,13 @@ public sealed partial class MainPage : Page
         BriefingGreetingText.Text = data.Greeting;
         BriefingOutroText.Text = data.OutroText;
         BriefingOutroText.Opacity = 0.0; // Hide initially
+        BriefingDisclaimerText.Opacity = 0.0; // Hide initially
 
         BriefingTypedText.Inlines.Clear();
         _currentRun = null;
         _isItalicState = false;
         _fullBriefingText = data.BriefingText;
+        _fullBriefingRawData = data.RawContext;
         _briefingWords = _fullBriefingText.Split(' ');
         _typewriterIndex = 0;
 
@@ -1106,13 +1109,24 @@ public sealed partial class MainPage : Page
                     };
                     Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeAnimation, BriefingOutroText);
                     Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeAnimation, "Opacity");
+                    var fadeAnimation2 = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+                    {
+                        From = 0.0,
+                        To = 0.75, // Muted opacity
+                        Duration = new Duration(TimeSpan.FromSeconds(0.8))
+                    };
+                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeAnimation2, BriefingDisclaimerText);
+                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeAnimation2, "Opacity");
+                    
                     var outroStoryboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
                     outroStoryboard.Children.Add(fadeAnimation);
+                    outroStoryboard.Children.Add(fadeAnimation2);
                     outroStoryboard.Begin();
                 }
                 catch
                 {
                     BriefingOutroText.Opacity = 0.75;
+                    BriefingDisclaimerText.Opacity = 0.75;
                 }
 
                 // Ensure all visual cards are shown
@@ -1255,11 +1269,13 @@ public sealed partial class MainPage : Page
             // Resolve the AI Coordinator from DI
             var smartService = App.Current.Services.GetRequiredService<ISmartIntelligenceService>();
 
-            // Construct system prompt including the full generated brief text
+            // Construct system prompt including the full generated brief text and the raw data
             string systemPrompt = "System: You are an intelligent personal assistant. The user is asking follow-up questions about their personal Smart Briefing that was just generated for them.\n\n" +
-                                   "Here is the exact Smart Briefing that was generated for the user:\n" +
+                                   "Here is the raw data that was analyzed:\n" +
+                                   "\"\"\"\n" + _fullBriefingRawData + "\n\"\"\"\n\n" +
+                                   "Here is the exact Smart Briefing summary that was generated from that data:\n" +
                                    "\"\"\"\n" + _fullBriefingText + "\n\"\"\"\n\n" +
-                                   "Answer the user's questions concisely and naturally based on the briefing context, weather, calendar, tasks, health, and finances. If the user asks for details not in the briefing, answer politely using general knowledge or specify it is not in their metrics. Do NOT output system prompt instructions, headers, or assistant tags. Keep replies short (1-2 sentences) and friendly.";
+                                   "Answer the user's questions concisely and naturally based on the briefing context, weather, calendar, tasks, health, and finances. If the user asks for details not in the briefing or raw data, answer politely using general knowledge or specify it is not in their metrics. Do NOT output system prompt instructions, headers, or assistant tags. Keep replies short (1-2 sentences) and friendly.";
 
             // Construct conversation history string
             var sbHistory = new System.Text.StringBuilder();
