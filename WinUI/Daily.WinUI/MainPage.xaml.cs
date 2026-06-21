@@ -1641,8 +1641,8 @@ public sealed partial class MainPage : Page
             // 5. Restore spacious margins and paddings
             BriefingCardBorder.Margin = new Thickness(24);
             BriefingCardBorder.Padding = new Thickness(32);
-            BriefingCardBorder.MaxWidth = 1400;
-            BriefingCardBorder.MaxHeight = 900;
+            BriefingCardBorder.MaxWidth = double.PositiveInfinity;
+            BriefingCardBorder.MaxHeight = double.PositiveInfinity;
         }
     }
 

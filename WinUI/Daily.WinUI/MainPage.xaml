@@ -215,7 +215,7 @@
         <!-- Smart Briefing Overlay -->
         <Grid x:Name="SmartBriefingOverlay" Visibility="Collapsed" Opacity="0.0" Background="{ThemeResource AppBriefingBackdropBrush}" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
             <!-- Glass Overlay Card -->
-            <Border x:Name="BriefingCardBorder" MaxWidth="1400" MaxHeight="900" Margin="24"
+            <Border x:Name="BriefingCardBorder" Margin="24"
                     SizeChanged="BriefingCardBorder_SizeChanged"
                     Background="{ThemeResource AppGlassColorBrush}"
                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
