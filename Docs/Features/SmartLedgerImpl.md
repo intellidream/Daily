@@ -91,7 +91,12 @@ To pick up development on another machine:
 3. Open `Daily.WinUI.csproj` and ensure `Services\Finances\SmartLedgerParser.cs` is properly referenced as a linked compile target.
 4. If testing the AI, ensure the `ISmartBriefingEngine` (like `LLamaUniversalEngine`) is loaded and has access to the local weights. If weights are missing, the AI chat will throw a missing service or model error.
 
-## 6. Future Architectural Considerations
+## 6. Cross-Device Synchronization Architecture
+- **Supabase LINQ Evaluation**: In `SyncService.cs`, the Postgrest `.Where` lambda failed to evaluate `Guid.Parse(userId)` remotely, causing sync queries to crash. The query was refactored to extract the parsed `Guid` into a local variable prior to passing it to the expression tree, restoring pulling functionality.
+- **Self-Healing Full Pull**: Added logic in `SyncService.cs` (`PullSmartLedgerInternalAsync`) to auto-heal devices with empty local states. If the `local_smart_ledgers` SQLite table is completely empty, the delta-sync `lastPull` optimization is bypassed, and a full fetch of the entire user's ledger is organically pulled from the cloud.
+- **Concurrency (LWW)**: The sync mechanism currently relies on a Last-Write-Wins (LWW) conflict resolution policy based on `UpdatedAt`. When a user types locally, `SyncedAt` is nulled out, and the data is pushed with a fresh `UpdatedAt`. If another device modifies it while offline, the last device to successfully push to Supabase overwrites the single text entry.
+
+## 7. Future Architectural Considerations
 - **Version History**: We currently overwrite the single text entry. Implementing a text history or diff log could prevent accidental data loss.
 - **Language Independence**: The regex is currently hardcoded to look for `Total` and `Balance`. For full i18n, these keywords might need to be customizable or dynamic.
 - **Complex AI Math**: If the user asks the AI "I spent half my cash", the SLM needs to be fed the *current* cash value in the prompt context so it can compute `amount`, or the `ProcessLedgerCommand` needs to handle fractional instructions.
