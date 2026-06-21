@@ -28,7 +28,8 @@ namespace Daily_WinUI.Services
         public async Task<List<LocalCalendarAccount>> GetAccountsAsync()
         {
             await _databaseService.InitializeAsync();
-            var accounts = await _databaseService.Connection.Table<LocalCalendarAccount>().Where(x => !x.IsDeleted).OrderBy(x => x.DisplayOrder).ToListAsync();
+            var allAccounts = await _databaseService.Connection.Table<LocalCalendarAccount>().OrderBy(x => x.DisplayOrder).ToListAsync();
+            var accounts = allAccounts.Where(x => !x.IsDeleted).ToList();
             foreach (var account in accounts)
             {
                 if (string.IsNullOrEmpty(account.IdentifiedName))
