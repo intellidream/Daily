@@ -1027,7 +1027,7 @@ namespace Daily_WinUI.Services
                 }
                 string stocksList = sbStocks.Length > 0 ? sbStocks.ToString().TrimEnd(',', ' ') : "None";
 
-                string systemPrompt = @"System: Do not include any of the prompting as a formulation inside the summary. Do not salute me or get conversational, we do that separately. Do not say any other things that suggest you are prompted, talk to the me naturally, using second person and/or my name!
+                string systemPrompt = @"Do not include any of the prompting as a formulation inside the summary. Do not salute me or get conversational, we do that separately. Do not say any other things that suggest you are prompted, talk to me naturally, using second person and/or my name!
 
 You are an intelligent personal assistant. Review the user's daily data and write a single, natural, and highly engaging paragraph (2-3 sentences max) summarizing the day. Do not list the data points. Pick out the 2 most interesting or critical anomalies across all data points (e.g., bad weather, an important meeting, or falling behind on habits) and weave them into a conversational morning greeting.
 
