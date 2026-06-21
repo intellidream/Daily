@@ -905,9 +905,12 @@ namespace Daily_WinUI.Views
                             var encryptedAccessToken = EncryptionHelper.Encrypt(accessToken, userId);
                             var encryptedRefreshToken = EncryptionHelper.Encrypt(refreshToken, userId);
 
+                            var accountIdInput = $"{userId}_Google_{email}";
+                            var accountId = Daily_WinUI.Helpers.UuidHelper.GenerateDeterministicGuid(accountIdInput).ToString().ToLowerInvariant();
+
                             var account = new LocalCalendarAccount
                             {
-                                Id = Guid.NewGuid().ToString().ToLowerInvariant(),
+                                Id = accountId,
                                 UserId = userId,
                                 Email = email,
                                 AccountType = "Google",
@@ -1045,9 +1048,12 @@ namespace Daily_WinUI.Views
                         var encryptedAccessToken = EncryptionHelper.Encrypt(accessToken, userId);
                         var encryptedRefreshToken = EncryptionHelper.Encrypt(refreshToken, userId);
 
+                        var accountIdInput = $"{userId}_{accountType}_{email}";
+                        var accountId = Daily_WinUI.Helpers.UuidHelper.GenerateDeterministicGuid(accountIdInput).ToString().ToLowerInvariant();
+
                         var account = new LocalCalendarAccount
                         {
-                            Id = Guid.NewGuid().ToString().ToLowerInvariant(),
+                            Id = accountId,
                             UserId = userId,
                             Email = email,
                             AccountType = accountType,
@@ -1239,9 +1245,12 @@ namespace Daily_WinUI.Views
                             // Encrypt password (stored in AccessToken, RefreshToken is empty)
                             var encryptedPassword = EncryptionHelper.Encrypt(password, userId);
 
+                            var accountIdInput = $"{userId}_Yahoo_{email}";
+                            var accountId = Daily_WinUI.Helpers.UuidHelper.GenerateDeterministicGuid(accountIdInput).ToString().ToLowerInvariant();
+
                             var account = new LocalCalendarAccount
                             {
-                                Id = Guid.NewGuid().ToString().ToLowerInvariant(),
+                                Id = accountId,
                                 UserId = userId,
                                 Email = email,
                                 AccountType = "Yahoo",
@@ -1365,9 +1374,12 @@ namespace Daily_WinUI.Views
                         var encryptedAccessToken = EncryptionHelper.Encrypt(accessToken, userId);
                         var encryptedRefreshToken = EncryptionHelper.Encrypt(refreshToken, userId);
 
+                        var accountIdInput = $"{userId}_Yahoo_{email}";
+                        var accountId = Daily_WinUI.Helpers.UuidHelper.GenerateDeterministicGuid(accountIdInput).ToString().ToLowerInvariant();
+
                         var account = new LocalCalendarAccount
                         {
-                            Id = Guid.NewGuid().ToString().ToLowerInvariant(),
+                            Id = accountId,
                             UserId = userId,
                             Email = email,
                             AccountType = "Yahoo",

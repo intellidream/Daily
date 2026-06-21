@@ -31,6 +31,15 @@ namespace Daily.Models
         [Column("color")]
         public string Color { get; set; } = "#FF594AE2";
 
+        [Column("custom_name")]
+        public string CustomName { get; set; } = string.Empty;
+
+        [Column("identified_name")]
+        public string IdentifiedName { get; set; } = string.Empty;
+
+        [Column("display_order")]
+        public int DisplayOrder { get; set; }
+
         [Column("is_active")]
         public bool IsActive { get; set; }
 
