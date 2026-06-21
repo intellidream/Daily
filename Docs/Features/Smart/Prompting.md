@@ -26,19 +26,23 @@ The raw data is injected exactly as follows, providing the AI with the context i
 ```text
 Data:
 [WEATHER]
-Condition: {Condition}, {Temp}°C. Forecast: {ForecastDetails}
+- Current Condition: {Condition}, Temperature is {Temp}°C.
+- Forecast: {ForecastDetails}
 
 [FINANCES]
-Ledger Net Worth: {NetWorth}. Stocks: {Stocks}
+- Ledger Net Worth: {NetWorth}.
+- Stocks: {Stocks}
 
 [VITALS]
-Steps: {Steps} (Target: 10,000). Sleep: {Sleep} hours.
+- Steps taken today: {Steps}. The daily step goal is 10,000 steps.
+- Hours of sleep last night: {Sleep} hours.
 
 [HABITS]
-Liquids: {Water}/{WaterGoal} ml. Smokes: {Smokes}/{SmokesGoal}.
+- Liquids consumed: {Water} ml. The daily hydration goal is {WaterGoal} ml.
+- Smokes had today: {Smokes}. The daily smoking limit is {SmokesGoal}.
 
 [CALENDAR]
-Upcoming:
+Upcoming meetings:
 {Events}
 
 [TODOS]
@@ -46,7 +50,7 @@ Active tasks:
 {Todos}
 
 [NEWS]
-Headlines:
+Top Headlines:
 {Headlines}
 ```
 
@@ -54,3 +58,13 @@ Headlines:
 Because this utilizes a local SLM, the AI is prone to minor hallucinations. To safeguard the user experience, disclaimers are placed in the UI:
 1. On the Briefing Loading Screen.
 2. Faded in underneath the final typed briefing output.
+
+## Chat Follow-up & Vocabulary Mapping
+Users can chat with the local SLM to ask follow-up questions about their briefing. To assist the local SLM in routing questions to the correct context from the raw data, the chat's system prompt injects a `CRITICAL VOCABULARY MAPPING`:
+- `water`, `hydration`, `liquids`, `drinking`, `smokes`, `cigarettes` -> `[HABITS]`
+- `steps`, `walking`, `sleep`, `rest`, `heart rate`, `bpm` -> `[VITALS]`
+- `money`, `stocks`, `markets`, `net worth`, `ledger` -> `[FINANCES]`
+- `meetings`, `schedule`, `free time` -> `[CALENDAR]`
+- `tasks`, `chores`, `todos`, `priorities`, `focus` -> `[TODOS]`
+
+Additionally, all follow-up chat interactions (System Prompt, User Prompt, and Response) are logged to the `LlmDebugLogger` under the active engine name "Smart Briefing Follow-up Chat", making them visible in the **System > Debug Settings** UI for troubleshooting.

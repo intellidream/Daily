@@ -651,6 +651,11 @@ public sealed partial class MainPage : Page
         BriefingLoadingPanel.Visibility = Visibility.Visible;
         RotatingLoadingIconStoryboard.Begin();
         BriefingGrid.Visibility = Visibility.Collapsed;
+        
+        // Hide and clear previous chat history
+        BriefingChatPanel.Visibility = Visibility.Collapsed;
+        BriefingChatHistory.Children.Clear();
+        _briefingChatHistory.Clear();
 
         try
         {
@@ -1271,28 +1276,58 @@ public sealed partial class MainPage : Page
 
             // Construct system prompt including the full generated brief text and the raw data
             string systemPrompt = "System: You are an intelligent personal assistant. The user is asking follow-up questions about their personal Smart Briefing that was just generated for them.\n\n" +
+                                   "CRITICAL VOCABULARY MAPPING:\n" +
+                                   "- 'water', 'hydration', 'liquids', 'drinking', 'smokes', 'cigarettes' -> Look in the [HABITS] section of the raw data.\n" +
+                                   "- 'steps', 'walking', 'sleep', 'rest', 'heart rate', 'bpm' -> Look in the [VITALS] section of the raw data.\n" +
+                                   "- 'money', 'stocks', 'markets', 'net worth', 'ledger' -> Look in the [FINANCES] section of the raw data.\n" +
+                                   "- 'meetings', 'schedule', 'free time' -> Look in the [CALENDAR] section of the raw data.\n" +
+                                   "- 'tasks', 'chores', 'todos', 'priorities', 'focus' -> Look in the [TODOS] section of the raw data.\n\n" +
+                                   "CRITICAL INSTRUCTION: Do NOT mix up values from different categories. For example, never use the Steps target (10,000) for hydration goals. Keep the metrics isolated to their respective categories.\n\n" +
                                    "Here is the raw data that was analyzed:\n" +
                                    "\"\"\"\n" + _fullBriefingRawData + "\n\"\"\"\n\n" +
                                    "Here is the exact Smart Briefing summary that was generated from that data:\n" +
                                    "\"\"\"\n" + _fullBriefingText + "\n\"\"\"\n\n" +
                                    "Answer the user's questions concisely and naturally based on the briefing context, weather, calendar, tasks, health, and finances. If the user asks for details not in the briefing or raw data, answer politely using general knowledge or specify it is not in their metrics. Do NOT output system prompt instructions, headers, or assistant tags. Keep replies short (1-2 sentences) and friendly.";
 
-            // Construct conversation history string
+            // Construct conversation history string to inject into the system prompt
             var sbHistory = new System.Text.StringBuilder();
-            foreach (var msg in _briefingChatHistory)
+            if (_briefingChatHistory.Count > 0)
             {
-                sbHistory.AppendLine($"{msg.role}: {msg.content}");
+                sbHistory.AppendLine("PREVIOUS CONVERSATION HISTORY:");
+                foreach (var msg in _briefingChatHistory)
+                {
+                    sbHistory.AppendLine($"{msg.role}: {msg.content}");
+                }
+                sbHistory.AppendLine();
             }
-            sbHistory.AppendLine($"User: {question}");
-            string userPrompt = sbHistory.ToString();
+
+            systemPrompt += "\n\n" + sbHistory.ToString();
+            string userPrompt = question;
+
+            // Note start time to measure duration
+            var startTime = System.DateTime.Now;
 
             string response = await smartService.GenerateResponseAsync(systemPrompt, userPrompt);
             response = response?.Trim() ?? "I'm sorry, I couldn't process your request.";
+
+            var duration = (long)(System.DateTime.Now - startTime).TotalMilliseconds;
 
             _briefingChatHistory.Add(("User", question));
             _briefingChatHistory.Add(("Assistant", response));
 
             AppendChatMessage(response, isUser: false);
+
+            // Log to debug logger
+            Services.LlmDebugLogger.Log(new Services.LlmExecutionLog
+            {
+                SystemPrompt = systemPrompt,
+                UserPrompt = userPrompt,
+                FormattedPrompt = "N/A (Managed by Engine)",
+                Response = $"User: {question}\nAssistant: {response}",
+                Timestamp = System.DateTime.Now,
+                DurationMs = duration,
+                ActiveEngine = "Smart Briefing Follow-up Chat"
+            });
         }
         catch (System.Exception ex)
         {
