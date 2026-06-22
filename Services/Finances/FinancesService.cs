@@ -623,6 +623,88 @@ namespace Daily.Services.Finances
             await _databaseService.Connection.InsertAsync(transaction);
         }
 
+        public async Task<List<LocalRecurringTransaction>> GetRecurringTransactionsAsync()
+        {
+            var user = _supabaseClient.Auth.CurrentUser;
+            if (user == null) return new List<LocalRecurringTransaction>();
+
+            return await _databaseService.Connection.Table<LocalRecurringTransaction>()
+                .Where(t => t.UserId == user.Id && !t.IsDeleted)
+                .ToListAsync();
+        }
+
+        public async Task SaveRecurringTransactionAsync(LocalRecurringTransaction transaction)
+        {
+            var user = _supabaseClient.Auth.CurrentUser;
+            if (user == null) return;
+
+            transaction.UserId = user.Id;
+            transaction.CreatedAt = DateTime.UtcNow;
+
+            await _databaseService.Connection.InsertOrReplaceAsync(transaction);
+        }
+
+        public async Task ProcessRecurringTransactionsAsync()
+        {
+            var user = _supabaseClient.Auth.CurrentUser;
+            if (user == null) return;
+
+            var recurring = await GetRecurringTransactionsAsync();
+            var now = DateTime.UtcNow;
+            
+            bool modifiedLedger = false;
+            var ledger = await GetSmartLedgerAsync();
+            string currentLedgerText = ledger?.LedgerText ?? string.Empty;
+
+            foreach (var r in recurring)
+            {
+                while (r.NextRunAt <= now)
+                {
+                    // Create ledger transaction
+                    var lt = new LocalLedgerTransaction
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Source = r.Source,
+                        Target = r.Target,
+                        Amount = r.Amount,
+                        ActionType = r.ActionType
+                    };
+                    await SaveLedgerTransactionAsync(lt);
+
+                    // Modify ledger
+                    var command = new SmartLedgerParser.LedgerCommand
+                    {
+                        action = r.ActionType,
+                        source = r.Source,
+                        target = r.Target,
+                        amount = r.Amount
+                    };
+                    currentLedgerText = SmartLedgerParser.ExecuteCommand(currentLedgerText, command);
+                    modifiedLedger = true;
+
+                    // Update NextRunAt
+                    if (r.Frequency.Equals("daily", StringComparison.OrdinalIgnoreCase))
+                        r.NextRunAt = r.NextRunAt.AddDays(1);
+                    else if (r.Frequency.Equals("weekly", StringComparison.OrdinalIgnoreCase))
+                        r.NextRunAt = r.NextRunAt.AddDays(7);
+                    else if (r.Frequency.Equals("monthly", StringComparison.OrdinalIgnoreCase))
+                        r.NextRunAt = r.NextRunAt.AddMonths(1);
+                    else 
+                    {
+                        // Fallback
+                        r.NextRunAt = r.NextRunAt.AddDays(1);
+                    }
+                    
+                    await _databaseService.Connection.UpdateAsync(r);
+                }
+            }
+
+            if (modifiedLedger)
+            {
+                await SaveSmartLedgerAsync(currentLedgerText);
+            }
+        }
+
         public async Task<decimal> GetNetWorthAsync()
         {
             var accounts = await GetAccountsAsync();

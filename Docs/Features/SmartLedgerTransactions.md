@@ -48,3 +48,44 @@ CREATE POLICY "Users can manage their own ledger transactions"
     FOR ALL
     USING (auth.uid() = user_id);
 ```
+
+## Recurring Transactions
+
+In addition to regular transactions, the system supports recurring transactions (e.g. daily, weekly, monthly transfers or expenses). 
+
+- **Remote Model**: `RecurringTransaction` (Supabase `recurring_transactions` table)
+- **Local Model**: `LocalRecurringTransaction` (SQLite `local_recurring_transactions` table)
+
+When an AI command returns `{"action": "schedule", "frequency": "monthly"}`, the transaction is saved into the recurring table instead of the regular ledger log.
+
+### Processing Engine
+The `ProcessRecurringTransactionsAsync` method in `FinancesService` runs on application launch. It checks the `NextRunAt` timestamp of each recurring transaction. If a transaction is due (or overdue), it:
+1. Records a standard `LocalLedgerTransaction` for historical traceability.
+2. Adjusts the underlying Smart Ledger text using `SmartLedgerParser`.
+3. Updates the `NextRunAt` field according to the frequency.
+4. Saves the updated ledger.
+
+### Database Setup
+To set up the recurring tracking, execute the following in your Supabase SQL Editor:
+
+```sql
+CREATE TABLE public.recurring_transactions (
+    id uuid NOT NULL PRIMARY KEY,
+    user_id uuid NOT NULL,
+    source text NOT NULL DEFAULT '',
+    target text NOT NULL DEFAULT '',
+    amount numeric NOT NULL DEFAULT 0,
+    action_type text NOT NULL DEFAULT '',
+    frequency text NOT NULL DEFAULT 'monthly',
+    next_run_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+    created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+    is_deleted boolean NOT NULL DEFAULT false
+);
+
+ALTER TABLE public.recurring_transactions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own recurring transactions"
+    ON public.recurring_transactions
+    FOR ALL
+    USING (auth.uid() = user_id);
+```

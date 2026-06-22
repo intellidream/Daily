@@ -9,10 +9,11 @@ namespace Daily.Services.Finances
     {
         public class LedgerCommand
         {
-            public string action { get; set; } = string.Empty; // e.g. "transfer"
+            public string action { get; set; } = string.Empty; // e.g. "transfer", "schedule"
             public string source { get; set; } = string.Empty; // e.g. "Card", "Cash"
             public string target { get; set; } = string.Empty; // e.g. "Mega", "Gaz"
             public decimal amount { get; set; }
+            public string? frequency { get; set; } // e.g. "daily", "weekly", "monthly"
         }
 
         public static string ExecuteCommand(string ledgerText, LedgerCommand command)
@@ -232,6 +233,51 @@ namespace Daily.Services.Finances
             decimal nw = cash + investments;
 
             return (nw.ToString("N0") + " RON", cash.ToString("N0") + " RON", investments.ToString("N0") + " RON");
+        }
+
+        public static List<Daily.Models.Finances.AccountBalance> ExtractBalances(string text)
+        {
+            var results = new List<Daily.Models.Finances.AccountBalance>();
+            if (string.IsNullOrWhiteSpace(text)) return results;
+
+            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            
+            string currentSection = "";
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("**") && trimmed.EndsWith("**"))
+                {
+                    currentSection = trimmed.Replace("*", "");
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(currentSection)) continue;
+                if (!trimmed.Contains("=") || trimmed.StartsWith("Total =") || trimmed.StartsWith("INT =") || trimmed.StartsWith("BIA =")) continue;
+
+                int eqIdx = trimmed.IndexOf("=");
+                if (eqIdx > 0)
+                {
+                    string accountName = trimmed.Substring(0, eqIdx).Trim();
+                    
+                    int commentIdx = trimmed.IndexOf("//");
+                    string mathPart = commentIdx >= 0 ? trimmed.Substring(0, commentIdx) : trimmed;
+                    
+                    decimal balance = ParseValue(mathPart);
+                    
+                    if (balance > 0)
+                    {
+                        results.Add(new Daily.Models.Finances.AccountBalance
+                        {
+                            Category = currentSection,
+                            AccountName = accountName,
+                            Balance = balance
+                        });
+                    }
+                }
+            }
+
+            return results;
         }
 
         public static Dictionary<string, string> ExtractTags(string commentPart)

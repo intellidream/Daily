@@ -70,6 +70,13 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
     public ObservableCollection<object> Holdings { get; } = new();
 
     public ObservableCollection<Daily.Models.Finances.LocalLedgerTransaction> LedgerTransactions { get; } = new();
+    
+    private ObservableCollection<AccountBalance> _accountBalances = new();
+    public ObservableCollection<AccountBalance> AccountBalances 
+    { 
+        get => _accountBalances; 
+        set { _accountBalances = value; OnPropertyChanged(); } 
+    }
 
     // Smart Ledger
     private string _smartLedgerText = string.Empty;
@@ -173,6 +180,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             var allStocks = await _financesService.GetStockQuotesAsync(allSymbols);
 
             // Money
+            await _financesService.ProcessRecurringTransactionsAsync();
             var ledger = await _financesService.GetSmartLedgerAsync();
             var nw = await _financesService.GetNetWorthAsync();
             var accounts = await _financesService.GetAccountsAsync();
@@ -357,6 +365,9 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         NetWorthDisplay = headers.NetWorth;
         CashDisplay = headers.Cash;
         InvestmentsDisplay = headers.Investments;
+        
+        var balances = Daily.Services.Finances.SmartLedgerParser.ExtractBalances(_smartLedgerText);
+        AccountBalances = new ObservableCollection<AccountBalance>(balances);
     }
 
     private void LedgerChatInput_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
@@ -383,10 +394,11 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             var intelligenceService = App.Current.Services.GetRequiredService<Daily_WinUI.Services.ISmartIntelligenceService>();
             
             // System prompt instructing to output JSON command
-            string systemPrompt = @"You are a financial AI parsing a Ledger. User dictates an expense or income.
+            string systemPrompt = @"You are a financial AI parsing a Ledger. User dictates an expense, income, or scheduled transfer.
 Output ONLY valid JSON. No conversational text.
-{""action"":""transfer"",""source"":""Card"",""target"":""ALIAS"",""amount"":5}
-Target MUST be the exact alias mentioned.";
+For immediate: {""action"":""transfer"",""source"":""Card"",""target"":""Mega"",""amount"":5}
+For recurring: {""action"":""schedule"",""source"":""Checking"",""target"":""Savings"",""amount"":50,""frequency"":""monthly""}
+Frequency options: daily, weekly, monthly. Target MUST be the exact alias mentioned.";
 
             if (_lastAiBubbleText != null) _lastAiBubbleText.Text = "Processing...";
 
@@ -436,22 +448,52 @@ Target MUST be the exact alias mentioned.";
             
             if (command != null && command.action != null)
             {
-                var newText = Daily.Services.Finances.SmartLedgerParser.ExecuteCommand(SmartLedgerText, command);
-                SmartLedgerText = newText; // Triggers setter, which saves and recalculates
-
-                // Record the transaction
-                if (_financesService != null)
+                if (command.action.Equals("schedule", StringComparison.OrdinalIgnoreCase))
                 {
-                    var transaction = new Daily.Models.Finances.LocalLedgerTransaction
+                    if (_financesService != null)
                     {
-                        Id = Guid.NewGuid().ToString(),
-                        Source = command.source ?? "",
-                        Target = command.target ?? "",
-                        Amount = command.amount,
-                        ActionType = command.action ?? ""
-                    };
-                    await _financesService.SaveLedgerTransactionAsync(transaction);
-                    LedgerTransactions.Insert(0, transaction);
+                        var recurring = new Daily.Models.Finances.LocalRecurringTransaction
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            Source = command.source ?? "",
+                            Target = command.target ?? "",
+                            Amount = command.amount,
+                            ActionType = "transfer",
+                            Frequency = command.frequency ?? "monthly",
+                            NextRunAt = DateTime.UtcNow
+                        };
+                        await _financesService.SaveRecurringTransactionAsync(recurring);
+                        
+                        // Immediately process it to catch the first run
+                        await _financesService.ProcessRecurringTransactionsAsync();
+                        
+                        // Reload ledger and transactions
+                        SmartLedgerText = (await _financesService.GetSmartLedgerAsync())?.LedgerText ?? SmartLedgerText;
+                        
+                        var updatedTransactions = await _financesService.GetLedgerTransactionsAsync();
+                        LedgerTransactions.Clear();
+                        foreach(var t in updatedTransactions.Take(50)) LedgerTransactions.Add(t);
+                    }
+                }
+                else
+                {
+                    var newText = Daily.Services.Finances.SmartLedgerParser.ExecuteCommand(SmartLedgerText, command);
+                    SmartLedgerText = newText; // Triggers setter, which saves and recalculates
+
+                    // Record the transaction
+                    if (_financesService != null)
+                    {
+                        var transaction = new Daily.Models.Finances.LocalLedgerTransaction
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            Source = command.source ?? "",
+                            Target = command.target ?? "",
+                            Amount = command.amount,
+                            ActionType = command.action ?? ""
+                        };
+                        await _financesService.SaveLedgerTransactionAsync(transaction);
+                        LedgerTransactions.Insert(0, transaction);
+                    }
                 }
             }
         }

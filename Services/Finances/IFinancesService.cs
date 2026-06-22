@@ -20,6 +20,10 @@ namespace Daily.Services.Finances
         Task<List<LocalLedgerTransaction>> GetLedgerTransactionsAsync();
         Task SaveLedgerTransactionAsync(LocalLedgerTransaction transaction);
 
+        Task<List<LocalRecurringTransaction>> GetRecurringTransactionsAsync();
+        Task SaveRecurringTransactionAsync(LocalRecurringTransaction transaction);
+        Task ProcessRecurringTransactionsAsync();
+
         // Money Features
         Task<List<LocalAccount>> GetAccountsAsync();
         Task AddAccountAsync(LocalAccount account);

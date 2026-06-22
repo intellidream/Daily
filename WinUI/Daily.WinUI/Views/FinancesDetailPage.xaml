@@ -6,6 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:Daily.Models.Finances"
     xmlns:controls="using:Daily_WinUI.Controls"
+    xmlns:chart="using:Syncfusion.UI.Xaml.Charts"
     mc:Ignorable="d"
     Background="Transparent"
     Loaded="Page_Loaded">
@@ -409,6 +410,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                                 <RowDefinition Height="250" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             
                             <!-- Dummy placeholder to force column 1 width in wide mode -->
@@ -434,11 +436,28 @@
                             </Border>
 
                             <!-- Raw Ledger Editor -->
-                            <Border x:Name="MoneyEditorBorder" Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16" Margin="0,0,16,0">
+                            <Border x:Name="MoneyEditorBorder" Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16" Margin="0,0,16,0">
                                 <TextBox AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" 
                                          Text="{x:Bind SmartLedgerText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                          Background="Transparent" BorderThickness="0"
                                          ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                            </Border>
+
+                            <!-- Balances Chart -->
+                            <Border x:Name="MoneyChartPanel" Grid.Row="2" Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16" Margin="0,16,16,0">
+                                <Grid>
+                                    <TextBlock Text="Asset Allocation" FontWeight="SemiBold" Margin="0,0,0,8" Opacity="0.8" />
+                                    <chart:SfCircularChart Margin="0,24,0,0">
+                                        <chart:PieSeries ItemsSource="{x:Bind AccountBalances, Mode=OneWay}" 
+                                                         XBindingPath="AccountName" 
+                                                         YBindingPath="Balance" 
+                                                         ShowDataLabels="True">
+                                            <chart:PieSeries.DataLabelSettings>
+                                                <chart:CircularDataLabelSettings Position="Outside" />
+                                            </chart:PieSeries.DataLabelSettings>
+                                        </chart:PieSeries>
+                                    </chart:SfCircularChart>
+                                </Grid>
                             </Border>
 
                             <!-- AI Chat -->
@@ -499,6 +518,109 @@
                                     </ListView>
                                 </Grid>
                             </Border>
+
+                            <!-- User Manual -->
+                            <Expander Grid.Row="3" Grid.ColumnSpan="2" HorizontalAlignment="Stretch" Margin="0,32,0,0"
+                                      Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}">
+                                <Expander.Header>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" Padding="8">
+                                        <FontIcon Glyph="&#xE8FD;" />
+                                        <TextBlock Text="Smart Ledger User Manual" FontWeight="Bold" FontSize="16" />
+                                    </StackPanel>
+                                </Expander.Header>
+                                <Expander.Content>
+                                    <StackPanel Spacing="24" Padding="16,24,16,32" MaxWidth="800" HorizontalAlignment="Left">
+                                        
+                                        <!-- Overview -->
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Text="What is the Smart Ledger?" FontSize="20" FontWeight="SemiBold" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
+                                            <TextBlock TextWrapping="Wrap" LineHeight="24">
+The Smart Ledger is a hybrid financial tracking tool. You can freely edit your financial data as plain text on the left, or use the AI Assistant on the right to manage your money with natural language. 
+The system automatically parses your text, computes your Net Worth, Cash, and Investments, and tracks historical transactions.
+                                            </TextBlock>
+                                        </StackPanel>
+
+                                        <!-- Basic Formatting -->
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Text="1. Basic Balances" FontSize="18" FontWeight="SemiBold" />
+                                            <TextBlock TextWrapping="Wrap" LineHeight="24">
+You declare accounts and their balances by writing <Run FontWeight="Bold">Account = Value</Run>. You can group them under headers surrounded by double asterisks.
+                                            </TextBlock>
+                                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <TextBlock FontFamily="Consolas" TextWrapping="Wrap">
+**Cash**<LineBreak/>
+Card = 1500<LineBreak/>
+Wallet = 300<LineBreak/>
+<LineBreak/>
+**Investments**<LineBreak/>
+Broker = 5000
+                                                </TextBlock>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Mathematical Expressions & Comments -->
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Text="2. Expressions &amp; Comments" FontSize="18" FontWeight="SemiBold" />
+                                            <TextBlock TextWrapping="Wrap" LineHeight="24">
+The ledger evaluates math expressions dynamically. Use <Run FontWeight="Bold">//</Run> to add comments. Everything after <Run FontWeight="Bold">//</Run> is safely ignored by the parser but kept for your records.
+                                            </TextBlock>
+                                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <TextBlock FontFamily="Consolas" TextWrapping="Wrap">
+Card = 1500 - 50 // Groceries<LineBreak/>
+Wallet = 300 + 100 // ATM withdrawal<LineBreak/>
+Savings = 50 * 12 // Yearly savings
+                                                </TextBlock>
+                                            </Border>
+                                        </StackPanel>
+                                        
+                                        <!-- Assets & Goals -->
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Text="3. Asset Tracking &amp; Goals" FontSize="18" FontWeight="SemiBold" />
+                                            <TextBlock TextWrapping="Wrap" LineHeight="24">
+Track assets like stocks or crypto using the <Run FontWeight="Bold">@</Run> symbol for price multiplication. Define financial goals using the <Run FontWeight="Bold">=&gt;</Run> arrow syntax.
+                                            </TextBlock>
+                                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <TextBlock FontFamily="Consolas" TextWrapping="Wrap">
+Apple = 10 @ 150 // 10 shares at $150 each<LineBreak/>
+BTC = 0.5 @ 60000<LineBreak/>
+<LineBreak/>
+Emergency Fund = 5000 =&gt; 10000 // 50% complete
+                                                </TextBlock>
+                                            </Border>
+                                        </StackPanel>
+                                        
+                                        <!-- AI Commands -->
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Text="4. AI Assistant Commands" FontSize="18" FontWeight="SemiBold" />
+                                            <TextBlock TextWrapping="Wrap" LineHeight="24">
+Instead of typing the math yourself, tell the AI Assistant what happened. It will automatically update the ledger and record a transaction in the history!
+                                            </TextBlock>
+                                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <StackPanel Spacing="12">
+                                                    <TextBlock Text="• 'I spent 50 from Card at Mega Image'" />
+                                                    <TextBlock Text="• 'Got paid 2000 into Checking'" />
+                                                    <TextBlock Text="• 'Transfer 500 from Checking to Savings'" />
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                        
+                                        <!-- Recurring -->
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Text="5. Recurring Transactions" FontSize="18" FontWeight="SemiBold" />
+                                            <TextBlock TextWrapping="Wrap" LineHeight="24">
+You can ask the AI to schedule recurring transfers or payments. The system will automatically execute them in the background based on the schedule.
+                                            </TextBlock>
+                                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <StackPanel Spacing="12">
+                                                    <TextBlock Text="• 'Schedule 50 from Checking to Savings every month'" />
+                                                    <TextBlock Text="• 'Schedule a 10 payment from Card to Netflix every week'" />
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+
+                                    </StackPanel>
+                                </Expander.Content>
+                            </Expander>
                         </Grid>
                     </ScrollViewer>
                 </Grid>

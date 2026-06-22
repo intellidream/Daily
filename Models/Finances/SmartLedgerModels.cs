@@ -97,4 +97,74 @@ namespace Daily.Models.Finances
         public DateTime? SyncedAt { get; set; }
         public bool IsDeleted { get; set; }
     }
+
+    // ==========================================
+    // ACCOUNT BALANCE (For Visualizations)
+    // ==========================================
+    public class AccountBalance
+    {
+        public string Category { get; set; } = string.Empty;
+        public string AccountName { get; set; } = string.Empty;
+        public decimal Balance { get; set; }
+    }
+
+    // ==========================================
+    // RECURRING TRANSACTIONS (Supabase)
+    // ==========================================
+
+    [Supabase.Postgrest.Attributes.Table("recurring_transactions")]
+    public class RecurringTransaction : Supabase.Postgrest.Models.BaseModel
+    {
+        [Supabase.Postgrest.Attributes.PrimaryKey("id")]
+        public Guid Id { get; set; }
+
+        [Supabase.Postgrest.Attributes.Column("user_id")]
+        public Guid UserId { get; set; }
+
+        [Supabase.Postgrest.Attributes.Column("source")]
+        public string Source { get; set; } = string.Empty;
+
+        [Supabase.Postgrest.Attributes.Column("target")]
+        public string Target { get; set; } = string.Empty;
+
+        [Supabase.Postgrest.Attributes.Column("amount")]
+        public decimal Amount { get; set; }
+
+        [Supabase.Postgrest.Attributes.Column("action_type")]
+        public string ActionType { get; set; } = string.Empty;
+
+        [Supabase.Postgrest.Attributes.Column("frequency")]
+        public string Frequency { get; set; } = string.Empty;
+
+        [Supabase.Postgrest.Attributes.Column("next_run_at")]
+        public DateTime NextRunAt { get; set; }
+
+        [Supabase.Postgrest.Attributes.Column("created_at")]
+        public DateTime CreatedAt { get; set; }
+    }
+
+    // ==========================================
+    // LOCAL RECURRING TRANSACTIONS (SQLite)
+    // ==========================================
+
+    [Table("local_recurring_transactions")]
+    public class LocalRecurringTransaction
+    {
+        [PrimaryKey]
+        public string Id { get; set; } = string.Empty; // UUID string
+
+        [Indexed]
+        public string UserId { get; set; } = string.Empty; // Supabase user ID
+
+        public string Source { get; set; } = string.Empty;
+        public string Target { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string ActionType { get; set; } = string.Empty;
+        public string Frequency { get; set; } = string.Empty;
+        public DateTime NextRunAt { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? SyncedAt { get; set; }
+        public bool IsDeleted { get; set; }
+    }
 }
