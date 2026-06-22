@@ -88,7 +88,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         }
     }
 
-    public ObservableCollection<string> SmartLedgerChatHistory { get; } = new();
+    private TextBlock? _lastAiBubbleText;
 
     public FinancesDetailPage()
     {
@@ -362,41 +362,96 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         string userText = LedgerChatInput.Text;
         LedgerChatInput.Text = string.Empty;
         
-        SmartLedgerChatHistory.Add($"You: {userText}");
-        SmartLedgerChatHistory.Add("AI: Processing...");
+        AddChatBubble(userText, true);
+        AddChatBubble("Processing...", false);
         
         try 
         {
-            var briefingEngine = App.Current.Services.GetRequiredService<Daily_WinUI.Services.ISmartBriefingEngine>();
+            var intelligenceService = App.Current.Services.GetRequiredService<Daily_WinUI.Services.ISmartIntelligenceService>();
             
             // System prompt instructing to output JSON command
-            string prompt = $@"
-You are a financial AI assistant. The user will tell you about an expense or a transfer they made.
-Return a JSON command using this structure ONLY: {{ ""action"": ""transfer"", ""source"": ""Card"", ""target"": ""Mega"", ""amount"": 5 }}
-If the source is not specified, assume 'Card'. If it's a new income, assume target is 'Card' and action is 'transfer'.
-Just the JSON, nothing else.
+            string systemPrompt = @"You are a financial AI assistant. The user will tell you about an expense or a transfer they made.
+First, reply with a short, natural and friendly confirmation (e.g., 'Got it! I recorded the 5 Mega expense.').
+Then, on a new line, provide the JSON command using this structure ONLY: { ""action"": ""transfer"", ""source"": ""Card"", ""target"": ""Mega"", ""amount"": 5 }
+If the source is not specified, assume 'Card'. If it's a new income, assume target is 'Card' and action is 'transfer'.";
+            
+            var aiResponse = await intelligenceService.GenerateResponseAsync(systemPrompt, userText);
+            
+            // Extract the first JSON block (assuming flat structure)
+            string jsonResponse = aiResponse;
+            string friendlyResponse = aiResponse;
+            var match = System.Text.RegularExpressions.Regex.Match(aiResponse, @"\{[^{}]*\}", System.Text.RegularExpressions.RegexOptions.Singleline);
+            if (match.Success)
+            {
+                jsonResponse = match.Value;
+                friendlyResponse = aiResponse.Replace(jsonResponse, "").Trim();
+                friendlyResponse = friendlyResponse.Replace("```json", "").Replace("```", "").Trim();
+            }
+            
+            if (string.IsNullOrWhiteSpace(friendlyResponse)) 
+            {
+                friendlyResponse = "Ledger updated.";
+            }
 
-User Input: {userText}
-";
-            
-            var aiResponse = await briefingEngine.GenerateBriefingAsync(prompt);
-            SmartLedgerChatHistory[^1] = $"AI: {aiResponse}";
-            
+            if (_lastAiBubbleText != null) _lastAiBubbleText.Text = friendlyResponse;
+  
             // Try parse JSON
             var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var command = System.Text.Json.JsonSerializer.Deserialize<Daily.Services.Finances.SmartLedgerParser.LedgerCommand>(aiResponse, options);
+            var command = System.Text.Json.JsonSerializer.Deserialize<Daily.Services.Finances.SmartLedgerParser.LedgerCommand>(jsonResponse, options);
             
             if (command != null && command.action != null)
             {
                 var newText = Daily.Services.Finances.SmartLedgerParser.ExecuteCommand(SmartLedgerText, command);
                 SmartLedgerText = newText; // Triggers setter, which saves and recalculates
-                SmartLedgerChatHistory.Add($"AI: Updated ledger successfully.");
             }
         }
         catch (Exception ex)
         {
-            SmartLedgerChatHistory[^1] = $"AI: Failed to process command.";
+            if (_lastAiBubbleText != null) _lastAiBubbleText.Text += $"\n\nFailed to process command. Error: {ex.Message}";
             System.Diagnostics.Debug.WriteLine($"Smart Ledger AI error: {ex}");
         }
+    }
+
+    private void AddChatBubble(string text, bool isUser)
+    {
+        var themeKey = App.Current.RequestedTheme == ApplicationTheme.Light ? "Light" : "Dark";
+        var border = new Microsoft.UI.Xaml.Controls.Border
+        {
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12, 8, 12, 8),
+            Margin = isUser ? new Thickness(32, 0, 0, 0) : new Thickness(0, 0, 32, 0),
+            HorizontalAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left
+        };
+
+        if (isUser)
+        {
+            border.Background = themeKey == "Light"
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x22, 0, 120, 215))
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x44, 0, 120, 215));
+        }
+        else
+        {
+            border.Background = themeKey == "Light"
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x0F, 0, 0, 0))
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x15, 255, 255, 255));
+        }
+
+        var textBlock = new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 14,
+            Opacity = 0.8
+        };
+        border.Child = textBlock;
+        SmartLedgerChatPanel.Children.Add(border);
+
+        if (!isUser)
+        {
+            _lastAiBubbleText = textBlock;
+        }
+
+        SmartLedgerChatScrollViewer.UpdateLayout();
+        SmartLedgerChatScrollViewer.ChangeView(null, SmartLedgerChatScrollViewer.ScrollableHeight, null);
     }
 }

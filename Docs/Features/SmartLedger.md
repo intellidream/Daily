@@ -18,10 +18,14 @@ The user maintains a ledger text document containing categories, abbreviations, 
 - Automatically recalculates section sums and balances using Regex.
 
 ### AI Integration & Chat
-- `ISmartBriefingEngine` evaluates natural language inputs (e.g. "I spent 5 at Mega").
-- Output is strictly formatted as JSON (`LedgerCommand` with `action`, `source`, `target`, `amount`).
-- The parser interprets the JSON, finds the text lines for `source` and `target`, applies the `amount` mathematically, and replaces the string values dynamically.
-- Auto-calculation runs immediately after to ensure `Total` and `Balance` lines are updated.
+- **Service Integration**: The chat relies on `ISmartIntelligenceService`, which abstracts the underlying inference engines (Phi-3, Llama) and properly formats the system prompts with ChatML (`<|user|>`, `<|assistant|>`) to prevent infinite generation loops and hallucination.
+- **Natural Language Parsing**: The AI is instructed to reply with a natural language confirmation followed by a strict JSON object (`LedgerCommand` with `action`, `source`, `target`, `amount`).
+- **Robust JSON Extraction**: The UI code uses a regex (`@"\{[^{}]*\}"`) to extract the first complete flat JSON object, ignoring any conversational text. The JSON is then executed mathematically against the AST, while the natural language portion is isolated and displayed cleanly in the Chat UI.
+- **Auto-Logging**: All interactions are natively captured by `LlmDebugLogger` and visible in `DebugSettingsPage.xaml` under the "AI Debug Diagnostics" panel.
+
+### UI/UX Details
+- **Dynamic Layout Stretching**: The Money tab replaces generic scrolling stack panels with nested `Grid` rows (`Height="*"`), allowing the raw text editor and the chat bubble ScrollViewer to stretch fluidly and consume the full available window height without infinitely expanding off-screen.
+- **Differentiated Chat Bubbles**: Follows the `SmartBriefing` UI pattern—blue gradient borders for user input and glassy dark styling for the AI response.
 
 ## Usage Guide
 1. Open the **Daily app** and navigate to the **Finances** -> **Money** pivot.

@@ -337,11 +337,15 @@
             <PivotItem Header="Money">
                 <Grid>
                     <ProgressRing IsActive="{x:Bind IsMoneyLoading, Mode=OneWay}" Width="64" Height="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Spacing="24" Padding="0,16,20,20">
+                    
+                    <Grid Padding="0,16,20,20">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
                         
                         <!-- Net Worth Hero -->
-                        <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="32">
+                        <Border Grid.Row="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="32">
                             <StackPanel HorizontalAlignment="Center">
                                 <TextBlock Text="NET WORTH" FontSize="14" Opacity="0.6" HorizontalAlignment="Center" CharacterSpacing="100" Margin="0,0,0,8" />
                                 <TextBlock Text="{x:Bind NetWorthDisplay, Mode=OneWay}" FontSize="64" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{ThemeResource SystemFillColorSuccessBrush}" Margin="0,-12,0,16" />
@@ -359,9 +363,7 @@
                             </StackPanel>
                         </Border>
 
-
-
-                        <Grid Margin="0,24,0,0">
+                        <Grid Grid.Row="1" Margin="0,24,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="2*" />
                                 <ColumnDefinition Width="1*" />
@@ -372,7 +374,7 @@
                                 <TextBox AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" 
                                          Text="{x:Bind SmartLedgerText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                          Background="Transparent" BorderThickness="0"
-                                         ScrollViewer.VerticalScrollBarVisibility="Auto" MinHeight="400" />
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
                             </Border>
 
                             <!-- AI Chat -->
@@ -386,13 +388,9 @@
                                     
                                     <TextBlock Text="Smart AI Assistant" FontWeight="SemiBold" Margin="0,0,0,16" Opacity="0.8" />
                                     
-                                    <ListView Grid.Row="1" ItemsSource="{x:Bind SmartLedgerChatHistory, Mode=OneWay}" SelectionMode="None">
-                                        <ListView.ItemTemplate>
-                                            <DataTemplate x:DataType="x:String">
-                                                <TextBlock Text="{x:Bind}" TextWrapping="Wrap" Margin="0,0,0,12" Opacity="0.8" />
-                                            </DataTemplate>
-                                        </ListView.ItemTemplate>
-                                    </ListView>
+                                    <ScrollViewer x:Name="SmartLedgerChatScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                        <StackPanel x:Name="SmartLedgerChatPanel" Spacing="8" Padding="0,0,16,0" />
+                                    </ScrollViewer>
                                     
                                     <Grid Grid.Row="2" Margin="0,16,0,0">
                                         <Grid.ColumnDefinitions>
@@ -405,22 +403,19 @@
                                                 Click="SendLedgerChatBtn_Click">
                                             <FontIcon Glyph="&#xE122;" FontSize="14" />
                                         </Button>
-                                    </Grid>
-                                </Grid>
-                            </Border>
-                        </Grid>
-
-                    </StackPanel>
-                </ScrollViewer>
-                </Grid>
-            </PivotItem>
+                                      </Grid>
+                                  </Grid>
+                              </Border>
+                          </Grid>
+  
+                      </Grid>
+                  </Grid>
+              </PivotItem>
 
         </Pivot>
     </Grid>
+
+
+
+
 </Page>
-
-
-
-
-
-
