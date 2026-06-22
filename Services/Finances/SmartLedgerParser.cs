@@ -44,8 +44,13 @@ namespace Daily.Services.Finances
                 var line = lines[i];
                 if (line.Contains(targetAbbreviation, StringComparison.OrdinalIgnoreCase))
                 {
+                    // Split out the comment first
+                    int commentIdx = line.IndexOf("//");
+                    string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
+                    string commentPart = commentIdx >= 0 ? line.Substring(commentIdx) : "";
+
                     // Match the primary value assigned (e.g. "Card = 108" -> captures 108)
-                    var match = Regex.Match(line, @"=\s*([\-\d\.\,]+)");
+                    var match = Regex.Match(mathPart, @"=\s*([\-\d\.\,]+)");
                     if (match.Success)
                     {
                         var valStr = match.Groups[1].Value.Replace(',', '.'); // standardize decimal separator
@@ -54,7 +59,8 @@ namespace Daily.Services.Finances
                             var newVal = currentVal + amountDelta;
                             // Re-format to avoid too many decimal places
                             string newStr = newVal % 1 == 0 ? newVal.ToString("F0") : newVal.ToString("G");
-                            lines[i] = Regex.Replace(line, @"=\s*[\-\d\.\,]+", $"= {newStr}");
+                            mathPart = Regex.Replace(mathPart, @"=\s*[\-\d\.\,]+", $"= {newStr}");
+                            lines[i] = mathPart + commentPart;
                             break;
                         }
                     }
@@ -92,7 +98,10 @@ namespace Daily.Services.Finances
 
                 if (inSection && line.Contains("=") && !line.StartsWith("Total"))
                 {
-                    var match = Regex.Match(line, @"=\s*([\-\d\.\,]+)");
+                    int commentIdx = line.IndexOf("//");
+                    string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
+
+                    var match = Regex.Match(mathPart, @"=\s*([\-\d\.\,]+)");
                     if (match.Success)
                     {
                         var valStr = match.Groups[1].Value.Replace(',', '.');
@@ -105,8 +114,13 @@ namespace Daily.Services.Finances
 
                 if (inSection && line.StartsWith("Total ="))
                 {
+                    int commentIdx = line.IndexOf("//");
+                    string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
+                    string commentPart = commentIdx >= 0 ? line.Substring(commentIdx) : "";
+
                     string sumStr = currentSectionSum % 1 == 0 ? currentSectionSum.ToString("F0") : currentSectionSum.ToString("G");
-                    lines[i] = $"Total = {sumStr}";
+                    lines[i] = $"Total = {sumStr} " + commentPart;
+                    lines[i] = lines[i].TrimEnd();
                     inSection = false; 
                     currentSectionSum = 0;
                 }
@@ -124,9 +138,13 @@ namespace Daily.Services.Finances
                     {
                         if (lines[j].Trim().StartsWith("Total ="))
                         {
+                            int commentIdx = lines[j].IndexOf("//");
+                            string commentPart = commentIdx >= 0 ? lines[j].Substring(commentIdx) : "";
+
                             decimal diff = incomingTotal - outgoingTotal;
                             string sumStr = diff % 1 == 0 ? diff.ToString("F0") : diff.ToString("G");
-                            lines[j] = $"Total = {sumStr}";
+                            lines[j] = $"Total = {sumStr} " + commentPart;
+                            lines[j] = lines[j].TrimEnd();
                             break;
                         }
                     }
@@ -149,7 +167,10 @@ namespace Daily.Services.Finances
                 }
                 else if (inSection && line.Trim().StartsWith("Total ="))
                 {
-                    var match = Regex.Match(line, @"=\s*([\-\d\.\,]+)");
+                    int commentIdx = line.IndexOf("//");
+                    string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
+
+                    var match = Regex.Match(mathPart, @"=\s*([\-\d\.\,]+)");
                     if (match.Success)
                     {
                         var valStr = match.Groups[1].Value.Replace(',', '.');
@@ -183,8 +204,11 @@ namespace Daily.Services.Finances
 
                 if (inDeposit && line.StartsWith("INT ="))
                 {
+                    int commentIdx = line.IndexOf("//");
+                    string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
+
                     // Match INT = 139.604,51
-                    var match = Regex.Match(line, @"=\s*([\-\d\.]+,\d+)");
+                    var match = Regex.Match(mathPart, @"=\s*([\-\d\.]+,\d+)");
                     if (match.Success)
                     {
                         // Parse romanian number format: 139.604,51 -> 139604.51

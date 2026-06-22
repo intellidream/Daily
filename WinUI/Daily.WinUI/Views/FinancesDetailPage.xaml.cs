@@ -370,10 +370,27 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             var intelligenceService = App.Current.Services.GetRequiredService<Daily_WinUI.Services.ISmartIntelligenceService>();
             
             // System prompt instructing to output JSON command
-            string systemPrompt = @"You are a financial AI assistant. The user will tell you about an expense or a transfer they made.
-First, reply with a short, natural and friendly confirmation (e.g., 'Got it! I recorded the 5 Mega expense.').
-Then, on a new line, provide the JSON command using this structure ONLY: { ""action"": ""transfer"", ""source"": ""Card"", ""target"": ""Mega"", ""amount"": 5 }
-If the source is not specified, assume 'Card'. If it's a new income, assume target is 'Card' and action is 'transfer'.";
+            string systemPrompt = @"You are a financial AI assistant parsing commands for a Smart Ledger.
+You MUST output your response in exactly TWO parts:
+1. A short, friendly confirmation.
+2. A strict JSON command block enclosed in ```json ... ```.
+
+Examples:
+User: I spent 5 on Mega
+Assistant: Got it! I recorded the 5 Mega expense.
+```json
+{ ""action"": ""transfer"", ""source"": ""Card"", ""target"": ""Mega"", ""amount"": 5 }
+```
+
+User: Got my salary, 107
+Assistant: Awesome! I've added 107 to your Card.
+```json
+{ ""action"": ""transfer"", ""source"": ""Income"", ""target"": ""Card"", ""amount"": 107 }
+```
+
+CRITICAL RULES:
+- The JSON target MUST match the exact alias the user mentioned (e.g. 'Mega').
+- NEVER forget the ```json block! It is required for the system to work.";
             
             var aiResponse = await intelligenceService.GenerateResponseAsync(systemPrompt, userText);
             
@@ -386,6 +403,10 @@ If the source is not specified, assume 'Card'. If it's a new income, assume targ
                 jsonResponse = match.Value;
                 friendlyResponse = aiResponse.Replace(jsonResponse, "").Trim();
                 friendlyResponse = friendlyResponse.Replace("```json", "").Replace("```", "").Trim();
+            }
+            else
+            {
+                throw new Exception("The AI response did not contain a valid JSON command block.");
             }
             
             if (string.IsNullOrWhiteSpace(friendlyResponse)) 
@@ -409,6 +430,7 @@ If the source is not specified, assume 'Card'. If it's a new income, assume targ
         {
             if (_lastAiBubbleText != null) _lastAiBubbleText.Text += $"\n\nFailed to process command. Error: {ex.Message}";
             System.Diagnostics.Debug.WriteLine($"Smart Ledger AI error: {ex}");
+            Daily_WinUI.Services.LlmDebugLogger.LastError = ex.ToString();
         }
     }
 

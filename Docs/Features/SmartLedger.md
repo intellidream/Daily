@@ -50,3 +50,62 @@ The user maintains a ledger text document containing categories, abbreviations, 
 
 > [!NOTE]
 > For highly specific developer documentation regarding AST parsing and SQLite database sync logic, see [SmartLedgerImpl.md](SmartLedgerImpl.md).
+
+## Logic
+
+> [!NOTE]
+> The Smart Ledger uses a strict Double-Entry accounting logic based on a unique Domain Specific Language (DSL).
+
+### The DSL Syntax
+The AI and the AST parser adhere to a strict rule separating the **Mathematics** from the **Metadata**:
+``text
+CategoryName = Value // Aliases, Tags, and Comments
+``
+- **Math Part**: Everything to the left of // is mathematical. The parser looks here to run additions/subtractions.
+- **Metadata Part**: Everything to the right of // is completely ignored by the math parser. It is used as a safe space for human annotations and for the AI to find alias names.
+
+### Example Ledger
+``text
+# Calcule
+**Incoming**
+Card = 107 // Rz: 97, Ig: 10, Rv: 0. [Mom: 9, !!!!: 9]
+Cash = 0 // [SG-1/A/3M], [MOM/250!]
+
+Total = 107
+
+**Outgoing**
+CarTaxes = 0 // Itp, Rvg (4.27). Ghs, Prk, Csc, Rca (1.27)
+Subs = 2 // V, N, Y, O, AI, M, W, E, I, Ap, Am, Sy, Ad, Sp
+Household = 35 // Prop, Rds, Gaz, Înt, Hid (est 30). Mom (5)
+Groceries = 0 // Cora, Mega, Bringo, Fresh. [Edn: 6]
+Tigari = 6 // [25/45 packs]
+Car = 5 // Benzina, Honda. [1/4 fill-ups] [CER/SPL!]
+Serviciu = 0 // Outs. [0/100, 0/200]
+Acasa = 10 // Tuns, Cadouri. [M&T=5, !!!!!=5]
+Vacante = 49 // Noi, Iesiri, Other. [MOM/250!]
+
+AnnualSubs = 0 // (APL 21.01 $5) (RED 14.03 $1) (CSP 29.05 $5)
+
+Total = 107
+
+**Balance**
+Total = 0
+
+**Dentist**
+Total = 53 // Dental track
+
+**Deposit**
+ECO = 0 // Current account
+EUR = 0 // Euro current
+ERO = 0 // Euro economies (5-7%)
+DEP = 0 // RON economies (2-3%)
+BIA = 30000 // GF emergency savings
+INT = 139604 // (~27.300E) [-IMP-VER]
+``
+
+### AI Prompting Strategy
+To prevent AI hallucinations (especially with Small Language Models like Phi):
+1. The AI is fed few-shot examples via its System Prompt dictating exactly how to output its Markdown JSON structure.
+2. The AI is strictly told not to mutate values to the right of //. 
+3. If a user says "I spent 5 on Mega", the AI searches the // comments for "Mega" and outputs {"target": "Mega"}.
+4. The C# parser locates the Groceries row because the string "Mega" exists in its metadata, splits the row at //, calculates the math, and re-attaches the comment seamlessly.
