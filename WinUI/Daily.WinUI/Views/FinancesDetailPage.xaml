@@ -25,6 +25,67 @@
     </Page.Resources>
 
     <Grid Background="Transparent">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="WideState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="850" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="WideColumnPlaceholder.Visibility" Value="Visible" />
+                        <Setter Target="MoneyScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+                        <Setter Target="MoneyEditorBorder.MinHeight" Value="0" />
+                        
+                        <!-- Editor on left, full height -->
+                        <Setter Target="MoneyEditorBorder.(Grid.Column)" Value="0" />
+                        <Setter Target="MoneyEditorBorder.(Grid.Row)" Value="0" />
+                        <Setter Target="MoneyEditorBorder.(Grid.RowSpan)" Value="3" />
+                        <Setter Target="MoneyEditorBorder.Margin" Value="0,0,16,0" />
+                        
+                        <!-- Totals on right, top -->
+                        <Setter Target="MoneyTotalsBorder.(Grid.Column)" Value="1" />
+                        <Setter Target="MoneyTotalsBorder.(Grid.Row)" Value="0" />
+                        <Setter Target="MoneyTotalsBorder.(Grid.RowSpan)" Value="1" />
+                        <Setter Target="MoneyTotalsBorder.Margin" Value="0,0,0,16" />
+                        
+                        <!-- Chat on right, bottom -->
+                        <Setter Target="MoneyChatBorder.(Grid.Column)" Value="1" />
+                        <Setter Target="MoneyChatBorder.(Grid.Row)" Value="1" />
+                        <Setter Target="MoneyChatBorder.(Grid.RowSpan)" Value="2" />
+                        <Setter Target="MoneyChatBorder.Margin" Value="0" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="NarrowState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="WideColumnPlaceholder.Visibility" Value="Collapsed" />
+                        <Setter Target="MoneyScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+                        <Setter Target="MoneyEditorBorder.MinHeight" Value="500" />
+                        
+                        <!-- Totals on top -->
+                        <Setter Target="MoneyTotalsBorder.(Grid.Column)" Value="0" />
+                        <Setter Target="MoneyTotalsBorder.(Grid.Row)" Value="0" />
+                        <Setter Target="MoneyTotalsBorder.(Grid.RowSpan)" Value="1" />
+                        <Setter Target="MoneyTotalsBorder.Margin" Value="0,0,0,16" />
+                        
+                        <!-- Editor in middle -->
+                        <Setter Target="MoneyEditorBorder.(Grid.Column)" Value="0" />
+                        <Setter Target="MoneyEditorBorder.(Grid.Row)" Value="1" />
+                        <Setter Target="MoneyEditorBorder.(Grid.RowSpan)" Value="1" />
+                        <Setter Target="MoneyEditorBorder.Margin" Value="0,0,0,16" />
+                        
+                        <!-- Chat on bottom -->
+                        <Setter Target="MoneyChatBorder.(Grid.Column)" Value="0" />
+                        <Setter Target="MoneyChatBorder.(Grid.Row)" Value="2" />
+                        <Setter Target="MoneyChatBorder.(Grid.RowSpan)" Value="1" />
+                        <Setter Target="MoneyChatBorder.Margin" Value="0" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="110" />
             <RowDefinition Height="*" />
@@ -332,45 +393,47 @@
                 </ScrollViewer>
                 </Grid>
             </PivotItem>
-
             <!-- MONEY -->
             <PivotItem Header="Money">
                 <Grid>
                     <ProgressRing IsActive="{x:Bind IsMoneyLoading, Mode=OneWay}" Width="64" Height="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
                     
-                    <Grid Padding="0,16,20,20">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        
-                        <!-- Net Worth Hero -->
-                        <Border Grid.Row="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="32">
-                            <StackPanel HorizontalAlignment="Center">
-                                <TextBlock Text="NET WORTH" FontSize="14" Opacity="0.6" HorizontalAlignment="Center" CharacterSpacing="100" Margin="0,0,0,8" />
-                                <TextBlock Text="{x:Bind NetWorthDisplay, Mode=OneWay}" FontSize="64" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{ThemeResource SystemFillColorSuccessBrush}" Margin="0,-12,0,16" />
-                                
-                                <StackPanel Orientation="Horizontal" Spacing="24" HorizontalAlignment="Center">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="CASH" FontSize="12" Opacity="0.6" HorizontalAlignment="Center" />
-                                        <TextBlock Text="{x:Bind CashDisplay, Mode=OneWay}" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#FF0288D1" />
-                                    </StackPanel>
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="INVESTMENTS" FontSize="12" Opacity="0.6" HorizontalAlignment="Center" />
-                                        <TextBlock Text="{x:Bind InvestmentsDisplay, Mode=OneWay}" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#FF8E24AA" />
+                    <ScrollViewer x:Name="MoneyScrollViewer" VerticalScrollBarVisibility="Disabled">
+                        <Grid x:Name="MoneyLayoutGrid" Padding="0,16,20,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="250" />
+                            </Grid.RowDefinitions>
+                            
+                            <!-- Dummy placeholder to force column 1 width in wide mode -->
+                            <Border x:Name="WideColumnPlaceholder" Grid.Column="1" Width="350" Height="0" />
+                            
+                            <!-- Net Worth Hero -->
+                            <Border x:Name="MoneyTotalsBorder" Grid.Row="0" Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="32" Margin="0,0,0,16">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="NET WORTH" FontSize="14" Opacity="0.6" HorizontalAlignment="Center" CharacterSpacing="100" Margin="0,0,0,8" />
+                                    <TextBlock Text="{x:Bind NetWorthDisplay, Mode=OneWay}" FontSize="64" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{ThemeResource SystemFillColorSuccessBrush}" Margin="0,-12,0,16" />
+                                    
+                                    <StackPanel Orientation="Horizontal" Spacing="24" HorizontalAlignment="Center">
+                                        <StackPanel HorizontalAlignment="Center">
+                                            <TextBlock Text="CASH" FontSize="12" Opacity="0.6" HorizontalAlignment="Center" />
+                                            <TextBlock Text="{x:Bind CashDisplay, Mode=OneWay}" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#FF0288D1" />
+                                        </StackPanel>
+                                        <StackPanel HorizontalAlignment="Center">
+                                            <TextBlock Text="INVESTMENTS" FontSize="12" Opacity="0.6" HorizontalAlignment="Center" />
+                                            <TextBlock Text="{x:Bind InvestmentsDisplay, Mode=OneWay}" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#FF8E24AA" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <Grid Grid.Row="1" Margin="0,24,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="2*" />
-                                <ColumnDefinition Width="1*" />
-                            </Grid.ColumnDefinitions>
+                            </Border>
 
                             <!-- Raw Ledger Editor -->
-                            <Border Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16" Margin="0,0,16,0">
+                            <Border x:Name="MoneyEditorBorder" Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16" Margin="0,0,16,0">
                                 <TextBox AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" 
                                          Text="{x:Bind SmartLedgerText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                          Background="Transparent" BorderThickness="0"
@@ -378,7 +441,7 @@
                             </Border>
 
                             <!-- AI Chat -->
-                            <Border Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16">
+                            <Border x:Name="MoneyChatBorder" Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -403,14 +466,13 @@
                                                 Click="SendLedgerChatBtn_Click">
                                             <FontIcon Glyph="&#xE122;" FontSize="14" />
                                         </Button>
-                                      </Grid>
-                                  </Grid>
-                              </Border>
-                          </Grid>
-  
-                      </Grid>
-                  </Grid>
-              </PivotItem>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </PivotItem>
 
         </Pivot>
     </Grid>

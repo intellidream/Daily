@@ -25,6 +25,7 @@ The user maintains a ledger text document containing categories, abbreviations, 
 
 ### UI/UX Details
 - **Dynamic Layout Stretching**: The Money tab replaces generic scrolling stack panels with nested `Grid` rows (`Height="*"`), allowing the raw text editor and the chat bubble ScrollViewer to stretch fluidly and consume the full available window height without infinitely expanding off-screen.
+- **Fully Responsive Architecture**: Implemented a rock-solid `VisualStateManager` anchored to the Page root. In wide view (≥850px width), the editor takes the full left column while the Totals and AI Chat securely dock to the right. When narrowed (<850px), the UI morphs into a vertically stacked, mobile-friendly view (Totals -> Editor -> Chat). In this mobile view, the editor is given a strict `500px` minimum height, and the outer layout seamlessly enables vertical window scrolling to ensure no content is crushed.
 - **Differentiated Chat Bubbles**: Follows the `SmartBriefing` UI pattern—blue gradient borders for user input and glassy dark styling for the AI response.
 
 ## Usage Guide
