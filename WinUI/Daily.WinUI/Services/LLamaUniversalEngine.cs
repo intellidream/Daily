@@ -101,6 +101,37 @@ namespace Daily_WinUI.Services
                 return sb.ToString();
             });
         }
+        public async IAsyncEnumerable<string> GenerateBriefingStreamAsync(string prompt)
+        {
+            if (!_initialized || _weights == null || string.IsNullOrEmpty(_loadedModelPath))
+            {
+                throw new InvalidOperationException("LLamaUniversalEngine is not initialized.");
+            }
+
+            var parameters = new ModelParams(_loadedModelPath)
+            {
+                ContextSize = 8192,
+                GpuLayerCount = _allowGpuOffload ? 99 : 0
+            };
+
+            var executor = new StatelessExecutor(_weights, parameters);
+
+            var inferenceParams = new InferenceParams
+            {
+                MaxTokens = 1024,
+                AntiPrompts = new[] { "<|eot_id|>", "<|end|>" },
+                SamplingPipeline = new DefaultSamplingPipeline
+                {
+                    Temperature = 0.2f,
+                    TopP = 0.9f
+                }
+            };
+
+            await foreach (var token in executor.InferAsync(prompt, inferenceParams))
+            {
+                yield return token;
+            }
+        }
 
         public void Dispose()
         {

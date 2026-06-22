@@ -17,6 +17,8 @@ namespace Daily.Services.Finances
         // Smart Ledger
         Task<LocalSmartLedger?> GetSmartLedgerAsync();
         Task SaveSmartLedgerAsync(string ledgerText);
+        Task<List<LocalLedgerTransaction>> GetLedgerTransactionsAsync();
+        Task SaveLedgerTransactionAsync(LocalLedgerTransaction transaction);
 
         // Money Features
         Task<List<LocalAccount>> GetAccountsAsync();

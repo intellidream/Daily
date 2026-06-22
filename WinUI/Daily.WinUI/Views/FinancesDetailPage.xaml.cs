@@ -69,6 +69,8 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
     // Using object here since PortfolioItem inherits from StockQuote but we might just use StockQuote
     public ObservableCollection<object> Holdings { get; } = new();
 
+    public ObservableCollection<Daily.Models.Finances.LocalLedgerTransaction> LedgerTransactions { get; } = new();
+
     // Smart Ledger
     private string _smartLedgerText = string.Empty;
     public string SmartLedgerText
@@ -215,6 +217,17 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
             Holdings.Clear();
             foreach (var p in portfolio) Holdings.Add(p);
+
+            try
+            {
+                var transactions = await _financesService.GetLedgerTransactionsAsync();
+                LedgerTransactions.Clear();
+                foreach (var tx in transactions) LedgerTransactions.Add(tx);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading ledger transactions: {ex.Message}");
+            }
 
             try
             {
@@ -370,51 +383,52 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             var intelligenceService = App.Current.Services.GetRequiredService<Daily_WinUI.Services.ISmartIntelligenceService>();
             
             // System prompt instructing to output JSON command
-            string systemPrompt = @"You are a financial AI assistant parsing commands for a Smart Ledger.
-You MUST output your response in exactly TWO parts:
-1. A short, friendly confirmation.
-2. A strict JSON command block enclosed in ```json ... ```.
+            string systemPrompt = @"You are a financial AI parsing a Ledger. User dictates an expense or income.
+Output ONLY valid JSON. No conversational text.
+{""action"":""transfer"",""source"":""Card"",""target"":""ALIAS"",""amount"":5}
+Target MUST be the exact alias mentioned.";
 
-Examples:
-User: I spent 5 on Mega
-Assistant: Got it! I recorded the 5 Mega expense.
-```json
-{ ""action"": ""transfer"", ""source"": ""Card"", ""target"": ""Mega"", ""amount"": 5 }
-```
+            if (_lastAiBubbleText != null) _lastAiBubbleText.Text = "Processing...";
 
-User: Got my salary, 107
-Assistant: Awesome! I've added 107 to your Card.
-```json
-{ ""action"": ""transfer"", ""source"": ""Income"", ""target"": ""Card"", ""amount"": 107 }
-```
-
-CRITICAL RULES:
-- The JSON target MUST match the exact alias the user mentioned (e.g. 'Mega').
-- NEVER forget the ```json block! It is required for the system to work.";
+            var stream = intelligenceService.GenerateResponseStreamAsync(systemPrompt, userText);
             
-            var aiResponse = await intelligenceService.GenerateResponseAsync(systemPrompt, userText);
-            
-            // Extract the first JSON block (assuming flat structure)
-            string jsonResponse = aiResponse;
-            string friendlyResponse = aiResponse;
-            var match = System.Text.RegularExpressions.Regex.Match(aiResponse, @"\{[^{}]*\}", System.Text.RegularExpressions.RegexOptions.Singleline);
-            if (match.Success)
+            var sb = new System.Text.StringBuilder();
+
+            await foreach (var token in stream)
             {
-                jsonResponse = match.Value;
-                friendlyResponse = aiResponse.Replace(jsonResponse, "").Trim();
-                friendlyResponse = friendlyResponse.Replace("```json", "").Replace("```", "").Trim();
+                sb.Append(token);
+            }
+
+            string aiResponse = sb.ToString();
+            string jsonResponse = aiResponse;
+            
+            if (string.IsNullOrWhiteSpace(jsonResponse))
+            {
+                // Fallback extraction if stream logic missed it
+                var match = System.Text.RegularExpressions.Regex.Match(aiResponse, @"\{[^{}]*\}", System.Text.RegularExpressions.RegexOptions.Singleline);
+                if (match.Success)
+                {
+                    jsonResponse = match.Value;
+                }
+            }
+
+            if (_lastAiBubbleText != null) _lastAiBubbleText.Text = "Recorded successfully.";
+
+            // Clean up the json string extracted from stream
+            var finalMatch = System.Text.RegularExpressions.Regex.Match(jsonResponse, @"\{[^{}]*\}", System.Text.RegularExpressions.RegexOptions.Singleline);
+            if (finalMatch.Success)
+            {
+                jsonResponse = finalMatch.Value;
             }
             else
             {
-                throw new Exception("The AI response did not contain a valid JSON command block.");
-            }
-            
-            if (string.IsNullOrWhiteSpace(friendlyResponse)) 
-            {
-                friendlyResponse = "Ledger updated.";
+                jsonResponse = string.Empty;
             }
 
-            if (_lastAiBubbleText != null) _lastAiBubbleText.Text = friendlyResponse;
+            if (string.IsNullOrWhiteSpace(jsonResponse))
+            {
+                throw new Exception("The AI response did not contain a valid JSON command block.");
+            }
   
             // Try parse JSON
             var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -424,6 +438,21 @@ CRITICAL RULES:
             {
                 var newText = Daily.Services.Finances.SmartLedgerParser.ExecuteCommand(SmartLedgerText, command);
                 SmartLedgerText = newText; // Triggers setter, which saves and recalculates
+
+                // Record the transaction
+                if (_financesService != null)
+                {
+                    var transaction = new Daily.Models.Finances.LocalLedgerTransaction
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Source = command.source ?? "",
+                        Target = command.target ?? "",
+                        Amount = command.amount,
+                        ActionType = command.action ?? ""
+                    };
+                    await _financesService.SaveLedgerTransactionAsync(transaction);
+                    LedgerTransactions.Insert(0, transaction);
+                }
             }
         }
         catch (Exception ex)

@@ -338,6 +338,7 @@ namespace Daily.Services
                 await PushTransactionsAsync(userId);
                 await PushHoldingsAsync(userId);
                 await PushSmartLedgerAsync(userId);
+                await PushLedgerTransactionsAsync(userId);
             }
 
             if ((scope & SyncScope.SavedArticles) != 0)
@@ -443,6 +444,7 @@ namespace Daily.Services
                 pulled += await PullTransactionsInternalAsync(userId, lastPull);
                 pulled += await PullHoldingsInternalAsync(userId, lastPull);
                 pulled += await PullSmartLedgerInternalAsync(userId, lastPull);
+                pulled += await PullLedgerTransactionsInternalAsync(userId, lastPull);
 
                 totalPulled += pulled;
                 SetPreference(key, DateTime.UtcNow.ToString("O"));
@@ -1582,6 +1584,73 @@ namespace Daily.Services
             catch (Exception ex)
             {
                 LogSyncException("PullSmartLedgerInternalAsync", ex);
+            }
+            return 0;
+        }
+
+        // ==========================================
+        // SMART LEDGER TRANSACTIONS SYNC
+        // ==========================================
+
+        private async Task PushLedgerTransactionsAsync(string userId)
+        {
+            var dirty = await _databaseService.Connection.Table<LocalLedgerTransaction>()
+                                .Where(a => a.SyncedAt == null && a.UserId == userId)
+                                .ToListAsync();
+            if (dirty.Any())
+            {
+                LogDebug($"[SyncService] Pushing {dirty.Count} Ledger Transactions...");
+                var remoteList = dirty.Select(Mappers.ToDomain).ToList();
+                try 
+                {
+                    await _supabase.From<LedgerTransaction>().Upsert(remoteList);
+                    foreach (var a in dirty)
+                    {
+                        a.SyncedAt = DateTime.UtcNow;
+                        await _databaseService.Connection.UpdateAsync(a);
+                    }
+                    LogDebug("[SyncService] Push Ledger Transactions Success.");
+                }
+                catch(Exception ex) { LogDebug($"[SyncService] Push Ledger Transactions Failed: {ex.Message}"); }
+            }
+        }
+
+        private async Task<int> PullLedgerTransactionsInternalAsync(string userId, DateTime lastPull)
+        {
+            try 
+            {
+                var userGuid = Guid.Parse(userId);
+                
+                // Self-healing: if local table is empty, force a full pull
+                var localCount = await _databaseService.Connection.Table<LocalLedgerTransaction>().CountAsync();
+                if (localCount == 0)
+                {
+                    lastPull = DateTime.MinValue;
+                }
+
+                var query = _supabase.From<LedgerTransaction>().Where(x => x.UserId == userGuid);
+                
+                if (lastPull > DateTime.MinValue)
+                {
+                    query = query.Where(x => x.CreatedAt > lastPull);
+                }
+
+                var remote = await query.Get();
+
+                if (remote.Models.Any())
+                {
+                    LogDebug($"[SyncService] Pulled {remote.Models.Count} Ledger Transactions.");
+                    foreach (var rm in remote.Models)
+                    {
+                        var local = Mappers.ToLocal(rm);
+                        await _databaseService.Connection.InsertOrReplaceAsync(local);
+                    }
+                    return remote.Models.Count;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogSyncException("PullLedgerTransactionsInternalAsync", ex);
             }
             return 0;
         }

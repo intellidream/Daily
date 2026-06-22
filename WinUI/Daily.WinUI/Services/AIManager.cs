@@ -342,6 +342,33 @@ namespace Daily_WinUI.Services
             }
         }
 
+        public async IAsyncEnumerable<string> GenerateBriefingStreamAsync(string prompt)
+        {
+            if (_activeEngine == null)
+            {
+                Console.WriteLine("[AIManager] Active engine is uninitialized. Running InitializeAsync now.");
+                await InitializeAsync();
+            }
+
+            if (_activeEngine == null)
+            {
+                throw new InvalidOperationException("Failed to initialize any local AI briefing engines.");
+            }
+
+            await _inferenceSemaphore.WaitAsync();
+            try
+            {
+                await foreach (var token in _activeEngine.GenerateBriefingStreamAsync(prompt))
+                {
+                    yield return token;
+                }
+            }
+            finally
+            {
+                _inferenceSemaphore.Release();
+            }
+        }
+
         private bool DetectDedicatedGpu(out string gpuName)
         {
             gpuName = "";

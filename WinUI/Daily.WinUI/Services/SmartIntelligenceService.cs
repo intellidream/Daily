@@ -11,6 +11,7 @@ namespace Daily_WinUI.Services
     {
         Task<bool> IsModelReadyAsync();
         Task<string> GenerateResponseAsync(string systemPrompt, string userPrompt, CancellationToken ct = default);
+        IAsyncEnumerable<string> GenerateResponseStreamAsync(string systemPrompt, string userPrompt, CancellationToken ct = default);
         Task InitializeAsync();
         bool IsPhiSilicaActive { get; }
         string ActiveEngineName { get; }
@@ -93,6 +94,41 @@ namespace Daily_WinUI.Services
                 log.Error = ex.ToString();
                 LlmDebugLogger.Log(log);
                 throw;
+            }
+        }
+
+        public async IAsyncEnumerable<string> GenerateResponseStreamAsync(string systemPrompt, string userPrompt, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            string prompt = $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{userPrompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
+
+            var log = new LlmExecutionLog
+            {
+                SystemPrompt = systemPrompt,
+                UserPrompt = userPrompt,
+                FormattedPrompt = prompt,
+                ActiveEngine = _aiManager.ActiveEngineName,
+                Timestamp = DateTime.Now
+            };
+
+            var stream = _aiManager.GenerateBriefingStreamAsync(prompt);
+            var sb = new System.Text.StringBuilder();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                await foreach (var token in stream.WithCancellation(ct))
+                {
+                    sb.Append(token);
+                    yield return token;
+                }
+            }
+            finally
+            {
+                sw.Stop();
+                log.DurationMs = sw.ElapsedMilliseconds;
+                log.Response = sb.ToString();
+                // If there's an exception, it will bubble up, but we log what we got so far
+                LlmDebugLogger.Log(log);
             }
         }
     }
@@ -205,6 +241,69 @@ namespace Daily_WinUI.Services
                 log.Error = ex.ToString();
                 LlmDebugLogger.Log(log);
                 throw;
+            }
+        }
+
+        public async IAsyncEnumerable<string> GenerateResponseStreamAsync(string systemPrompt, string userPrompt, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            var settings = SettingsService.Load();
+            string selectedModelId = settings.SelectedLocalAiModel ?? "llama32_1b";
+
+            await _aiManager.InitializeAsync();
+
+            string prompt;
+            if (_aiManager.ActiveEngine is PhiSilicaNpuEngine)
+            {
+                prompt = $"<|system|>\n{systemPrompt}<|end|>\n<|user|>\n{userPrompt}<|end|>\n<|assistant|>\n";
+            }
+            else
+            {
+                string lowerId = selectedModelId.ToLowerInvariant();
+                if (lowerId.Contains("qwen") || lowerId.Contains("chatml"))
+                {
+                    prompt = $"<|im_start|>system\n{systemPrompt}<|im_end|>\n<|im_start|>user\n{userPrompt}<|im_end|>\n<|im_start|>assistant\n";
+                }
+                else if (lowerId.Contains("gemma"))
+                {
+                    prompt = $"<start_of_turn>system\n{systemPrompt}<end_of_turn>\n<start_of_turn>user\n{userPrompt}<end_of_turn>\n<start_of_turn>assistant\n";
+                }
+                else if (lowerId.Contains("phi"))
+                {
+                    prompt = $"<|system|>\n{systemPrompt}<|end|>\n<|user|>\n{userPrompt}<|end|>\n<|assistant|>\n";
+                }
+                else
+                {
+                    prompt = $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{userPrompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
+                }
+            }
+
+            var log = new LlmExecutionLog
+            {
+                SystemPrompt = systemPrompt,
+                UserPrompt = userPrompt,
+                FormattedPrompt = prompt,
+                ActiveEngine = _aiManager.ActiveEngineName,
+                Timestamp = DateTime.Now
+            };
+
+            var stream = _aiManager.GenerateBriefingStreamAsync(prompt);
+            var sb = new System.Text.StringBuilder();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            
+            try
+            {
+                await foreach (var token in stream.WithCancellation(ct))
+                {
+                    sb.Append(token);
+                    yield return token;
+                }
+            }
+            finally
+            {
+                sw.Stop();
+                log.DurationMs = sw.ElapsedMilliseconds;
+                log.Response = sb.ToString();
+                LlmDebugLogger.Log(log);
             }
         }
     }

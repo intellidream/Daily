@@ -22,6 +22,7 @@
         <converters:HeatmapForegroundConverter x:Key="HeatmapForegroundConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
         <converters:CountryFlagConverter x:Key="CountryFlagConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
         <converters:VolumeFormatConverter x:Key="VolumeFormatConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
+        <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
     </Page.Resources>
 
     <Grid Background="Transparent">
@@ -444,12 +445,14 @@
                             <Border x:Name="MoneyChatBorder" Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16">
                                 <Grid>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="*" />
-                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" /> <!-- AI Assistant Title -->
+                                        <RowDefinition Height="*" />    <!-- Chat messages -->
+                                        <RowDefinition Height="Auto" /> <!-- Input -->
+                                        <RowDefinition Height="Auto" /> <!-- Transaction History Title -->
+                                        <RowDefinition Height="Auto" /> <!-- Transaction List -->
                                     </Grid.RowDefinitions>
                                     
-                                    <TextBlock Text="Smart AI Assistant" FontWeight="SemiBold" Margin="0,0,0,16" Opacity="0.8" />
+                                    <TextBlock Grid.Row="0" Text="Smart AI Assistant" FontWeight="SemiBold" Margin="0,0,0,16" Opacity="0.8" />
                                     
                                     <ScrollViewer x:Name="SmartLedgerChatScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto">
                                         <StackPanel x:Name="SmartLedgerChatPanel" Spacing="8" Padding="0,0,16,0" />
@@ -461,12 +464,39 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBox x:Name="LedgerChatInput" PlaceholderText="Ask AI or say 'spent 5 at Mega'..." 
+                                                 TextWrapping="Wrap" MaxHeight="100" AcceptsReturn="True"
                                                  KeyDown="LedgerChatInput_KeyDown" />
-                                        <Button Grid.Column="1" Style="{StaticResource AccentButtonStyle}" Margin="8,0,0,0"
+                                        <Button Grid.Column="1" Style="{StaticResource AccentButtonStyle}" Margin="8,0,0,0" VerticalAlignment="Bottom"
                                                 Click="SendLedgerChatBtn_Click">
                                             <FontIcon Glyph="&#xE122;" FontSize="14" />
                                         </Button>
                                     </Grid>
+
+                                    <!-- Transaction History -->
+                                    <TextBlock Grid.Row="3" Text="Transaction History" FontWeight="SemiBold" Margin="0,24,0,16" Opacity="0.8" />
+                                    <ListView Grid.Row="4" ItemsSource="{x:Bind LedgerTransactions, Mode=OneWay}" 
+                                              SelectionMode="None" Margin="0,0,0,16"
+                                              MaxHeight="300" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,4,0,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding CreatedAt}" Opacity="0.6" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding ActionType}" FontWeight="SemiBold" FontSize="12" Opacity="0.8"/>
+                                                        <TextBlock Text="{Binding Target}" FontWeight="SemiBold"/>
+                                                        <TextBlock Text="from" Opacity="0.6" Visibility="{Binding Target, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                                        <TextBlock Text="{Binding Source}" Opacity="0.8"/>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Text="{Binding Amount}" FontWeight="Bold" Foreground="{ThemeResource SystemFillColorSuccessBrush}" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
                                 </Grid>
                             </Border>
                         </Grid>

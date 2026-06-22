@@ -7,5 +7,6 @@ namespace Daily_WinUI.Services
         Task<bool> IsSupportedAsync();
         Task InitializeAsync();
         Task<string> GenerateBriefingAsync(string prompt);
+        IAsyncEnumerable<string> GenerateBriefingStreamAsync(string prompt);
     }
 }

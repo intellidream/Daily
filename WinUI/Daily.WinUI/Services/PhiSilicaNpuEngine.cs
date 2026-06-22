@@ -91,5 +91,11 @@ namespace Daily_WinUI.Services
                 throw new Exception($"Phi Silica generation failed. Status: {result.Status}");
             }
         }
+
+        public async IAsyncEnumerable<string> GenerateBriefingStreamAsync(string prompt)
+        {
+            var result = await GenerateBriefingAsync(prompt);
+            yield return result;
+        }
     }
 }

@@ -601,6 +601,28 @@ namespace Daily.Services.Finances
             }
         }
 
+        public async Task<List<LocalLedgerTransaction>> GetLedgerTransactionsAsync()
+        {
+            var user = _supabaseClient.Auth.CurrentUser;
+            if (user == null) return new List<LocalLedgerTransaction>();
+
+            return await _databaseService.Connection.Table<LocalLedgerTransaction>()
+                .Where(t => t.UserId == user.Id && !t.IsDeleted)
+                .OrderByDescending(t => t.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task SaveLedgerTransactionAsync(LocalLedgerTransaction transaction)
+        {
+            var user = _supabaseClient.Auth.CurrentUser;
+            if (user == null) return;
+
+            transaction.UserId = user.Id;
+            transaction.CreatedAt = DateTime.UtcNow;
+
+            await _databaseService.Connection.InsertAsync(transaction);
+        }
+
         public async Task<decimal> GetNetWorthAsync()
         {
             var accounts = await GetAccountsAsync();

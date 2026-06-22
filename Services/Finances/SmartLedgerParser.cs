@@ -49,17 +49,23 @@ namespace Daily.Services.Finances
                     string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
                     string commentPart = commentIdx >= 0 ? line.Substring(commentIdx) : "";
 
-                    // Match the primary value assigned (e.g. "Card = 108" -> captures 108)
-                    var match = Regex.Match(mathPart, @"=\s*([\-\d\.\,]+)");
+                    // Match the primary value assigned and capture everything after it as suffix
+                    var match = Regex.Match(mathPart, @"=\s*([\-\d\.\,]+)(.*)");
                     if (match.Success)
                     {
                         var valStr = match.Groups[1].Value.Replace(',', '.'); // standardize decimal separator
+                        var suffix = match.Groups.Count > 2 ? match.Groups[2].Value : "";
+
                         if (decimal.TryParse(valStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal currentVal))
                         {
                             var newVal = currentVal + amountDelta;
                             // Re-format to avoid too many decimal places
                             string newStr = newVal % 1 == 0 ? newVal.ToString("F0") : newVal.ToString("G");
-                            mathPart = Regex.Replace(mathPart, @"=\s*[\-\d\.\,]+", $"= {newStr}");
+                            
+                            string replacement = $"= {newStr}{suffix}";
+                            
+                            // We replace the entire matched part, which is essentially the entire assignment portion
+                            mathPart = Regex.Replace(mathPart, @"=\s*[\-\d\.\,]+.*", replacement);
                             lines[i] = mathPart + commentPart;
                             break;
                         }
@@ -68,6 +74,36 @@ namespace Daily.Services.Finances
             }
             
             return string.Join(Environment.NewLine, lines);
+        }
+
+        public static decimal ParseValue(string mathPart)
+        {
+            // 1. Asset Tracking: Quantity @ Price (e.g., 10 @ 415.50 or 10 shares @ 415.50)
+            var assetMatch = Regex.Match(mathPart, @"=\s*([\-\d\.\,]+)\s*(?:shares|units|@)?\s*@\s*([\-\d\.\,]+)", RegexOptions.IgnoreCase);
+            if (assetMatch.Success)
+            {
+                var qtyStr = assetMatch.Groups[1].Value.Replace(',', '.');
+                var priceStr = assetMatch.Groups[2].Value.Replace(',', '.');
+                if (decimal.TryParse(qtyStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal qty) &&
+                    decimal.TryParse(priceStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal price))
+                {
+                    return qty * price;
+                }
+            }
+
+            // 2. Goal Yields / Targets: Current => Target (+APY%) OR Current / Target
+            // We just need to extract the first number after =
+            var match = Regex.Match(mathPart, @"=\s*([\-\d\.\,]+)");
+            if (match.Success)
+            {
+                var valStr = match.Groups[1].Value.Replace(',', '.');
+                if (decimal.TryParse(valStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val))
+                {
+                    return val;
+                }
+            }
+
+            return 0;
         }
 
         public static string RecalculateTotals(string ledgerText)
@@ -101,15 +137,7 @@ namespace Daily.Services.Finances
                     int commentIdx = line.IndexOf("//");
                     string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
 
-                    var match = Regex.Match(mathPart, @"=\s*([\-\d\.\,]+)");
-                    if (match.Success)
-                    {
-                        var valStr = match.Groups[1].Value.Replace(',', '.');
-                        if (decimal.TryParse(valStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val))
-                        {
-                            currentSectionSum += val;
-                        }
-                    }
+                    currentSectionSum += ParseValue(mathPart);
                 }
 
                 if (inSection && line.StartsWith("Total ="))
@@ -170,15 +198,7 @@ namespace Daily.Services.Finances
                     int commentIdx = line.IndexOf("//");
                     string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
 
-                    var match = Regex.Match(mathPart, @"=\s*([\-\d\.\,]+)");
-                    if (match.Success)
-                    {
-                        var valStr = match.Groups[1].Value.Replace(',', '.');
-                        if (decimal.TryParse(valStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val))
-                        {
-                            return val;
-                        }
-                    }
+                    return ParseValue(mathPart);
                 }
             }
             return 0;
@@ -193,37 +213,44 @@ namespace Daily.Services.Finances
             
             decimal cash = ExtractTotal(lines, "**Incoming**");
             
-            // Assuming INT is Investments and BIA is deposit/investments in **Deposit** section.
-            // For simplicity based on the DSL:
             decimal investments = 0;
-            bool inDeposit = false;
+            bool inInvestments = false;
             foreach (var line in lines)
             {
-                if (line.Trim() == "**Deposit**") inDeposit = true;
-                else if (line.Trim().StartsWith("**") && line.Trim() != "**Deposit**") inDeposit = false;
+                if (line.Trim() == "**Deposit**" || line.Trim() == "**Investments**") inInvestments = true;
+                else if (line.Trim().StartsWith("**") && line.Trim() != "**Deposit**" && line.Trim() != "**Investments**") inInvestments = false;
 
-                if (inDeposit && line.StartsWith("INT ="))
+                if (inInvestments && line.Contains("=") && !line.StartsWith("Total"))
                 {
                     int commentIdx = line.IndexOf("//");
                     string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
 
-                    // Match INT = 139.604,51
-                    var match = Regex.Match(mathPart, @"=\s*([\-\d\.]+,\d+)");
-                    if (match.Success)
-                    {
-                        // Parse romanian number format: 139.604,51 -> 139604.51
-                        var valStr = match.Groups[1].Value.Replace(".", "").Replace(",", ".");
-                        if (decimal.TryParse(valStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val))
-                        {
-                            investments += val;
-                        }
-                    }
+                    investments += ParseValue(mathPart);
                 }
             }
 
             decimal nw = cash + investments;
 
             return (nw.ToString("N0") + " RON", cash.ToString("N0") + " RON", investments.ToString("N0") + " RON");
+        }
+
+        public static Dictionary<string, string> ExtractTags(string commentPart)
+        {
+            var tags = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            
+            if (string.IsNullOrWhiteSpace(commentPart))
+                return tags;
+
+            // Matches #tag or #key:value
+            var matches = Regex.Matches(commentPart, @"#([a-zA-Z0-9_]+)(?::([^\s]+))?");
+            foreach (Match match in matches)
+            {
+                var key = match.Groups[1].Value;
+                var val = match.Groups.Count > 2 && match.Groups[2].Success ? match.Groups[2].Value : "true";
+                tags[key] = val;
+            }
+
+            return tags;
         }
     }
 }

@@ -419,5 +419,44 @@ namespace Daily.Services
                 SyncedAt = DateTime.UtcNow
             };
         }
+
+        // ==========================================
+        // SMART LEDGER TRANSACTIONS
+        // ==========================================
+
+        public static LedgerTransaction ToDomain(this LocalLedgerTransaction local)
+        {
+            if (!Guid.TryParse(local.Id, out Guid parsedId))
+                parsedId = Guid.Empty;
+                
+            if (!Guid.TryParse(local.UserId, out Guid parsedUserId))
+                parsedUserId = Guid.Empty;
+
+            return new LedgerTransaction
+            {
+                Id = parsedId,
+                UserId = parsedUserId,
+                Source = local.Source,
+                Target = local.Target,
+                Amount = local.Amount,
+                ActionType = local.ActionType,
+                CreatedAt = SafeUtc(local.CreatedAt)
+            };
+        }
+
+        public static LocalLedgerTransaction ToLocal(this LedgerTransaction domain)
+        {
+            return new LocalLedgerTransaction
+            {
+                Id = domain.Id.ToString(),
+                UserId = domain.UserId.ToString(),
+                Source = domain.Source ?? string.Empty,
+                Target = domain.Target ?? string.Empty,
+                Amount = domain.Amount,
+                ActionType = domain.ActionType ?? string.Empty,
+                CreatedAt = SafeUtc(domain.CreatedAt),
+                SyncedAt = DateTime.UtcNow
+            };
+        }
     }
 }
