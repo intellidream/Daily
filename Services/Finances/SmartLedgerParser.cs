@@ -205,10 +205,10 @@ namespace Daily.Services.Finances
             return 0;
         }
 
-        // Extracts key header metrics (Net Worth, Cash, Investments) from the text directly
-        public static (string NetWorth, string Cash, string Investments) ExtractHeaders(string text)
+        // Extracts raw decimal values for charting
+        public static (decimal NetWorth, decimal Cash, decimal Investments) ExtractHeaderValues(string text)
         {
-            if (string.IsNullOrWhiteSpace(text)) return ("$0", "$0", "$0");
+            if (string.IsNullOrWhiteSpace(text)) return (0, 0, 0);
 
             var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             
@@ -231,8 +231,14 @@ namespace Daily.Services.Finances
             }
 
             decimal nw = cash + investments;
+            return (nw, cash, investments);
+        }
 
-            return (nw.ToString("N0") + " RON", cash.ToString("N0") + " RON", investments.ToString("N0") + " RON");
+        // Extracts key header metrics formatted as strings
+        public static (string NetWorth, string Cash, string Investments) ExtractHeaders(string text)
+        {
+            var values = ExtractHeaderValues(text);
+            return (values.NetWorth.ToString("N0") + " RON", values.Cash.ToString("N0") + " RON", values.Investments.ToString("N0") + " RON");
         }
 
         public static List<Daily.Models.Finances.AccountBalance> ExtractBalances(string text)

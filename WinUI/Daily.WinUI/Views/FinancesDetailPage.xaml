@@ -437,7 +437,7 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
-                                <RowDefinition Height="250" />
+                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
@@ -473,20 +473,52 @@
                                          ScrollViewer.VerticalScrollBarVisibility="Auto" />
                             </Border>
 
-                            <!-- Balances Chart -->
-                            <Border x:Name="MoneyChartPanel" Grid.Row="2" Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16" Margin="0,16,16,0">
+                            <!-- Analytics Charts -->
+                            <Border x:Name="MoneyChartPanel" Grid.Row="2" Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="16" Margin="0,16,16,0" Height="400">
                                 <Grid>
-                                    <TextBlock Text="Asset Allocation" FontWeight="SemiBold" Margin="0,0,0,8" Opacity="0.8" />
-                                    <chart:SfCircularChart Margin="0,24,0,0">
-                                        <chart:PieSeries ItemsSource="{x:Bind AccountBalances, Mode=OneWay}" 
-                                                         XBindingPath="AccountName" 
-                                                         YBindingPath="Balance" 
-                                                         ShowDataLabels="True">
-                                            <chart:PieSeries.DataLabelSettings>
-                                                <chart:CircularDataLabelSettings Position="Outside" />
-                                            </chart:PieSeries.DataLabelSettings>
-                                        </chart:PieSeries>
-                                    </chart:SfCircularChart>
+                                    <TextBlock Text="Analytics" FontWeight="SemiBold" Margin="0,0,0,8" Opacity="0.8" />
+                                    <FlipView Margin="0,24,0,0" Background="Transparent">
+                                        <!-- Chart 1: Balances by Account -->
+                                        <FlipViewItem>
+                                            <Grid>
+                                                <TextBlock Text="Balances by Account" FontSize="12" Opacity="0.6" HorizontalAlignment="Center" Margin="0,0,0,4" />
+                                                <chart:SfCircularChart Margin="0,16,0,0" Background="Transparent">
+                                                    <chart:SfCircularChart.Legend>
+                                                        <chart:ChartLegend Placement="Right" />
+                                                    </chart:SfCircularChart.Legend>
+                                                    <chart:DoughnutSeries ItemsSource="{x:Bind AccountBalances, Mode=OneWay}" 
+                                                                     XBindingPath="AccountName" 
+                                                                     YBindingPath="Balance" 
+                                                                     ShowDataLabels="True"
+                                                                     EnableAnimation="True">
+                                                        <chart:DoughnutSeries.DataLabelSettings>
+                                                            <chart:CircularDataLabelSettings Position="Outside" />
+                                                        </chart:DoughnutSeries.DataLabelSettings>
+                                                    </chart:DoughnutSeries>
+                                                </chart:SfCircularChart>
+                                            </Grid>
+                                        </FlipViewItem>
+                                        <!-- Chart 2: Cash vs Investments -->
+                                        <FlipViewItem>
+                                            <Grid>
+                                                <TextBlock Text="Asset Classes" FontSize="12" Opacity="0.6" HorizontalAlignment="Center" Margin="0,0,0,4" />
+                                                <chart:SfCircularChart Margin="0,16,0,0" Background="Transparent">
+                                                    <chart:SfCircularChart.Legend>
+                                                        <chart:ChartLegend Placement="Right" />
+                                                    </chart:SfCircularChart.Legend>
+                                                    <chart:DoughnutSeries ItemsSource="{x:Bind AssetCategories, Mode=OneWay}" 
+                                                                     XBindingPath="AccountName" 
+                                                                     YBindingPath="Balance" 
+                                                                     ShowDataLabels="True"
+                                                                     EnableAnimation="True">
+                                                        <chart:DoughnutSeries.DataLabelSettings>
+                                                            <chart:CircularDataLabelSettings Position="Outside" />
+                                                        </chart:DoughnutSeries.DataLabelSettings>
+                                                    </chart:DoughnutSeries>
+                                                </chart:SfCircularChart>
+                                            </Grid>
+                                        </FlipViewItem>
+                                    </FlipView>
                                 </Grid>
                             </Border>
 
@@ -522,13 +554,13 @@
                             </Border>
 
                             <!-- Transaction History -->
-                            <Border x:Name="MoneyTransactionsBorder" Grid.Row="2" Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="16" Margin="0,16,0,0">
+                            <Border x:Name="MoneyTransactionsBorder" Grid.Row="2" Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Padding="16" Margin="0,16,0,0" Height="400">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
-                                    <TextBlock Grid.Row="0" Text="Transaction History" FontWeight="SemiBold" Margin="0,0,0,16" Opacity="0.8" />
+                                    <TextBlock Grid.Row="0" Text="History" FontWeight="SemiBold" Margin="0,0,0,16" Opacity="0.8" />
                                     <ListView Grid.Row="1" ItemsSource="{x:Bind LedgerTransactions, Mode=OneWay}" 
                                               SelectionMode="None" Margin="0,0,0,16"
                                               ScrollViewer.VerticalScrollBarVisibility="Auto">

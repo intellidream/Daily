@@ -18,11 +18,15 @@ The Smart Ledger now tracks transactions to create an immutable audit trail of c
 The transactions are synced incrementally using `PushLedgerTransactionsAsync` and `PullLedgerTransactionsInternalAsync` within the `SyncService`. They rely on the `UpdatedAt/CreatedAt` and `SyncedAt` fields to sync differential changes since the last pull.
 
 ## User Interface
-A new "Transaction History" list has been added to the Finances detail page below the chat input. It displays the recent ledger transactions with:
+A new "History" list has been added to the Finances detail page below the chat input. It displays the recent ledger transactions with:
 - Timestamp of the action
 - Source and Target text
 - The Action Type
 - Formatted numerical amount.
+
+An "Analytics" panel has been added on the bottom left. It uses a swipeable FlipView to show multiple Doughnut charts:
+- Balances by Account
+- Asset Classes (Cash vs Investments)
 
 ## Next Steps
 In the future, the target limits logic (budgets) could be evaluated historically using this transaction history to show limit adherence over time.

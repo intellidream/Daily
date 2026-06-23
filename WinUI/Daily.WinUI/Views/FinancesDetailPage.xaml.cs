@@ -78,6 +78,13 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         set { _accountBalances = value; OnPropertyChanged(); } 
     }
 
+    private ObservableCollection<AccountBalance> _assetCategories = new();
+    public ObservableCollection<AccountBalance> AssetCategories
+    {
+        get => _assetCategories;
+        set { _assetCategories = value; OnPropertyChanged(); }
+    }
+
     // Smart Ledger
     private string _smartLedgerText = string.Empty;
     public string SmartLedgerText
@@ -365,6 +372,13 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         NetWorthDisplay = headers.NetWorth;
         CashDisplay = headers.Cash;
         InvestmentsDisplay = headers.Investments;
+        
+        var values = Daily.Services.Finances.SmartLedgerParser.ExtractHeaderValues(_smartLedgerText);
+        AssetCategories = new ObservableCollection<AccountBalance>
+        {
+            new AccountBalance { AccountName = "Cash", Balance = values.Cash },
+            new AccountBalance { AccountName = "Investments", Balance = values.Investments }
+        };
         
         var balances = Daily.Services.Finances.SmartLedgerParser.ExtractBalances(_smartLedgerText);
         AccountBalances = new ObservableCollection<AccountBalance>(balances);
