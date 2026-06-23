@@ -23,6 +23,7 @@ namespace Daily.Services
 #endif
             var flags = SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.SharedCache;
             // Reverting back to default (Ticks) because historical data was already saved as Ticks.
+            SQLitePCL.Batteries_V2.Init();
             _connection = new SQLiteAsyncConnection(dbPath, flags);
         }
 
