@@ -19,7 +19,7 @@
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <Nullable>enable</Nullable>
         <NoWarn>$(NoWarn);NU1510</NoWarn>
-        <DefaultItemExcludes>$(DefaultItemExcludes);WinUI\**</DefaultItemExcludes>
+        <DefaultItemExcludes>$(DefaultItemExcludes);WinUI\**;scratch\**</DefaultItemExcludes>
 
         <!-- Display name -->
         <ApplicationTitle>Daily</ApplicationTitle>
@@ -83,27 +83,26 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="AngleSharp" Version="1.4.0" />
-        <PackageReference Include="CommunityToolkit.Maui" Version="14.0.1" />
-        <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.50" />
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.50" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.4" />
-        <PackageReference Include="MudBlazor" Version="9.1.0" />
+        <PackageReference Include="AngleSharp" Version="1.5.1" />
+        <PackageReference Include="CommunityToolkit.Maui" Version="14.2.0" />
+        <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.71" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.71" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.9" />
+        <PackageReference Include="MudBlazor" Version="9.5.0" />
         <PackageReference Include="H.NotifyIcon.Maui" Version="2.4.1" />
         <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
         <PackageReference Include="Plugin.Maui.Audio" Version="4.0.0" />
-        <PackageReference Include="postgrest-csharp" Version="3.5.1" />
-        <PackageReference Include="SmartReader" Version="0.10.2" />
-        <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
-        <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
+        <PackageReference Include="SmartReader" Version="0.11.0" />
+        <PackageReference Include="sqlite-net-base" Version="1.9.172" />
+        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
         <PackageReference Include="Supabase" Version="1.1.1" />
-        <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.4" />
-        <PackageReference Include="System.Text.Json" Version="10.0.4" />
+        <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.9" />
+        <PackageReference Include="System.Text.Json" Version="10.0.9" />
         <PackageReference Include="YahooFinanceApi" Version="2.3.3" />
     </ItemGroup>
     <ItemGroup Condition="$(TargetFramework.Contains('android'))">
-        <PackageReference Include="Xamarin.AndroidX.Health.Connect.ConnectClient" Version="1.1.0.2" />
+        <PackageReference Include="Xamarin.AndroidX.Health.Connect.ConnectClient" Version="1.1.0.3" />
         <!-- Force newer versions to resolve conflicts with CommunityToolkit.Maui -->
         <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData" Version="2.10.0.2" />
         <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData.Core" Version="2.10.0.2" />
@@ -115,7 +114,7 @@
         <PackageReference Include="Xamarin.AndroidX.Lifecycle.ViewModelSavedState" Version="2.10.0.2" />
         
         <!-- Fix for Duplicate Class androidx.compose.runtime.Stable/Immutable (Android vs JVM) -->
-        <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="1.10.4.1" ExcludeAssets="all" />
+        <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="1.11.2" ExcludeAssets="all" />
     </ItemGroup>
 
     <ItemGroup>
@@ -130,6 +129,14 @@
         <MauiAsset Remove="WinUI\**\*.*" />
         <MauiXaml Remove="WinUI\**\*.xaml" />
         <Page Remove="WinUI\**\*.xaml" />
+
+        <!-- Ignore scratch sub-project completely -->
+        <Compile Remove="scratch\**\*.cs" />
+        <EmbeddedResource Remove="scratch\**\*.*" />
+        <None Remove="scratch\**\*.*" />
+        <MauiAsset Remove="scratch\**\*.*" />
+        <MauiXaml Remove="scratch\**\*.xaml" />
+        <Page Remove="scratch\**\*.xaml" />
 
         <!-- Prevent MAUI Apple targets from crashing on unexpanded literal wildcards -->
         <Content Remove="**/*.config" />
