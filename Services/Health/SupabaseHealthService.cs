@@ -21,6 +21,7 @@ namespace Daily.Services.Health
         private readonly IRefreshService _refreshService;
         private readonly IDatabaseService _databaseService;
         private Supabase.Realtime.RealtimeChannel? _vitalsChannel;
+        private Supabase.Realtime.RealtimeChannel? _healthVitalsChannel;
         private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _authStateChangedHandler;
         private Supabase.Realtime.Interfaces.IRealtimeClient<Supabase.Realtime.RealtimeSocket, Supabase.Realtime.RealtimeChannel>.SocketStateEventHandler? _realtimeStateChangedHandler;
 
@@ -151,6 +152,15 @@ namespace Daily.Services.Health
                     catch { }
                     _vitalsChannel = null;
                 }
+                if (_healthVitalsChannel != null)
+                {
+                    try
+                    {
+                        _healthVitalsChannel.Unsubscribe();
+                    }
+                    catch { }
+                    _healthVitalsChannel = null;
+                }
             }
         }
 
@@ -234,6 +244,13 @@ namespace Daily.Services.Health
                     try { _supabase.Realtime.Remove(_vitalsChannel); } catch { }
                     _vitalsChannel = null;
                 }
+                
+                if (forceRecreate && _healthVitalsChannel != null)
+                {
+                    try { _healthVitalsChannel.Unsubscribe(); } catch { }
+                    try { _supabase.Realtime.Remove(_healthVitalsChannel); } catch { }
+                    _healthVitalsChannel = null;
+                }
 
                 if (_vitalsChannel != null && !_vitalsChannel.IsJoined)
                 {
@@ -248,6 +265,16 @@ namespace Daily.Services.Health
                     }
                     _vitalsChannel = null;
                 }
+                
+                if (_healthVitalsChannel != null && !_healthVitalsChannel.IsJoined)
+                {
+                    try
+                    {
+                        _supabase.Realtime.Remove(_healthVitalsChannel);
+                    }
+                    catch { }
+                    _healthVitalsChannel = null;
+                }
 
                 if (_vitalsChannel == null)
                 {
@@ -255,13 +282,22 @@ namespace Daily.Services.Health
                     if (!string.IsNullOrEmpty(userId))
                     {
                         _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
+                        _healthVitalsChannel = _supabase.Realtime.Channel("realtime_health", "public", "health_vitals", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
                     }
                     else
                     {
                         _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", null, null, new Dictionary<string, string>());
+                        _healthVitalsChannel = _supabase.Realtime.Channel("realtime_health", "public", "health_vitals", null, null, new Dictionary<string, string>());
                     }
                     _vitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnVitalReceived);
                     await _vitalsChannel.Subscribe();
+                    
+                    if (_healthVitalsChannel != null)
+                    {
+                        _healthVitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHealthVitalReceived);
+                        await _healthVitalsChannel.Subscribe();
+                    }
+                    
                     Console.WriteLine($"[SupabaseHealthService] Realtime subscribed to vitals. Filtered user: {userId}");
                 }
             }
@@ -367,6 +403,73 @@ namespace Daily.Services.Health
             catch (Exception ex)
             {
                 Console.WriteLine($"[SupabaseHealthService] Realtime Vital Error in OnVitalReceived: {ex}");
+            }
+        }
+
+        private void OnHealthVitalReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
+        {
+            try
+            {
+                Console.WriteLine($"[SupabaseHealthService] Realtime HealthVital Postgres Change received! Event: {e.Event}, Topic: {e.Topic}");
+                
+                var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                if (user == null || !Guid.TryParse(user.Id, out var uid))
+                {
+                    return;
+                }
+
+                if (e.Event == Supabase.Realtime.Constants.EventType.Delete)
+                {
+                    var deletedVital = e.Model<HealthVitalMetric>();
+                    if (deletedVital != null && deletedVital.Id != Guid.Empty)
+                    {
+                        var deleteId = deletedVital.Id.ToString().ToLowerInvariant();
+                        Console.WriteLine($"[SupabaseHealthService] Realtime: Deleting health_vitals {deleteId} locally.");
+                        Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await _databaseService.InitializeAsync();
+                                await _databaseService.Connection.ExecuteAsync("DELETE FROM vitals WHERE Id = ?", deleteId);
+                                await _refreshService.TriggerHealthRefreshAsync();
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"[SupabaseHealthService] Realtime delete error: {ex.Message}");
+                            }
+                        });
+                    }
+                    return;
+                }
+
+                var remoteVital = e.Model<HealthVitalMetric>();
+                if (remoteVital == null)
+                {
+                    Console.WriteLine("[SupabaseHealthService] Realtime: remoteVital is NULL! Cannot parse database change.");
+                    return;
+                }
+
+                string currentUserIdStr = user?.Id ?? "NULL";
+                Console.WriteLine($"[SupabaseHealthService] Realtime parsed remoteVital: Id={remoteVital.Id}, UserId={remoteVital.UserId}, Type={remoteVital.TypeString}, Value={remoteVital.Value}, CurrentUserId={currentUserIdStr}");
+
+                bool isMatch = remoteVital.UserId == uid || remoteVital.UserId == Guid.Empty;
+
+                if (isMatch)
+                {
+                    Console.WriteLine($"[SupabaseHealthService] Realtime: Match found. Saving remote health_vital directly to local cache.");
+                    Task.Run(async () =>
+                    {
+                        await SaveRemoteVitalToLocalAsync(remoteVital.ToVitalMetric());
+                    });
+                }
+                else
+                {
+                    Console.WriteLine($"[SupabaseHealthService] Realtime: User ID mismatch. remoteVital.UserId={remoteVital.UserId}, uid={user?.Id}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SupabaseHealthService] Realtime HealthVital Error in OnHealthVitalReceived: {ex}");
             }
         }
 

@@ -590,6 +590,54 @@
                 </StackPanel>
             </Border>
 
+            <!-- SECTION: DayOne Orbit -->
+            <TextBlock Text="DayOne Orbit" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+            
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="16">
+                    <!-- Pairing -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Smartwatch Pairing" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Link your standalone smartwatch to this account. The watch will orbit this application, passively syncing health data directly to the cloud." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button Grid.Column="1" x:Name="OrbitLinkWatchBtn" Content="Link Smartwatch" Click="OrbitLinkWatchBtn_Click" Style="{ThemeResource DefaultButtonStyle}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                    
+                    <!-- Pairing PIN Display (Collapsed by default) -->
+                    <StackPanel x:Name="OrbitPinPanel" Visibility="Collapsed" Spacing="8" Margin="0,8,0,0">
+                        <TextBlock Text="Enter this 6-digit PIN on your smartwatch to link it:" FontSize="13" />
+                        <TextBlock x:Name="OrbitPinText" Text="------" FontSize="28" FontWeight="Bold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" HorizontalAlignment="Center" CharacterSpacing="200" />
+                        <TextBlock Text="This PIN expires in 10 minutes." FontSize="11" Opacity="0.6" HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <!-- Sync Frequency -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Watch Sync Frequency" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="How often the watch should wake up to batch sync health data. More frequent syncs use more battery." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="OrbitSyncFrequencyCombo" SelectionChanged="OrbitSyncFrequencyCombo_SelectionChanged" VerticalAlignment="Center" Margin="12,0,0,0" Width="150">
+                            <ComboBoxItem Content="Every 15 minutes" Tag="15" />
+                            <ComboBoxItem Content="Every 30 minutes" Tag="30" />
+                            <ComboBoxItem Content="Hourly" Tag="60" />
+                        </ComboBox>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <!-- SECTION 3: Configurable Traditional Features -->
             <TextBlock Text="Traditional Features" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
 

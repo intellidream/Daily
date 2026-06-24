@@ -65,6 +65,9 @@ public sealed class AppSettings
     public string? MediumUsername { get; set; }
     public string? MediumReadingListUrl { get; set; }
 
+    // ── DayOne Orbit Configurations ──
+    public int WatchSyncFrequency { get; set; } = 15;
+
     // ── Health Configurations ──
     public bool HealthMockDataEnabled { get; set; } = false;
     public double HealthSleepTargetHours { get; set; } = 8.0;

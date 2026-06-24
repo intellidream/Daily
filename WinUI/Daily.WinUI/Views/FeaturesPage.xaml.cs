@@ -128,6 +128,19 @@ public sealed partial class FeaturesPage : Page
             SmartBehaviorSwitch.IsOn = _settings.EnableSmartBehavior;
             SmartBehaviorSyncSwitch.IsOn = _settings.SyncSmartBehaviorToCloud;
 
+            // ── DayOne Orbit ──
+            int syncFreq = _settings.WatchSyncFrequency;
+            int freqIdx = 0;
+            for (int i = 0; i < OrbitSyncFrequencyCombo.Items.Count; i++)
+            {
+                if (OrbitSyncFrequencyCombo.Items[i] is ComboBoxItem item && int.TryParse(item.Tag?.ToString(), out int tagVal) && tagVal == syncFreq)
+                {
+                    freqIdx = i;
+                    break;
+                }
+            }
+            OrbitSyncFrequencyCombo.SelectedIndex = freqIdx;
+
             // ── SECTION 3: Configurable Traditional Features ──
             // Weather
             WeatherAutoLocationSwitch.IsOn = _settings.AlwaysAutoLocation;
@@ -705,6 +718,66 @@ public sealed partial class FeaturesPage : Page
     }
 
     // ── EVENT HANDLERS ──
+
+    private async void OrbitLinkWatchBtn_Click(object sender, RoutedEventArgs e)
+    {
+        OrbitPinPanel.Visibility = Visibility.Visible;
+        OrbitLinkWatchBtn.IsEnabled = false;
+        OrbitPinText.Text = "------";
+        
+        try
+        {
+            var supabase = App.Current.Services.GetRequiredService<Supabase.Client>();
+            var currentUser = supabase.Auth.CurrentUser;
+            if (currentUser != null)
+            {
+                var random = new Random();
+                string pin = random.Next(100000, 1000000).ToString();
+                
+                var pairingCode = new Daily.Models.Health.WatchPairingCode
+                {
+                    PinCode = pin,
+                    UserId = Guid.Parse(currentUser.Id),
+                    CreatedAt = DateTime.UtcNow,
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+                    Claimed = false
+                };
+
+                await supabase.From<Daily.Models.Health.WatchPairingCode>().Insert(pairingCode);
+                OrbitPinText.Text = pin;
+            }
+            else
+            {
+                OrbitPinText.Text = "Login Required";
+                OrbitPinText.FontSize = 16;
+            }
+        }
+        catch (Supabase.Postgrest.Exceptions.PostgrestException)
+        {
+            // Usually happens if the user hasn't run the DayOneOrbit_Schema.sql script
+            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] PostgrestException: watch_pairing_codes table might be missing.");
+            OrbitPinText.Text = "DB_Err";
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Failed to generate PIN: {ex}");
+            OrbitPinText.Text = "Error!";
+        }
+        finally
+        {
+            OrbitLinkWatchBtn.IsEnabled = true;
+        }
+    }
+
+    private void OrbitSyncFrequencyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isInitializing || _settings == null || OrbitSyncFrequencyCombo == null) return;
+        if (OrbitSyncFrequencyCombo.SelectedItem is ComboBoxItem item && int.TryParse(item.Tag?.ToString(), out int freq))
+        {
+            _settings.WatchSyncFrequency = freq;
+            SettingsService.Save(_settings);
+        }
+    }
 
     private void SmartBriefingSwitch_Toggled(object sender, RoutedEventArgs e)
     {
