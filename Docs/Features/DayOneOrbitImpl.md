@@ -8,7 +8,7 @@ The objective is to establish a standalone smartwatch ecosystem where smart devi
 ### New Tables
 - **`health_telemetry`**: Stores raw, highly granular time-series data pushed directly by the standalone smartwatch (e.g. 5-minute interval heart rates).
 - **`health_vitals`**: Stores daily aggregated snapshots (e.g. total steps for the day, latest resting heart rate). This runs parallel to the legacy `vitals` table until full migration.
-- **`watch_pairing_codes`**: Manages secure OTP (One Time Password) pairing logic to bind a new smartwatch to an authenticated user's account without requiring complex OAuth flows on the watch's small screen.
+- **`watch_pairing_codes`**: Manages secure OTP (One Time Password) pairing logic to bind a new smartwatch to an authenticated user's account without requiring complex OAuth flows on the watch's small screen. During creation, the desktop application injects its current `access_token` and `refresh_token` into the record so the watch can inherit the authentication session immediately upon claiming the PIN.
 
 ### Triggers & Aggregation
 A PostgreSQL Trigger (`trigger_aggregate_health_telemetry`) is attached to `health_telemetry` `AFTER INSERT`. It fires a function (`aggregate_health_telemetry_to_vitals`) that determines if a metric is cumulative (e.g., Steps) or absolute (e.g., Heart Rate). It then updates the `health_vitals` table via an `ON CONFLICT (user_id, date, type) DO UPDATE` UPSERT operation. 

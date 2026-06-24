@@ -7,11 +7,18 @@ namespace Daily.Models.Health
     [Table("watch_pairing_codes")]
     public class WatchPairingCode : BaseModel
     {
-        [PrimaryKey("pin_code", false)] // pin_code is the primary key
+        [PrimaryKey("pin_code", false)]
+        [Column("pin_code")]
         public string PinCode { get; set; } = string.Empty;
 
         [Column("user_id")]
         public Guid UserId { get; set; }
+
+        [Column("access_token")]
+        public string? AccessToken { get; set; }
+
+        [Column("refresh_token")]
+        public string? RefreshToken { get; set; }
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -738,6 +738,8 @@ public sealed partial class FeaturesPage : Page
                 {
                     PinCode = pin,
                     UserId = Guid.Parse(currentUser.Id),
+                    AccessToken = supabase.Auth.CurrentSession?.AccessToken,
+                    RefreshToken = supabase.Auth.CurrentSession?.RefreshToken,
                     CreatedAt = DateTime.UtcNow,
                     ExpiresAt = DateTime.UtcNow.AddMinutes(10),
                     Claimed = false
