@@ -1,5 +1,7 @@
 import SwiftUI
 import WatchConnectivity
+import HealthKit
+import Supabase
 
 struct ContentView: View {
     @StateObject private var sessionManager = WatchSessionManager.shared
@@ -17,6 +19,47 @@ struct ContentView: View {
                     .tabItem {
                         Label("Smokes", systemImage: "flame.fill")
                     }
+                
+                #if targetEnvironment(simulator)
+                VStack {
+                    Button("Inject Mock HR") {
+                        Task {
+                            guard let pClient = WatchSessionManager.shared.supabaseClient,
+                                  let userId = WatchSessionManager.shared.currentUserId else { return }
+                            
+                            let dateFormatter = ISO8601DateFormatter()
+                            dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                            
+                            // Create a direct mock payload
+                            let payload = TelemetryPayload(
+                                user_id: userId.uuidString,
+                                type: "heart_rate",
+                                value: 75.0,
+                                unit: "bpm",
+                                start_time: dateFormatter.string(from: Date()),
+                                end_time: dateFormatter.string(from: Date()),
+                                source_device: "Apple Watch (Mock Injection)"
+                            )
+                            
+                            do {
+                                try await pClient.from("health_telemetry").insert([payload]).execute()
+                                print("Successfully injected mock HR directly to Supabase")
+                            } catch {
+                                print("Failed to inject to Supabase: \(error)")
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                    
+                    Text("Forces a sync to Supabase")
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                }
+                .tabItem {
+                    Label("Debug", systemImage: "ladybug.fill")
+                }
+                #endif
             }
         } else {
             ScrollView {
