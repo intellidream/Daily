@@ -11,6 +11,16 @@ struct WatchPairing: Codable {
     let created_at: String?
 }
 
+struct WatchPairingCode: Codable {
+    let pin_code: String
+    let user_id: String
+    let access_token: String?
+    let refresh_token: String?
+    let created_at: String?
+    let expires_at: String?
+    let claimed: Bool
+}
+
 // Persistent pairing record — mirrors the paired_watches Supabase table
 struct PairedWatchRecord: Codable {
     let id: String?
@@ -105,35 +115,88 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     }
     
     func generatePairingCode() {
+        // Keeping as a fallback for WCSession, but we don't start polling by default anymore
+        // since the primary flow is now DayOne Orbit.
+        self.pairingCode = String(format: "%06d", Int.random(in: 0...999999))
+    }
+    
+    func claimOrbitPin(pin: String) {
         self.isPairing = true
         self.errorMessage = ""
-        // Generate random 6 digit code
-        self.pairingCode = String(format: "%06d", Int.random(in: 0...999999))
         
         Task {
             do {
-                let dict: [String: String] = ["code": self.pairingCode]
+                let rpcUrl = supabaseUrl.appendingPathComponent("rest/v1/rpc/claim_orbit_pin")
                 
-                guard var components = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/watch_pairings"), resolvingAgainstBaseURL: false) else { return }
-                guard let url = components.url else { return }
-                
-                var request = URLRequest(url: url)
+                var request = URLRequest(url: rpcUrl)
                 request.httpMethod = "POST"
                 request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
                 request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = try JSONSerialization.data(withJSONObject: dict)
+                request.httpBody = try JSONSerialization.data(withJSONObject: ["p_pin_code": pin])
                 
-                let (_, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: request)
                 
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     throw NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP Error \(httpResponse.statusCode)"])
                 }
                 
-                self.startPolling()
+                // The RPC returns an array of rows (even if it's just 1 row) containing user_id, access_token, refresh_token
+                struct RpcResponse: Codable {
+                    let user_id: String
+                    let access_token: String
+                    let refresh_token: String
+                }
+                
+                let pairings = try JSONDecoder().decode([RpcResponse].self, from: data)
+                
+                if let pairing = pairings.first {
+                    let token = pairing.access_token
+                    let refresh = pairing.refresh_token
+                    
+                    DispatchQueue.main.async {
+                        UserDefaults.standard.set(token, forKey: "supabase_access_token")
+                        UserDefaults.standard.set(refresh, forKey: "supabase_refresh_token")
+                    }
+                    
+                    let options = SupabaseClientOptions(auth: SupabaseClientOptions.AuthOptions(autoRefreshToken: false, emitLocalSessionAsInitialSession: true))
+                    self.supabaseClient = SupabaseClient(supabaseURL: supabaseUrl, supabaseKey: supabaseAnonKey, options: options)
+                    self.listenToAuthState()
+                    
+                    do {
+                        try await self.supabaseClient?.auth.setSession(accessToken: token, refreshToken: refresh)
+                        
+                        DispatchQueue.main.async {
+                            if let userId = self.extractUserId(from: token) {
+                                self.currentUserId = userId
+                            }
+                            self.isAuthenticated = true
+                            self.isPairing = false
+                            
+                            if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                                groupPrefs.set(token, forKey: "supabase_access_token")
+                            }
+                        }
+                    } catch {
+                        print("Failed to initialize Auth session: \(error)")
+                        DispatchQueue.main.async {
+                            self.errorMessage = "Auth Initialization Failed."
+                            self.isPairing = false
+                        }
+                    }
+                    
+                    // We don't delete the row, we just marked it claimed.
+                    await self.registerPairing(accessToken: token)
+                } else {
+                    DispatchQueue.main.async {
+                        self.errorMessage = "Invalid or expired PIN."
+                        self.isPairing = false
+                    }
+                }
             } catch {
                 DispatchQueue.main.async {
-                    self.errorMessage = "Insert Err: \(error.localizedDescription)"
+                    self.errorMessage = "Error: \(error.localizedDescription)"
+                    self.isPairing = false
                 }
             }
         }

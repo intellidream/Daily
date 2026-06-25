@@ -111,3 +111,26 @@ CREATE TRIGGER trigger_aggregate_health_telemetry
 AFTER INSERT ON public.health_telemetry
 FOR EACH ROW
 EXECUTE FUNCTION aggregate_health_telemetry_to_vitals();
+
+-- 5. RPC for Claiming PIN
+-- We use a SECURITY DEFINER function to allow the anonymous watch app to claim a pin
+-- and retrieve the tokens without giving the 'anon' role blanket SELECT access to the table.
+CREATE OR REPLACE FUNCTION claim_orbit_pin(p_pin_code VARCHAR(6))
+RETURNS TABLE (
+    user_id UUID,
+    access_token TEXT,
+    refresh_token TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    UPDATE public.watch_pairing_codes
+    SET claimed = TRUE
+    WHERE pin_code = p_pin_code
+      AND NOT claimed
+      AND expires_at > NOW()
+    RETURNING watch_pairing_codes.user_id, watch_pairing_codes.access_token, watch_pairing_codes.refresh_token;
+END;
+$$;

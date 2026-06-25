@@ -3,6 +3,7 @@ import WatchConnectivity
 
 struct ContentView: View {
     @StateObject private var sessionManager = WatchSessionManager.shared
+    @State private var inputPin: String = ""
     
     var body: some View {
         if sessionManager.isAuthenticated {
@@ -18,36 +19,55 @@ struct ContentView: View {
                     }
             }
         } else {
-            VStack {
-                if !sessionManager.errorMessage.isEmpty {
-                    Text("Error")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                    Text(sessionManager.errorMessage)
-                        .font(.caption)
-                        .multilineTextAlignment(.center)
-                        
-                    Button("Retry") {
-                        sessionManager.generatePairingCode()
+            ScrollView {
+                VStack(spacing: 8) {
+                    if !sessionManager.errorMessage.isEmpty {
+                        Text(sessionManager.errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
                     }
-                    .padding(.top, 5)
-                } else if sessionManager.isPairing {
-                    Text("Pairing Code")
-                        .font(.headline)
-                        .foregroundColor(.accentColor)
+                    
+                    if sessionManager.isPairing {
+                        ProgressView("Pairing...")
+                            .padding()
+                    } else {
+                        Text("DayOne Orbit")
+                            .font(.headline)
+                            .foregroundColor(.accentColor)
+                            
+                        Text("Enter the 6-digit PIN from the Desktop App.")
+                            .font(.system(size: 11))
+                            .multilineTextAlignment(.center)
+                            .padding(.bottom, 2)
                         
-                    Text(sessionManager.pairingCode)
-                        .font(.system(size: 34, weight: .bold, design: .monospaced))
-                        .padding(.vertical, 8)
+                        TextField("123456", text: $inputPin)
+                            .textContentType(.oneTimeCode)
+                            .multilineTextAlignment(.center)
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
                         
-                    Text("Open Daily on iPhone:\nSettings -> Pair Watch")
-                        .font(.system(size: 11))
-                        .multilineTextAlignment(.center)
-                } else {
-                    ProgressView("Loading...")
+                        Button("Link Watch") {
+                            sessionManager.claimOrbitPin(pin: inputPin)
+                        }
+                        .disabled(inputPin.count != 6)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.accentColor)
+                        
+                        Divider().padding(.vertical, 4)
+                        
+                        Button("Pair via iPhone") {
+                            sessionManager.generatePairingCode()
+                        }
+                        .font(.system(size: 12))
+                        
+                        if !sessionManager.pairingCode.isEmpty {
+                            Text(sessionManager.pairingCode)
+                                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        }
+                    }
                 }
+                .padding()
             }
-            .padding()
         }
     }
 }
