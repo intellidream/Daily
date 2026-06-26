@@ -40,6 +40,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     @Published var isAuthenticated: Bool = false
     @Published var pairingCode: String = ""
     @Published var isPairing: Bool = false
+    @Published var isCheckingSession: Bool = true
     @Published var errorMessage: String = ""
     @Published var currentUserId: UUID?
     
@@ -76,20 +77,28 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
             self.listenToAuthState()
             
             Task {
+                // FIRST, check for repair tokens / remote unpair BEFORE dropping the loading screen.
+                // If the watch was remotely unpaired, this returns true and schedules logout().
+                let wasLoggedOut = await self.checkForRepairTokens()
+                
+                guard !wasLoggedOut else {
+                    // isCheckingSession will be set to false by logout()
+                    return
+                }
+                
                 do {
                     // Hand tokens to the Supabase Auth module so it manages the session.
                     try await self.supabaseClient?.auth.setSession(accessToken: accessToken, refreshToken: refreshToken)
                     
-                    // We no longer forcefully refresh tokens on wake. 
-                    // Instead, we rely on the Central Hub (MAUI App) pushing fresh tokens
-                    // to the paired_watches table and checkForRepairTokens() picking them up.
-                    // try? await self.supabaseClient?.auth.refreshSession()
-                    
                     DispatchQueue.main.async {
+                        // Double check we haven't been forcefully unpaired during the async operation
+                        guard UserDefaults.standard.string(forKey: "paired_watch_id") != nil else { return }
+                        
                         if let userId = self.extractUserId(from: accessToken) {
                             self.currentUserId = userId
                         }
                         self.isAuthenticated = true
+                        self.isCheckingSession = false
                         self.isPairing = false
                         
                         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
@@ -101,16 +110,21 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                     // We will retry on activation if networking was unavailable.
                     print("Initial session restore failed: \(error). Will retry on activation.")
                     DispatchQueue.main.async {
+                        guard UserDefaults.standard.string(forKey: "paired_watch_id") != nil else { return }
                         if let userId = self.extractUserId(from: accessToken) {
                             self.currentUserId = userId
                             self.isAuthenticated = true
+                            self.isCheckingSession = false
                             self.isPairing = false
                         }
                     }
                 }
             }
         } else {
-            self.generatePairingCode()
+            DispatchQueue.main.async {
+                self.isCheckingSession = false
+                self.generatePairingCode()
+            }
         }
     }
     
@@ -372,6 +386,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         }
         
         self.isAuthenticated = false
+        self.isCheckingSession = false
         self.currentUserId = nil
         self.supabaseClient = nil
         self.generatePairingCode()
@@ -415,16 +430,18 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     
     /// Checks the paired_watches table for pending repair tokens pushed from the main app.
     /// If found, consumes them and replaces the current session.
-    private func checkForRepairTokens() async {
-        guard let pairId = UserDefaults.standard.string(forKey: "paired_watch_id") else { return }
+    /// Returns `true` if this check resulted in a forceful unpairing/logout.
+    @discardableResult
+    private func checkForRepairTokens() async -> Bool {
+        guard let pairId = UserDefaults.standard.string(forKey: "paired_watch_id") else { return false }
         
         do {
-            guard var components = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/paired_watches"), resolvingAgainstBaseURL: false) else { return }
+            guard var components = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/paired_watches"), resolvingAgainstBaseURL: false) else { return false }
             components.queryItems = [
                 URLQueryItem(name: "id", value: "eq.\(pairId)"),
-                URLQueryItem(name: "select", value: "pending_access_token,pending_refresh_token")
+                URLQueryItem(name: "select", value: "pending_access_token,pending_refresh_token,is_active")
             ]
-            guard let url = components.url else { return }
+            guard let url = components.url else { return false }
             
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
@@ -436,10 +453,18 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
             let (data, _) = try await URLSession.shared.data(for: request)
             let rows = try JSONDecoder().decode([PairedWatchRecord].self, from: data)
             
-            guard let row = rows.first,
-                  let token = row.pending_access_token, !token.isEmpty,
+            // If the record was deleted or marked inactive, forcefully unpair the watch
+            guard let row = rows.first, row.is_active != false else {
+                print("Watch pairing record deleted or inactive. Logging out.")
+                DispatchQueue.main.async {
+                    self.logout()
+                }
+                return true
+            }
+            
+            guard let token = row.pending_access_token, !token.isEmpty,
                   let refresh = row.pending_refresh_token, !refresh.isEmpty else {
-                return  // No pending repair tokens
+                return false  // No pending repair tokens, but watch is still active
             }
             
             print("Repair tokens found! Applying new session.")
@@ -468,9 +493,9 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
             }
             
             // Clear the pending tokens so we don't consume them again
-            guard var clearComponents = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/paired_watches"), resolvingAgainstBaseURL: false) else { return }
+            guard var clearComponents = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/paired_watches"), resolvingAgainstBaseURL: false) else { return false }
             clearComponents.queryItems = [URLQueryItem(name: "id", value: "eq.\(pairId)")]
-            guard let clearUrl = clearComponents.url else { return }
+            guard let clearUrl = clearComponents.url else { return false }
             
             var clearRequest = URLRequest(url: clearUrl)
             clearRequest.httpMethod = "PATCH"
@@ -484,8 +509,11 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
             
             _ = try? await URLSession.shared.data(for: clearRequest)
             print("Repair tokens consumed and cleared.")
+            
+            return false
         } catch {
             print("Error checking repair tokens: \(error)")
+            return false
         }
     }
     

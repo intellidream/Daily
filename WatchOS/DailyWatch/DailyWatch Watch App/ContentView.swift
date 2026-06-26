@@ -8,7 +8,12 @@ struct ContentView: View {
     @State private var inputPin: String = ""
     
     var body: some View {
-        if sessionManager.isAuthenticated {
+        if sessionManager.isCheckingSession {
+            VStack {
+                ProgressView("Orbiting DayOne...")
+                    .padding()
+            }
+        } else if sessionManager.isAuthenticated {
             TabView {
                 BubblesView()
                     .tabItem {
@@ -62,54 +67,54 @@ struct ContentView: View {
                 #endif
             }
         } else {
-            ScrollView {
-                VStack(spacing: 8) {
-                    if !sessionManager.errorMessage.isEmpty {
-                        Text(sessionManager.errorMessage)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .multilineTextAlignment(.center)
-                    }
-                    
-                    if sessionManager.isPairing {
-                        ProgressView("Pairing...")
-                            .padding()
-                    } else {
-                        Text("DayOne Orbit")
-                            .font(.headline)
-                            .foregroundColor(.accentColor)
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 8) {
+                        if !sessionManager.errorMessage.isEmpty {
+                            Text(sessionManager.errorMessage)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .multilineTextAlignment(.center)
+                        }
+                        
+                        if sessionManager.isPairing {
+                            ProgressView("Pairing...")
+                                .padding()
+                        } else {
+                            Text("DayOne Orbit")
+                                .font(.headline)
+                                .foregroundColor(.accentColor)
+                                
+                            Text("Link your watch using the 6-digit PIN from the Desktop App.")
+                                .font(.system(size: 11))
+                                .multilineTextAlignment(.center)
+                                .padding(.bottom, 6)
                             
-                        Text("Enter the 6-digit PIN from the Desktop App.")
-                            .font(.system(size: 11))
-                            .multilineTextAlignment(.center)
-                            .padding(.bottom, 2)
-                        
-                        TextField("123456", text: $inputPin)
-                            .textContentType(.oneTimeCode)
-                            .multilineTextAlignment(.center)
-                            .font(.system(size: 20, weight: .bold, design: .monospaced))
-                        
-                        Button("Link Watch") {
-                            sessionManager.claimOrbitPin(pin: inputPin)
-                        }
-                        .disabled(inputPin.count != 6)
-                        .buttonStyle(.borderedProminent)
-                        .tint(.accentColor)
-                        
-                        Divider().padding(.vertical, 4)
-                        
-                        Button("Pair via iPhone") {
-                            sessionManager.generatePairingCode()
-                        }
-                        .font(.system(size: 12))
-                        
-                        if !sessionManager.pairingCode.isEmpty {
-                            Text(sessionManager.pairingCode)
-                                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            NavigationLink(destination: OrbitPinEntryView(pin: $inputPin) {
+                                sessionManager.claimOrbitPin(pin: inputPin)
+                            }) {
+                                Text(inputPin.isEmpty ? "Enter PIN" : inputPin)
+                                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                                    .foregroundColor(inputPin.isEmpty ? .primary : .accentColor)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(inputPin.isEmpty ? .gray.opacity(0.3) : .accentColor)
+                            
+                            Divider().padding(.vertical, 8)
+                            
+                            Button("Pair via iPhone") {
+                                sessionManager.generatePairingCode()
+                            }
+                            .font(.system(size: 12))
+                            
+                            if !sessionManager.pairingCode.isEmpty {
+                                Text(sessionManager.pairingCode)
+                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            }
                         }
                     }
+                    .padding()
                 }
-                .padding()
             }
         }
     }

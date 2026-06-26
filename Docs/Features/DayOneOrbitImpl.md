@@ -38,6 +38,10 @@ The standalone architecture is unified across platforms, pushing identical telem
 - **Wear OS**: Utilizes Android `WorkManager` with `Health Connect` to push to the same REST endpoints. 
 - **Pairing**: The watch user inputs the 6-digit PIN, triggering a `POST` to the `/rpc/claim_orbit_pin` endpoint. If valid, it claims the code and returns the `access_token` and `refresh_token` for full direct-to-cloud capabilities.
 
+### Wearable UX & Lifecycle
+- **Custom PIN Entry**: Because watchOS `TextField` inputs default to a clunky scribble/dictation menu, the pairing screen implements a custom 6-digit numeric keypad (`OrbitPinEntryView`) wrapped in a `NavigationStack` for a native, fast pairing experience.
+- **Remote Unpairing via `paired_watches`**: Once paired, `watch_pairing_codes` is no longer used. Instead, the watch registers itself in the `paired_watches` persistent ledger. On every app foreground (`onAppBecameActive`), the watch queries this ledger. If the desktop app deletes the watch or sets `is_active = false`, the watch detects it, wipes local tokens, and forces the user back to the PIN screen seamlessly (preventing UI flickering by holding a loading state during the check).
+
 ### Tiered Delta Syncing
 To prevent battery drain while building a massive historical telemetry dataset, the wearable node uses a **Tiered Delta Sync** strategy:
 1. **Delta Syncing (`HKQueryAnchor`)**: The device stores anchor tokens locally. HealthKit queries only return data generated *since the last successful sync*, keeping the HTTP payload size near zero and preventing redundant row inserts.
