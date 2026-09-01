@@ -719,11 +719,18 @@ public sealed partial class FeaturesPage : Page
 
     // ── EVENT HANDLERS ──
 
-    private async void OrbitLinkWatchBtn_Click(object sender, RoutedEventArgs e)
+    private async void OrbitSubmitPinBtn_Click(object sender, RoutedEventArgs e)
     {
-        OrbitPinPanel.Visibility = Visibility.Visible;
-        OrbitLinkWatchBtn.IsEnabled = false;
-        OrbitPinText.Text = "------";
+        string pin = OrbitPinTextBox.Text?.Trim();
+        if (string.IsNullOrEmpty(pin) || pin.Length != 6)
+        {
+            OrbitPinFeedbackPanel.Visibility = Visibility.Visible;
+            OrbitPinFeedbackText.Text = "Please enter a valid 6-digit PIN.";
+            OrbitPinFeedbackText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            return;
+        }
+
+        OrbitSubmitPinBtn.IsEnabled = false;
         
         try
         {
@@ -731,43 +738,61 @@ public sealed partial class FeaturesPage : Page
             var currentUser = supabase.Auth.CurrentUser;
             if (currentUser != null)
             {
-                var random = new Random();
-                string pin = random.Next(100000, 1000000).ToString();
-                
-                var pairingCode = new Daily.Models.Health.WatchPairingCode
-                {
-                    PinCode = pin,
-                    UserId = Guid.Parse(currentUser.Id),
-                    AccessToken = supabase.Auth.CurrentSession?.AccessToken,
-                    RefreshToken = supabase.Auth.CurrentSession?.RefreshToken,
-                    CreatedAt = DateTime.UtcNow,
-                    ExpiresAt = DateTime.UtcNow.AddMinutes(10),
-                    Claimed = false
-                };
+                // Find the pairing code in the DB
+                var response = await supabase.From<Daily.Models.Health.WatchPairingCode>()
+                                             .Where(x => x.PinCode == pin && x.Claimed == false)
+                                             .Get();
+                var pairingCode = response.Models.FirstOrDefault();
 
-                await supabase.From<Daily.Models.Health.WatchPairingCode>().Insert(pairingCode);
-                OrbitPinText.Text = pin;
+                if (pairingCode != null)
+                {
+                    if (pairingCode.ExpiresAt < DateTime.UtcNow)
+                    {
+                        OrbitPinFeedbackText.Text = "This PIN has expired. Request a new one on your watch.";
+                        OrbitPinFeedbackText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                    }
+                    else
+                    {
+                        // Update with tokens
+                        pairingCode.UserId = Guid.Parse(currentUser.Id);
+                        pairingCode.AccessToken = supabase.Auth.CurrentSession?.AccessToken;
+                        pairingCode.RefreshToken = supabase.Auth.CurrentSession?.RefreshToken;
+                        pairingCode.Claimed = true;
+                        
+                        await supabase.From<Daily.Models.Health.WatchPairingCode>().Update(pairingCode);
+
+                        OrbitPinFeedbackText.Text = "Watch successfully linked!";
+                        OrbitPinFeedbackText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Green);
+                    }
+                }
+                else
+                {
+                    OrbitPinFeedbackText.Text = "Invalid PIN or already claimed.";
+                    OrbitPinFeedbackText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                }
             }
             else
             {
-                OrbitPinText.Text = "Login Required";
-                OrbitPinText.FontSize = 16;
+                OrbitPinFeedbackText.Text = "You must be logged in to pair a watch.";
+                OrbitPinFeedbackText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
             }
         }
         catch (Supabase.Postgrest.Exceptions.PostgrestException)
         {
-            // Usually happens if the user hasn't run the DayOneOrbit_Schema.sql script
             System.Diagnostics.Debug.WriteLine($"[FeaturesPage] PostgrestException: watch_pairing_codes table might be missing.");
-            OrbitPinText.Text = "DB_Err";
+            OrbitPinFeedbackText.Text = "Database Error! Check table schema.";
+            OrbitPinFeedbackText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Failed to generate PIN: {ex}");
-            OrbitPinText.Text = "Error!";
+            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Failed to pair watch: {ex}");
+            OrbitPinFeedbackText.Text = "An error occurred during pairing.";
+            OrbitPinFeedbackText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
         }
         finally
         {
-            OrbitLinkWatchBtn.IsEnabled = true;
+            OrbitPinFeedbackPanel.Visibility = Visibility.Visible;
+            OrbitSubmitPinBtn.IsEnabled = true;
         }
     }
 
