@@ -8,6 +8,8 @@ using Daily_WinUI.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Windows.AI;
 using Microsoft.Windows.AI.Text;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI;
 
 namespace Daily_WinUI.Views;
 
