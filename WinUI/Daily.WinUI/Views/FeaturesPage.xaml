@@ -614,7 +614,7 @@
                     </Grid>
                     
                     <StackPanel x:Name="OrbitPinFeedbackPanel" Visibility="Collapsed" Margin="0,8,0,0">
-                        <TextBlock x:Name="OrbitPinFeedbackText" Text="" FontSize="13" Foreground="{ThemeResource SystemControlForegroundSuccessBrush}" />
+                        <TextBlock x:Name="OrbitPinFeedbackText" Text="" FontSize="13" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
                     </StackPanel>
 
                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,16,0,0" />
