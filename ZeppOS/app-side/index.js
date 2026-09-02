@@ -10,76 +10,64 @@ AppSideService(
     },
     
     onRequest(req, res) {
-      console.log('Received request from Watch:', req.method)
+      console.log('Received request from Watch:', req?.method)
       
-      if (req.method === 'PAIR_WATCH') {
-        const { pin } = req.params
-        
-        // 1. Send the PIN to Supabase
-        fetch({
-          url: `${SUPABASE_URL}/rest/v1/watch_pairing_codes`,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify({
-            pin_code: pin,
-            expires_at: new Date(Date.now() + 15 * 60000).toISOString()
+      try {
+        if (req.method === 'PAIR_WATCH') {
+          const { pin } = req.params
+          console.log('Starting fetch for pin:', pin)
+
+          // Zepp OS 3.0 fetch expects a SINGLE object argument
+          fetch({
+            url: `${SUPABASE_URL}/rest/v1/watch_pairing_codes`,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+              pin_code: String(pin)
+            })
           })
-        })
-        .then(() => {
-          // 2. Start polling for the token
-          let attempts = 0
-          const maxAttempts = 60 // 3 minutes total if polling every 3s
+          .then((response) => {
+            console.log('Fetch POST completed with status:', response.status)
+            if (response.status >= 400) {
+               return res(`API Error ${response.status}`, { success: false })
+            }
+            
+            res(null, { success: true })
+          })
+          .catch(err => {
+            console.log('Fetch POST failed', err)
+            res(err ? err.toString() : 'Unknown POST network err', { success: false })
+          })
+        } else if (req.method === 'POLL_WATCH') {
+          const { pin } = req.params
           
-          const poll = () => {
-            fetch({
-              url: `${SUPABASE_URL}/rest/v1/watch_pairing_codes?pin_code=eq.${pin}&select=*`,
-              method: 'GET',
-              headers: {
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-              }
-            })
-            .then(response => {
-              const data = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
-              if (data && data.length > 0 && data[0].claimed === true && data[0].access_token) {
-                // Success! The desktop app has inserted the tokens
-                res(null, { success: true, tokens: data[0] })
-              } else {
-                // Not claimed yet
-                attempts++
-                if (attempts < maxAttempts) {
-                  setTimeout(poll, 3000)
-                } else {
-                  res('Pairing timeout', { success: false })
-                }
-              }
-            })
-            .catch(err => {
-              res(err.toString(), { success: false })
-            })
-          }
-          
-          poll()
-        })
-        .catch(err => {
-          res(err.toString(), { success: false })
-        })
-      } else {
-        res(null, { error: 'Unknown method' })
+          fetch({
+            url: `${SUPABASE_URL}/rest/v1/watch_pairing_codes?pin_code=eq.${pin}&select=*`,
+            method: 'GET',
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+            }
+          })
+          .then(response => {
+             const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
+             res(null, { success: true, data: resBody })
+          })
+          .catch(err => {
+             res(err ? err.toString() : 'Unknown GET network err', { success: false })
+          })
+        } else {
+          res(null, { error: 'Unknown method' })
+        }
+      } catch (fatalErr) {
+        console.log('Fatal error in onRequest', fatalErr)
+        res(fatalErr ? fatalErr.toString() : 'Fatal unknown error', { success: false })
       }
-    },
-
-    onRun() {
-      console.log('App Side Service Run')
-    },
-
-    onDestroy() {
-      console.log('App Side Service Destroy')
     }
   })
 )
