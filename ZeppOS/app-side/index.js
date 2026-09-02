@@ -102,6 +102,42 @@ AppSideService(
              res(null, { success: true, data: { total, waterTotal, coffeeTotal, cigTotal, heatTotal } })
           })
           .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
+        } else if (req.method === 'GET_HABITS_WEEK') {
+          const { access_token, habit_type } = req.params
+          const now = new Date()
+          const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).toISOString()
+
+          fetch({
+            url: `${SUPABASE_URL}/rest/v1/habits_logs?habit_type=eq.${habit_type}&is_deleted=eq.false&logged_at=gte.${sevenDaysAgo}&select=*`,
+            method: 'GET',
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${access_token}`
+            }
+          })
+          .then(response => {
+             const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
+             // We return exactly 7 buckets for the histogram
+             let weekBuckets = [0, 0, 0, 0, 0, 0, 0]
+             
+             if (Array.isArray(resBody)) {
+               resBody.forEach(row => { 
+                 const val = parseFloat(row.value) || 0
+                 const logDate = new Date(row.logged_at)
+                 // Calculate difference in days from exactly 6 days ago (which is bucket 0)
+                 const diffTime = Math.abs(now.getTime() - logDate.getTime())
+                 const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+                 // Bucket 6 is today (diffDays == 0). Bucket 0 is 6 days ago (diffDays == 6).
+                 const bucketIndex = 6 - diffDays
+                 
+                 if (bucketIndex >= 0 && bucketIndex <= 6) {
+                   weekBuckets[bucketIndex] += val
+                 }
+               })
+             }
+             res(null, { success: true, data: weekBuckets })
+          })
+          .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else if (req.method === 'LOG_HABIT') {
           const { access_token, user_id, habit_type, value, unit, metadata } = req.params
           
@@ -110,9 +146,10 @@ AppSideService(
             value: value,
             unit: unit,
             logged_at: new Date().toISOString(),
-            metadata: metadata
+            metadata: metadata,
+            is_deleted: false,
+            user_id: user_id
           }
-          if (user_id) bodyObj.user_id = user_id
           
           fetch({
             url: `${SUPABASE_URL}/rest/v1/habits_logs`,

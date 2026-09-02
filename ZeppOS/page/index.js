@@ -50,9 +50,13 @@ Page(
           let waterTotal = 0
           let waterVal = 0
           let coffeeVal = 0
+          let waterWeek = [0, 0, 0, 0, 0, 0, 0]
           
-          let waterStatsText;
           let smokeTotal = 0
+          let smokeWeek = [0, 0, 0, 0, 0, 0, 0]
+          
+          let waterHistogram;
+          let smokeHistogram;
 
           const fetchData = () => {
              self.request({
@@ -84,6 +88,24 @@ Page(
                  smokeTotal = res.data.total || 0
                }
                
+               return self.request({
+                 method: 'GET_HABITS_WEEK',
+                 params: { access_token: accessToken, habit_type: 'water' }
+               })
+             }).then(res => {
+               if (res && res.success && res.data) {
+                 waterWeek = res.data
+               }
+               
+               return self.request({
+                 method: 'GET_HABITS_WEEK',
+                 params: { access_token: accessToken, habit_type: 'smokes' }
+               })
+             }).then(res => {
+               if (res && res.success && res.data) {
+                 smokeWeek = res.data
+               }
+               
                loadingText.setProperty(prop.VISIBLE, false)
                buildDashboard()
              }).catch(err => {
@@ -104,7 +126,6 @@ Page(
           
           let waterArc, coffeeArc, waterCenterText
           let smokeArc, smokeCenterText
-          let smokeStatsText
 
           const updateWaterUI = () => {
              const goal = Math.max(1, waterGoal)
@@ -117,8 +138,14 @@ Page(
              coffeeArc.setProperty(prop.MORE, { start_angle: -90 + wDegrees, end_angle: -90 + wDegrees + cDegrees })
              waterCenterText.setProperty(prop.TEXT, `${waterTotal}\n/ ${waterGoal}`)
              
-             if (waterStatsText) {
-                waterStatsText.setProperty(prop.TEXT, `Water Today\n${waterVal} ml\n\nCoffee Today\n${coffeeVal} ml`)
+             if (waterHistogram) {
+                const maxVal = Math.max(waterGoal, ...waterWeek, 1000)
+                waterHistogram.setProperty(prop.UPDATE_DATA, {
+                   data_array: waterWeek,
+                   data_count: 7,
+                   data_min_value: 0,
+                   data_max_value: maxVal
+                })
              }
           }
           
@@ -137,8 +164,14 @@ Page(
              smokeArc.setProperty(prop.MORE, { start_angle: -90, end_angle: -90 + sDegrees, color: color })
              smokeCenterText.setProperty(prop.TEXT, `${smokeTotal}\n/ ${goal}`)
              
-             if (smokeStatsText) {
-                smokeStatsText.setProperty(prop.TEXT, `Total Smokes\n${smokeTotal}\n\nBaseline Goal\n${goal}`)
+             if (smokeHistogram) {
+                const maxVal = Math.max(smokeBaseline, ...smokeWeek, 10)
+                smokeHistogram.setProperty(prop.UPDATE_DATA, {
+                   data_array: smokeWeek,
+                   data_count: 7,
+                   data_min_value: 0,
+                   data_max_value: maxVal
+                })
              }
              if (ratio >= 1.0) smokeCenterText.setProperty(prop.COLOR, 0xff0000)
              else smokeCenterText.setProperty(prop.COLOR, 0xffffff)
@@ -146,6 +179,7 @@ Page(
 
           const logWater = (amount, type) => {
              waterTotal += amount
+             waterWeek[6] += amount
              if (type.includes('Coffee')) coffeeVal += amount
              else waterVal += amount
              updateWaterUI()
@@ -156,15 +190,23 @@ Page(
              }).then(res => {
                if (!res || !res.success) {
                   waterTotal -= amount
+                  waterWeek[6] -= amount
                   if (type.includes('Coffee')) coffeeVal -= amount
                   else waterVal -= amount
                   updateWaterUI()
                }
+             }).catch(err => {
+                  waterTotal -= amount
+                  waterWeek[6] -= amount
+                  if (type.includes('Coffee')) coffeeVal -= amount
+                  else waterVal -= amount
+                  updateWaterUI()
              })
           }
           
           const logSmoke = (amount, type) => {
              smokeTotal += amount
+             smokeWeek[6] += amount
              updateSmokeUI()
              
              self.request({
@@ -173,8 +215,13 @@ Page(
              }).then(res => {
                if (!res || !res.success) {
                   smokeTotal -= amount
+                  smokeWeek[6] -= amount
                   updateSmokeUI()
                }
+             }).catch(err => {
+                  smokeTotal -= amount
+                  smokeWeek[6] -= amount
+                  updateSmokeUI()
              })
           }
 
@@ -199,8 +246,20 @@ Page(
              createWidget(widget.BUTTON, { x: 190, y: 280, w: 180, h: 70, radius: 35, normal_color: 0x8b4513, press_color: 0x5a2d0c, text: '+100ml', color: 0xffffff, text_size: 18, click_func: () => logWater(100, 'Coffee') })
 
              // ================== PAGE 2: BUBBLES STATS ==================
-             createWidget(widget.TEXT, { x: 0, y: h + 120, w: 390, h: 60, color: 0x00aaff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Hydration Stats' })
-             waterStatsText = createWidget(widget.TEXT, { x: 0, y: h + 190, w: 390, h: 150, color: 0xffffff, text_size: 20, align_h: align.CENTER_H, align_v: align.TOP, text_style: text_style.WRAP, text: 'Loading...' })
+             createWidget(widget.TEXT, { x: 0, y: h + 100, w: 390, h: 60, color: 0x00aaff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Hydration 7 Days' })
+             
+             waterHistogram = createWidget(widget.HISTOGRAM, {
+               x: 20, y: h + 170, w: 350, h: 180,
+               item_color: 0x00aaff,
+               item_bg_color: 0x333333,
+               item_width: 30,
+               item_space: 15,
+               item_radius: 10,
+               data_array: waterWeek,
+               data_count: 7,
+               data_min_value: 0,
+               data_max_value: Math.max(waterGoal, ...waterWeek, 1000)
+             })
 
              // ================== PAGE 3: SMOKES ==================
              createWidget(widget.ARC, { x: 10, y: h*2 + 145, w: 160, h: 160, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 12 })
@@ -211,8 +270,20 @@ Page(
              createWidget(widget.BUTTON, { x: 190, y: h*2 + 235, w: 180, h: 70, radius: 35, normal_color: 0x007aff, press_color: 0x005bb5, text: '+1 Heat', color: 0xffffff, text_size: 20, click_func: () => logSmoke(1, 'Heated Tobacco') })
 
              // ================== PAGE 4: SMOKES STATS ==================
-             createWidget(widget.TEXT, { x: 0, y: h*3 + 120, w: 390, h: 60, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Smoking Stats' })
-             smokeStatsText = createWidget(widget.TEXT, { x: 0, y: h*3 + 190, w: 390, h: 150, color: 0xffffff, text_size: 20, align_h: align.CENTER_H, align_v: align.TOP, text_style: text_style.WRAP, text: 'Loading...' })
+             createWidget(widget.TEXT, { x: 0, y: h*3 + 100, w: 390, h: 60, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Smoking 7 Days' })
+             
+             smokeHistogram = createWidget(widget.HISTOGRAM, {
+               x: 20, y: h*3 + 170, w: 350, h: 180,
+               item_color: 0xff5555,
+               item_bg_color: 0x333333,
+               item_width: 30,
+               item_space: 15,
+               item_radius: 10,
+               data_array: smokeWeek,
+               data_count: 7,
+               data_min_value: 0,
+               data_max_value: Math.max(smokeBaseline, ...smokeWeek, 10)
+             })
 
              // ================== PAGE 5: ABOUT / SETTINGS ==================
              createWidget(widget.IMG, { x: 145, y: h*4 + 80, src: 'icon.png' })
