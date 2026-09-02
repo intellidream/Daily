@@ -55,3 +55,11 @@ The process of directly pairing a Zepp OS smartwatch to the Supabase backend was
 1. **App-Side Communication**: The Zepp OS 3.0 implementation requires wrapping the `app-side` logic in `BaseSideService` and the `app.js` in `BaseApp` for the `messageBuilder` bridge to correctly pass data from the watch UI to the companion app environment.
 2. **Fetch API Constraint**: Zepp OS uses a custom `fetch` implementation taking a single parameter object (`fetch({ url, method, body, headers })`) instead of the standard Web API signature.
 3. **PostgreSQL RLS for Pairing**: When claiming a PIN from the WinUI Desktop App (updating `user_id` and `access_token`), an `UPDATE` policy is enforced on `watch_pairing_codes`. A critical requirement is to explicitly specify the `WITH CHECK (true)` clause. Omitting it causes the database to implicitly evaluate the `USING (NOT claimed)` clause against the mutated row (`claimed = true`), triggering a silent rejection (returned as an empty array) which manifests as a `PostgrestException` in the C# `Supabase.Client`.
+
+### Watch Apps: Bubbles and Smokes (Zepp OS 3.0)
+*Added: Sep 2026*
+
+The Zepp OS application features robust habit trackers directly on the watch, bypassing the need for a phone UI:
+- **Persistent Sessions**: `@zos/storage` handles storing the user's Supabase JWT tokens locally on the watch, allowing the user to seamlessly skip pairing screens after the first login.
+- **Direct-to-Cloud Bridge**: New endpoints in the ZML proxy (`app-side`) were created (`GET_HABITS_TODAY` and `LOG_HABIT`). They intercept watch parameters and fire `fetch` commands directly to Supabase using the user's saved `Authorization: Bearer` token.
+- **Optimistic UI**: When users log water, coffee, or smokes on the watch, the UI updates instantly using optimistic rendering, ensuring zero perceived latency before network confirmation.

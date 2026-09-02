@@ -30,7 +30,9 @@
       "module": {
         "page": {
           "pages": [
-            "page/index"
+            "page/index",
+            "page/bubbles",
+            "page/smokes"
           ]
         },
         "app-side": {
