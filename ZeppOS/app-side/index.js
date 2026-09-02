@@ -5,19 +5,11 @@ const SUPABASE_ANON_KEY = 'sb_publishable_6FzrRSdmsH4arDhZS09PSQ_QK_I31DG'
 
 AppSideService(
   BaseSideService({
-    onInit() {
-      console.log('App Side Service Init')
-    },
-    
+    onInit() {},
     onRequest(req, res) {
-      console.log('Received request from Watch:', req?.method)
-      
       try {
         if (req.method === 'PAIR_WATCH') {
           const { pin } = req.params
-          console.log('Starting fetch for pin:', pin)
-
-          // Zepp OS 3.0 fetch expects a SINGLE object argument
           fetch({
             url: `${SUPABASE_URL}/rest/v1/watch_pairing_codes`,
             method: 'POST',
@@ -27,47 +19,49 @@ AppSideService(
               'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
               'Prefer': 'return=representation'
             },
-            body: JSON.stringify({
-              pin_code: String(pin)
-            })
+            body: JSON.stringify({ pin_code: String(pin) })
           })
-          .then((response) => {
-            console.log('Fetch POST completed with status:', response.status)
-            if (response.status >= 400) {
-               return res(`API Error ${response.status}`, { success: false })
-            }
-            
+          .then(response => {
+            if (response.status >= 400) return res(`API Error ${response.status}`, { success: false })
             res(null, { success: true })
           })
-          .catch(err => {
-            console.log('Fetch POST failed', err)
-            res(err ? err.toString() : 'Unknown POST network err', { success: false })
-          })
+          .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else if (req.method === 'POLL_WATCH') {
           const { pin } = req.params
-          
           fetch({
             url: `${SUPABASE_URL}/rest/v1/watch_pairing_codes?pin_code=eq.${pin}&select=*`,
             method: 'GET',
-            headers: {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-            }
+            headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
           })
           .then(response => {
              const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
              res(null, { success: true, data: resBody })
           })
-          .catch(err => {
-             res(err ? err.toString() : 'Unknown GET network err', { success: false })
+          .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
+        } else if (req.method === 'GET_PREFS') {
+          const { access_token } = req.params
+          fetch({
+            url: `${SUPABASE_URL}/rest/v1/user_preferences?select=*`,
+            method: 'GET',
+            headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${access_token}` }
           })
+          .then(response => {
+             const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
+             let prefs = { water_goal: 2000, smokes_baseline: 20 }
+             if (Array.isArray(resBody) && resBody.length > 0) {
+               if (resBody[0].water_goal) prefs.water_goal = resBody[0].water_goal
+               if (resBody[0].smokes_baseline) prefs.smokes_baseline = resBody[0].smokes_baseline
+             }
+             res(null, { success: true, data: prefs })
+          })
+          .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else if (req.method === 'GET_HABITS_TODAY') {
           const { access_token, habit_type } = req.params
           const now = new Date()
           const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
 
           fetch({
-            url: `${SUPABASE_URL}/rest/v1/habits_logs?habit_type=eq.${habit_type}&logged_at=gte.${startOfToday}&select=value`,
+            url: `${SUPABASE_URL}/rest/v1/habits_logs?habit_type=eq.${habit_type}&logged_at=gte.${startOfToday}&select=*`,
             method: 'GET',
             headers: {
               'apikey': SUPABASE_ANON_KEY,
@@ -77,17 +71,49 @@ AppSideService(
           .then(response => {
              const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
              let total = 0
+             let waterTotal = 0
+             let coffeeTotal = 0
+             let cigTotal = 0
+             let heatTotal = 0
+
              if (Array.isArray(resBody)) {
-               resBody.forEach(row => { total += (row.value || 0) })
+               resBody.forEach(row => { 
+                 const val = parseFloat(row.value) || 0
+                 total += val
+                 
+                 let meta = {}
+                 if (typeof row.metadata === 'string') {
+                    try { meta = JSON.parse(row.metadata) } catch(e) {}
+                 } else if (row.metadata) {
+                    meta = row.metadata
+                 }
+                 
+                 if (habit_type === 'water') {
+                   const drinkType = meta.drink || ''
+                   if (drinkType.includes('Coffee')) coffeeTotal += val
+                   else waterTotal += val
+                 } else if (habit_type === 'smokes') {
+                   const sType = meta.type || ''
+                   if (sType.includes('Heat') || sType.includes('Vape')) heatTotal += val
+                   else cigTotal += val
+                 }
+               })
              }
-             res(null, { success: true, data: { total } })
+             res(null, { success: true, data: { total, waterTotal, coffeeTotal, cigTotal, heatTotal } })
           })
-          .catch(err => {
-             res(err ? err.toString() : 'Unknown GET network err', { success: false })
-          })
+          .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else if (req.method === 'LOG_HABIT') {
           const { access_token, user_id, habit_type, value, unit, metadata } = req.params
-
+          
+          let bodyObj = {
+            habit_type: habit_type,
+            value: value,
+            unit: unit,
+            logged_at: new Date().toISOString(),
+            metadata: metadata
+          }
+          if (user_id) bodyObj.user_id = user_id
+          
           fetch({
             url: `${SUPABASE_URL}/rest/v1/habits_logs`,
             method: 'POST',
@@ -97,30 +123,18 @@ AppSideService(
               'Authorization': `Bearer ${access_token}`,
               'Prefer': 'return=representation'
             },
-            body: JSON.stringify({
-              user_id: user_id,
-              habit_type: habit_type,
-              value: value,
-              unit: unit,
-              logged_at: new Date().toISOString(),
-              metadata: metadata
-            })
+            body: JSON.stringify(bodyObj)
           })
           .then(response => {
-            if (response.status >= 400) {
-               return res(`API Error ${response.status}`, { success: false })
-            }
+            if (response.status >= 400) return res(`API Error ${response.status}`, { success: false })
             res(null, { success: true })
           })
-          .catch(err => {
-            res(err ? err.toString() : 'Unknown POST network err', { success: false })
-          })
+          .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else {
           res(null, { error: 'Unknown method' })
         }
       } catch (fatalErr) {
-        console.log('Fatal error in onRequest', fatalErr)
-        res(fatalErr ? fatalErr.toString() : 'Fatal unknown error', { success: false })
+        res(fatalErr ? fatalErr.toString() : 'Fatal error', { success: false })
       }
     }
   })
