@@ -12,7 +12,7 @@ namespace Daily.Models.Health
         public string PinCode { get; set; } = string.Empty;
 
         [Column("user_id")]
-        public Guid UserId { get; set; }
+        public Guid? UserId { get; set; }
 
         [Column("access_token")]
         public string? AccessToken { get; set; }

@@ -53,5 +53,7 @@
       ]
     }
   },
-  "permissions": []
+  "permissions": [
+    "device:os.network"
+  ]
 }

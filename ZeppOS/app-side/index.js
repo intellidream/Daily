@@ -1,7 +1,7 @@
-import { BaseSideService } from '@zeppos/zml'
+import { BaseSideService } from '@zeppos/zml/base-side'
 
-const SUPABASE_URL = 'https://your-supabase-url.supabase.co'
-const SUPABASE_ANON_KEY = 'your-anon-key'
+const SUPABASE_URL = 'https://akkfouifxztnfwwiclwg.supabase.co'
+const SUPABASE_ANON_KEY = 'sb_publishable_6FzrRSdmsH4arDhZS09PSQ_QK_I31DG'
 
 AppSideService(
   BaseSideService({
@@ -16,7 +16,8 @@ AppSideService(
         const { pin } = req.params
         
         // 1. Send the PIN to Supabase
-        fetch(`${SUPABASE_URL}/rest/v1/watch_pairing_codes`, {
+        fetch({
+          url: `${SUPABASE_URL}/rest/v1/watch_pairing_codes`,
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -26,7 +27,6 @@ AppSideService(
           },
           body: JSON.stringify({
             pin_code: pin,
-            device_type: 'amazfit',
             expires_at: new Date(Date.now() + 15 * 60000).toISOString()
           })
         })
@@ -36,15 +36,16 @@ AppSideService(
           const maxAttempts = 60 // 3 minutes total if polling every 3s
           
           const poll = () => {
-            fetch(`${SUPABASE_URL}/rest/v1/watch_pairing_codes?pin_code=eq.${pin}&select=*`, {
+            fetch({
+              url: `${SUPABASE_URL}/rest/v1/watch_pairing_codes?pin_code=eq.${pin}&select=*`,
               method: 'GET',
               headers: {
                 'apikey': SUPABASE_ANON_KEY,
                 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
               }
             })
-            .then(response => response.json())
-            .then(data => {
+            .then(response => {
+              const data = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
               if (data && data.length > 0 && data[0].claimed === true && data[0].access_token) {
                 // Success! The desktop app has inserted the tokens
                 res(null, { success: true, tokens: data[0] })

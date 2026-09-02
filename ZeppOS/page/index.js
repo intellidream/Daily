@@ -1,10 +1,13 @@
 import { createWidget, widget, prop, align, text_style } from '@zos/ui'
 import { log } from '@zos/utils'
 import { HeartRate, Sleep } from '@zos/sensor'
+import { BasePage } from '@zeppos/zml/base-page'
+import { setTimeout } from '@zos/timer'
 const logger = log.getLogger('dayone-orbit')
 const appId = 1000001
 
-Page({
+Page(
+  BasePage({
   build() {
     logger.info('page build invoked')
     
@@ -45,40 +48,33 @@ Page({
       text_size: 16,
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
-      text: 'Waiting for Desktop...'
+      text: 'Connecting to phone...'
     })
 
-    // Request App Side Service to send PIN to Supabase
-    /*
-    messageBuilder.request({
-      method: 'PAIR_WATCH',
-      params: { pin }
-    })
-    .then(data => {
-      logger.info('Successfully paired! Token data:', data)
-      statusText.setProperty(prop.MORE, { text: 'Paired! Syncing...', color: 0x00ff00 })
-      
-      // Initialize Sensors after pairing
-      // const hr = new HeartRate()
-      // const sleep = new Sleep()
-      
-      // Example of grabbing latest reading
-      // logger.info('Current HR:', hr.getLast())
-      // logger.info('Sleep Stage:', sleep.getStageConstant())
-      
-      // TODO: Save tokens to @zos/fs and start background sync interval
-    })
-    .catch(res => {
-      logger.error('Pairing failed:', res)
-    })
-    */
+    // Wait 2 seconds for BLE message channel to establish with Zepp App
+    setTimeout(() => {
+      statusText.setProperty(prop.TEXT, 'Registering PIN...')
+      this.request({
+        method: 'PAIR_WATCH',
+        params: { pin }
+      })
+      .then(data => {
+        logger.info('Successfully paired! Token data:', data)
+        statusText.setProperty(prop.TEXT, 'Paired! Syncing...')
+        statusText.setProperty(prop.COLOR, 0x00ff00)
+      })
+      .catch(res => {
+        logger.error('Pairing failed:', res)
+        statusText.setProperty(prop.TEXT, 'Failed. Try again.')
+        statusText.setProperty(prop.COLOR, 0xff0000)
+      })
+    }, 2000)
   },
   onInit() {
     logger.info('page onInit invoked')
-    // messageBuilder.connect()
   },
   onDestroy() {
     logger.info('page onDestroy invoked')
-    // messageBuilder.disConnect()
   }
 })
+)
