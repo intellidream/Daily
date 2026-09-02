@@ -47,3 +47,11 @@ To prevent battery drain while building a massive historical telemetry dataset, 
 1. **Delta Syncing (`HKQueryAnchor`)**: The device stores anchor tokens locally. HealthKit queries only return data generated *since the last successful sync*, keeping the HTTP payload size near zero and preventing redundant row inserts.
 2. **Tier 1 (Fast Sync)**: Low-volume, high-priority metrics (Heart Rate, Steps, Active Energy, and Habit Logs) are synced every 15–30 minutes to keep the WinUI Dashboard feeling "real-time".
 3. **Tier 2 (Deep Sync)**: High-volume or deep analytics data (Sleep Analysis, HRV, Respiratory Rate) are batched and executed only once every 4 hours (or when on Wi-Fi/Charging) to conserve battery and network usage.
+
+### Watch Pairing & Authentication (Zepp OS 3.0 & WinUI)
+*Added: Sep 2026*
+
+The process of directly pairing a Zepp OS smartwatch to the Supabase backend was implemented using a 6-digit PIN bridging process:
+1. **App-Side Communication**: The Zepp OS 3.0 implementation requires wrapping the `app-side` logic in `BaseSideService` and the `app.js` in `BaseApp` for the `messageBuilder` bridge to correctly pass data from the watch UI to the companion app environment.
+2. **Fetch API Constraint**: Zepp OS uses a custom `fetch` implementation taking a single parameter object (`fetch({ url, method, body, headers })`) instead of the standard Web API signature.
+3. **PostgreSQL RLS for Pairing**: When claiming a PIN from the WinUI Desktop App (updating `user_id` and `access_token`), an `UPDATE` policy is enforced on `watch_pairing_codes`. A critical requirement is to explicitly specify the `WITH CHECK (true)` clause. Omitting it causes the database to implicitly evaluate the `USING (NOT claimed)` clause against the mutated row (`claimed = true`), triggering a silent rejection (returned as an empty array) which manifests as a `PostgrestException` in the C# `Supabase.Client`.
