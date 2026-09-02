@@ -51,12 +51,22 @@ Page(
           let waterVal = 0
           let coffeeVal = 0
           let waterWeek = [0, 0, 0, 0, 0, 0, 0]
+          let coffeeWeek = [0, 0, 0, 0, 0, 0, 0]
           
           let smokeTotal = 0
+          let cigVal = 0
+          let heatVal = 0
           let smokeWeek = [0, 0, 0, 0, 0, 0, 0]
+          let heatWeek = [0, 0, 0, 0, 0, 0, 0]
           
           let waterHistogram;
+          let coffeeHistogram;
           let smokeHistogram;
+          let heatHistogram;
+          
+          let debugText;
+          let waterBreakdownText;
+          let smokeBreakdownText;
 
           const fetchData = () => {
              self.request({
@@ -86,6 +96,8 @@ Page(
              }).then(res => {
                if (res && res.success && res.data) {
                  smokeTotal = res.data.total || 0
+                 cigVal = res.data.cigTotal || 0
+                 heatVal = res.data.heatTotal || 0
                }
                
                return self.request({
@@ -94,7 +106,8 @@ Page(
                })
              }).then(res => {
                if (res && res.success && res.data) {
-                 waterWeek = res.data
+                 waterWeek = res.data.total || [0,0,0,0,0,0,0]
+                 coffeeWeek = res.data.sub || [0,0,0,0,0,0,0]
                }
                
                return self.request({
@@ -103,7 +116,8 @@ Page(
                })
              }).then(res => {
                if (res && res.success && res.data) {
-                 smokeWeek = res.data
+                 smokeWeek = res.data.total || [0,0,0,0,0,0,0]
+                 heatWeek = res.data.sub || [0,0,0,0,0,0,0]
                }
                
                loadingText.setProperty(prop.VISIBLE, false)
@@ -138,10 +152,20 @@ Page(
              coffeeArc.setProperty(prop.MORE, { start_angle: -90 + wDegrees, end_angle: -90 + wDegrees + cDegrees })
              waterCenterText.setProperty(prop.TEXT, `${waterTotal}\n/ ${waterGoal}`)
              
-             if (waterHistogram) {
+             if (waterBreakdownText) {
+                waterBreakdownText.setProperty(prop.TEXT, `Water: ${waterVal} ml | Coffee: ${coffeeVal} ml`)
+             }
+             
+             if (waterHistogram && coffeeHistogram) {
                 const maxVal = Math.max(waterGoal, ...waterWeek, 1000)
                 waterHistogram.setProperty(prop.UPDATE_DATA, {
                    data_array: waterWeek,
+                   data_count: 7,
+                   data_min_value: 0,
+                   data_max_value: maxVal
+                })
+                coffeeHistogram.setProperty(prop.UPDATE_DATA, {
+                   data_array: coffeeWeek,
                    data_count: 7,
                    data_min_value: 0,
                    data_max_value: maxVal
@@ -164,10 +188,20 @@ Page(
              smokeArc.setProperty(prop.MORE, { start_angle: -90, end_angle: -90 + sDegrees, color: color })
              smokeCenterText.setProperty(prop.TEXT, `${smokeTotal}\n/ ${goal}`)
              
-             if (smokeHistogram) {
+             if (smokeBreakdownText) {
+                smokeBreakdownText.setProperty(prop.TEXT, `Cigarettes: ${cigVal} | Heated: ${heatVal}`)
+             }
+             
+             if (smokeHistogram && heatHistogram) {
                 const maxVal = Math.max(smokeBaseline, ...smokeWeek, 10)
                 smokeHistogram.setProperty(prop.UPDATE_DATA, {
                    data_array: smokeWeek,
+                   data_count: 7,
+                   data_min_value: 0,
+                   data_max_value: maxVal
+                })
+                heatHistogram.setProperty(prop.UPDATE_DATA, {
+                   data_array: heatWeek,
                    data_count: 7,
                    data_min_value: 0,
                    data_max_value: maxVal
@@ -180,26 +214,36 @@ Page(
           const logWater = (amount, type) => {
              waterTotal += amount
              waterWeek[6] += amount
-             if (type.includes('Coffee')) coffeeVal += amount
-             else waterVal += amount
+             if (type.includes('Coffee')) {
+                 coffeeVal += amount
+                 coffeeWeek[6] += amount
+             } else waterVal += amount
              updateWaterUI()
+             
+             if (debugText) debugText.setProperty(prop.TEXT, '')
              
              self.request({
                method: 'LOG_HABIT',
                params: { access_token: accessToken, user_id: userId, habit_type: 'water', value: amount, unit: 'ml', metadata: { drink: type } }
              }).then(res => {
                if (!res || !res.success) {
+                  if (debugText) debugText.setProperty(prop.TEXT, res?.error || 'Log Failed')
                   waterTotal -= amount
                   waterWeek[6] -= amount
-                  if (type.includes('Coffee')) coffeeVal -= amount
-                  else waterVal -= amount
+                  if (type.includes('Coffee')) {
+                      coffeeVal -= amount
+                      coffeeWeek[6] -= amount
+                  } else waterVal -= amount
                   updateWaterUI()
                }
              }).catch(err => {
+                  if (debugText) debugText.setProperty(prop.TEXT, err ? err.toString() : 'Net Err')
                   waterTotal -= amount
                   waterWeek[6] -= amount
-                  if (type.includes('Coffee')) coffeeVal -= amount
-                  else waterVal -= amount
+                  if (type.includes('Coffee')) {
+                      coffeeVal -= amount
+                      coffeeWeek[6] -= amount
+                  } else waterVal -= amount
                   updateWaterUI()
              })
           }
@@ -207,20 +251,36 @@ Page(
           const logSmoke = (amount, type) => {
              smokeTotal += amount
              smokeWeek[6] += amount
+             if (type.includes('Heat') || type.includes('Vape')) {
+                 heatVal += amount
+                 heatWeek[6] += amount
+             } else cigVal += amount
              updateSmokeUI()
+             
+             if (debugText) debugText.setProperty(prop.TEXT, '')
              
              self.request({
                method: 'LOG_HABIT',
                params: { access_token: accessToken, user_id: userId, habit_type: 'smokes', value: amount, unit: 'count', metadata: { type: type } }
              }).then(res => {
                if (!res || !res.success) {
+                  if (debugText) debugText.setProperty(prop.TEXT, res?.error || 'Log Failed')
                   smokeTotal -= amount
                   smokeWeek[6] -= amount
+                  if (type.includes('Heat') || type.includes('Vape')) {
+                      heatVal -= amount
+                      heatWeek[6] -= amount
+                  } else cigVal -= amount
                   updateSmokeUI()
                }
              }).catch(err => {
+                  if (debugText) debugText.setProperty(prop.TEXT, err ? err.toString() : 'Net Err')
                   smokeTotal -= amount
                   smokeWeek[6] -= amount
+                  if (type.includes('Heat') || type.includes('Vape')) {
+                      heatVal -= amount
+                      heatWeek[6] -= amount
+                  } else cigVal -= amount
                   updateSmokeUI()
              })
           }
@@ -236,10 +296,14 @@ Page(
              }
 
              // ================== PAGE 1: BUBBLES ==================
+             debugText = createWidget(widget.TEXT, { x: 0, y: 15, w: 390, h: 40, color: 0xff0000, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '' })
+             
              createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 12 })
              waterArc = createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0x00ffff, line_width: 12 })
              coffeeArc = createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0xffa500, line_width: 12 })
              waterCenterText = createWidget(widget.TEXT, { x: 10, y: 145, w: 160, h: 160, color: 0xffffff, text_size: 20, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...' })
+             
+             waterBreakdownText = createWidget(widget.TEXT, { x: 0, y: 315, w: 180, h: 60, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
              
              createWidget(widget.BUTTON, { x: 190, y: 100, w: 180, h: 70, radius: 35, normal_color: 0x0055ff, press_color: 0x0033aa, text: '+300ml', color: 0xffffff, text_size: 18, click_func: () => logWater(300, 'Large Water') })
              createWidget(widget.BUTTON, { x: 190, y: 190, w: 180, h: 70, radius: 35, normal_color: 0x0055ff, press_color: 0x0033aa, text: '+150ml', color: 0xffffff, text_size: 18, click_func: () => logWater(150, 'Small Water') })
@@ -247,9 +311,10 @@ Page(
 
              // ================== PAGE 2: BUBBLES STATS ==================
              createWidget(widget.TEXT, { x: 0, y: h + 100, w: 390, h: 60, color: 0x00aaff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Hydration 7 Days' })
+             createWidget(widget.TEXT, { x: 0, y: h + 140, w: 390, h: 30, color: 0xffa500, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Blue: Water | Orange: Coffee' })
              
              waterHistogram = createWidget(widget.HISTOGRAM, {
-               x: 20, y: h + 170, w: 350, h: 180,
+               x: 20, y: h + 180, w: 350, h: 180,
                item_color: 0x00aaff,
                item_bg_color: 0x333333,
                item_width: 30,
@@ -260,26 +325,55 @@ Page(
                data_min_value: 0,
                data_max_value: Math.max(waterGoal, ...waterWeek, 1000)
              })
+             
+             coffeeHistogram = createWidget(widget.HISTOGRAM, {
+               x: 20, y: h + 180, w: 350, h: 180,
+               item_color: 0xffa500,
+               item_bg_color: 0x00000000,
+               item_width: 30,
+               item_space: 15,
+               item_radius: 10,
+               data_array: coffeeWeek,
+               data_count: 7,
+               data_min_value: 0,
+               data_max_value: Math.max(waterGoal, ...waterWeek, 1000)
+             })
 
              // ================== PAGE 3: SMOKES ==================
              createWidget(widget.ARC, { x: 10, y: h*2 + 145, w: 160, h: 160, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 12 })
              smokeArc = createWidget(widget.ARC, { x: 10, y: h*2 + 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0x00ff00, line_width: 12 })
              smokeCenterText = createWidget(widget.TEXT, { x: 10, y: h*2 + 145, w: 160, h: 160, color: 0xffffff, text_size: 20, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...' })
+             
+             smokeBreakdownText = createWidget(widget.TEXT, { x: 0, y: h*2 + 315, w: 180, h: 60, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
 
              createWidget(widget.BUTTON, { x: 190, y: h*2 + 145, w: 180, h: 70, radius: 35, normal_color: 0xff3b30, press_color: 0xaa2010, text: '+1 Cig', color: 0xffffff, text_size: 20, click_func: () => logSmoke(1, 'Cigarette') })
              createWidget(widget.BUTTON, { x: 190, y: h*2 + 235, w: 180, h: 70, radius: 35, normal_color: 0x007aff, press_color: 0x005bb5, text: '+1 Heat', color: 0xffffff, text_size: 20, click_func: () => logSmoke(1, 'Heated Tobacco') })
 
              // ================== PAGE 4: SMOKES STATS ==================
              createWidget(widget.TEXT, { x: 0, y: h*3 + 100, w: 390, h: 60, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Smoking 7 Days' })
+             createWidget(widget.TEXT, { x: 0, y: h*3 + 140, w: 390, h: 30, color: 0x007aff, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Red: Cigs | Blue: Heat' })
              
              smokeHistogram = createWidget(widget.HISTOGRAM, {
-               x: 20, y: h*3 + 170, w: 350, h: 180,
+               x: 20, y: h*3 + 180, w: 350, h: 180,
                item_color: 0xff5555,
                item_bg_color: 0x333333,
                item_width: 30,
                item_space: 15,
                item_radius: 10,
                data_array: smokeWeek,
+               data_count: 7,
+               data_min_value: 0,
+               data_max_value: Math.max(smokeBaseline, ...smokeWeek, 10)
+             })
+             
+             heatHistogram = createWidget(widget.HISTOGRAM, {
+               x: 20, y: h*3 + 180, w: 350, h: 180,
+               item_color: 0x007aff,
+               item_bg_color: 0x00000000,
+               item_width: 30,
+               item_space: 15,
+               item_radius: 10,
+               data_array: heatWeek,
                data_count: 7,
                data_min_value: 0,
                data_max_value: Math.max(smokeBaseline, ...smokeWeek, 10)

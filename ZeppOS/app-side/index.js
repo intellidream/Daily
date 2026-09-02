@@ -119,6 +119,7 @@ AppSideService(
              const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
              // We return exactly 7 buckets for the histogram
              let weekBuckets = [0, 0, 0, 0, 0, 0, 0]
+             let subTypeBuckets = [0, 0, 0, 0, 0, 0, 0]
              
              if (Array.isArray(resBody)) {
                resBody.forEach(row => { 
@@ -132,10 +133,25 @@ AppSideService(
                  
                  if (bucketIndex >= 0 && bucketIndex <= 6) {
                    weekBuckets[bucketIndex] += val
+                   
+                   let meta = {}
+                   if (typeof row.metadata === 'string') {
+                      try { meta = JSON.parse(row.metadata) } catch(e) {}
+                   } else if (row.metadata) {
+                      meta = row.metadata
+                   }
+                   
+                   if (habit_type === 'water') {
+                     const drinkType = meta.drink || ''
+                     if (drinkType.includes('Coffee')) subTypeBuckets[bucketIndex] += val
+                   } else if (habit_type === 'smokes') {
+                     const sType = meta.type || ''
+                     if (sType.includes('Heat') || sType.includes('Vape')) subTypeBuckets[bucketIndex] += val
+                   }
                  }
                })
              }
-             res(null, { success: true, data: weekBuckets })
+             res(null, { success: true, data: { total: weekBuckets, sub: subTypeBuckets } })
           })
           .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else if (req.method === 'LOG_HABIT') {
@@ -146,7 +162,7 @@ AppSideService(
             value: value,
             unit: unit,
             logged_at: new Date().toISOString(),
-            metadata: metadata,
+            metadata: typeof metadata === 'string' ? metadata : JSON.stringify(metadata),
             is_deleted: false,
             user_id: user_id
           }
@@ -163,7 +179,10 @@ AppSideService(
             body: JSON.stringify(bodyObj)
           })
           .then(response => {
-            if (response.status >= 400) return res(`API Error ${response.status}`, { success: false })
+            if (response.status >= 400) {
+                const bStr = typeof response.body === 'string' ? response.body : JSON.stringify(response.body)
+                return res(`API Error ${response.status}: ${bStr.substring(0, 30)}`, { success: false })
+            }
             res(null, { success: true })
           })
           .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
