@@ -26,23 +26,38 @@ Page(
       try {
         logger.info('page build invoked')
         
-        const accessToken = loadFileStr('token.txt')
+        let accessToken = loadFileStr('token.txt')
+        let refreshToken = loadFileStr('refresh_token.txt')
         const userId = loadFileStr('userid.txt')
         const self = this
         
         if (accessToken) {
           // --- LOADING UI ---
-          const loadingText = createWidget(widget.TEXT, {
-            x: 0,
-            y: 0,
-            w: 390,
-            h: 450,
-            color: 0x00ffff,
-            text_size: 24,
-            align_h: align.CENTER_H,
-            align_v: align.CENTER_V,
-            text: 'Loading Orbit...'
+          const loadingBg = createWidget(widget.ARC, {
+            x: 145, y: 125, w: 100, h: 100,
+            start_angle: -90, end_angle: 270,
+            color: 0x222222, line_width: 8
           })
+          
+          const loadingArc = createWidget(widget.ARC, {
+            x: 145, y: 125, w: 100, h: 100,
+            start_angle: -90, end_angle: 0,
+            color: 0x00aaff, line_width: 8
+          })
+          
+          const loadingText = createWidget(widget.TEXT, {
+            x: 0, y: 240, w: 390, h: 50,
+            color: 0xffffff, text_size: 20,
+            align_h: align.CENTER_H, align_v: align.CENTER_V,
+            text: 'Orbiting...'
+          })
+          
+          let loadingAngle = -90;
+          const loadingTimer = setInterval(() => {
+              loadingAngle += 15;
+              if (loadingAngle >= 270) loadingAngle = -90;
+              loadingArc.setProperty(prop.MORE, { start_angle: loadingAngle, end_angle: loadingAngle + 90 })
+          }, 50)
 
           let waterGoal = 2000
           let smokeBaseline = 20
@@ -68,20 +83,36 @@ Page(
           let waterBreakdownText;
           let smokeBreakdownText;
 
+          const doRequest = (method, params) => {
+             return self.request({ method, params }).then(res => {
+                if (res && res.success === false) throw new Error(res.error || 'API Failed')
+                return res
+             })
+          }
+
+          const showError = (msg) => {
+             clearInterval(loadingTimer)
+             loadingBg.setProperty(prop.VISIBLE, false)
+             loadingArc.setProperty(prop.VISIBLE, false)
+             loadingText.setProperty(prop.TEXT, msg)
+             loadingText.setProperty(prop.COLOR, 0xff0000)
+             
+             createWidget(widget.BUTTON, {
+               x: 45, y: 300, w: 300, h: 60, radius: 30, normal_color: 0x222222, press_color: 0x111111,
+               text: '⚙️ Reset App', color: 0xffffff, text_size: 20,
+               click_func: () => { saveFileStr('token.txt', ''); saveFileStr('refresh_token.txt', ''); saveFileStr('userid.txt', ''); exit() }
+             })
+          }
+
           const fetchData = () => {
-             self.request({
-               method: 'GET_PREFS',
-               params: { access_token: accessToken, user_id: userId }
-             }).then(res => {
+             doRequest('GET_PREFS', { access_token: accessToken, user_id: userId })
+             .then(res => {
                if (res && res.success && res.data) {
                  waterGoal = res.data.water_goal || 2000
                  smokeBaseline = res.data.smokes_baseline || 20
                }
                
-               return self.request({
-                 method: 'GET_HABITS_TODAY',
-                 params: { access_token: accessToken, user_id: userId, habit_type: 'water' }
-               })
+               return doRequest('GET_HABITS_TODAY', { access_token: accessToken, user_id: userId, habit_type: 'water' })
              }).then(res => {
                if (res && res.success && res.data) {
                  waterTotal = res.data.total || 0
@@ -89,10 +120,7 @@ Page(
                  coffeeVal = res.data.coffeeTotal || 0
                }
                
-               return self.request({
-                 method: 'GET_HABITS_TODAY',
-                 params: { access_token: accessToken, user_id: userId, habit_type: 'smokes' }
-               })
+               return doRequest('GET_HABITS_TODAY', { access_token: accessToken, user_id: userId, habit_type: 'smokes' })
              }).then(res => {
                if (res && res.success && res.data) {
                  smokeTotal = res.data.total || 0
@@ -100,41 +128,51 @@ Page(
                  heatVal = res.data.heatTotal || 0
                }
                
-               return self.request({
-                 method: 'GET_HABITS_WEEK',
-                 params: { access_token: accessToken, habit_type: 'water' }
-               })
+               return doRequest('GET_HABITS_WEEK', { access_token: accessToken, habit_type: 'water' })
              }).then(res => {
                if (res && res.success && res.data) {
                  waterWeek = res.data.total || [0,0,0,0,0,0,0]
                  coffeeWeek = res.data.sub || [0,0,0,0,0,0,0]
                }
                
-               return self.request({
-                 method: 'GET_HABITS_WEEK',
-                 params: { access_token: accessToken, habit_type: 'smokes' }
-               })
+               return doRequest('GET_HABITS_WEEK', { access_token: accessToken, habit_type: 'smokes' })
              }).then(res => {
                if (res && res.success && res.data) {
                  smokeWeek = res.data.total || [0,0,0,0,0,0,0]
                  heatWeek = res.data.sub || [0,0,0,0,0,0,0]
                }
                
+               clearInterval(loadingTimer)
+               loadingBg.setProperty(prop.VISIBLE, false)
+               loadingArc.setProperty(prop.VISIBLE, false)
                loadingText.setProperty(prop.VISIBLE, false)
                buildDashboard()
              }).catch(err => {
                let errMsg = err ? err.toString() : 'Unknown'
                if (err && err.message) errMsg = err.message
+               logger.error('Fetch chain error', errMsg)
                
-               loadingText.setProperty(prop.TEXT, 'Err: ' + errMsg.substring(0, 50))
-               loadingText.setProperty(prop.COLOR, 0xff0000)
-               logger.error('Fetch chain error', err)
+               if (errMsg.includes('401') || errMsg.includes('JWT expired')) {
+                  if (!refreshToken) {
+                     showError('Session expired. Please Re-Pair.')
+                     return
+                  }
+                  self.request({ method: 'REFRESH_TOKEN', params: { refresh_token: refreshToken } })
+                  .then(refRes => {
+                     if (refRes && refRes.success && refRes.data) {
+                        accessToken = refRes.data.access_token
+                        refreshToken = refRes.data.refresh_token
+                        saveFileStr('token.txt', accessToken)
+                        saveFileStr('refresh_token.txt', refreshToken)
+                        fetchData() // Retry!
+                     } else {
+                        showError('Refresh failed. Please Re-Pair.')
+                     }
+                  }).catch(e => showError('Network Error. Reset App.'))
+                  return
+               }
                
-               createWidget(widget.BUTTON, {
-                 x: 45, y: 300, w: 300, h: 60, radius: 30, normal_color: 0x222222, press_color: 0x111111,
-                 text: '⚙️ Reset App', color: 0xffffff, text_size: 20,
-                 click_func: () => { saveFileStr('token.txt', ''); saveFileStr('userid.txt', ''); exit() }
-               })
+               showError('Err: ' + errMsg.substring(0, 50))
              })
           }
           
@@ -383,7 +421,7 @@ Page(
              createWidget(widget.IMG, { x: 145, y: h*4 + 80, src: 'icon.png' })
              createWidget(widget.TEXT, { x: 0, y: h*4 + 200, w: 390, h: 40, color: 0xffffff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'DayOne Orbit' })
              createWidget(widget.TEXT, { x: 0, y: h*4 + 240, w: 390, h: 30, color: 0xaaaaaa, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'v1.0.0 Sync App' })
-             createWidget(widget.BUTTON, { x: 45, y: h*4 + 320, w: 300, h: 60, radius: 30, normal_color: 0x222222, press_color: 0x111111, text: '⚙️ Unpair & Logout', color: 0xffffff, text_size: 20, click_func: () => { saveFileStr('token.txt', ''); saveFileStr('userid.txt', ''); exit() } })
+             createWidget(widget.BUTTON, { x: 45, y: h*4 + 320, w: 300, h: 60, radius: 30, normal_color: 0x222222, press_color: 0x111111, text: '⚙️ Unpair & Logout', color: 0xffffff, text_size: 20, click_func: () => { saveFileStr('token.txt', ''); saveFileStr('refresh_token.txt', ''); saveFileStr('userid.txt', ''); exit() } })
 
              
              updateWaterUI()
@@ -425,6 +463,7 @@ Page(
                         statusText.setProperty(prop.COLOR, 0x00ff00)
                         
                         saveFileStr('token.txt', data[0].access_token)
+                        if (data[0].refresh_token) saveFileStr('refresh_token.txt', data[0].refresh_token)
                         if (data[0].user_id) saveFileStr('userid.txt', data[0].user_id)
 
                         setTimeout(() => { exit() }, 2000)

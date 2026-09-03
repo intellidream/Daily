@@ -47,6 +47,7 @@ AppSideService(
           })
           .then(response => {
              const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
+             if (response.status >= 400) return res(`API Error ${response.status}`, { success: false, error: `401: ${resBody.message || ''}` })
              let prefs = { water_goal: 2000, smokes_baseline: 20 }
              if (Array.isArray(resBody) && resBody.length > 0) {
                if (resBody[0].water_goal) prefs.water_goal = resBody[0].water_goal
@@ -70,6 +71,7 @@ AppSideService(
           })
           .then(response => {
              const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
+             if (response.status >= 400) return res(`API Error ${response.status}`, { success: false, error: `401: ${resBody.message || ''}` })
              let total = 0
              let waterTotal = 0
              let coffeeTotal = 0
@@ -120,6 +122,7 @@ AppSideService(
           })
           .then(response => {
              const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
+             if (response.status >= 400) return res(`API Error ${response.status}`, { success: false, error: `401: ${resBody.message || ''}` })
              // We return exactly 7 buckets for the histogram
              let weekBuckets = [0, 0, 0, 0, 0, 0, 0]
              let subTypeBuckets = [0, 0, 0, 0, 0, 0, 0]
@@ -193,6 +196,25 @@ AppSideService(
                 return res(`API Error ${response.status}: ${bStr.substring(0, 30)}`, { success: false })
             }
             res(null, { success: true })
+          })
+          .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
+        } else if (req.method === 'REFRESH_TOKEN') {
+          const { refresh_token } = req.params
+          fetch({
+            url: `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_ANON_KEY
+            },
+            body: JSON.stringify({ refresh_token: refresh_token })
+          })
+          .then(response => {
+             const resBody = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
+             if (response.status >= 400 || !resBody.access_token) {
+                 return res(`Refresh Error ${response.status}`, { success: false })
+             }
+             res(null, { success: true, data: { access_token: resBody.access_token, refresh_token: resBody.refresh_token } })
           })
           .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else {
