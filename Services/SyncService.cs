@@ -475,12 +475,12 @@ namespace Daily.Services
                     {
                         threshold = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
                     }
-                    else if (lastPull > threshold)
+                    else if (lastPull < threshold)
                     {
-                        threshold = lastPull.AddMinutes(-5); // Buffer to catch inflight syncs
+                        threshold = lastPull;
                     }
                     
-                    query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, threshold.ToString("O"));
+                    query = query.Filter("created_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, threshold.ToString("O"));
 
                     var response = await query.Range(rangeStart, rangeEnd).Get();
 
