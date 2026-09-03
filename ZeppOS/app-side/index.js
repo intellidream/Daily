@@ -217,6 +217,40 @@ AppSideService(
              res(null, { success: true, data: { access_token: resBody.access_token, refresh_token: resBody.refresh_token } })
           })
           .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
+        } else if (req.method === 'SYNC_TELEMETRY') {
+          const { access_token, user_id, telemetry } = req.params
+          if (!telemetry || telemetry.length === 0) return res(null, { success: true })
+          
+          const nowIso = new Date().toISOString()
+          const rows = telemetry.map(t => ({
+             user_id: user_id,
+             type: t.type,
+             value: t.value,
+             unit: t.unit,
+             start_time: nowIso,
+             end_time: nowIso,
+             source_device: 'Zepp OS Watch'
+          }))
+          
+          fetch({
+            url: `${SUPABASE_URL}/rest/v1/health_telemetry`,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${access_token}`,
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(rows)
+          })
+          .then(response => {
+            if (response.status >= 400) {
+                const bStr = typeof response.body === 'string' ? response.body : JSON.stringify(response.body)
+                return res(`API Error ${response.status}: ${bStr.substring(0, 30)}`, { success: false })
+            }
+            res(null, { success: true })
+          })
+          .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else {
           res(null, { error: 'Unknown method' })
         }

@@ -5,6 +5,7 @@ import { BasePage } from '@zeppos/zml/base-page'
 import { exit } from '@zos/router'
 import { statSync, writeFileSync, readFileSync } from '@zos/fs'
 import { setScrollMode, SCROLL_MODE_SWIPER } from '@zos/page'
+import { HeartRate, Sleep, Step, BloodOxygen } from '@zos/sensor'
 
 const logger = log.getLogger('dayone-orbit')
 
@@ -334,8 +335,6 @@ Page(
              }
 
              // ================== PAGE 1: BUBBLES ==================
-             debugText = createWidget(widget.TEXT, { x: 0, y: 15, w: 390, h: 40, color: 0xff0000, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '' })
-             
              createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 12 })
              waterArc = createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0x00ffff, line_width: 12 })
              coffeeArc = createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0xffa500, line_width: 12 })
@@ -418,14 +417,78 @@ Page(
              })
 
              // ================== PAGE 5: ABOUT / SETTINGS ==================
-             createWidget(widget.IMG, { x: 145, y: h*4 + 80, src: 'icon.png' })
-             createWidget(widget.TEXT, { x: 0, y: h*4 + 200, w: 390, h: 40, color: 0xffffff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'DayOne Orbit' })
-             createWidget(widget.TEXT, { x: 0, y: h*4 + 240, w: 390, h: 30, color: 0xaaaaaa, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'v1.0.0 Sync App' })
-             createWidget(widget.BUTTON, { x: 45, y: h*4 + 320, w: 300, h: 60, radius: 30, normal_color: 0x222222, press_color: 0x111111, text: '⚙️ Unpair & Logout', color: 0xffffff, text_size: 20, click_func: () => { saveFileStr('token.txt', ''); saveFileStr('refresh_token.txt', ''); saveFileStr('userid.txt', ''); exit() } })
+             createWidget(widget.IMG, { x: 145, y: h*4 + 60, src: 'icon.png' })
+             createWidget(widget.TEXT, { x: 0, y: h*4 + 180, w: 390, h: 40, color: 0xffffff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'DayOne Orbit' })
+             createWidget(widget.TEXT, { x: 0, y: h*4 + 220, w: 390, h: 30, color: 0xaaaaaa, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'v1.0.0 Sync App' })
+             
+             debugText = createWidget(widget.TEXT, { x: 10, y: h*4 + 250, w: 370, h: 80, color: 0xffa500, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: 'Waiting for health sync...' })
+             
+             createWidget(widget.BUTTON, { x: 45, y: h*4 + 340, w: 300, h: 60, radius: 30, normal_color: 0x222222, press_color: 0x111111, text: '⚙️ Unpair & Logout', color: 0xffffff, text_size: 20, click_func: () => { saveFileStr('token.txt', ''); saveFileStr('refresh_token.txt', ''); saveFileStr('userid.txt', ''); exit() } })
 
              
              updateWaterUI()
              updateSmokeUI()
+             
+             // Poll telemetry every 1 hour (3600000 ms) while app is open, and once on load
+             setInterval(syncTelemetry, 3600000)
+             setTimeout(syncTelemetry, 1000) // 1 second after dashboard builds
+          }
+          
+          const syncTelemetry = () => {
+             try {
+                const hr = new HeartRate()
+                const sleep = new Sleep()
+                const step = new Step()
+                const bo = new BloodOxygen()
+                
+                const hrLast = hr.getLast() || 0
+                const sleepInfo = sleep.getInfo() || {}
+                const stepData = step.getCurrent() || {}
+                const boLast = bo.getCurrent() || {}
+                
+                const payload = []
+                
+                if (hrLast > 0) {
+                    payload.push({ type: 'heart_rate', value: hrLast, unit: 'bpm' })
+                }
+                
+                if (stepData.step > 0) {
+                    payload.push({ type: 'steps', value: stepData.step, unit: 'count' })
+                    payload.push({ type: 'active_energy', value: stepData.calorie, unit: 'kcal' })
+                }
+                
+                if (boLast.value > 0) {
+                    payload.push({ type: 'blood_oxygen', value: boLast.value, unit: '%' })
+                }
+                
+                // Granular sleep data
+                if (sleepInfo.totalTime > 0) {
+                    if (sleepInfo.deepTime > 0) payload.push({ type: 'sleep_deep', value: sleepInfo.deepTime, unit: 'minutes' })
+                    if (sleepInfo.lightTime > 0) payload.push({ type: 'sleep_light', value: sleepInfo.lightTime, unit: 'minutes' })
+                    if (sleepInfo.remTime > 0) payload.push({ type: 'sleep_rem', value: sleepInfo.remTime, unit: 'minutes' })
+                    if (sleepInfo.awakeTime > 0) payload.push({ type: 'sleep_awake', value: sleepInfo.awakeTime, unit: 'minutes' })
+                }
+                
+                if (payload.length > 0) {
+                    if (debugText) debugText.setProperty(prop.TEXT, `Sending ${payload.length} sensors...`)
+                    self.request({
+                        method: 'SYNC_TELEMETRY',
+                        params: { access_token: accessToken, user_id: userId, telemetry: payload }
+                    }).then(res => {
+                        const d = new Date()
+                        const timeStr = d.getHours() + ':' + (d.getMinutes()<10?'0':'') + d.getMinutes()
+                        if (debugText) debugText.setProperty(prop.TEXT, res?.success ? `Health data successfully synced at ${timeStr}` : `Sync Failed: ${res?.error || 'Unknown'}`)
+                    }).catch(e => {
+                        logger.error('Telemetry push failed', e)
+                        if (debugText) debugText.setProperty(prop.TEXT, `Sync err: ${e}`)
+                    })
+                } else {
+                    if (debugText) debugText.setProperty(prop.TEXT, 'No sensor data')
+                }
+             } catch(err) {
+                 logger.error('Sensor read failed', err)
+                 if (debugText) debugText.setProperty(prop.TEXT, `Read err: ${err}`)
+             }
           }
           
           fetchData()

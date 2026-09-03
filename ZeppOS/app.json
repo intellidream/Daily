@@ -54,6 +54,12 @@
     }
   },
   "permissions": [
-    "device:os.network"
+    "device:os.network",
+    "device:os.bg_service",
+    "device:os.alarm",
+    "data:user.hd.step",
+    "data:user.hd.sleep",
+    "data:user.hd.heart_rate",
+    "data:user.hd.spo2"
   ]
 }
