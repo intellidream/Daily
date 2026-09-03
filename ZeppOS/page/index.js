@@ -5,7 +5,7 @@ import { BasePage } from '@zeppos/zml/base-page'
 import { exit } from '@zos/router'
 import { statSync, writeFileSync, readFileSync } from '@zos/fs'
 import { setScrollMode, SCROLL_MODE_SWIPER } from '@zos/page'
-import { HeartRate, Sleep, Step, BloodOxygen, Calorie } from '@zos/sensor'
+import { HeartRate, Sleep, Step, BloodOxygen, Calorie, Stress, Pai } from '@zos/sensor'
 
 const logger = log.getLogger('dayone-orbit')
 
@@ -473,34 +473,56 @@ Page(
                      payload.push({ type: 'blood_oxygen', value: boLast, unit: '%' })
                  }
                  
-                 // Granular sleep data using stages
+                 // Stress and PAI
+                 let stressVal = 0; let paiVal = 0;
+                 try { const str = new Stress(); const s = str.getCurrent(); stressVal = (s && s.value) ? s.value : (s || 0) } catch(e) {}
+                 try { const p = new Pai(); paiVal = p.getToday() || 0 } catch(e) {}
+                 
+                 if (stressVal > 0) payload.push({ type: 'stress', value: stressVal, unit: 'score' })
+                 if (paiVal > 0) payload.push({ type: 'pai', value: paiVal, unit: 'score' })
+                 
+                 const nowD = new Date()
+                 const midnightAnchor = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 0, 0, 0, 0).getTime()
+
+                 // Granular sleep data using precise stages graph
                  const sleepInfo = sleep.getInfo() || {}
                  if (sleepInfo.totalTime > 0) {
-                     payload.push({ type: 'sleep_deep', value: sleepInfo.deepTime || 0, unit: 'minutes' })
-                     
-                     // Aggregate stages manually if getStage is available
                      if (typeof sleep.getStage === 'function') {
-                         let light = 0, rem = 0, awake = 0
                          const stages = sleep.getStage() || []
                          const constants = sleep.getStageConstantObj ? sleep.getStageConstantObj() : { LIGHT_STAGE: 1, DEEP_STAGE: 2, REM_STAGE: 3, WAKE_STAGE: 0 }
                          
                          stages.forEach(st => {
                              const dur = st.stop - st.start
                              if (dur > 0) {
-                                 if (st.model === constants.LIGHT_STAGE) light += dur
-                                 else if (st.model === constants.REM_STAGE) rem += dur
-                                 else if (st.model === constants.WAKE_STAGE) awake += dur
+                                 let sType = 'sleep_stage_unknown'
+                                 if (st.model === constants.LIGHT_STAGE) sType = 'sleep_stage_light'
+                                 else if (st.model === constants.DEEP_STAGE) sType = 'sleep_stage_deep'
+                                 else if (st.model === constants.REM_STAGE) sType = 'sleep_stage_rem'
+                                 else if (st.model === constants.WAKE_STAGE) sType = 'sleep_stage_awake'
+                                 
+                                 const startIso = new Date(midnightAnchor + st.start * 60000).toISOString()
+                                 const endIso = new Date(midnightAnchor + st.stop * 60000).toISOString()
+                                 payload.push({ type: sType, value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })
                              }
                          })
-                         
-                         if (light > 0) payload.push({ type: 'sleep_light', value: light, unit: 'minutes' })
-                         if (rem > 0) payload.push({ type: 'sleep_rem', value: rem, unit: 'minutes' })
-                         if (awake > 0) payload.push({ type: 'sleep_awake', value: awake, unit: 'minutes' })
                      } else {
-                         // Fallback math
+                         payload.push({ type: 'sleep_deep', value: sleepInfo.deepTime || 0, unit: 'minutes' })
                          const light = sleepInfo.totalTime - (sleepInfo.deepTime || 0)
                          if (light > 0) payload.push({ type: 'sleep_light', value: light, unit: 'minutes' })
                      }
+                 }
+                 
+                 // Naps
+                 if (typeof sleep.getNap === 'function') {
+                     const naps = sleep.getNap() || []
+                     naps.forEach(nap => {
+                         const dur = nap.stop - nap.start
+                         if (dur > 0) {
+                             const startIso = new Date(midnightAnchor + nap.start * 60000).toISOString()
+                             const endIso = new Date(midnightAnchor + nap.stop * 60000).toISOString()
+                             payload.push({ type: 'sleep_nap', value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })
+                         }
+                     })
                  }
                  
                  if (payload.length > 0) {

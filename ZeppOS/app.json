@@ -60,6 +60,8 @@
     "data:user.hd.step",
     "data:user.hd.sleep",
     "data:user.hd.heart_rate",
-    "data:user.hd.spo2"
+    "data:user.hd.spo2",
+    "data:user.hd.stress",
+    "data:user.hd.pai"
   ]
 }
