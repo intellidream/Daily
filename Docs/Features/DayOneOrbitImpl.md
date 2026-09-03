@@ -56,10 +56,13 @@ The process of directly pairing a Zepp OS smartwatch to the Supabase backend was
 2. **Fetch API Constraint**: Zepp OS uses a custom `fetch` implementation taking a single parameter object (`fetch({ url, method, body, headers })`) instead of the standard Web API signature.
 3. **PostgreSQL RLS for Pairing**: When claiming a PIN from the WinUI Desktop App (updating `user_id` and `access_token`), an `UPDATE` policy is enforced on `watch_pairing_codes`. A critical requirement is to explicitly specify the `WITH CHECK (true)` clause. Omitting it causes the database to implicitly evaluate the `USING (NOT claimed)` clause against the mutated row (`claimed = true`), triggering a silent rejection (returned as an empty array) which manifests as a `PostgrestException` in the C# `Supabase.Client`.
 
-### Watch Apps: Bubbles and Smokes (Zepp OS 3.0)
+### Zepp OS 3.0 Implementation Details
 *Added: Sep 2026*
 
-The Zepp OS application features robust habit trackers directly on the watch, bypassing the need for a phone UI:
+The Zepp OS application features robust habit trackers and health telemetry synchronization directly on the watch, bypassing the need for a phone UI:
 - **Persistent Sessions**: `@zos/storage` handles storing the user's Supabase JWT tokens locally on the watch, allowing the user to seamlessly skip pairing screens after the first login.
-- **Direct-to-Cloud Bridge**: New endpoints in the ZML proxy (`app-side`) were created (`GET_HABITS_TODAY` and `LOG_HABIT`). They intercept watch parameters and fire `fetch` commands directly to Supabase using the user's saved `Authorization: Bearer` token.
+- **Direct-to-Cloud Bridge**: New endpoints in the ZML proxy (`app-side`) were created (`GET_HABITS_TODAY`, `LOG_HABIT`, `SYNC_TELEMETRY`). They intercept watch parameters and fire `fetch` commands directly to Supabase using the user's saved `Authorization: Bearer` token.
 - **Optimistic UI**: When users log water, coffee, or smokes on the watch, the UI updates instantly using optimistic rendering, ensuring zero perceived latency before network confirmation.
+- **Multi-Device Support**: The concept of enforcing a "single-device-per-platform" constraint was completely removed from both MAUI and WinUI. Users can now pair multiple devices of the same operating system (e.g., two Zepp OS watches or two Apple Watches). Devices are strictly managed via the desktop app's `Unpair` action rather than automatic database overwrites.
+- **Zepp OS 3.0 Sensor Quirks**: The Health extraction implementation uses specific Zepp OS 3.0 APIs: `Step` now returns a primitive number rather than an object (requiring the standalone `Calorie` class for energy extraction), and `Sleep` granular stages (Deep, Light, REM, Awake) are calculated by manually iterating over the `sleep.getStage()` array, rather than relying on direct properties of `getInfo()`.
+- **Battery-Optimized Telemetry (Snapshot Sync)**: Instead of utilizing a heavy background `app-service` that drains battery on Zepp OS, telemetry syncing runs explicitly as a "Snapshot" whenever the user opens the DayOne Orbit app on their watch. To aid debugging in production, a dedicated scrolling text widget (`debugText`) is injected above the settings layout to display timestamped network confirmations or precise REST API failure codes.
