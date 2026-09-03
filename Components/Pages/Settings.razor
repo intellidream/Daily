@@ -200,6 +200,7 @@
                                         }
                                     </MudText>
                                 </div>
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => UnpairWatch(watch))" />
                             </div>
                             <MudDivider Style="opacity: 0.06;" />
                         }
@@ -648,6 +649,23 @@
         {
             _isPairing = false;
             StateHasChanged();
+        }
+    }
+
+    private async Task UnpairWatch(PairedWatch watch)
+    {
+        try
+        {
+            await SupabaseClient.From<PairedWatch>()
+                .Where(w => w.Id == watch.Id)
+                .Delete();
+
+            await LoadPairedWatches();
+            Snackbar.Add($"Unpaired {watch.DeviceName}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to unpair: {ex.Message}", Severity.Error);
         }
     }
 }

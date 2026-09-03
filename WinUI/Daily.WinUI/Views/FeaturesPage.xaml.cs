@@ -871,6 +871,29 @@ public sealed partial class FeaturesPage : Page
         }
     }
 
+    private async void UnpairWatch_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string watchId)
+        {
+            try
+            {
+                var supabase = MauiProgram.ServiceProvider.GetService<Supabase.Client>();
+                if (supabase != null)
+                {
+                    await supabase.From<Daily.Models.PairedWatch>()
+                        .Where(w => w.Id == watchId)
+                        .Delete();
+
+                    await LoadPairedWatchesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to unpair watch: {ex.Message}");
+            }
+        }
+    }
+
     private void OrbitSyncFrequencyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_isInitializing || _settings == null || OrbitSyncFrequencyCombo == null) return;
