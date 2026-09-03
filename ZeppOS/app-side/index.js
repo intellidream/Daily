@@ -83,7 +83,10 @@ AppSideService(
                  
                  let meta = {}
                  if (typeof row.metadata === 'string') {
-                    try { meta = JSON.parse(row.metadata) } catch(e) {}
+                    try { 
+                       meta = JSON.parse(row.metadata) 
+                       if (typeof meta === 'string') meta = JSON.parse(meta) // Unwrap double-stringified
+                    } catch(e) {}
                  } else if (row.metadata) {
                     meta = row.metadata
                  }
@@ -125,9 +128,11 @@ AppSideService(
                resBody.forEach(row => { 
                  const val = parseFloat(row.value) || 0
                  const logDate = new Date(row.logged_at)
-                 // Calculate difference in days from exactly 6 days ago (which is bucket 0)
-                 const diffTime = Math.abs(now.getTime() - logDate.getTime())
-                 const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+                 // Calculate difference in days using midnight-to-midnight
+                 const logDateMidnight = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate())
+                 const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                 const diffTime = Math.abs(todayMidnight.getTime() - logDateMidnight.getTime())
+                 const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
                  // Bucket 6 is today (diffDays == 0). Bucket 0 is 6 days ago (diffDays == 6).
                  const bucketIndex = 6 - diffDays
                  
@@ -136,7 +141,10 @@ AppSideService(
                    
                    let meta = {}
                    if (typeof row.metadata === 'string') {
-                      try { meta = JSON.parse(row.metadata) } catch(e) {}
+                      try { 
+                         meta = JSON.parse(row.metadata) 
+                         if (typeof meta === 'string') meta = JSON.parse(meta)
+                      } catch(e) {}
                    } else if (row.metadata) {
                       meta = row.metadata
                    }
@@ -162,6 +170,7 @@ AppSideService(
             value: value,
             unit: unit,
             logged_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
             metadata: typeof metadata === 'string' ? metadata : JSON.stringify(metadata),
             is_deleted: false,
             user_id: user_id
