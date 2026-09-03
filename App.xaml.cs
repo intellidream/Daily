@@ -138,52 +138,7 @@ namespace Daily
                 };
 #endif
 
-                // Token Push Logic (Option B) - Keep watches alive without Token Rotation
-                _supabase.Auth.AddStateChangedListener(async (sender, state) =>
-                {
-                    if (state == global::Supabase.Gotrue.Constants.AuthState.SignedIn || 
-                        state == global::Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
-                    {
-                        var session = _supabase.Auth.CurrentSession;
-                        if (session != null && !string.IsNullOrEmpty(session.AccessToken) && !string.IsNullOrEmpty(session.RefreshToken))
-                        {
-                            try
-                            {
-                                // Push the new token pair to all active watches for this user
-                                var userId = session.User?.Id;
-                                if (!string.IsNullOrEmpty(userId))
-                                {
-                                    // 1. Fetch active watches
-                                    var response = await _supabase.From<PairedWatch>()
-                                        .Where(x => x.UserId == userId)
-                                        .Where(x => x.IsActive == true)
-                                        .Get();
-
-                                    var watches = response.Models;
-                                    if (watches != null && watches.Any())
-                                    {
-                                        _logger.Log($"[App] Pushing fresh tokens to {watches.Count} paired watches...");
-                                        
-                                        // 2. Update them
-                                        foreach(var w in watches)
-                                        {
-                                            w.PendingAccessToken = session.AccessToken;
-                                            w.PendingRefreshToken = session.RefreshToken;
-                                            w.LastTokenPush = DateTime.UtcNow;
-                                        }
-
-                                        await _supabase.From<PairedWatch>().Upsert(watches);
-                                        _logger.Log("[App] Token push successful.");
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.Log($"[App] Failed to push tokens to watches: {ex.Message}");
-                            }
-                        }
-                    }
-                });
+                // Removed legacy Token Push Logic: Watches now use long-lived JWTs and do not need token rotation sync.
             });
 
             _trayService.Initialize();
@@ -608,6 +563,14 @@ namespace Daily
                 {
                     await Task.Delay(500); // Allow OS networks to settle
                     await _supabase.Realtime.ConnectAsync();
+                    
+                    // Check if token needs refresh upon resume (fixes MAUI/WinUI expiration bugs)
+                    var session = _supabase.Auth.CurrentSession;
+                    if (session != null && session.ExpiresAt() < DateTime.UtcNow)
+                    {
+                        _logger.Log("[App] Session expired during sleep. Refreshing now...");
+                        await _supabase.Auth.RefreshSession();
+                    }
                     
                     // Trigger a background sync pull on resume
                     await _syncService.PullAsync(SyncScope.All);

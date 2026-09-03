@@ -9,7 +9,7 @@
 create table if not exists public.paired_watches (
     id uuid primary key default gen_random_uuid(),
     user_id uuid not null references auth.users(id) on delete cascade,
-    platform text not null check (platform in ('watchos', 'wearos', 'harmonyos')),
+    platform text not null check (platform in ('watchos', 'wearos', 'harmonyos', 'zeppos')),
     device_name text,                               -- e.g. "Apple Watch Series 9", "Pixel Watch 2", "HarmonyOS Watch"
     paired_at timestamp with time zone default now() not null,
     last_token_push timestamp with time zone default now(),
@@ -25,7 +25,7 @@ alter table public.paired_watches enable row level security;
 -- Update platform check constraint to include harmonyos (idempotent)
 alter table public.paired_watches drop constraint if exists paired_watches_platform_check;
 alter table public.paired_watches add constraint paired_watches_platform_check
-    check (platform in ('watchos', 'wearos', 'harmonyos'));
+    check (platform in ('watchos', 'wearos', 'harmonyos', 'zeppos'));
 
 -- Users can only see their own paired watches
 drop policy if exists "Users see own paired watches" on public.paired_watches;

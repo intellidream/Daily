@@ -211,6 +211,9 @@ public sealed partial class FeaturesPage : Page
             // Load Subscribed Feeds list
             _ = LoadFeedsListAsync();
             UpdateMediumUi();
+            
+            // Load Paired Watches
+            _ = LoadPairedWatchesAsync();
         }
         catch (Exception ex)
         {
@@ -718,8 +721,43 @@ public sealed partial class FeaturesPage : Page
             }
         }
     }
-
     // ── EVENT HANDLERS ──
+
+    private async Task LoadPairedWatchesAsync()
+    {
+        try
+        {
+            var supabase = App.Current.Services.GetRequiredService<Supabase.Client>();
+            var currentUser = supabase.Auth.CurrentUser;
+            if (currentUser == null) return;
+
+            var response = await supabase.From<Daily.Models.PairedWatch>()
+                .Where(x => x.UserId == currentUser.Id)
+                .Where(x => x.IsActive == true)
+                .Order("paired_at", Supabase.Postgrest.Constants.Ordering.Descending)
+                .Get();
+
+            var watches = response.Models;
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (watches != null && watches.Count > 0)
+                {
+                    PairedWatchesPanel.Visibility = Visibility.Visible;
+                    PairedWatchesList.ItemsSource = watches;
+                }
+                else
+                {
+                    PairedWatchesPanel.Visibility = Visibility.Collapsed;
+                    PairedWatchesList.ItemsSource = null;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Failed to load paired watches: {ex}");
+        }
+    }
 
     private async void OrbitSubmitPinBtn_Click(object sender, RoutedEventArgs e)
     {
@@ -730,6 +768,12 @@ public sealed partial class FeaturesPage : Page
             OrbitPinFeedbackText.Text = "Please enter a valid 6-digit PIN.";
             OrbitPinFeedbackText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
             return;
+        }
+
+        string selectedPlatform = "zeppos"; // Default
+        if (OrbitPlatformCombo.SelectedItem is ComboBoxItem cbi && cbi.Tag != null)
+        {
+            selectedPlatform = cbi.Tag.ToString() ?? "zeppos";
         }
 
         OrbitSubmitPinBtn.IsEnabled = false;
@@ -757,11 +801,40 @@ public sealed partial class FeaturesPage : Page
                     {
                         // Update with tokens
                         pairingCode.UserId = Guid.Parse(currentUser.Id);
-                        pairingCode.AccessToken = supabase.Auth.CurrentSession?.AccessToken;
-                        pairingCode.RefreshToken = supabase.Auth.CurrentSession?.RefreshToken;
+                        
+                        // Generate long-lived JWT for the watch to prevent Token Rotation conflicts
+                        var rpcResponse = await supabase.Rpc("generate_watch_token", null);
+                        var watchToken = rpcResponse.Content?.Trim('"') ?? supabase.Auth.CurrentSession?.AccessToken;
+                        
+                        pairingCode.AccessToken = watchToken;
+                        pairingCode.RefreshToken = ""; // Empty refresh token so watch never attempts to refresh
                         pairingCode.Claimed = true;
                         
                         await supabase.From<Daily.Models.Health.WatchPairingCode>().Update(pairingCode);
+
+                        // Create PairedWatch row
+                        string deviceName = selectedPlatform switch
+                        {
+                            "watchos" => "Apple Watch",
+                            "wearos" => "Wear OS",
+                            "harmonyos" => "HarmonyOS Watch",
+                            "zeppos" => "Zepp OS",
+                            _ => "Watch"
+                        };
+
+                        var pairedWatch = new Daily.Models.PairedWatch
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            UserId = currentUser.Id,
+                            Platform = selectedPlatform,
+                            DeviceName = deviceName,
+                            PairedAt = DateTime.UtcNow,
+                            IsActive = true
+                        };
+
+                        await supabase.From<Daily.Models.PairedWatch>().Insert(pairedWatch);
+
+                        await LoadPairedWatchesAsync();
 
                         OrbitPinFeedbackText.Text = "Watch successfully linked!";
                         OrbitPinFeedbackText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Green);

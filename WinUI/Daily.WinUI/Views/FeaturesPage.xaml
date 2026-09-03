@@ -597,6 +597,29 @@
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="8" Padding="16">
                 <StackPanel Spacing="16">
+                    <!-- Paired Watches List -->
+                    <StackPanel x:Name="PairedWatchesPanel" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="Paired Watches" FontWeight="SemiBold" FontSize="14" />
+                        <ItemsControl x:Name="PairedWatchesList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="&#xE90D;" FontFamily="{ThemeResource SymbolThemeFontFamily}" FontSize="16" VerticalAlignment="Center" Margin="0,0,12,0" Opacity="0.7"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DeviceName}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding PairedAt}" FontSize="12" Opacity="0.5" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,8,0,8" />
+                    </StackPanel>
+
                     <!-- Pairing -->
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -605,10 +628,16 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="4" VerticalAlignment="Center">
                             <TextBlock Text="Smartwatch Pairing" FontWeight="SemiBold" FontSize="14" />
-                            <TextBlock Text="Link your standalone smartwatch to this account. Enter the 6-digit PIN displayed on your watch." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                            <TextBlock Text="Link your smartwatch to this account. Enter the 6-digit PIN displayed on your watch." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="12,0,0,0">
-                            <TextBox x:Name="OrbitPinTextBox" PlaceholderText="000000" MaxLength="6" Width="100" HorizontalAlignment="Center" />
+                            <ComboBox x:Name="OrbitPlatformCombo" SelectedIndex="3" Width="130">
+                                <ComboBoxItem Content="Apple Watch" Tag="watchos" />
+                                <ComboBoxItem Content="Wear OS" Tag="wearos" />
+                                <ComboBoxItem Content="HarmonyOS" Tag="harmonyos" />
+                                <ComboBoxItem Content="Zepp OS" Tag="zeppos" />
+                            </ComboBox>
+                            <TextBox x:Name="OrbitPinTextBox" PlaceholderText="000000" MaxLength="6" Width="80" HorizontalAlignment="Center" />
                             <Button x:Name="OrbitSubmitPinBtn" Content="Submit PIN" Click="OrbitSubmitPinBtn_Click" Style="{ThemeResource AccentButtonStyle}" />
                         </StackPanel>
                     </Grid>

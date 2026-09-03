@@ -200,29 +200,6 @@
                                         }
                                     </MudText>
                                 </div>
-                                <div class="d-flex gap-1" style="flex-shrink: 0;">
-                                    <MudTooltip Text="Push fresh auth tokens to this watch">
-                                        <MudIconButton Icon="@Icons.Material.Filled.Refresh"
-                                                       Color="Color.Primary"
-                                                       Size="Size.Small"
-                                                       Disabled="_isRepairingId == watch.Id"
-                                                       OnClick="@(() => RepairWatch(watch))" />
-                                    </MudTooltip>
-                                    @if (_unpairingWatchId == watch.Id)
-                                    {
-                                        <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" OnClick="@(() => ConfirmUnpair(watch))" Class="mx-1">Confirm</MudButton>
-                                        <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small" OnClick="@(() => _unpairingWatchId = null)">Cancel</MudButton>
-                                    }
-                                    else
-                                    {
-                                        <MudTooltip Text="Unpair this watch">
-                                            <MudIconButton Icon="@Icons.Material.Filled.LinkOff"
-                                                           Color="Color.Error"
-                                                           Size="Size.Small"
-                                                           OnClick="@(() => _unpairingWatchId = watch.Id)" />
-                                        </MudTooltip>
-                                    }
-                                </div>
                             </div>
                             <MudDivider Style="opacity: 0.06;" />
                         }
@@ -266,6 +243,7 @@
                                         <MudToggleItem Value="@("watchos")" Text="Apple Watch" />
                                         <MudToggleItem Value="@("wearos")" Text="Wear OS" />
                                         <MudToggleItem Value="@("harmonyos")" Text="HarmonyOS" />
+                                        <MudToggleItem Value="@("zeppos")" Text="Zepp OS" />
                                     </MudToggleGroup>
                                 </div>
                                 <div class="d-flex gap-2 justify-end">
@@ -529,8 +507,6 @@
     private MudTextField<string> _pairingCodeField;
     private bool _focusPairingCode;
     private List<PairedWatch> _pairedWatches = new();
-    private string? _isRepairingId;
-    private string? _unpairingWatchId;
 
     private void ShowPairingInput()
     {
@@ -550,6 +526,7 @@
         "watchos" => Icons.Custom.Brands.Apple,
         "wearos" => Icons.Custom.Brands.Google,
         "harmonyos" => Icons.Material.Filled.Watch,
+        "zeppos" => Icons.Material.Filled.Watch,
         _ => Icons.Material.Filled.Devices
     };
 
@@ -558,6 +535,7 @@
         "watchos" => "Apple Watch",
         "wearos" => "Wear OS",
         "harmonyos" => "HarmonyOS Watch",
+        "zeppos" => "Zepp OS",
         _ => "Watch"
     };
 
@@ -582,56 +560,7 @@
         }
     }
 
-    private async Task ConfirmUnpair(PairedWatch watch)
-    {
-        try
-        {
-            watch.IsActive = false;
-            await SupabaseClient.From<PairedWatch>().Update(watch);
-            _pairedWatches.Remove(watch);
-            Snackbar.Add("Watch unpaired.", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to unpair: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _unpairingWatchId = null;
-        }
-    }
 
-    private async Task RepairWatch(PairedWatch watch)
-    {
-        _isRepairingId = watch.Id;
-        StateHasChanged();
-
-        try
-        {
-            var currentSession = SupabaseClient.Auth.CurrentSession;
-            if (currentSession == null || string.IsNullOrEmpty(currentSession.AccessToken))
-            {
-                Snackbar.Add("You must be logged in to refresh watch tokens.", Severity.Error);
-                return;
-            }
-
-            watch.PendingAccessToken = currentSession.AccessToken;
-            watch.PendingRefreshToken = currentSession.RefreshToken;
-            watch.LastTokenPush = DateTime.UtcNow;
-            await SupabaseClient.From<PairedWatch>().Update(watch);
-
-            Snackbar.Add("Fresh tokens pushed! Open Daily on your watch to pick them up.", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Repair failed: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isRepairingId = null;
-            StateHasChanged();
-        }
-    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -656,8 +585,8 @@
                 return;
             }
 
-            var existingResponse = await SupabaseClient.From<WatchPairing>()
-                .Where(x => x.Code == _pairingCode)
+            var existingResponse = await SupabaseClient.From<Daily.Models.Health.WatchPairingCode>()
+                .Where(x => x.PinCode == _pairingCode && x.Claimed == false)
                 .Get();
 
             var existing = existingResponse.Models.FirstOrDefault();
@@ -667,10 +596,23 @@
                 return;
             }
 
-            existing.AccessToken = currentSession.AccessToken;
-            existing.RefreshToken = currentSession.RefreshToken;
+            if (existing.ExpiresAt < DateTime.UtcNow)
+            {
+                Snackbar.Add("This PIN has expired. Request a new one on your watch.", Severity.Error);
+                return;
+            }
 
-            var updateResponse = await SupabaseClient.From<WatchPairing>().Update(existing);
+            existing.UserId = Guid.Parse(currentSession.User!.Id);
+
+            // Generate long-lived JWT for the watch to prevent Token Rotation conflicts
+            var rpcResponse = await SupabaseClient.Rpc("generate_watch_token", null);
+            var watchToken = rpcResponse.Content?.Trim('"') ?? currentSession.AccessToken;
+
+            existing.AccessToken = watchToken;
+            existing.RefreshToken = ""; // Empty refresh token so watch never attempts to refresh
+            existing.Claimed = true;
+
+            var updateResponse = await SupabaseClient.From<Daily.Models.Health.WatchPairingCode>().Update(existing);
 
             if (updateResponse.Models == null || updateResponse.Models.Count == 0)
             {
@@ -678,20 +620,22 @@
                 return;
             }
 
-            // Polling to detect when the watch actually saves itself to the database
-            for (int i = 0; i < 4; i++)
+            // Create a PairedWatch row manually since we abandoned polling
+            var pairedWatch = new PairedWatch
             {
-                await Task.Delay(1500); // Wait 1.5s
-                await LoadPairedWatches();
-                
-                // If a watch matching the platform just appeared in the last 2 minutes, assume success and stop polling
-                if (_pairedWatches.Any(w => w.Platform == _pairingPlatform && w.PairedAt > DateTime.UtcNow.AddMinutes(-2)))
-                {
-                    break;
-                }
-            }
+                Id = Guid.NewGuid().ToString(),
+                UserId = currentSession.User!.Id,
+                Platform = _pairingPlatform,
+                DeviceName = GetPlatformDisplayName(_pairingPlatform),
+                PairedAt = DateTime.UtcNow,
+                IsActive = true
+            };
 
-            var watchLabel = GetPlatformDisplayName(_pairingPlatform) + " watch";
+            await SupabaseClient.From<PairedWatch>().Insert(pairedWatch);
+
+            await LoadPairedWatches();
+
+            var watchLabel = GetPlatformDisplayName(_pairingPlatform);
             Snackbar.Add($"Watch paired successfully! Check your {watchLabel}.", Severity.Success);
             _showPairingInput = false;
             _pairingCode = string.Empty;
