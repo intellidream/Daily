@@ -248,7 +248,11 @@ namespace Daily.Services
                         var remoteLogs = new List<HabitLog>();
                         foreach(var d in dirtyLogs)
                         {
-                            try { remoteLogs.Add(d.ToDomain()); }
+                            try { 
+                                var domain = d.ToDomain();
+                                domain.UpdatedAt = DateTime.UtcNow;
+                                remoteLogs.Add(domain); 
+                            }
                             catch { Console.WriteLine($"[SyncService] SKIP Bad Log ID: {d.Id}"); }
                         }
 
@@ -475,7 +479,7 @@ namespace Daily.Services
                     {
                         threshold = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
                     }
-                    else if (lastPull < threshold)
+                    else if (lastPull > threshold)
                     {
                         threshold = lastPull;
                     }

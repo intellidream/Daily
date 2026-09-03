@@ -125,9 +125,10 @@ AppSideService(
                resBody.forEach(row => { 
                  const val = parseFloat(row.value) || 0
                  const logDate = new Date(row.logged_at)
-                 // Calculate difference in days from exactly 6 days ago (which is bucket 0)
-                 const diffTime = Math.abs(now.getTime() - logDate.getTime())
-                 const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+                 const todayAtMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                 const logDateAtMidnight = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
+                 const diffTime = Math.abs(todayAtMidnight.getTime() - logDateAtMidnight.getTime());
+                 const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
                  // Bucket 6 is today (diffDays == 0). Bucket 0 is 6 days ago (diffDays == 6).
                  const bucketIndex = 6 - diffDays
                  
@@ -162,7 +163,7 @@ AppSideService(
             value: value,
             unit: unit,
             logged_at: new Date().toISOString(),
-            metadata: typeof metadata === 'string' ? metadata : JSON.stringify(metadata),
+            metadata: typeof metadata === 'string' ? JSON.parse(metadata) : metadata,
             is_deleted: false,
             user_id: user_id
           }
