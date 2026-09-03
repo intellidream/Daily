@@ -40,7 +40,10 @@ namespace Daily.Services
              
              var local = log.ToLocal();
              // Ensure ID is set
-             if (string.IsNullOrEmpty(local.Id)) local.Id = Guid.NewGuid().ToString();
+             if (string.IsNullOrEmpty(local.Id) || local.Id == Guid.Empty.ToString().ToLowerInvariant()) 
+             {
+                 local.Id = Guid.NewGuid().ToString().ToLowerInvariant();
+             }
              
              await _databaseService.Connection.InsertOrReplaceAsync(local);
         }

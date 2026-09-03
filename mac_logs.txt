@@ -1,0 +1,78 @@
+2026-09-03 15:18:27.185 Daily[33713:10071302] You've implemented -[<UIApplicationDelegate> application:performFetchWithCompletionHandler:], but you still need to add "fetch" to the list of your supported UIBackgroundModes in your Info.plist.
+2026-09-03 15:18:27.220 Daily[33713:10071302] [MauiProgram] Registering Health Services...
+2026-09-03 15:18:27.221 Daily[33713:10071302] [MauiProgram] Registering MockNativeHealthStore (Default)...
+2026-09-03 15:18:27.221 Daily[33713:10071302] [MauiProgram] Registering SupabaseHealthService...
+2026-09-03 15:18:27.221 Daily[33713:10071302] [MauiProgram] Health Services Registered.
+2026-09-03 15:18:27.309 Daily[33713:10071302] [RssFeedService] Constructor called. InstanceId: e08a2892-ddbd-47c7-909b-2f640f7bcbb4
+2026-09-03 15:18:27.315 Daily[33713:10071302] [DatabaseService] Initializing DB at: /Users/mihai/Library/Containers/com.intellidream.daily/Data/Library/Daily.db3
+2026-09-03 15:18:27.372 Daily[33713:10071566] [15:18:27] [App] Initialization Started.
+2026-09-03 15:18:27.416 Daily[33713:10071302] Loaded custom menubaricon
+2026-09-03 15:18:27.758 Daily[33713:10071626] [DatabaseService] Tables Created results: Migrated, Migrated, Migrated, Migrated
+2026-09-03 15:18:27.891 Daily[33713:10071302] Hidden on start.
+2026-09-03 15:18:28.243 Daily[33713:10071626] [SupabaseHealthService] Realtime Socket State Changed: Open
+2026-09-03 15:18:28.243 Daily[33713:10071626] [SupabaseHealthService] Realtime Socket opened/reconnected. Triggering debounced SetupRealtimeAsync...
+2026-09-03 15:18:28.243 Daily[33713:10071626] [HabitsService] Realtime Socket State Changed: Open
+2026-09-03 15:18:28.243 Daily[33713:10071626] [HabitsService] Realtime Socket opened/reconnected. Triggering debounced SetupRealtimeAsync...
+2026-09-03 15:18:28.246 Daily[33713:10071626] [15:18:28] [App] Supabase Session is NULL. Attempting Manual Hydration...
+2026-09-03 15:18:28.247 Daily[33713:10071626] [MauiSessionPersistence] Loading Session...
+2026-09-03 15:18:28.247 Daily[33713:10071626] [15:18:28] [MauiSessionPersistence] Loading Session...
+2026-09-03 15:18:28.254 Daily[33713:10071626] [MauiSessionPersistence] Loaded Session from Preferences.
+2026-09-03 15:18:28.254 Daily[33713:10071626] [15:18:28] [MauiSessionPersistence] Loaded Session from Preferences.
+2026-09-03 15:18:28.308 Daily[33713:10071302] [WindowManagerService] PreWarmed Mac Detail View. Visibility: False
+2026-09-03 15:18:28.316 Daily[33713:10071626] [15:18:28] [App] Hydrating Session for ionescusemail@gmail.com...
+2026-09-03 15:18:28.317 Daily[33713:10071626] [MauiSessionPersistence] Destroying Session...
+2026-09-03 15:18:28.317 Daily[33713:10071626] [15:18:28] [MauiSessionPersistence] Destroying Session...
+2026-09-03 15:18:28.319 Daily[33713:10071626] [MauiSessionPersistence] Session Removed from Preferences.
+2026-09-03 15:18:28.319 Daily[33713:10071626] [15:18:28] [MauiSessionPersistence] Session Removed from Preferences.
+2026-09-03 15:18:28.319 Daily[33713:10071626] [MauiSessionPersistence] Session Removed from SecureStorage.
+2026-09-03 15:18:28.319 Daily[33713:10071626] [15:18:28] [MauiSessionPersistence] Session Removed from SecureStorage.
+2026-09-03 15:18:28.321 Daily[33713:10071626] [15:18:28] [Supabase Client Factory] Auth state changed: SignedOut
+2026-09-03 15:18:28.321 Daily[33713:10071626] [15:18:28] [Supabase Client Factory] Clearing access token from Realtime client.
+2026-09-03 15:18:28.321 Daily[33713:10071626] [SupabaseHealthService] Auth State Changed: SignedOut
+2026-09-03 15:18:28.321 Daily[33713:10071626] [SettingsService] Auth State Changed: SignedOut
+2026-09-03 15:18:28.321 Daily[33713:10071626] [SettingsService] Handling Auth Change (SignedOut). Reloading...
+2026-09-03 15:18:28.321 Daily[33713:10071626] [HabitsService] Auth State Changed: SignedOut
+2026-09-03 15:18:28.322 Daily[33713:10071633] [HabitsService] Initialize: Guest mode.
+2026-09-03 15:18:28.322 Daily[33713:10071566] [SettingsService] Initializing. Auth: False, UserID: 00000000-0000-0000-0000-000000000000
+2026-09-03 15:18:28.362 Daily[33713:10071633] [SettingsService] ToDomain Raw: 'metric' -> Sanitized: 'metric'
+2026-09-03 15:18:28.474 Daily[33713:10071302] [MainLayout] OnInitialized Called.
+2026-09-03 15:18:28.549 Daily[33713:10071302] [WeatherService] Checking Permissions...
+2026-09-03 15:18:28.562 Daily[33713:10071302] [WeatherService] Requesting Permission (MainThread)...
+2026-09-03 15:18:28.594 Daily[33713:10071302] [RssFeedService] LoadFeedAsync called for Republica. Force: True. Instance: e08a2892-ddbd-47c7-909b-2f640f7bcbb4
+2026-09-03 15:18:28.856 Daily[33713:10071566] [MauiSessionPersistence] SecureStorage Failed (Error adding record: MissingEntitlement). Falling back to Preferences...
+2026-09-03 15:18:28.856 Daily[33713:10071566] [15:18:28] [MauiSessionPersistence] SecureStorage Failed (Error adding record: MissingEntitlement). Falling back to Preferences...
+2026-09-03 15:18:28.857 Daily[33713:10071566] [MauiSessionPersistence] Session Saved via Preferences.
+2026-09-03 15:18:28.857 Daily[33713:10071566] [15:18:28] [MauiSessionPersistence] Session Saved via Preferences.
+2026-09-03 15:18:28.857 Daily[33713:10071566] [StubWatchConnectivityService] SendSupabaseSession: WatchConnectivity is not supported on this platform.
+2026-09-03 15:18:28.857 Daily[33713:10071566] [15:18:28] [Supabase Client Factory] Auth state changed: SignedIn
+2026-09-03 15:18:28.857 Daily[33713:10071566] [15:18:28] [Supabase Client Factory] Propagating access token to Realtime client.
+2026-09-03 15:18:28.857 Daily[33713:10071566] [SupabaseHealthService] Auth State Changed: SignedIn
+2026-09-03 15:18:28.857 Daily[33713:10071566] [SettingsService] Auth State Changed: SignedIn
+2026-09-03 15:18:28.858 Daily[33713:10071566] [SettingsService] Handling Auth Change (SignedIn). Reloading...
+2026-09-03 15:18:28.858 Daily[33713:10071626] [SupabaseHealthService] Running vitals migration and deduplication...
+2026-09-03 15:18:28.858 Daily[33713:10071633] [SettingsService] Initializing. Auth: True, UserID: 32b8b75f-a0b0-4686-8519-f790f0b3822a
+2026-09-03 15:18:28.858 Daily[33713:10071566] [HabitsService] Auth State Changed: SignedIn
+2026-09-03 15:18:28.858 Daily[33713:10071989] [HabitsService] Initialize: User 32b8b75f-a0b0-4686-8519-f790f0b3822a detected. Triggering Sync & Realtime...
+2026-09-03 15:18:28.858 Daily[33713:10071566] [15:18:28] [App] Restored ProviderToken (Length: 341)
+2026-09-03 15:18:28.866 Daily[33713:10071566] [MauiSessionPersistence] SecureStorage Failed (Error adding record: MissingEntitlement). Falling back to Preferences...
+2026-09-03 15:18:28.866 Daily[33713:10071566] [15:18:28] [MauiSessionPersistence] SecureStorage Failed (Error adding record: MissingEntitlement). Falling back to Preferences...
+2026-09-03 15:18:28.866 Daily[33713:10072052] [SettingsService] Local User Settings found. Triggering Background Sync.
+2026-09-03 15:18:28.866 Daily[33713:10072052] [SettingsService] ToDomain Raw: 'metric' -> Sanitized: 'metric'
+2026-09-03 15:18:28.866 Daily[33713:10071566] [MauiSessionPersistence] Session Saved via Preferences.
+2026-09-03 15:18:28.866 Daily[33713:10071566] [15:18:28] [MauiSessionPersistence] Session Saved via Preferences.
+2026-09-03 15:18:28.866 Daily[33713:10071566] [15:18:28] [App] Re-saved Session with ProviderToken to ensure persistence.
+2026-09-03 15:18:28.866 Daily[33713:10071566] [15:18:28] [App] Manual Hydration Result: Success
+2026-09-03 15:18:28.866 Daily[33713:10071566] [SettingsService] Initializing. Auth: True, UserID: 32b8b75f-a0b0-4686-8519-f790f0b3822a
+2026-09-03 15:18:28.869 Daily[33713:10072053] [SupabaseHealthService] SyncNativeHealthDataAsync STARTED
+2026-09-03 15:18:28.869 Daily[33713:10072053] [Health] SyncNativeHealthDataAsync STARTED
+2026-09-03 15:18:28.870 Daily[33713:10072053] [SupabaseHealthService] Native Health Store not supported (Skipping Upload). Reading handled by Widget.
+2026-09-03 15:18:28.870 Daily[33713:10072053] [Health] Native Health Store not supported (Skipping Upload). Reading handled by Widget.
+2026-09-03 15:18:28.883 Daily[33713:10071302] [MacroService] Serving 6 cached indicators
+2026-09-03 15:18:28.886 Daily[33713:10072053] [SyncService] PushAsync Started with scope: All
+2026-09-03 15:18:28.915 Daily[33713:10072052] [SettingsService] Local User Settings found. Triggering Background Sync.
+2026-09-03 15:18:28.922 Daily[33713:10072052] [SettingsService] ToDomain Raw: 'metric' -> Sanitized: 'metric'
+2026-09-03 15:18:28.922 Daily[33713:10072052] [15:18:28] [App] Settings Initialized. IsAuthenticated: True
+2026-09-03 15:18:28.922 Daily[33713:10072052] [HabitsService] Initialize: User 32b8b75f-a0b0-4686-8519-f790f0b3822a detected. Triggering Sync & Realtime...
+2026-09-03 15:18:28.933 Daily[33713:10071566] [SyncService] Found 0 dirty logs for User 32b8b75f-a0b0-4686-8519-f790f0b3822a.
+2026-09-03 15:18:28.940 Daily[33713:10072052] [Seeder] SeedRssFeedsAsync Error: Calling context '' is expected to be a member of or derived from `BaseModel`
+2026-09-03 15:18:28.940 Daily[33713:10072057] [Seeder] SeedRssFeedsAsync Error: Calling context '' is expected to be a member of or derived from `BaseModel`

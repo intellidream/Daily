@@ -57,6 +57,7 @@ namespace Daily.Models
         public DateTime LoggedAt { get; set; }
 
         [Column("metadata")]
+        [Newtonsoft.Json.JsonConverter(typeof(StringOrObjectJsonConverter))]
         public string? Metadata { get; set; }
 
         [Column("created_at")]
@@ -108,5 +109,34 @@ namespace Daily.Models
 
         [Column("updated_at")]
         public DateTime? UpdatedAt { get; set; }
+    }
+
+    public class StringOrObjectJsonConverter : Newtonsoft.Json.JsonConverter
+    {
+        public override bool CanConvert(Type objectType) => objectType == typeof(string);
+
+        public override object? ReadJson(Newtonsoft.Json.JsonReader reader, Type objectType, object? existingValue, Newtonsoft.Json.JsonSerializer serializer)
+        {
+            if (reader.TokenType == Newtonsoft.Json.JsonToken.String)
+                return reader.Value;
+
+            if (reader.TokenType == Newtonsoft.Json.JsonToken.StartObject || reader.TokenType == Newtonsoft.Json.JsonToken.StartArray)
+            {
+                var token = Newtonsoft.Json.Linq.JToken.Load(reader);
+                return token.ToString(Newtonsoft.Json.Formatting.None);
+            }
+
+            return null;
+        }
+
+        public override void WriteJson(Newtonsoft.Json.JsonWriter writer, object? value, Newtonsoft.Json.JsonSerializer serializer)
+        {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+            writer.WriteValue(value.ToString());
+        }
     }
 }

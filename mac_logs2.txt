@@ -1,0 +1,247 @@
+2026-09-03 15:18:52.475 Daily[33801:10073085] You've implemented -[<UIApplicationDelegate> application:performFetchWithCompletionHandler:], but you still need to add "fetch" to the list of your supported UIBackgroundModes in your Info.plist.
+2026-09-03 15:18:52.526 Daily[33801:10073085] [MauiProgram] Registering Health Services...
+2026-09-03 15:18:52.526 Daily[33801:10073085] [MauiProgram] Registering MockNativeHealthStore (Default)...
+2026-09-03 15:18:52.526 Daily[33801:10073085] [MauiProgram] Registering SupabaseHealthService...
+2026-09-03 15:18:52.526 Daily[33801:10073085] [MauiProgram] Health Services Registered.
+2026-09-03 15:18:52.582 Daily[33801:10073085] [RssFeedService] Constructor called. InstanceId: 9b6364f0-d364-4ecf-b0d5-a42d0b546b51
+2026-09-03 15:18:52.590 Daily[33801:10073085] [DatabaseService] Initializing DB at: /Users/mihai/Library/Containers/com.intellidream.daily/Data/Library/Daily.db3
+2026-09-03 15:18:52.658 Daily[33801:10073206] [15:18:52] [App] Initialization Started.
+2026-09-03 15:18:52.702 Daily[33801:10073085] Loaded custom menubaricon
+2026-09-03 15:18:53.072 Daily[33801:10073298] [DatabaseService] Tables Created results: Migrated, Migrated, Migrated, Migrated
+2026-09-03 15:18:53.225 Daily[33801:10073085] Hidden on start.
+2026-09-03 15:18:53.444 Daily[33801:10073206] [SupabaseHealthService] Realtime Socket State Changed: Open
+2026-09-03 15:18:53.445 Daily[33801:10073206] [SupabaseHealthService] Realtime Socket opened/reconnected. Triggering debounced SetupRealtimeAsync...
+2026-09-03 15:18:53.445 Daily[33801:10073206] [HabitsService] Realtime Socket State Changed: Open
+2026-09-03 15:18:53.445 Daily[33801:10073206] [HabitsService] Realtime Socket opened/reconnected. Triggering debounced SetupRealtimeAsync...
+2026-09-03 15:18:53.447 Daily[33801:10073206] [15:18:53] [App] Supabase Session is NULL. Attempting Manual Hydration...
+2026-09-03 15:18:53.448 Daily[33801:10073206] [MauiSessionPersistence] Loading Session...
+2026-09-03 15:18:53.448 Daily[33801:10073206] [15:18:53] [MauiSessionPersistence] Loading Session...
+2026-09-03 15:18:53.456 Daily[33801:10073206] [MauiSessionPersistence] Loaded Session from Preferences.
+2026-09-03 15:18:53.456 Daily[33801:10073206] [15:18:53] [MauiSessionPersistence] Loaded Session from Preferences.
+2026-09-03 15:18:53.530 Daily[33801:10073206] [15:18:53] [App] Hydrating Session for ionescusemail@gmail.com...
+2026-09-03 15:18:53.532 Daily[33801:10073206] [MauiSessionPersistence] Destroying Session...
+2026-09-03 15:18:53.533 Daily[33801:10073206] [15:18:53] [MauiSessionPersistence] Destroying Session...
+2026-09-03 15:18:53.534 Daily[33801:10073206] [MauiSessionPersistence] Session Removed from Preferences.
+2026-09-03 15:18:53.534 Daily[33801:10073206] [15:18:53] [MauiSessionPersistence] Session Removed from Preferences.
+2026-09-03 15:18:53.534 Daily[33801:10073206] [MauiSessionPersistence] Session Removed from SecureStorage.
+2026-09-03 15:18:53.534 Daily[33801:10073206] [15:18:53] [MauiSessionPersistence] Session Removed from SecureStorage.
+2026-09-03 15:18:53.536 Daily[33801:10073206] [15:18:53] [Supabase Client Factory] Auth state changed: SignedOut
+2026-09-03 15:18:53.536 Daily[33801:10073206] [15:18:53] [Supabase Client Factory] Clearing access token from Realtime client.
+2026-09-03 15:18:53.536 Daily[33801:10073206] [SupabaseHealthService] Auth State Changed: SignedOut
+2026-09-03 15:18:53.536 Daily[33801:10073206] [SettingsService] Auth State Changed: SignedOut
+2026-09-03 15:18:53.536 Daily[33801:10073206] [SettingsService] Handling Auth Change (SignedOut). Reloading...
+2026-09-03 15:18:53.537 Daily[33801:10073206] [HabitsService] Auth State Changed: SignedOut
+2026-09-03 15:18:53.537 Daily[33801:10073297] [HabitsService] Initialize: Guest mode.
+2026-09-03 15:18:53.538 Daily[33801:10073351] [SettingsService] Initializing. Auth: False, UserID: 00000000-0000-0000-0000-000000000000
+2026-09-03 15:18:53.559 Daily[33801:10073297] [SettingsService] ToDomain Raw: 'metric' -> Sanitized: 'metric'
+2026-09-03 15:18:53.595 Daily[33801:10073085] [MainLayout] OnInitialized Called.
+2026-09-03 15:18:53.684 Daily[33801:10073085] [WeatherService] Checking Permissions...
+2026-09-03 15:18:53.694 Daily[33801:10073085] [WeatherService] Requesting Permission (MainThread)...
+2026-09-03 15:18:53.739 Daily[33801:10073085] [RssFeedService] LoadFeedAsync called for Republica. Force: True. Instance: 9b6364f0-d364-4ecf-b0d5-a42d0b546b51
+2026-09-03 15:18:53.852 Daily[33801:10073351] [MauiSessionPersistence] SecureStorage Failed (Error adding record: MissingEntitlement). Falling back to Preferences...
+2026-09-03 15:18:53.852 Daily[33801:10073351] [15:18:53] [MauiSessionPersistence] SecureStorage Failed (Error adding record: MissingEntitlement). Falling back to Preferences...
+2026-09-03 15:18:53.854 Daily[33801:10073351] [MauiSessionPersistence] Session Saved via Preferences.
+2026-09-03 15:18:53.854 Daily[33801:10073351] [15:18:53] [MauiSessionPersistence] Session Saved via Preferences.
+2026-09-03 15:18:53.854 Daily[33801:10073351] [StubWatchConnectivityService] SendSupabaseSession: WatchConnectivity is not supported on this platform.
+2026-09-03 15:18:53.855 Daily[33801:10073351] [15:18:53] [Supabase Client Factory] Auth state changed: SignedIn
+2026-09-03 15:18:53.855 Daily[33801:10073351] [15:18:53] [Supabase Client Factory] Propagating access token to Realtime client.
+2026-09-03 15:18:53.855 Daily[33801:10073351] [SupabaseHealthService] Auth State Changed: SignedIn
+2026-09-03 15:18:53.855 Daily[33801:10073351] [SettingsService] Auth State Changed: SignedIn
+2026-09-03 15:18:53.855 Daily[33801:10073351] [SettingsService] Handling Auth Change (SignedIn). Reloading...
+2026-09-03 15:18:53.856 Daily[33801:10073351] [HabitsService] Auth State Changed: SignedIn
+2026-09-03 15:18:53.856 Daily[33801:10073297] [SettingsService] Initializing. Auth: True, UserID: 32b8b75f-a0b0-4686-8519-f790f0b3822a
+2026-09-03 15:18:53.856 Daily[33801:10073206] [SupabaseHealthService] Running vitals migration and deduplication...
+2026-09-03 15:18:53.856 Daily[33801:10073298] [HabitsService] Initialize: User 32b8b75f-a0b0-4686-8519-f790f0b3822a detected. Triggering Sync & Realtime...
+2026-09-03 15:18:53.856 Daily[33801:10073351] [15:18:53] [App] Restored ProviderToken (Length: 341)
+2026-09-03 15:18:53.858 Daily[33801:10073351] [MauiSessionPersistence] SecureStorage Failed (Error adding record: MissingEntitlement). Falling back to Preferences...
+2026-09-03 15:18:53.858 Daily[33801:10073351] [15:18:53] [MauiSessionPersistence] SecureStorage Failed (Error adding record: MissingEntitlement). Falling back to Preferences...
+2026-09-03 15:18:53.859 Daily[33801:10073351] [MauiSessionPersistence] Session Saved via Preferences.
+2026-09-03 15:18:53.859 Daily[33801:10073351] [15:18:53] [MauiSessionPersistence] Session Saved via Preferences.
+2026-09-03 15:18:53.859 Daily[33801:10073351] [15:18:53] [App] Re-saved Session with ProviderToken to ensure persistence.
+2026-09-03 15:18:53.859 Daily[33801:10073351] [15:18:53] [App] Manual Hydration Result: Success
+2026-09-03 15:18:53.859 Daily[33801:10073351] [SettingsService] Initializing. Auth: True, UserID: 32b8b75f-a0b0-4686-8519-f790f0b3822a
+2026-09-03 15:18:53.862 Daily[33801:10073350] [SettingsService] Local User Settings found. Triggering Background Sync.
+2026-09-03 15:18:53.862 Daily[33801:10073350] [SettingsService] ToDomain Raw: 'metric' -> Sanitized: 'metric'
+2026-09-03 15:18:53.872 Daily[33801:10073350] [SupabaseHealthService] SyncNativeHealthDataAsync STARTED
+2026-09-03 15:18:53.872 Daily[33801:10073350] [Health] SyncNativeHealthDataAsync STARTED
+2026-09-03 15:18:53.874 Daily[33801:10073350] [SupabaseHealthService] Native Health Store not supported (Skipping Upload). Reading handled by Widget.
+2026-09-03 15:18:53.874 Daily[33801:10073350] [Health] Native Health Store not supported (Skipping Upload). Reading handled by Widget.
+2026-09-03 15:18:53.885 Daily[33801:10073350] [SyncService] PushAsync Started with scope: All
+2026-09-03 15:18:53.928 Daily[33801:10073297] [SettingsService] Local User Settings found. Triggering Background Sync.
+2026-09-03 15:18:53.928 Daily[33801:10073297] [SettingsService] ToDomain Raw: 'metric' -> Sanitized: 'metric'
+2026-09-03 15:18:53.929 Daily[33801:10073297] [15:18:53] [App] Settings Initialized. IsAuthenticated: True
+2026-09-03 15:18:53.929 Daily[33801:10073297] [HabitsService] Initialize: User 32b8b75f-a0b0-4686-8519-f790f0b3822a detected. Triggering Sync & Realtime...
+2026-09-03 15:18:53.944 Daily[33801:10073206] [SyncService] Found 0 dirty logs for User 32b8b75f-a0b0-4686-8519-f790f0b3822a.
+2026-09-03 15:18:53.957 Daily[33801:10073351] [Seeder] SeedRssFeedsAsync Error: Calling context '' is expected to be a member of or derived from `BaseModel`
+2026-09-03 15:18:53.957 Daily[33801:10073297] [Seeder] SeedRssFeedsAsync Error: Calling context '' is expected to be a member of or derived from `BaseModel`
+2026-09-03 15:18:53.987 Daily[33801:10073085] [WindowManagerService] PreWarmed Mac Detail View. Visibility: False
+2026-09-03 15:18:54.339 Daily[33801:10073379] [SupabaseHealthService] Vitals migration completed. Deduplicated from 2314 to 2314 records.
+2026-09-03 15:18:54.340 Daily[33801:10073379] [SupabaseHealthService] Propagating current session token to Realtime.
+2026-09-03 15:18:54.344 Daily[33801:10073085] [MacroService] Serving 6 cached indicators
+2026-09-03 15:18:54.447 Daily[33801:10073379] [HabitsService] Propagating current session token to Realtime.
+2026-09-03 15:18:54.530 Daily[33801:10073388] [SupabaseHealthService] Pulling vitals deltas for user 32b8b75f-a0b0-4686-8519-f790f0b3822a since 2026-09-03T14:05:57.0000000Z (with 5m skew buffer)
+2026-09-03 15:18:54.752 Daily[33801:10073351] [SyncService] Pruning Check: Threshold=6/5/2026, LatestSummary=6/5/2026. SafeDate=6/5/2026
+2026-09-03 15:18:54.764 Daily[33801:10073413] [HabitsService] Realtime subscribed to habits_logs
+2026-09-03 15:18:54.775 Daily[33801:10073413] [SupabaseHealthService] Realtime setup failed: {"ref":"431ded9f-0165-479b-9a32-388b145c7fcc","event":"phx_reply","payload":{"status":"error","response":{"reason":"unmatched topic"}},"topic":"realtime_health:public:health_vitals"}
+2026-09-03 15:18:54.775 Daily[33801:10073393] [SupabaseHealthService] Propagating current session token to Realtime.
+2026-09-03 15:18:54.775 Daily[33801:10073393] [SupabaseHealthService] Reconnected. Triggering background health catch-up pull...
+2026-09-03 15:18:54.831 Daily[33801:10073085] [HabitsService] RPC financials: 7612 smokes over 247 days
+2026-09-03 15:18:54.859 Daily[33801:10073389] [HabitsService] Realtime subscribed to habits_goals
+2026-09-03 15:18:54.859 Daily[33801:10073389] [HabitsService] Reconnected. Triggering background habits catch-up pull...
+2026-09-03 15:18:54.926 Daily[33801:10073389] [SyncService] Pruning Command Sent. Remote logs older than 6/5/2026 should be deleted.
+2026-09-03 15:18:54.926 Daily[33801:10073389] [SyncService] PushPreferencesAsync Started for 32b8b75f-a0b0-4686-8519-f790f0b3822a
+2026-09-03 15:18:55.197 Daily[33801:10073085] [WeatherService] Checking Permissions...
+2026-09-03 15:18:55.201 Daily[33801:10073085] [WeatherService] Requesting Permission (MainThread)...
+2026-09-03 15:18:55.232 Daily[33801:10073085] [RssFeedService] LoadFeedAsync called for Republica. Force: True. Instance: 9b6364f0-d364-4ecf-b0d5-a42d0b546b51
+2026-09-03 15:18:55.270 Daily[33801:10073297] [SyncService] Total Local Prefs: 2. IDs: 00000000-0000-0000-0000-000000000000 (Synced: , Updated: 1/1/0001 12:00:00 AM), 32b8b75f-a0b0-4686-8519-f790f0b3822a (Synced: 9/3/2026 11:52:19 AM, Updated: 9/3/2026 1:08:27 AM)
+2026-09-03 15:18:55.419 Daily[33801:10073085] [WeatherService] Permission Status: Granted
+2026-09-03 15:18:55.449 Daily[33801:10073085] [WeatherService] cache hit (LastKnown).
+2026-09-03 15:18:55.450 Daily[33801:10073085] [WeatherService] Fetching Weather. RawSetting: 'metric' | UnitsParam: 'metric'
+2026-09-03 15:18:55.450 Daily[33801:10073085] [WeatherService] URL: https://api.openweathermap.org/data/2.5/weather?lat=44.43311324253916&lon=26.127427523314715&appid=APIKEY&units=metric
+2026-09-03 15:18:55.599 Daily[33801:10073085] [WeatherService] Result Temp: 29
+2026-09-03 15:18:55.611 Daily[33801:10073394] [SupabaseHealthService] Pulling vitals deltas for user 32b8b75f-a0b0-4686-8519-f790f0b3822a since 2026-09-03T14:05:57.0000000Z (with 5m skew buffer)
+2026-09-03 15:18:55.618 Daily[33801:10073297] [SyncService] Dirty Prefs for 32b8b75f-a0b0-4686-8519-f790f0b3822a: 0
+2026-09-03 15:18:55.640 Daily[33801:10073379] [SyncService] PullAsync Started with scope: All
+2026-09-03 15:18:55.641 Daily[33801:10073379] [SyncService] Pulling Logs for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:55.641 Daily[33801:10073379] [SyncService] Pulling Logs range 0-999...
+2026-09-03 15:18:55.697 Daily[33801:10073085] [MacroService] Serving 6 cached indicators
+2026-09-03 15:18:55.954 Daily[33801:10073297] [SyncService] Pull Logs Error: Newtonsoft.Json.JsonReaderException: Unexpected character encountered while parsing value: {. Path '[26].metadata', line 27, position 196.
+   at Newtonsoft.Json.JsonTextReader.ReadStringValue(ReadType readType)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Newtonsoft.Json.JsonTextReader.ReadAsString()
+   at Newtonsoft.Json.JsonReader.ReadForType(JsonContract contract, Boolean hasConverter)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.PopulateObject(Object newObject, JsonReader reader, JsonObjectContract contract, JsonProperty member, String id)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateObject(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateValueInternal(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+   at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.PopulateList(IList list, JsonReader reader, JsonArrayContract contract, JsonProperty containerProperty, String id)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateList(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, Object existingValue, String id)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateValueInternal(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.Deserialize(JsonReader reader, Type objectType, Boolean checkAdditionalContent)
+   at Newtonsoft.Json.JsonSerializer.DeserializeInternal(JsonReader reader, Type objectType)
+   at Newtonsoft.Json.JsonSerializer.Deserialize(JsonReader reader, Type objectType)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Newtonsoft.Json.JsonConvert.DeserializeObject(String value, Type type, JsonSerializerSettings settings)
+   at Newtonsoft.Json.JsonConvert.DeserializeObject[List`1](String value, JsonSerializerSettings settings)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Supabase.Postgrest.Responses.ModeledResponse`1[[Daily.Models.HabitLog, Daily, Version=1.1.103.0, Culture=neutral, PublicKeyToken=null]]..ctor(BaseResponse baseResponse, JsonSerializerSettings serializerSettings, Func`1 getHeaders, Boolean shouldParse)
+2026-09-03 15:18:55.954 Daily[33801:10073297]    at Supabase.Postgrest.Helpers.<MakeRequest>d__2`1[[Daily.Models.HabitLog, Daily, Version=1.1.103.0, Culture=neutral, PublicKeyToken=null]].MoveNext()
+   at Daily.Services.SyncService.PullLogsInternalAsync(String userId, DateTime lastPull) in /Users/mihai/Source/Daily/Services/SyncService.cs:line 485
+2026-09-03 15:18:55.955 Daily[33801:10073297] [SyncService] Pulling Goals for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:56.141 Daily[33801:10073297] [SyncService] Pulled 1 goals from Cloud.
+2026-09-03 15:18:56.362 Daily[33801:10073387] [SyncService] Pull Goals Local Save Complete.
+2026-09-03 15:18:56.363 Daily[33801:10073387] [SyncService] Pulling Summaries range 0-999...
+2026-09-03 15:18:56.492 Daily[33801:10073387] [SyncService] Pulling Preferences for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:56.649 Daily[33801:10073298] [SyncService] Pulled 0 preferences from Cloud.
+2026-09-03 15:18:56.649 Daily[33801:10073298] [SyncService] Pull Preferences Complete. Merged 0 records.
+2026-09-03 15:18:56.650 Daily[33801:10073298] [SyncService] Pulling Saved Articles for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:56.833 Daily[33801:10073394] [SyncService] Pulled 0 saved articles from Cloud.
+2026-09-03 15:18:56.833 Daily[33801:10073394] [SyncService] Pull Saved Articles Complete.
+2026-09-03 15:18:56.835 Daily[33801:10073394] [SyncService] PullRssSubscriptionsAsync Started
+2026-09-03 15:18:57.035 Daily[33801:10073394] [SyncService] Pulled 26 RSS subscriptions from Supabase.
+2026-09-03 15:18:57.041 Daily[33801:10073394] [SyncService] Saved 26 RSS subscriptions to local SQLite DB.
+2026-09-03 15:18:57.051 Daily[33801:10073394] [RssFeedService] SyncService pulled RSS Subscriptions. Reloading feeds...
+2026-09-03 15:18:57.053 Daily[33801:10073394] [SyncService] Pulling Calendar accounts for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:57.307 Daily[33801:10073387] [SyncService] Pull Accounts Failed: {"code":"42703","details":null,"hint":null,"message":"column accounts.updated_at does not exist"}
+2026-09-03 15:18:57.400 Daily[33801:10073387] [SyncService] Pull Transactions Failed: {"code":"42703","details":null,"hint":null,"message":"column transactions.updated_at does not exist"}
+2026-09-03 15:18:57.491 Daily[33801:10073387] [SyncService] Pull Holdings Failed: {"code":"42703","details":null,"hint":null,"message":"column holdings.updated_at does not exist"}
+2026-09-03 15:18:57.741 Daily[33801:10073387] [SupabaseHealthService] SyncNativeHealthDataAsync STARTED
+2026-09-03 15:18:57.741 Daily[33801:10073387] [Health] SyncNativeHealthDataAsync STARTED
+2026-09-03 15:18:57.754 Daily[33801:10073387] [SupabaseHealthService] Native Health Store not supported (Skipping Upload). Reading handled by Widget.
+2026-09-03 15:18:57.754 Daily[33801:10073387] [Health] Native Health Store not supported (Skipping Upload). Reading handled by Widget.
+2026-09-03 15:18:57.772 Daily[33801:10073387] [SyncService] PushAsync Started with scope: All
+2026-09-03 15:18:57.773 Daily[33801:10073394] [SyncService] Found 0 dirty logs for User 32b8b75f-a0b0-4686-8519-f790f0b3822a.
+2026-09-03 15:18:57.864 Daily[33801:10073387] [SyncService] Pruning Check: Threshold=6/5/2026, LatestSummary=6/5/2026. SafeDate=6/5/2026
+2026-09-03 15:18:58.008 Daily[33801:10073387] [SyncService] Pruning Command Sent. Remote logs older than 6/5/2026 should be deleted.
+2026-09-03 15:18:58.008 Daily[33801:10073387] [SyncService] PushPreferencesAsync Started for 32b8b75f-a0b0-4686-8519-f790f0b3822a
+2026-09-03 15:18:58.010 Daily[33801:10073298] [SyncService] Total Local Prefs: 2. IDs: 00000000-0000-0000-0000-000000000000 (Synced: , Updated: 1/1/0001 12:00:00 AM), 32b8b75f-a0b0-4686-8519-f790f0b3822a (Synced: 9/3/2026 11:52:19 AM, Updated: 9/3/2026 1:08:27 AM)
+2026-09-03 15:18:58.026 Daily[33801:10073387] [SyncService] Dirty Prefs for 32b8b75f-a0b0-4686-8519-f790f0b3822a: 0
+2026-09-03 15:18:58.034 Daily[33801:10073387] [SyncService] PullAsync Started with scope: All
+2026-09-03 15:18:58.034 Daily[33801:10073387] [SyncService] Pulling Logs for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:58.035 Daily[33801:10073387] [SyncService] Pulling Logs range 0-999...
+2026-09-03 15:18:58.262 Daily[33801:10073387] [SyncService] Pull Logs Error: Newtonsoft.Json.JsonReaderException: Unexpected character encountered while parsing value: {. Path '[26].metadata', line 27, position 196.
+   at Newtonsoft.Json.JsonTextReader.ReadStringValue(ReadType readType)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Newtonsoft.Json.JsonTextReader.ReadAsString()
+   at Newtonsoft.Json.JsonReader.ReadForType(JsonContract contract, Boolean hasConverter)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.PopulateObject(Object newObject, JsonReader reader, JsonObjectContract contract, JsonProperty member, String id)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateObject(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateValueInternal(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+   at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.PopulateList(IList list, JsonReader reader, JsonArrayContract contract, JsonProperty containerProperty, String id)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateList(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, Object existingValue, String id)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateValueInternal(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.Deserialize(JsonReader reader, Type objectType, Boolean checkAdditionalContent)
+   at Newtonsoft.Json.JsonSerializer.DeserializeInternal(JsonReader reader, Type objectType)
+   at Newtonsoft.Json.JsonSerializer.Deserialize(JsonReader reader, Type objectType)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Newtonsoft.Json.JsonConvert.DeserializeObject(String value, Type type, JsonSerializerSettings settings)
+   at Newtonsoft.Json.JsonConvert.DeserializeObject[List`1](String value, JsonSerializerSettings settings)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Supabase.Postgrest.Responses.ModeledResponse`1[[Daily.Models.HabitLog, Daily, Version=1.1.103.0, Culture=neutral, PublicKeyToken=null]]..ctor(BaseResponse baseResponse, JsonSerializerSettings serializerSettings, Func`1 getHeaders, Boolean shouldParse)
+2026-09-03 15:18:58.262 Daily[33801:10073387]    at Supabase.Postgrest.Helpers.<MakeRequest>d__2`1[[Daily.Models.HabitLog, Daily, Version=1.1.103.0, Culture=neutral, PublicKeyToken=null]].MoveNext()
+   at Daily.Services.SyncService.PullLogsInternalAsync(String userId, DateTime lastPull) in /Users/mihai/Source/Daily/Services/SyncService.cs:line 485
+2026-09-03 15:18:58.262 Daily[33801:10073387] [SyncService] Pulling Goals for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:58.411 Daily[33801:10073387] [SyncService] Pulled 1 goals from Cloud.
+2026-09-03 15:18:58.412 Daily[33801:10073298] [SyncService] Pull Goals Local Save Complete.
+2026-09-03 15:18:58.412 Daily[33801:10073298] [SyncService] Pulling Summaries range 0-999...
+2026-09-03 15:18:58.504 Daily[33801:10073298] [SyncService] Pulling Preferences for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:58.680 Daily[33801:10073298] [SyncService] Pulled 0 preferences from Cloud.
+2026-09-03 15:18:58.680 Daily[33801:10073298] [SyncService] Pull Preferences Complete. Merged 0 records.
+2026-09-03 15:18:58.681 Daily[33801:10073298] [SyncService] Pulling Saved Articles for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:58.821 Daily[33801:10073298] [SyncService] Pulled 0 saved articles from Cloud.
+2026-09-03 15:18:58.821 Daily[33801:10073298] [SyncService] Pull Saved Articles Complete.
+2026-09-03 15:18:58.822 Daily[33801:10073298] [SyncService] PullRssSubscriptionsAsync Started
+2026-09-03 15:18:59.013 Daily[33801:10073298] [SyncService] Pulled 26 RSS subscriptions from Supabase.
+2026-09-03 15:18:59.018 Daily[33801:10073387] [SyncService] Saved 26 RSS subscriptions to local SQLite DB.
+2026-09-03 15:18:59.027 Daily[33801:10073387] [RssFeedService] SyncService pulled RSS Subscriptions. Reloading feeds...
+2026-09-03 15:18:59.028 Daily[33801:10073387] [SyncService] Pulling Calendar accounts for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:18:59.267 Daily[33801:10073394] [SyncService] Pull Accounts Failed: {"code":"42703","details":null,"hint":null,"message":"column accounts.updated_at does not exist"}
+2026-09-03 15:18:59.408 Daily[33801:10073394] [SyncService] Pull Transactions Failed: {"code":"42703","details":null,"hint":null,"message":"column transactions.updated_at does not exist"}
+2026-09-03 15:18:59.495 Daily[33801:10073394] [SyncService] Pull Holdings Failed: {"code":"42703","details":null,"hint":null,"message":"column holdings.updated_at does not exist"}
+2026-09-03 15:18:59.775 Daily[33801:10073298] [HabitsService] Propagating current session token to Realtime.
+2026-09-03 15:18:59.775 Daily[33801:10073297] [HabitsService] Propagating current session token to Realtime.
+2026-09-03 15:18:59.776 Daily[33801:10073297] [SupabaseHealthService] Propagating current session token to Realtime.
+2026-09-03 15:18:59.776 Daily[33801:10073297] [SyncService] Background Sync Started.
+2026-09-03 15:19:00.777 Daily[33801:10073413] [SupabaseHealthService] SyncNativeHealthDataAsync STARTED
+2026-09-03 15:19:00.777 Daily[33801:10073413] [Health] SyncNativeHealthDataAsync STARTED
+2026-09-03 15:19:00.782 Daily[33801:10073413] [SupabaseHealthService] Native Health Store not supported (Skipping Upload). Reading handled by Widget.
+2026-09-03 15:19:00.782 Daily[33801:10073413] [Health] Native Health Store not supported (Skipping Upload). Reading handled by Widget.
+2026-09-03 15:19:00.786 Daily[33801:10073413] [SyncService] PushAsync Started with scope: All
+2026-09-03 15:19:00.786 Daily[33801:10073389] [SyncService] Found 0 dirty logs for User 32b8b75f-a0b0-4686-8519-f790f0b3822a.
+2026-09-03 15:19:00.880 Daily[33801:10073389] [SyncService] Pruning Check: Threshold=6/5/2026, LatestSummary=6/5/2026. SafeDate=6/5/2026
+2026-09-03 15:19:01.024 Daily[33801:10073389] [SyncService] Pruning Command Sent. Remote logs older than 6/5/2026 should be deleted.
+2026-09-03 15:19:01.024 Daily[33801:10073389] [SyncService] PushPreferencesAsync Started for 32b8b75f-a0b0-4686-8519-f790f0b3822a
+2026-09-03 15:19:01.026 Daily[33801:10073413] [SyncService] Total Local Prefs: 2. IDs: 00000000-0000-0000-0000-000000000000 (Synced: , Updated: 1/1/0001 12:00:00 AM), 32b8b75f-a0b0-4686-8519-f790f0b3822a (Synced: 9/3/2026 11:52:19 AM, Updated: 9/3/2026 1:08:27 AM)
+2026-09-03 15:19:01.039 Daily[33801:10073413] [SyncService] Dirty Prefs for 32b8b75f-a0b0-4686-8519-f790f0b3822a: 0
+2026-09-03 15:19:01.054 Daily[33801:10073413] [SyncService] PullAsync Started with scope: All
+2026-09-03 15:19:01.055 Daily[33801:10073413] [SyncService] Pulling Logs for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:19:01.055 Daily[33801:10073413] [SyncService] Pulling Logs range 0-999...
+2026-09-03 15:19:01.257 Daily[33801:10073413] [SyncService] Pull Logs Error: Newtonsoft.Json.JsonReaderException: Unexpected character encountered while parsing value: {. Path '[26].metadata', line 27, position 196.
+   at Newtonsoft.Json.JsonTextReader.ReadStringValue(ReadType readType)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Newtonsoft.Json.JsonTextReader.ReadAsString()
+   at Newtonsoft.Json.JsonReader.ReadForType(JsonContract contract, Boolean hasConverter)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.PopulateObject(Object newObject, JsonReader reader, JsonObjectContract contract, JsonProperty member, String id)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateObject(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateValueInternal(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+   at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.PopulateList(IList list, JsonReader reader, JsonArrayContract contract, JsonProperty containerProperty, String id)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateList(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, Object existingValue, String id)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateValueInternal(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.Deserialize(JsonReader reader, Type objectType, Boolean checkAdditionalContent)
+   at Newtonsoft.Json.JsonSerializer.DeserializeInternal(JsonReader reader, Type objectType)
+   at Newtonsoft.Json.JsonSerializer.Deserialize(JsonReader reader, Type objectType)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Newtonsoft.Json.JsonConvert.DeserializeObject(String value, Type type, JsonSerializerSettings settings)
+   at Newtonsoft.Json.JsonConvert.DeserializeObject[List`1](String value, JsonSerializerSettings settings)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Supabase.Postgrest.Responses.ModeledResponse`1[[Daily.Models.HabitLog, Daily, Version=1.1.103.0, Culture=neutral, PublicKeyToken=null]]..ctor(BaseResponse baseResponse, JsonSerializerSettings serializerSettings, Func`1 getHeaders, Boolean shouldParse)
+2026-09-03 15:19:01.257 Daily[33801:10073413]    at Supabase.Postgrest.Helpers.<MakeRequest>d__2`1[[Daily.Models.HabitLog, Daily, Version=1.1.103.0, Culture=neutral, PublicKeyToken=null]].MoveNext()
+   at Daily.Services.SyncService.PullLogsInternalAsync(String userId, DateTime lastPull) in /Users/mihai/Source/Daily/Services/SyncService.cs:line 485
+2026-09-03 15:19:01.257 Daily[33801:10073413] [SyncService] Pulling Goals for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:19:01.394 Daily[33801:10073413] [SyncService] Pulled 1 goals from Cloud.
+2026-09-03 15:19:01.396 Daily[33801:10073389] [SyncService] Pull Goals Local Save Complete.
+2026-09-03 15:19:01.396 Daily[33801:10073389] [SyncService] Pulling Summaries range 0-999...
+2026-09-03 15:19:01.534 Daily[33801:10073389] [SyncService] Pulling Preferences for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:19:01.670 Daily[33801:10073389] [SyncService] Pulled 0 preferences from Cloud.
+2026-09-03 15:19:01.670 Daily[33801:10073389] [SyncService] Pull Preferences Complete. Merged 0 records.
+2026-09-03 15:19:01.671 Daily[33801:10073389] [SyncService] Pulling Saved Articles for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:19:01.811 Daily[33801:10073389] [SyncService] Pulled 0 saved articles from Cloud.
+2026-09-03 15:19:01.811 Daily[33801:10073389] [SyncService] Pull Saved Articles Complete.
+2026-09-03 15:19:01.812 Daily[33801:10073389] [SyncService] PullRssSubscriptionsAsync Started
+2026-09-03 15:19:01.917 Daily[33801:10073389] [SyncService] Pulled 26 RSS subscriptions from Supabase.
+2026-09-03 15:19:01.921 Daily[33801:10073413] [SyncService] Saved 26 RSS subscriptions to local SQLite DB.
+2026-09-03 15:19:01.932 Daily[33801:10073413] [RssFeedService] SyncService pulled RSS Subscriptions. Reloading feeds...
+2026-09-03 15:19:01.933 Daily[33801:10073413] [SyncService] Pulling Calendar accounts for User: 32b8b75f-a0b0-4686-8519-f790f0b3822a...
+2026-09-03 15:19:02.158 Daily[33801:10073394] [SyncService] Pull Accounts Failed: {"code":"42703","details":null,"hint":null,"message":"column accounts.updated_at does not exist"}
+2026-09-03 15:19:02.241 Daily[33801:10073394] [SyncService] Pull Transactions Failed: {"code":"42703","details":null,"hint":null,"message":"column transactions.updated_at does not exist"}
+2026-09-03 15:19:02.323 Daily[33801:10073394] [SyncService] Pull Holdings Failed: {"code":"42703","details":null,"hint":null,"message":"column holdings.updated_at does not exist"}
