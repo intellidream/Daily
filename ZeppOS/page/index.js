@@ -5,7 +5,7 @@ import { BasePage } from '@zeppos/zml/base-page'
 import { exit } from '@zos/router'
 import { statSync, writeFileSync, readFileSync } from '@zos/fs'
 import { setScrollMode, SCROLL_MODE_SWIPER } from '@zos/page'
-import { HeartRate, Sleep, Step, BloodOxygen } from '@zos/sensor'
+import { HeartRate, Sleep, Step, BloodOxygen, Calorie } from '@zos/sensor'
 
 const logger = log.getLogger('dayone-orbit')
 
@@ -433,43 +433,77 @@ Page(
              setInterval(syncTelemetry, 3600000)
              setTimeout(syncTelemetry, 1000) // 1 second after dashboard builds
           }
-          
-          const syncTelemetry = () => {
+             const syncTelemetry = () => {
              try {
-                const hr = new HeartRate()
-                const sleep = new Sleep()
-                const step = new Step()
-                const bo = new BloodOxygen()
-                
-                const hrLast = hr.getLast() || 0
-                const sleepInfo = sleep.getInfo() || {}
-                const stepData = step.getCurrent() || {}
-                const boLast = bo.getCurrent() || {}
-                
-                const payload = []
-                
-                if (hrLast > 0) {
-                    payload.push({ type: 'heart_rate', value: hrLast, unit: 'bpm' })
-                }
-                
-                if (stepData.step > 0) {
-                    payload.push({ type: 'steps', value: stepData.step, unit: 'count' })
-                    payload.push({ type: 'active_energy', value: stepData.calorie, unit: 'kcal' })
-                }
-                
-                if (boLast.value > 0) {
-                    payload.push({ type: 'blood_oxygen', value: boLast.value, unit: '%' })
-                }
-                
-                // Granular sleep data
-                if (sleepInfo.totalTime > 0) {
-                    if (sleepInfo.deepTime > 0) payload.push({ type: 'sleep_deep', value: sleepInfo.deepTime, unit: 'minutes' })
-                    if (sleepInfo.lightTime > 0) payload.push({ type: 'sleep_light', value: sleepInfo.lightTime, unit: 'minutes' })
-                    if (sleepInfo.remTime > 0) payload.push({ type: 'sleep_rem', value: sleepInfo.remTime, unit: 'minutes' })
-                    if (sleepInfo.awakeTime > 0) payload.push({ type: 'sleep_awake', value: sleepInfo.awakeTime, unit: 'minutes' })
-                }
-                
-                if (payload.length > 0) {
+                 const hr = new HeartRate()
+                 const sleep = new Sleep()
+                 const step = new Step()
+                 const bo = new BloodOxygen()
+                 
+                 // In Zepp OS 3.0, step.getCurrent() and bo.getCurrent() return numbers
+                 const hrLast = hr.getLast() || 0
+                 const boLast = bo.getCurrent() || bo.getCurrent()?.value || 0
+                 
+                 let stepCount = 0
+                 let calCount = 0
+                 try { stepCount = step.getCurrent() || 0 } catch(e) {}
+                 try { const cal = new Calorie(); calCount = cal.getCurrent() || 0 } catch(e) {}
+                 
+                 const payload = []
+                 
+                 if (hrLast > 0) {
+                     payload.push({ type: 'heart_rate', value: hrLast, unit: 'bpm' })
+                 }
+                 
+                 // Fallback if step returns object
+                 if (typeof stepCount === 'object') {
+                     calCount = stepCount.calorie || calCount
+                     stepCount = stepCount.step || 0
+                 }
+                 
+                 if (stepCount > 0) {
+                     payload.push({ type: 'steps', value: stepCount, unit: 'count' })
+                 }
+                 
+                 if (calCount > 0) {
+                     payload.push({ type: 'active_energy', value: calCount, unit: 'kcal' })
+                 }
+                 
+                 if (boLast > 0) {
+                     payload.push({ type: 'blood_oxygen', value: boLast, unit: '%' })
+                 }
+                 
+                 // Granular sleep data using stages
+                 const sleepInfo = sleep.getInfo() || {}
+                 if (sleepInfo.totalTime > 0) {
+                     payload.push({ type: 'sleep_deep', value: sleepInfo.deepTime || 0, unit: 'minutes' })
+                     
+                     // Aggregate stages manually if getStage is available
+                     if (typeof sleep.getStage === 'function') {
+                         let light = 0, rem = 0, awake = 0
+                         const stages = sleep.getStage() || []
+                         const constants = sleep.getStageConstantObj ? sleep.getStageConstantObj() : { LIGHT_STAGE: 1, DEEP_STAGE: 2, REM_STAGE: 3, WAKE_STAGE: 0 }
+                         
+                         stages.forEach(st => {
+                             const dur = st.stop - st.start
+                             if (dur > 0) {
+                                 if (st.model === constants.LIGHT_STAGE) light += dur
+                                 else if (st.model === constants.REM_STAGE) rem += dur
+                                 else if (st.model === constants.WAKE_STAGE) awake += dur
+                             }
+                         })
+                         
+                         if (light > 0) payload.push({ type: 'sleep_light', value: light, unit: 'minutes' })
+                         if (rem > 0) payload.push({ type: 'sleep_rem', value: rem, unit: 'minutes' })
+                         if (awake > 0) payload.push({ type: 'sleep_awake', value: awake, unit: 'minutes' })
+                     } else {
+                         // Fallback math
+                         const light = sleepInfo.totalTime - (sleepInfo.deepTime || 0)
+                         if (light > 0) payload.push({ type: 'sleep_light', value: light, unit: 'minutes' })
+                     }
+                 }
+                 
+                 if (payload.length > 0) {
                     if (debugText) debugText.setProperty(prop.TEXT, `Sending ${payload.length} sensors...`)
                     self.request({
                         method: 'SYNC_TELEMETRY',
