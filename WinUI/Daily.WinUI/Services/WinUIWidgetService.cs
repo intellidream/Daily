@@ -55,6 +55,12 @@ namespace Daily_WinUI.Services
             // Remove NewsRecommendationsWidget from the dashboard widgets list
             widgets.RemoveAll(w => w.ComponentType == "NewsRecommendationsWidget");
 
+            // Ensure new widgets are available even if the user has a saved configuration
+            if (!widgets.Any(w => w.ComponentType == "HealthTelemetryWidget"))
+            {
+                widgets.Add(new WidgetModel { Title = "Health Data", ComponentType = "HealthTelemetryWidget", ColumnSpan = 2, RowSpan = 1 });
+            }
+
             return Task.FromResult(widgets);
         }
 

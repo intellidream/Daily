@@ -927,8 +927,8 @@ namespace Daily.Services.Health
                 var userIdStr = uid.ToString().ToLowerInvariant();
 
                 // Convert to UTC strings for PostgREST
-                var startStr = start.ToString("O");
-                var endStr = end.ToString("O");
+                var startStr = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                var endStr = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
                 var result = await _supabase.From<HealthTelemetry>()
                                           .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)

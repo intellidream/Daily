@@ -3,46 +3,59 @@
 @using MudBlazor
 @inject IHealthService HealthService
 
-<MudPaper Class="widget-card cursor-pointer" Elevation="0" @onclick="NavigateToDetail">
+<div class="d-flex flex-column h-100 w-100 gap-3">
     <!-- Header -->
-    <div class="d-flex align-center mb-3">
-        <div class="icon-container primary-container mr-3">
-            <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Primary" Size="Size.Small" />
-        </div>
-        <div>
-            <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Health Telemetry</MudText>
-            <MudText Typo="Typo.caption" Style="opacity: 0.6;">Today</MudText>
+    <div class="d-flex align-center mb-1 flex-shrink-0" style="gap: 2px;">
+        <div class="flex-grow-1" style="min-width: 0;">
+            <MudCarousel TData="object" ShowArrows="false" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
+                         Class="flex-grow-1 rounded-pill mud-theme-primary">
+                 <MudCarouselItem Transition="Transition.Slide">
+                     <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%; cursor: pointer;" @onclick="NavigateToDetail">
+                         <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                         <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: white !important;">
+                             Health Data
+                         </MudText>
+                         <div class="d-flex align-center gap-1 ml-auto">
+                             <MudText Typo="Typo.caption" Style="color: white; opacity: 0.7;">Today</MudText>
+                         </div>
+                     </div>
+                 </MudCarouselItem>
+            </MudCarousel>
         </div>
     </div>
 
-    @if (isLoading)
-    {
-        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="100px" Class="rounded-lg" />
-    }
-    else
-    {
-        <div class="d-flex justify-space-between align-center mb-4">
-            <div class="d-flex flex-column align-center">
-                <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Size="Size.Small" Style="opacity: 0.5;" Class="mb-1" />
-                <MudText Typo="Typo.h6" Class="font-weight-bold">@totalSteps</MudText>
-                <MudText Typo="Typo.caption" Style="opacity: 0.5;">steps</MudText>
-            </div>
-            
-            <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+    <!-- Main Content -->
+    <div class="d-flex flex-column gap-4 flex-grow-1 overflow-auto pa-1" style="scrollbar-width: none;">
+        @if (isLoading)
+        {
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="100px" Class="rounded-lg" />
+        }
+        else
+        {
+            <!-- TOP ROW: Steps + Sleep -->
+            <div class="d-flex align-center justify-space-around px-2 py-2">
+                <div class="d-flex flex-column align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Size="Size.Small" Style="opacity: 0.5;" Class="mb-1" />
+                    <MudText Typo="Typo.h6" Class="font-weight-bold">@totalSteps</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 10px;">steps</MudText>
+                </div>
+                
+                <MudDivider Vertical="true" FlexItem="true" Style="height: 40px;" Class="mx-2" />
 
-            <div class="d-flex flex-column align-center">
-                <MudIcon Icon="@Icons.Material.Filled.Bedtime" Color="Color.Secondary" Size="Size.Small" Class="mb-1" />
-                <MudText Typo="Typo.h6" Color="Color.Secondary" Class="font-weight-bold">@totalSleep</MudText>
-                <MudText Typo="Typo.caption" Style="opacity: 0.5;">sleep</MudText>
+                <div class="d-flex flex-column align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Bedtime" Color="Color.Secondary" Size="Size.Small" Class="mb-1" />
+                    <MudText Typo="Typo.h6" Color="Color.Secondary" Class="font-weight-bold">@totalSleep</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 10px;">sleep</MudText>
+                </div>
             </div>
-        </div>
 
-        <MudPaper Elevation="0" Class="pa-2 rounded-lg" Style="background-color: var(--mud-palette-background-grey);">
-            <MudText Typo="Typo.caption" Class="font-weight-bold mb-1" Style="opacity: 0.5;">HEART RATE</MudText>
-            <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="60px" ChartOptions="chartOptions" />
-        </MudPaper>
-    }
-</MudPaper>
+            <MudPaper Elevation="0" Class="pa-2 rounded-lg" Style="background-color: var(--mud-palette-background-grey);">
+                <MudText Typo="Typo.caption" Class="font-weight-bold mb-1" Style="opacity: 0.5;">HEART RATE</MudText>
+                <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="60px" ChartOptions="chartOptions" />
+            </MudPaper>
+        }
+    </div>
+</div>
 
 @code {
     private bool isLoading = true;
