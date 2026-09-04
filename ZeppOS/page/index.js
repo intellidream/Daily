@@ -33,56 +33,60 @@ Page(
         const self = this
         
         if (accessToken) {
-          // --- LOADING UI ---
-          const loadingBg = createWidget(widget.ARC, {
-            x: 145, y: 125, w: 100, h: 100,
-            start_angle: -90, end_angle: 270,
-            color: 0x222222, line_width: 8
-          })
-          
-          const loadingArc = createWidget(widget.ARC, {
-            x: 145, y: 125, w: 100, h: 100,
-            start_angle: -90, end_angle: 0,
-            color: 0x00aaff, line_width: 8
-          })
-          
-          const loadingText = createWidget(widget.TEXT, {
-            x: 0, y: 240, w: 390, h: 50,
-            color: 0xffffff, text_size: 20,
-            align_h: align.CENTER_H, align_v: align.CENTER_V,
-            text: 'Orbiting...'
-          })
-          
-          let loadingAngle = -90;
-          const loadingTimer = setInterval(() => {
-              loadingAngle += 15;
-              if (loadingAngle >= 270) loadingAngle = -90;
-              loadingArc.setProperty(prop.MORE, { start_angle: loadingAngle, end_angle: loadingAngle + 90 })
-          }, 50)
-
           let waterGoal = 2000
           let smokeBaseline = 20
-          
-          let waterTotal = 0
-          let waterVal = 0
-          let coffeeVal = 0
+          let waterTotal = 0, waterVal = 0, coffeeVal = 0
           let waterWeek = [0, 0, 0, 0, 0, 0, 0]
           let coffeeWeek = [0, 0, 0, 0, 0, 0, 0]
           
-          let smokeTotal = 0
-          let cigVal = 0
-          let heatVal = 0
+          let smokeTotal = 0, cigVal = 0, heatVal = 0
           let smokeWeek = [0, 0, 0, 0, 0, 0, 0]
           let heatWeek = [0, 0, 0, 0, 0, 0, 0]
           
-          let waterHistogram;
-          let coffeeHistogram;
-          let smokeHistogram;
-          let heatHistogram;
+          let waterHistogram, coffeeHistogram, smokeHistogram, heatHistogram
+          let debugText, waterBreakdownText, smokeBreakdownText
+          let syncIndicator
+          let isDashboardBuilt = false
+
+          const setSyncing = (isSyncing) => {
+             if (syncIndicator) syncIndicator.setProperty(prop.TEXT, isSyncing ? '🔄 Syncing...' : '')
+          }
+
+          const saveCache = () => {
+             try {
+               const cache = { waterGoal, smokeBaseline, waterTotal, waterVal, coffeeVal, waterWeek, coffeeWeek, smokeTotal, cigVal, heatVal, smokeWeek, heatWeek }
+               saveFileStr('habits_cache.json', JSON.stringify(cache))
+             } catch(e) {}
+          }
+
+          let hasCache = false
+          try {
+             const cStr = loadFileStr('habits_cache.json')
+             if (cStr) {
+                const c = JSON.parse(cStr)
+                waterGoal = c.waterGoal || 2000; smokeBaseline = c.smokeBaseline || 20;
+                waterTotal = c.waterTotal || 0; waterVal = c.waterVal || 0; coffeeVal = c.coffeeVal || 0;
+                waterWeek = c.waterWeek || [0,0,0,0,0,0,0]; coffeeWeek = c.coffeeWeek || [0,0,0,0,0,0,0];
+                smokeTotal = c.smokeTotal || 0; cigVal = c.cigVal || 0; heatVal = c.heatVal || 0;
+                smokeWeek = c.smokeWeek || [0,0,0,0,0,0,0]; heatWeek = c.heatWeek || [0,0,0,0,0,0,0];
+                hasCache = true
+             }
+          } catch(e) {}
+
+          let loadingBg, loadingArc, loadingText, loadingTimer
           
-          let debugText;
-          let waterBreakdownText;
-          let smokeBreakdownText;
+          if (!hasCache) {
+              loadingBg = createWidget(widget.ARC, { x: 145, y: 125, w: 100, h: 100, start_angle: -90, end_angle: 270, color: 0x222222, line_width: 8 })
+              loadingArc = createWidget(widget.ARC, { x: 145, y: 125, w: 100, h: 100, start_angle: -90, end_angle: 0, color: 0x00aaff, line_width: 8 })
+              loadingText = createWidget(widget.TEXT, { x: 0, y: 240, w: 390, h: 50, color: 0xffffff, text_size: 20, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Orbiting...' })
+              
+              let loadingAngle = -90;
+              loadingTimer = setInterval(() => {
+                  loadingAngle += 15;
+                  if (loadingAngle >= 270) loadingAngle = -90;
+                  loadingArc.setProperty(prop.MORE, { start_angle: loadingAngle, end_angle: loadingAngle + 90 })
+              }, 50)
+          }
 
           const doRequest = (method, params) => {
              return self.request({ method, params }).then(res => {
@@ -92,11 +96,13 @@ Page(
           }
 
           const showError = (msg) => {
-             clearInterval(loadingTimer)
-             loadingBg.setProperty(prop.VISIBLE, false)
-             loadingArc.setProperty(prop.VISIBLE, false)
-             loadingText.setProperty(prop.TEXT, msg)
-             loadingText.setProperty(prop.COLOR, 0xff0000)
+             if (loadingTimer) clearInterval(loadingTimer)
+             if (loadingBg) loadingBg.setProperty(prop.VISIBLE, false)
+             if (loadingArc) loadingArc.setProperty(prop.VISIBLE, false)
+             if (loadingText) {
+                 loadingText.setProperty(prop.TEXT, msg)
+                 loadingText.setProperty(prop.COLOR, 0xff0000)
+             }
              
              createWidget(widget.BUTTON, {
                x: 45, y: 300, w: 300, h: 60, radius: 30, normal_color: 0x222222, press_color: 0x111111,
@@ -106,6 +112,7 @@ Page(
           }
 
           const fetchData = () => {
+             setSyncing(true)
              doRequest('GET_PREFS', { access_token: accessToken, user_id: userId })
              .then(res => {
                if (res && res.success && res.data) {
@@ -143,12 +150,23 @@ Page(
                  heatWeek = res.data.sub || [0,0,0,0,0,0,0]
                }
                
-               clearInterval(loadingTimer)
-               loadingBg.setProperty(prop.VISIBLE, false)
-               loadingArc.setProperty(prop.VISIBLE, false)
-               loadingText.setProperty(prop.VISIBLE, false)
-               buildDashboard()
+               saveCache()
+               
+               if (loadingTimer) clearInterval(loadingTimer)
+               if (loadingBg) loadingBg.setProperty(prop.VISIBLE, false)
+               if (loadingArc) loadingArc.setProperty(prop.VISIBLE, false)
+               if (loadingText) loadingText.setProperty(prop.VISIBLE, false)
+               
+               setSyncing(false)
+               
+               if (!isDashboardBuilt) {
+                   buildDashboard()
+               } else {
+                   updateWaterUI()
+                   updateSmokeUI()
+               }
              }).catch(err => {
+               setSyncing(false)
                let errMsg = err ? err.toString() : 'Unknown'
                if (err && err.message) errMsg = err.message
                logger.error('Fetch chain error', errMsg)
@@ -266,7 +284,7 @@ Page(
                params: { access_token: accessToken, user_id: userId, habit_type: 'water', value: amount, unit: 'ml', metadata: { drink: type } }
              }).then(res => {
                if (!res || !res.success) {
-                  if (debugText) debugText.setProperty(prop.TEXT, res?.error || 'Log Failed')
+                  if (debugText) debugText.setProperty(prop.TEXT, (res && res.error) ? res.error : 'Log Failed')
                   waterTotal -= amount
                   waterWeek[6] -= amount
                   if (type.includes('Coffee')) {
@@ -303,7 +321,7 @@ Page(
                params: { access_token: accessToken, user_id: userId, habit_type: 'smokes', value: amount, unit: 'count', metadata: { type: type } }
              }).then(res => {
                if (!res || !res.success) {
-                  if (debugText) debugText.setProperty(prop.TEXT, res?.error || 'Log Failed')
+                  if (debugText) debugText.setProperty(prop.TEXT, (res && res.error) ? res.error : 'Log Failed')
                   smokeTotal -= amount
                   smokeWeek[6] -= amount
                   if (type.includes('Heat') || type.includes('Vape')) {
@@ -335,6 +353,8 @@ Page(
              }
 
              // ================== PAGE 1: BUBBLES ==================
+             syncIndicator = createWidget(widget.TEXT, { x: 0, y: 410, w: 390, h: 30, color: 0x00ff00, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '' })
+             
              createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 12 })
              waterArc = createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0x00ffff, line_width: 12 })
              coffeeArc = createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0xffa500, line_width: 12 })
@@ -433,7 +453,8 @@ Page(
              setInterval(syncTelemetry, 3600000)
              setTimeout(syncTelemetry, 1000) // 1 second after dashboard builds
           }
-             const syncTelemetry = () => {
+          const syncTelemetry = () => {
+             setSyncing(true)
              try {
                  const hr = new HeartRate()
                  const sleep = new Sleep()
@@ -442,16 +463,28 @@ Page(
                  
                  // In Zepp OS 3.0, step.getCurrent() and bo.getCurrent() return numbers
                  const hrLast = hr.getLast() || 0
-                 const boLast = bo.getCurrent() || bo.getCurrent()?.value || 0
+                 const boLast = bo.getCurrent() || (bo.getCurrent() && bo.getCurrent().value) || 0
                  
                  let stepCount = 0
                  let calCount = 0
                  try { stepCount = step.getCurrent() || 0 } catch(e) {}
                  try { const cal = new Calorie(); calCount = cal.getCurrent() || 0 } catch(e) {}
+
+                 let tCache = {}
+                 try {
+                     const tStr = loadFileStr('telemetry_cache.json')
+                     if (tStr) tCache = JSON.parse(tStr)
+                 } catch(e) {}
+                 
+                 const todayStr = new Date().toISOString().split('T')[0]
+                 if (tCache.date !== todayStr) {
+                     tCache = { date: todayStr, steps: 0, active_energy: 0, heart_rate: 0, blood_oxygen: 0, stress: 0, pai: 0, sleep_keys: [] }
+                 }
+                 if (!tCache.sleep_keys) tCache.sleep_keys = []
                  
                  const payload = []
                  
-                 if (hrLast > 0) {
+                 if (hrLast > 0 && hrLast !== tCache.heart_rate) {
                      payload.push({ type: 'heart_rate', value: hrLast, unit: 'bpm' })
                  }
                  
@@ -461,15 +494,15 @@ Page(
                      stepCount = stepCount.step || 0
                  }
                  
-                 if (stepCount > 0) {
+                 if (stepCount > 0 && stepCount > (tCache.steps || 0)) {
                      payload.push({ type: 'steps', value: stepCount, unit: 'count' })
                  }
                  
-                 if (calCount > 0) {
+                 if (calCount > 0 && calCount > (tCache.active_energy || 0)) {
                      payload.push({ type: 'active_energy', value: calCount, unit: 'kcal' })
                  }
                  
-                 if (boLast > 0) {
+                 if (boLast > 0 && boLast !== tCache.blood_oxygen) {
                      payload.push({ type: 'blood_oxygen', value: boLast, unit: '%' })
                  }
                  
@@ -478,8 +511,8 @@ Page(
                  try { const str = new Stress(); const s = str.getCurrent(); stressVal = (s && s.value) ? s.value : (s || 0) } catch(e) {}
                  try { const p = new Pai(); paiVal = p.getToday() || 0 } catch(e) {}
                  
-                 if (stressVal > 0) payload.push({ type: 'stress', value: stressVal, unit: 'score' })
-                 if (paiVal > 0) payload.push({ type: 'pai', value: paiVal, unit: 'score' })
+                 if (stressVal > 0 && stressVal !== tCache.stress) payload.push({ type: 'stress', value: stressVal, unit: 'score' })
+                 if (paiVal > 0 && paiVal !== tCache.pai) payload.push({ type: 'pai', value: paiVal, unit: 'score' })
                  
                  const nowD = new Date()
                  const midnightAnchor = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 0, 0, 0, 0).getTime()
@@ -502,7 +535,10 @@ Page(
                                  
                                  const startIso = new Date(midnightAnchor + st.start * 60000).toISOString()
                                  const endIso = new Date(midnightAnchor + st.stop * 60000).toISOString()
-                                 payload.push({ type: sType, value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })
+                                 const key = `${startIso}-${endIso}-${sType}`
+                                 if (!tCache.sleep_keys.includes(key)) {
+                                     payload.push({ type: sType, value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })
+                                 }
                              }
                          })
                      } else {
@@ -520,7 +556,10 @@ Page(
                          if (dur > 0) {
                              const startIso = new Date(midnightAnchor + nap.start * 60000).toISOString()
                              const endIso = new Date(midnightAnchor + nap.stop * 60000).toISOString()
-                             payload.push({ type: 'sleep_nap', value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })
+                             const key = `${startIso}-${endIso}-sleep_nap`
+                             if (!tCache.sleep_keys.includes(key)) {
+                                 payload.push({ type: 'sleep_nap', value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })
+                             }
                          }
                      })
                  }
@@ -533,20 +572,43 @@ Page(
                     }).then(res => {
                         const d = new Date()
                         const timeStr = d.getHours() + ':' + (d.getMinutes()<10?'0':'') + d.getMinutes()
-                        if (debugText) debugText.setProperty(prop.TEXT, res?.success ? `Health data successfully synced at ${timeStr}` : `Sync Failed: ${res?.error || 'Unknown'}`)
+                        if (res && res.success) {
+                            if (hrLast > 0) tCache.heart_rate = hrLast
+                            if (stepCount > 0) tCache.steps = stepCount
+                            if (calCount > 0) tCache.active_energy = calCount
+                            if (boLast > 0) tCache.blood_oxygen = boLast
+                            if (stressVal > 0) tCache.stress = stressVal
+                            if (paiVal > 0) tCache.pai = paiVal
+                            payload.forEach(p => {
+                               if (p.type.startsWith('sleep_')) tCache.sleep_keys.push(`${p.start_time}-${p.end_time}-${p.type}`)
+                            })
+                            if (tCache.sleep_keys.length > 100) tCache.sleep_keys = tCache.sleep_keys.slice(-100)
+                            try { saveFileStr('telemetry_cache.json', JSON.stringify(tCache)) } catch(e) {}
+                            
+                            if (debugText) debugText.setProperty(prop.TEXT, `Health data successfully synced at ${timeStr}`)
+                        } else {
+                            if (debugText) debugText.setProperty(prop.TEXT, `Sync Failed: ${(res && res.error) ? res.error : 'Unknown'}`)
+                        }
+                        setSyncing(false)
                     }).catch(e => {
                         logger.error('Telemetry push failed', e)
                         if (debugText) debugText.setProperty(prop.TEXT, `Sync err: ${e}`)
+                        setSyncing(false)
                     })
                 } else {
-                    if (debugText) debugText.setProperty(prop.TEXT, 'No sensor data')
+                    if (debugText) debugText.setProperty(prop.TEXT, 'No new sensor data')
+                    setSyncing(false)
                 }
              } catch(err) {
                  logger.error('Sensor read failed', err)
                  if (debugText) debugText.setProperty(prop.TEXT, `Read err: ${err}`)
+                 setSyncing(false)
              }
           }
-          
+          if (hasCache) {
+             buildDashboard()
+             isDashboardBuilt = true
+          }
           fetchData()
 
         } else {
