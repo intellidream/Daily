@@ -364,9 +364,9 @@ Page(
              
              waterBreakdownText = createWidget(widget.TEXT, { x: 10, y: 370, w: 220, h: 40, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
              
-             createWidget(widget.BUTTON, { x: 240, y: 150, w: 130, h: 60, radius: 30, normal_color: 0x0055ff, press_color: 0x0033aa, text: '300', color: 0xffffff, text_size: 22, click_func: () => logWater(300, 'Large Water') })
-             createWidget(widget.BUTTON, { x: 240, y: 230, w: 130, h: 60, radius: 30, normal_color: 0x0055ff, press_color: 0x0033aa, text: '150', color: 0xffffff, text_size: 22, click_func: () => logWater(150, 'Small Water') })
-             createWidget(widget.BUTTON, { x: 240, y: 310, w: 130, h: 60, radius: 30, normal_color: 0x8b4513, press_color: 0x5a2d0c, text: '100', color: 0xffffff, text_size: 22, click_func: () => logWater(100, 'Coffee') })
+             createWidget(widget.BUTTON, { x: 240, y: 150, w: 130, h: 60, radius: 30, normal_color: 0x0055ff, press_color: 0x0033aa, text: '💧 300', color: 0xffffff, text_size: 22, click_func: () => logWater(300, 'Large Water') })
+             createWidget(widget.BUTTON, { x: 240, y: 230, w: 130, h: 60, radius: 30, normal_color: 0x0055ff, press_color: 0x0033aa, text: '💧 150', color: 0xffffff, text_size: 22, click_func: () => logWater(150, 'Small Water') })
+             createWidget(widget.BUTTON, { x: 240, y: 310, w: 130, h: 60, radius: 30, normal_color: 0x8b4513, press_color: 0x5a2d0c, text: '☕ 100', color: 0xffffff, text_size: 22, click_func: () => logWater(100, 'Coffee') })
 
              // ================== PAGE 2: BUBBLES STATS ==================
              createWidget(widget.TEXT, { x: 0, y: h + 80, w: 390, h: 40, color: 0x00aaff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles 7 Days' })
@@ -399,7 +399,7 @@ Page(
              })
 
              // ================== PAGE 3: SMOKES ==================
-             createWidget(widget.TEXT, { x: 0, y: h*2 + 80, w: 390, h: 40, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🚬 Smokes' })
+             createWidget(widget.TEXT, { x: 0, y: h*2 + 80, w: 390, h: 40, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 Smokes' })
              
              createWidget(widget.ARC, { x: 20, y: h*2 + 160, w: 200, h: 200, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 16 })
              smokeArc = createWidget(widget.ARC, { x: 20, y: h*2 + 160, w: 200, h: 200, start_angle: -90, end_angle: -90, color: 0x00ff00, line_width: 16 })
@@ -407,11 +407,11 @@ Page(
              
              smokeBreakdownText = createWidget(widget.TEXT, { x: 10, y: h*2 + 370, w: 220, h: 40, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
 
-             createWidget(widget.BUTTON, { x: 240, y: h*2 + 185, w: 130, h: 60, radius: 30, normal_color: 0xff3b30, press_color: 0xaa2010, text: 'Cig', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Cigarette') })
-             createWidget(widget.BUTTON, { x: 240, y: h*2 + 275, w: 130, h: 60, radius: 30, normal_color: 0x007aff, press_color: 0x005bb5, text: 'Heat', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Heated Tobacco') })
+             createWidget(widget.BUTTON, { x: 240, y: h*2 + 185, w: 130, h: 60, radius: 30, normal_color: 0xff3b30, press_color: 0xaa2010, text: '🔥 Cig', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Cigarette') })
+             createWidget(widget.BUTTON, { x: 240, y: h*2 + 275, w: 130, h: 60, radius: 30, normal_color: 0x007aff, press_color: 0x005bb5, text: '⚡ Heat', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Heated Tobacco') })
 
              // ================== PAGE 4: SMOKES STATS ==================
-             createWidget(widget.TEXT, { x: 0, y: h*3 + 80, w: 390, h: 40, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🚬 Smokes 7 Days' })
+             createWidget(widget.TEXT, { x: 0, y: h*3 + 80, w: 390, h: 40, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 Smokes 7 Days' })
              createWidget(widget.TEXT, { x: 0, y: h*3 + 130, w: 390, h: 30, color: 0x007aff, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Red: Cigs | Blue: Heat' })
              
              smokeHistogram = createWidget(widget.HISTOGRAM, {
