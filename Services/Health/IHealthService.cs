@@ -43,5 +43,10 @@ namespace Daily.Services.Health
         /// Pulls delta records from Supabase since the latest local record to catch up.
         /// </summary>
         Task PullDeltasAsync();
+
+        /// <summary>
+        /// Retrieves granular health telemetry for a specific date range.
+        /// </summary>
+        Task<List<HealthTelemetry>> GetHealthTelemetryAsync(DateTime start, DateTime end);
     }
 }

@@ -1,0 +1,295 @@
+@page "/health-telemetry"
+@using Daily.Models.Health
+@using Daily.Services.Health
+@using MudBlazor
+@inject IHealthService HealthService
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex align-center mb-6">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" Edge="Edge.Start" OnClick="GoBack" />
+        <MudText Typo="Typo.h5" Class="ml-3 font-weight-bold">Health Telemetry Data</MudText>
+    </div>
+
+    @if (isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-lg mb-4" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-lg mb-4" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-lg mb-4" />
+    }
+    else
+    {
+        <MudGrid>
+            <!-- Steps Section -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-4 rounded-lg" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                    <div class="d-flex align-center mb-4">
+                        <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Color="Color.Primary" Class="mr-2" />
+                        <MudText Typo="Typo.h6" Class="font-weight-bold">Steps</MudText>
+                        <MudSpacer />
+                        <MudText Typo="Typo.h5" Color="Color.Primary" Class="font-weight-bold">@totalSteps.ToString("N0")</MudText>
+                    </div>
+
+                    @if (stepsSeries.Count > 0)
+                    {
+                        <MudChart ChartType="ChartType.Bar" ChartSeries="@stepsSeries" XAxisLabels="@stepsLabels" Width="100%" Height="250px" ChartOptions="chartOptions" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Style="opacity: 0.6;">No steps data available.</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Sleep Section -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-4 rounded-lg" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                    <div class="d-flex align-center mb-4">
+                        <MudIcon Icon="@Icons.Material.Filled.Bedtime" Color="Color.Secondary" Class="mr-2" />
+                        <MudText Typo="Typo.h6" Class="font-weight-bold">Sleep Timeline</MudText>
+                        <MudSpacer />
+                        <MudText Typo="Typo.h5" Color="Color.Secondary" Class="font-weight-bold">@totalSleepText</MudText>
+                    </div>
+
+                    @if (sleepEntries.Any())
+                    {
+                        <div class="sleep-timeline-container" style="position: relative; height: 120px; width: 100%; border-radius: 8px; background-color: var(--mud-palette-background); overflow: hidden;">
+                            @foreach (var stage in sleepEntries)
+                            {
+                                <div class="sleep-stage-block"
+                                     style="position: absolute; 
+                                            left: @(GetSleepStageLeft(stage))%; 
+                                            width: @(GetSleepStageWidth(stage))%; 
+                                            height: 100%; 
+                                            background-color: @GetSleepStageColor(stage.TypeString);"
+                                     title="@($"{stage.TypeString}: {stage.StartTime:HH:mm} - {stage.EndTime:HH:mm}")">
+                                </div>
+                            }
+                            
+                            <!-- Current time indicator line if within bounds -->
+                            @if (IsTimeInSleepBounds(DateTime.Now))
+                            {
+                                <div class="current-time-indicator"
+                                     style="position: absolute;
+                                            left: @(GetSleepStageLeft(new HealthTelemetry { StartTime = DateTime.Now }))%;
+                                            width: 2px;
+                                            height: 100%;
+                                            background-color: red;
+                                            z-index: 10;">
+                                </div>
+                            }
+                        </div>
+                        
+                        <div class="d-flex justify-space-between mt-2 px-2" style="opacity: 0.6;">
+                            <MudText Typo="Typo.caption">@sleepMinTime.ToString("HH:mm")</MudText>
+                            <MudText Typo="Typo.caption">@sleepMaxTime.ToString("HH:mm")</MudText>
+                        </div>
+                        
+                        <div class="d-flex justify-center flex-wrap gap-4 mt-4">
+                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #2b5c8f; margin-right: 6px;"></div><MudText Typo="Typo.caption">Deep</MudText></div>
+                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #4a90e2; margin-right: 6px;"></div><MudText Typo="Typo.caption">Core</MudText></div>
+                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #74b9ff; margin-right: 6px;"></div><MudText Typo="Typo.caption">Light</MudText></div>
+                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #a29bfe; margin-right: 6px;"></div><MudText Typo="Typo.caption">REM</MudText></div>
+                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #fdcb6e; margin-right: 6px;"></div><MudText Typo="Typo.caption">Awake</MudText></div>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Style="opacity: 0.6;">No sleep data available for this period.</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Heart Rate Section -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-4 rounded-lg" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                    <div class="d-flex align-center mb-4">
+                        <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Error" Class="mr-2" />
+                        <MudText Typo="Typo.h6" Class="font-weight-bold">Heart Rate</MudText>
+                        <MudSpacer />
+                        <MudText Typo="Typo.h5" Color="Color.Error" Class="font-weight-bold">@avgHeartRate <span style="font-size: 0.5em; opacity: 0.6;">BPM</span></MudText>
+                    </div>
+
+                    @if (hrSeries.Count > 0)
+                    {
+                        <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="250px" ChartOptions="chartOptions" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Style="opacity: 0.6;">No heart rate data available.</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private bool isLoading = true;
+    
+    // Steps
+    private double totalSteps = 0;
+    private List<ChartSeries<double>> stepsSeries = new();
+    private string[] stepsLabels = Array.Empty<string>();
+    
+    // Sleep
+    private string totalSleepText = "--";
+    private List<HealthTelemetry> sleepEntries = new();
+    private DateTime sleepMinTime;
+    private DateTime sleepMaxTime;
+    
+    // HR
+    private double avgHeartRate = 0;
+    private List<ChartSeries<double>> hrSeries = new();
+    private string[] hrLabels = Array.Empty<string>();
+
+    private ChartOptions chartOptions = new ChartOptions
+    {
+        ChartPalette = new[] { "var(--mud-palette-primary)" }
+    };
+
+    [Inject] private NavigationManager Navigation { get; set; }
+    [Inject] private IJSRuntime JSRuntime { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(20);
+            var endOfToday = DateTime.Today.AddDays(1).AddTicks(-1);
+
+            var telemetryData = await HealthService.GetHealthTelemetryAsync(yesterdayEvening, endOfToday);
+            var today = DateTime.Today;
+
+            // Process Steps
+            var stepsData = telemetryData
+                .Where(x => x.TypeString == "Steps" && x.StartTime >= today)
+                .OrderBy(x => x.StartTime)
+                .ToList();
+
+            totalSteps = stepsData.Sum(x => x.Value);
+
+            if (stepsData.Any())
+            {
+                // Group by hour for chart
+                var hourlySteps = stepsData.GroupBy(x => x.StartTime.Hour)
+                                           .Select(g => new { Hour = g.Key, Total = g.Sum(x => x.Value) })
+                                           .OrderBy(x => x.Hour)
+                                           .ToList();
+                                           
+                stepsSeries = new List<ChartSeries<double>>
+                {
+                    new ChartSeries<double> { Name = "Steps", Data = hourlySteps.Select(x => x.Total).ToArray() }
+                };
+                stepsLabels = hourlySteps.Select(x => $"{x.Hour}:00").ToArray();
+            }
+
+            // Process Sleep
+            var sleepTypes = new[] { "SleepAsleep", "SleepDeep", "SleepLight", "SleepREM", "SleepCore", "SleepAwake" };
+            sleepEntries = telemetryData
+                .Where(x => sleepTypes.Contains(x.TypeString))
+                .OrderBy(x => x.StartTime)
+                .ToList();
+
+            if (sleepEntries.Any())
+            {
+                sleepMinTime = sleepEntries.Min(x => x.StartTime);
+                sleepMaxTime = sleepEntries.Max(x => x.EndTime);
+                
+                var trueSleepTypes = new[] { "SleepAsleep", "SleepDeep", "SleepLight", "SleepREM", "SleepCore" };
+                var totalSleepSeconds = sleepEntries
+                    .Where(x => trueSleepTypes.Contains(x.TypeString))
+                    .Sum(x => (x.EndTime - x.StartTime).TotalSeconds);
+                
+                var ts = TimeSpan.FromSeconds(totalSleepSeconds);
+                totalSleepText = $"{(int)ts.TotalHours}h {ts.Minutes}m";
+            }
+
+            // Process HR
+            var hrData = telemetryData
+                .Where(x => x.TypeString == "HeartRate" && x.StartTime >= today)
+                .OrderBy(x => x.StartTime)
+                .ToList();
+
+            if (hrData.Any())
+            {
+                avgHeartRate = Math.Round(hrData.Average(x => x.Value), 0);
+                
+                // Group by hour for chart to avoid too many points
+                var hourlyHr = hrData.GroupBy(x => x.StartTime.Hour)
+                                     .Select(g => new { Hour = g.Key, Avg = g.Average(x => x.Value) })
+                                     .OrderBy(x => x.Hour)
+                                     .ToList();
+                
+                hrSeries = new List<ChartSeries<double>>
+                {
+                    new ChartSeries<double> { Name = "Heart Rate", Data = hourlyHr.Select(x => x.Avg).ToArray() }
+                };
+                hrLabels = hourlyHr.Select(x => $"{x.Hour}:00").ToArray();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading detailed health telemetry: {ex}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetSleepStageColor(string typeString)
+    {
+        return typeString switch
+        {
+            "SleepDeep" => "#2b5c8f",
+            "SleepCore" => "#4a90e2",
+            "SleepAsleep" => "#4a90e2",
+            "SleepLight" => "#74b9ff",
+            "SleepREM" => "#a29bfe",
+            "SleepAwake" => "#fdcb6e",
+            _ => "#bdc3c7"
+        };
+    }
+
+    private double GetSleepStageLeft(HealthTelemetry stage)
+    {
+        if (!sleepEntries.Any()) return 0;
+        
+        var totalDuration = (sleepMaxTime - sleepMinTime).TotalSeconds;
+        if (totalDuration <= 0) return 0;
+        
+        var offset = (stage.StartTime - sleepMinTime).TotalSeconds;
+        return (offset / totalDuration) * 100.0;
+    }
+
+    private double GetSleepStageWidth(HealthTelemetry stage)
+    {
+        if (!sleepEntries.Any()) return 0;
+        
+        var totalDuration = (sleepMaxTime - sleepMinTime).TotalSeconds;
+        if (totalDuration <= 0) return 0;
+        
+        var stageDuration = (stage.EndTime - stage.StartTime).TotalSeconds;
+        return (stageDuration / totalDuration) * 100.0;
+    }
+    
+    private bool IsTimeInSleepBounds(DateTime time)
+    {
+        return sleepEntries.Any() && time >= sleepMinTime && time <= sleepMaxTime;
+    }
+
+    private async Task GoBack()
+    {
+        await JSRuntime.InvokeVoidAsync("history.back");
+    }
+}

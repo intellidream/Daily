@@ -41,5 +41,10 @@ namespace Daily_WinUI.Services
         {
             return Task.CompletedTask;
         }
+
+        public Task<List<HealthTelemetry>> GetHealthTelemetryAsync(DateTime start, DateTime end)
+        {
+            return Task.FromResult(new List<HealthTelemetry>());
+        }
     }
 }

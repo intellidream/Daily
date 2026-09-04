@@ -1,0 +1,139 @@
+@using Daily.Models.Health
+@using Daily.Services.Health
+@using MudBlazor
+@inject IHealthService HealthService
+
+<MudPaper Class="widget-card cursor-pointer" Elevation="0" @onclick="NavigateToDetail">
+    <!-- Header -->
+    <div class="d-flex align-center mb-3">
+        <div class="icon-container primary-container mr-3">
+            <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Primary" Size="Size.Small" />
+        </div>
+        <div>
+            <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Health Telemetry</MudText>
+            <MudText Typo="Typo.caption" Style="opacity: 0.6;">Today</MudText>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="100px" Class="rounded-lg" />
+    }
+    else
+    {
+        <div class="d-flex justify-space-between align-center mb-4">
+            <div class="d-flex flex-column align-center">
+                <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Size="Size.Small" Style="opacity: 0.5;" Class="mb-1" />
+                <MudText Typo="Typo.h6" Class="font-weight-bold">@totalSteps</MudText>
+                <MudText Typo="Typo.caption" Style="opacity: 0.5;">steps</MudText>
+            </div>
+            
+            <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+
+            <div class="d-flex flex-column align-center">
+                <MudIcon Icon="@Icons.Material.Filled.Bedtime" Color="Color.Secondary" Size="Size.Small" Class="mb-1" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary" Class="font-weight-bold">@totalSleep</MudText>
+                <MudText Typo="Typo.caption" Style="opacity: 0.5;">sleep</MudText>
+            </div>
+        </div>
+
+        <MudPaper Elevation="0" Class="pa-2 rounded-lg" Style="background-color: var(--mud-palette-background-grey);">
+            <MudText Typo="Typo.caption" Class="font-weight-bold mb-1" Style="opacity: 0.5;">HEART RATE</MudText>
+            <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="60px" ChartOptions="chartOptions" />
+        </MudPaper>
+    }
+</MudPaper>
+
+@code {
+    private bool isLoading = true;
+    private List<HealthTelemetry> telemetryData = new();
+    private string totalSteps = "--";
+    private string totalSleep = "--";
+    private List<ChartSeries<double>> hrSeries = new();
+    private string[] hrLabels = Array.Empty<string>();
+
+    private ChartOptions chartOptions = new ChartOptions
+    {
+        ChartPalette = new[] { "var(--mud-palette-error)" }
+    };
+
+    [Inject] private NavigationManager Navigation { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    public async Task LoadDataAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(20);
+            var endOfToday = DateTime.Today.AddDays(1).AddTicks(-1);
+
+            telemetryData = await HealthService.GetHealthTelemetryAsync(yesterdayEvening, endOfToday);
+
+            var today = DateTime.Today;
+            
+            // Steps
+            var steps = telemetryData.Where(x => x.TypeString == "Steps" && x.StartTime >= today).Sum(x => x.Value);
+            totalSteps = steps > 0 ? steps.ToString("N0") : "--";
+
+            // Sleep
+            var sleepTypes = new[] { "SleepAsleep", "SleepDeep", "SleepLight", "SleepREM", "SleepCore" };
+            var sleepSeconds = telemetryData
+                .Where(x => sleepTypes.Contains(x.TypeString))
+                .Sum(x => (x.EndTime - x.StartTime).TotalSeconds);
+            
+            if (sleepSeconds > 0)
+            {
+                var ts = TimeSpan.FromSeconds(sleepSeconds);
+                totalSleep = $"{(int)ts.TotalHours}h {ts.Minutes}m";
+            }
+
+            // Heart Rate for sparkline (Line chart)
+            var hrEntries = telemetryData
+                .Where(x => x.TypeString == "HeartRate" && x.StartTime >= today)
+                .OrderBy(x => x.StartTime)
+                .ToList();
+            
+            if (hrEntries.Any())
+            {
+                var hourlyHr = hrEntries.GroupBy(x => x.StartTime.Hour)
+                                     .Select(g => new { Hour = g.Key, Avg = g.Average(x => x.Value) })
+                                     .OrderBy(x => x.Hour)
+                                     .ToList();
+                hrSeries = new List<ChartSeries<double>>
+                {
+                    new ChartSeries<double> { Name = "HR", Data = hourlyHr.Select(x => x.Avg).ToArray() }
+                };
+                hrLabels = hourlyHr.Select(x => "").ToArray(); // Empty labels for small widget
+            }
+            else
+            {
+                hrSeries = new List<ChartSeries<double>>
+                {
+                    new ChartSeries<double> { Name = "HR", Data = new double[] { 60, 60 } }
+                };
+                hrLabels = new string[] { "", "" };
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading telemetry widget: {ex}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NavigateToDetail()
+    {
+        Navigation.NavigateTo("/health-telemetry");
+    }
+}

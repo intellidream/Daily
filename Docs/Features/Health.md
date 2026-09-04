@@ -38,6 +38,13 @@ Aggregates and organizes 35+ metrics into structured categories:
   - Cumulative metrics (Steps, Calories, Sleep) are scaled linearly against the maximum value in the range.
   - Spot/fluctuating metrics (Heart Rate, Weight, HRV) are normalized using a range-based formula `((val - min) / (max - min)) * 50.0` clamped between 15% and 100% height to emphasize relative daily fluctuations rather than absolute zeros.
 
+### 1.5 Granular Health Telemetry Data
+- **Health Telemetry Widget (`HealthTelemetryWidget`)**: A widget providing high-level telemetry insights for the day, including total steps, sleep duration, and a compact visual sparkline/line chart representing heart rate data.
+- **Detailed Telemetry View (`HealthTelemetryDetailPage`)**: A specialized detail page providing granular, raw data representation:
+  - **Sleep Timeline**: A horizontal Gantt-style timeline visualization tracking precise sleep cycles (Deep, Light, REM, Core, Awake).
+  - **Granular Heart Rate**: Hourly average heart rate visualizer.
+  - **Step Tracking**: Hourly step aggregations plotted in bar charts.
+
 ---
 
 ## 2. Technical Architecture & Data Model

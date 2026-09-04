@@ -914,5 +914,37 @@ namespace Daily.Services.Health
             }
             return false;
         }
+
+        public async Task<List<HealthTelemetry>> GetHealthTelemetryAsync(DateTime start, DateTime end)
+        {
+            try
+            {
+                var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
+                if (user == null || !Guid.TryParse(user.Id, out var uid))
+                {
+                    return new List<HealthTelemetry>();
+                }
+                var userIdStr = uid.ToString().ToLowerInvariant();
+
+                // Convert to UTC strings for PostgREST
+                var startStr = start.ToString("O");
+                var endStr = end.ToString("O");
+
+                var result = await _supabase.From<HealthTelemetry>()
+                                          .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
+                                          .Filter("start_time", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
+                                          .Filter("end_time", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
+                                          .Order("start_time", Supabase.Postgrest.Constants.Ordering.Ascending)
+                                          .Get();
+
+                return result.Models ?? new List<HealthTelemetry>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to fetch granular telemetry from Supabase");
+                Console.WriteLine($"[HealthTelemetry] ERROR: {ex.Message}");
+                return new List<HealthTelemetry>();
+            }
+        }
     }
 }
