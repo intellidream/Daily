@@ -73,14 +73,14 @@
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Text="HEART RATE" FontSize="10" FontWeight="Bold" Opacity="0.5" Margin="4,0,0,4" />
                         
-                        <chart:SfCartesianChart Grid.Row="1" Margin="-10,-10,-10,-10">
+                        <chart:SfCartesianChart Height="40" Margin="0" Background="Transparent">
                             <chart:SfCartesianChart.XAxes>
-                                <chart:DateTimeAxis ShowGridLines="False" ShowMajorTickLines="False" ShowLabel="False" ShowAxisLine="False" />
+                                <chart:DateTimeAxis ShowMajorGridLines="False" />
                             </chart:SfCartesianChart.XAxes>
                             <chart:SfCartesianChart.YAxes>
-                                <chart:NumericalAxis ShowGridLines="False" ShowMajorTickLines="False" ShowLabel="False" ShowAxisLine="False" Minimum="40" Maximum="200" />
+                                <chart:NumericalAxis ShowMajorGridLines="False" />
                             </chart:SfCartesianChart.YAxes>
-                            <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="StartTime" YBindingPath="Value" Stroke="#F44336" StrokeWidth="2" />
+                            <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="StartTime" YBindingPath="Value" Fill="#FF5252" />
                         </chart:SfCartesianChart>
                     </Grid>
                 </Border>

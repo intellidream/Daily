@@ -36,6 +36,38 @@ namespace Daily_WinUI.Views
         {
         }
 
+
+        private void SleepChartContainer_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        {
+            DrawSleepTimeline();
+        }
+
+        private void DrawSleepTimeline()
+        {
+            SleepChartContainer.Children.Clear();
+            var data = SleepData;
+            if (data == null || !data.Any()) return;
+
+            var width = SleepChartContainer.ActualWidth;
+            if (width == 0) return;
+
+            foreach (var item in data)
+            {
+                var leftOffset = (item.LeftPercentage / 100.0) * width;
+                var rectWidth = (item.WidthPercentage / 100.0) * width;
+
+                var border = new Border
+                {
+                    Background = item.ColorBrush,
+                    Width = rectWidth,
+                    Height = SleepChartContainer.Height,
+                    HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left,
+                    Margin = new Microsoft.UI.Xaml.Thickness(leftOffset, 0, 0, 0)
+                };
+                SleepChartContainer.Children.Add(border);
+            }
+        }
+
         public async Task LoadDataAsync()
         {
             if (_healthService == null) return;
@@ -50,6 +82,7 @@ namespace Daily_WinUI.Views
                 OnPropertyChanged(nameof(HeartRateData));
                 OnPropertyChanged(nameof(StepsData));
                 OnPropertyChanged(nameof(SleepData));
+                DrawSleepTimeline();
             }
             catch (Exception ex)
             {
@@ -86,26 +119,38 @@ namespace Daily_WinUI.Views
                     .OrderBy(x => x.StartTime)
                     .ToList();
 
-                foreach (var entry in sleepEntries)
+                if (sleepEntries.Any())
                 {
-                    Brush color = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-                    switch (entry.TypeString)
-                    {
-                        case "SleepDeep": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 63, 81, 181)); break; // #3F51B5
-                        case "SleepLight":
-                        case "SleepCore": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 124, 77, 255)); break; // #7C4DFF
-                        case "SleepREM": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 188, 212)); break; // #00BCD4
-                        case "SleepAwake": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 152, 0)); break; // #FF9800
-                        default: color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 158, 158, 158)); break; // Gray
-                    }
+                    var firstSleep = sleepEntries.Min(x => x.StartTime);
+                    var lastSleep = sleepEntries.Max(x => x.EndTime);
+                    var totalDuration = (lastSleep - firstSleep).TotalSeconds;
 
-                    items.Add(new SleepChartItem
+                    foreach (var entry in sleepEntries)
                     {
-                        Category = "Sleep",
-                        StartDateTime = entry.StartTime,
-                        EndDateTime = entry.EndTime,
-                        ColorBrush = color
-                    });
+                        Brush color = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                        switch (entry.TypeString)
+                        {
+                            case "SleepDeep": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 63, 81, 181)); break; // #3F51B5
+                            case "SleepLight":
+                            case "SleepCore": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 124, 77, 255)); break; // #7C4DFF
+                            case "SleepREM": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 188, 212)); break; // #00BCD4
+                            case "SleepAwake": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 152, 0)); break; // #FF9800
+                            default: color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 158, 158, 158)); break; // Gray
+                        }
+
+                        double left = totalDuration > 0 ? (entry.StartTime - firstSleep).TotalSeconds / totalDuration * 100 : 0;
+                        double width = totalDuration > 0 ? (entry.EndTime - entry.StartTime).TotalSeconds / totalDuration * 100 : 0;
+
+                        items.Add(new SleepChartItem
+                        {
+                            Category = "Sleep",
+                            StartDateTime = entry.StartTime,
+                            EndDateTime = entry.EndTime,
+                            ColorBrush = color,
+                            LeftPercentage = left,
+                            WidthPercentage = width
+                        });
+                    }
                 }
                 return items;
             }
@@ -124,5 +169,7 @@ namespace Daily_WinUI.Views
         public DateTime StartDateTime { get; set; }
         public DateTime EndDateTime { get; set; }
         public Brush ColorBrush { get; set; }
+        public double LeftPercentage { get; set; }
+        public double WidthPercentage { get; set; }
     }
 }

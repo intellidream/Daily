@@ -43,13 +43,12 @@
 
                         <chart:SfCartesianChart Height="250">
                             <chart:SfCartesianChart.XAxes>
-                                <chart:DateTimeAxis ShowMajorGridLines="False" LabelFormat="HH:mm" />
+                                <chart:DateTimeAxis ShowMajorGridLines="False" />
                             </chart:SfCartesianChart.XAxes>
                             <chart:SfCartesianChart.YAxes>
                                 <chart:NumericalAxis ShowMajorGridLines="True" Minimum="40" Maximum="200" Interval="20" />
                             </chart:SfCartesianChart.YAxes>
-
-                            <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="StartTime" YBindingPath="Value" Fill="#FF5252" Stroke="#FF5252" StrokeWidth="2" />
+                            <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="StartTime" YBindingPath="Value" Fill="#FF5252" />
                         </chart:SfCartesianChart>
                     </StackPanel>
                 </Border>
@@ -82,21 +81,7 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <chart:SfCartesianChart Height="200" IsTransposed="True">
-                            <chart:SfCartesianChart.XAxes>
-                                <chart:CategoryAxis ShowMajorGridLines="False" ShowLabel="False" ShowAxisLine="False" />
-                            </chart:SfCartesianChart.XAxes>
-                            <chart:SfCartesianChart.YAxes>
-                                <chart:DateTimeAxis ShowMajorGridLines="True" LabelFormat="HH:mm" />
-                            </chart:SfCartesianChart.YAxes>
-                            
-                            <chart:RangeColumnSeries 
-                                ItemsSource="{x:Bind SleepData, Mode=OneWay}" 
-                                XBindingPath="Category" 
-                                High="EndDateTime" 
-                                Low="StartDateTime"
-                                Fill="{Binding ColorBrush}" />
-                        </chart:SfCartesianChart>
+                        <Grid x:Name="SleepChartContainer" Height="40" HorizontalAlignment="Stretch" Margin="0,12,0,0" SizeChanged="SleepChartContainer_SizeChanged" />
                     </StackPanel>
                 </Border>
 
@@ -110,12 +95,11 @@
 
                         <chart:SfCartesianChart Height="200">
                             <chart:SfCartesianChart.XAxes>
-                                <chart:DateTimeAxis ShowMajorGridLines="False" LabelFormat="HH:mm" />
+                                <chart:DateTimeAxis ShowMajorGridLines="False" />
                             </chart:SfCartesianChart.XAxes>
                             <chart:SfCartesianChart.YAxes>
                                 <chart:NumericalAxis ShowMajorGridLines="True" />
                             </chart:SfCartesianChart.YAxes>
-
                             <chart:ColumnSeries ItemsSource="{x:Bind StepsData, Mode=OneWay}" XBindingPath="StartTime" YBindingPath="Value" Fill="#FF9800" />
                         </chart:SfCartesianChart>
                     </StackPanel>
