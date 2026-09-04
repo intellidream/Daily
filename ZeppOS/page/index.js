@@ -441,9 +441,9 @@ Page(
              })
 
              // ================== PAGE 5: ABOUT / SETTINGS ==================
-             createWidget(widget.IMG, { x: 145, y: h*4 + 60, src: 'icon.png' })
+             createWidget(widget.IMG, { x: 133, y: h*4 + 40, src: 'icon.png' })
              createWidget(widget.TEXT, { x: 0, y: h*4 + 180, w: 390, h: 40, color: 0xffffff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'DayOne Orbit' })
-             createWidget(widget.TEXT, { x: 0, y: h*4 + 220, w: 390, h: 30, color: 0xaaaaaa, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'v1.0.0 Sync App' })
+             createWidget(widget.TEXT, { x: 0, y: h*4 + 220, w: 390, h: 30, color: 0xaaaaaa, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'v1.0' })
              
              debugText = createWidget(widget.TEXT, { x: 10, y: h*4 + 250, w: 370, h: 80, color: 0xffa500, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: 'Waiting for health sync...' })
              
