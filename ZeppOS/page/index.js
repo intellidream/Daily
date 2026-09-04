@@ -355,20 +355,22 @@ Page(
              // ================== PAGE 1: BUBBLES ==================
              syncIndicator = createWidget(widget.TEXT, { x: 0, y: 410, w: 390, h: 30, color: 0x00ff00, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '' })
              
-             createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 12 })
-             waterArc = createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0x00ffff, line_width: 12 })
-             coffeeArc = createWidget(widget.ARC, { x: 10, y: 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0xffa500, line_width: 12 })
-             waterCenterText = createWidget(widget.TEXT, { x: 10, y: 145, w: 160, h: 160, color: 0xffffff, text_size: 20, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...' })
+             createWidget(widget.TEXT, { x: 0, y: 80, w: 390, h: 40, color: 0x00aaff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles' })
              
-             waterBreakdownText = createWidget(widget.TEXT, { x: 0, y: 315, w: 180, h: 60, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
+             createWidget(widget.ARC, { x: 20, y: 160, w: 200, h: 200, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 16 })
+             waterArc = createWidget(widget.ARC, { x: 20, y: 160, w: 200, h: 200, start_angle: -90, end_angle: -90, color: 0x00ffff, line_width: 16 })
+             coffeeArc = createWidget(widget.ARC, { x: 20, y: 160, w: 200, h: 200, start_angle: -90, end_angle: -90, color: 0xffa500, line_width: 16 })
+             waterCenterText = createWidget(widget.TEXT, { x: 20, y: 160, w: 200, h: 200, color: 0xffffff, text_size: 26, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...' })
              
-             createWidget(widget.BUTTON, { x: 190, y: 100, w: 180, h: 70, radius: 35, normal_color: 0x0055ff, press_color: 0x0033aa, text: '+300ml', color: 0xffffff, text_size: 18, click_func: () => logWater(300, 'Large Water') })
-             createWidget(widget.BUTTON, { x: 190, y: 190, w: 180, h: 70, radius: 35, normal_color: 0x0055ff, press_color: 0x0033aa, text: '+150ml', color: 0xffffff, text_size: 18, click_func: () => logWater(150, 'Small Water') })
-             createWidget(widget.BUTTON, { x: 190, y: 280, w: 180, h: 70, radius: 35, normal_color: 0x8b4513, press_color: 0x5a2d0c, text: '+100ml', color: 0xffffff, text_size: 18, click_func: () => logWater(100, 'Coffee') })
+             waterBreakdownText = createWidget(widget.TEXT, { x: 10, y: 370, w: 220, h: 40, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
+             
+             createWidget(widget.BUTTON, { x: 240, y: 150, w: 130, h: 60, radius: 30, normal_color: 0x0055ff, press_color: 0x0033aa, text: '300', color: 0xffffff, text_size: 22, click_func: () => logWater(300, 'Large Water') })
+             createWidget(widget.BUTTON, { x: 240, y: 230, w: 130, h: 60, radius: 30, normal_color: 0x0055ff, press_color: 0x0033aa, text: '150', color: 0xffffff, text_size: 22, click_func: () => logWater(150, 'Small Water') })
+             createWidget(widget.BUTTON, { x: 240, y: 310, w: 130, h: 60, radius: 30, normal_color: 0x8b4513, press_color: 0x5a2d0c, text: '100', color: 0xffffff, text_size: 22, click_func: () => logWater(100, 'Coffee') })
 
              // ================== PAGE 2: BUBBLES STATS ==================
-             createWidget(widget.TEXT, { x: 0, y: h + 100, w: 390, h: 60, color: 0x00aaff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Hydration 7 Days' })
-             createWidget(widget.TEXT, { x: 0, y: h + 140, w: 390, h: 30, color: 0xffa500, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Blue: Water | Orange: Coffee' })
+             createWidget(widget.TEXT, { x: 0, y: h + 80, w: 390, h: 40, color: 0x00aaff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles 7 Days' })
+             createWidget(widget.TEXT, { x: 0, y: h + 130, w: 390, h: 30, color: 0xffa500, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Blue: Water | Orange: Coffee' })
              
              waterHistogram = createWidget(widget.HISTOGRAM, {
                x: 20, y: h + 180, w: 350, h: 180,
@@ -397,18 +399,20 @@ Page(
              })
 
              // ================== PAGE 3: SMOKES ==================
-             createWidget(widget.ARC, { x: 10, y: h*2 + 145, w: 160, h: 160, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 12 })
-             smokeArc = createWidget(widget.ARC, { x: 10, y: h*2 + 145, w: 160, h: 160, start_angle: -90, end_angle: -90, color: 0x00ff00, line_width: 12 })
-             smokeCenterText = createWidget(widget.TEXT, { x: 10, y: h*2 + 145, w: 160, h: 160, color: 0xffffff, text_size: 20, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...' })
+             createWidget(widget.TEXT, { x: 0, y: h*2 + 80, w: 390, h: 40, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🚬 Smokes' })
              
-             smokeBreakdownText = createWidget(widget.TEXT, { x: 0, y: h*2 + 315, w: 180, h: 60, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
+             createWidget(widget.ARC, { x: 20, y: h*2 + 160, w: 200, h: 200, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 16 })
+             smokeArc = createWidget(widget.ARC, { x: 20, y: h*2 + 160, w: 200, h: 200, start_angle: -90, end_angle: -90, color: 0x00ff00, line_width: 16 })
+             smokeCenterText = createWidget(widget.TEXT, { x: 20, y: h*2 + 160, w: 200, h: 200, color: 0xffffff, text_size: 26, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...' })
+             
+             smokeBreakdownText = createWidget(widget.TEXT, { x: 10, y: h*2 + 370, w: 220, h: 40, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
 
-             createWidget(widget.BUTTON, { x: 190, y: h*2 + 145, w: 180, h: 70, radius: 35, normal_color: 0xff3b30, press_color: 0xaa2010, text: '+1 Cig', color: 0xffffff, text_size: 20, click_func: () => logSmoke(1, 'Cigarette') })
-             createWidget(widget.BUTTON, { x: 190, y: h*2 + 235, w: 180, h: 70, radius: 35, normal_color: 0x007aff, press_color: 0x005bb5, text: '+1 Heat', color: 0xffffff, text_size: 20, click_func: () => logSmoke(1, 'Heated Tobacco') })
+             createWidget(widget.BUTTON, { x: 240, y: h*2 + 185, w: 130, h: 60, radius: 30, normal_color: 0xff3b30, press_color: 0xaa2010, text: 'Cig', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Cigarette') })
+             createWidget(widget.BUTTON, { x: 240, y: h*2 + 275, w: 130, h: 60, radius: 30, normal_color: 0x007aff, press_color: 0x005bb5, text: 'Heat', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Heated Tobacco') })
 
              // ================== PAGE 4: SMOKES STATS ==================
-             createWidget(widget.TEXT, { x: 0, y: h*3 + 100, w: 390, h: 60, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Smoking 7 Days' })
-             createWidget(widget.TEXT, { x: 0, y: h*3 + 140, w: 390, h: 30, color: 0x007aff, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Red: Cigs | Blue: Heat' })
+             createWidget(widget.TEXT, { x: 0, y: h*3 + 80, w: 390, h: 40, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🚬 Smokes 7 Days' })
+             createWidget(widget.TEXT, { x: 0, y: h*3 + 130, w: 390, h: 30, color: 0x007aff, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Red: Cigs | Blue: Heat' })
              
              smokeHistogram = createWidget(widget.HISTOGRAM, {
                x: 20, y: h*3 + 180, w: 350, h: 180,
@@ -448,6 +452,12 @@ Page(
              
              updateWaterUI()
              updateSmokeUI()
+             
+             // Force UI redraw loop to workaround Zepp OS stale texture bug on Swiper pages
+             setInterval(() => {
+                 updateWaterUI()
+                 updateSmokeUI()
+             }, 2000)
              
              // Poll telemetry every 1 hour (3600000 ms) while app is open, and once on load
              setInterval(syncTelemetry, 3600000)
