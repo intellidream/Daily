@@ -62,7 +62,7 @@ AppSideService(
           const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
 
           fetch({
-            url: `${SUPABASE_URL}/rest/v1/habits_logs?habit_type=eq.${habit_type}&logged_at=gte.${startOfToday}&select=*`,
+            url: `${SUPABASE_URL}/rest/v1/habits_logs?habit_type=eq.${habit_type}&is_deleted=eq.false&logged_at=gte.${startOfToday}&select=*`,
             method: 'GET',
             headers: {
               'apikey': SUPABASE_ANON_KEY,
