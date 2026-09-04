@@ -407,7 +407,7 @@ Page(
              
              smokeBreakdownText = createWidget(widget.TEXT, { x: 10, y: h*2 + 370, w: 220, h: 40, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
 
-             createWidget(widget.BUTTON, { x: 240, y: h*2 + 185, w: 130, h: 60, radius: 30, normal_color: 0xff3b30, press_color: 0xaa2010, text: '🔥 Cig', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Cigarette') })
+             createWidget(widget.BUTTON, { x: 240, y: h*2 + 185, w: 130, h: 60, radius: 30, normal_color: 0x990000, press_color: 0x660000, text: '🔥 Cig', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Cigarette') })
              createWidget(widget.BUTTON, { x: 240, y: h*2 + 275, w: 130, h: 60, radius: 30, normal_color: 0x007aff, press_color: 0x005bb5, text: '⚡ Heat', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Heated Tobacco') })
 
              // ================== PAGE 4: SMOKES STATS ==================
@@ -416,7 +416,7 @@ Page(
              
              smokeHistogram = createWidget(widget.HISTOGRAM, {
                x: 20, y: h*3 + 180, w: 350, h: 180,
-               item_color: 0xff5555,
+               item_color: 0x990000,
                item_bg_color: 0x333333,
                item_width: 30,
                item_space: 15,
