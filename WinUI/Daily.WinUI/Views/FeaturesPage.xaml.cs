@@ -877,7 +877,7 @@ public sealed partial class FeaturesPage : Page
         {
             try
             {
-                var supabase = MauiProgram.ServiceProvider.GetService<Supabase.Client>();
+                var supabase = App.Current.Services.GetService<Supabase.Client>();
                 if (supabase != null)
                 {
                     await supabase.From<Daily.Models.PairedWatch>()
