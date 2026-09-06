@@ -7,20 +7,20 @@
 @inject IWindowManagerService WindowManager
 @implements IDisposable
 
-<div class="d-flex flex-column h-100 w-100 gap-3">
+<div class="d-flex flex-column h-100 w-100 gap-2">
     <!-- Header -->
     <div class="d-flex align-center mb-1 flex-shrink-0" style="gap: 2px;">
         <div class="flex-grow-1" style="min-width: 0;">
             <MudCarousel TData="object" ShowArrows="false" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
                          Class="flex-grow-1 rounded-pill mud-theme-primary">
                  <MudCarouselItem Transition="Transition.Slide">
-                     <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%; cursor: pointer;" @onclick="NavigateToDetail">
+                     <div class="d-flex align-center justify-center h-100 px-4 cursor-pointer" style="width: 100%; cursor: pointer;" @onclick="NavigateToDetail">
                          <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Class="mr-2" Size="Size.Small" Style="color: white;" />
-                         <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: white !important;">
-                             Health Data
+                         <MudText Typo="Typo.body2" Class="font-weight-bold" Style="color: white !important;">
+                             Sensors & Telemetry
                          </MudText>
                          <div class="d-flex align-center gap-1 ml-auto">
-                             <MudText Typo="Typo.caption" Style="color: white; opacity: 0.7;">Today</MudText>
+                             <MudText Typo="Typo.caption" Style="color: white; opacity: 0.85; font-size: 11px;">@GetFormattedSelectedDate()</MudText>
                          </div>
                      </div>
                  </MudCarouselItem>
@@ -33,42 +33,119 @@
     </div>
 
     <!-- Main Content -->
-    <div class="d-flex flex-column gap-4 flex-grow-1 overflow-auto pa-1" style="scrollbar-width: none;">
+    <div class="d-flex flex-column gap-2 flex-grow-1 overflow-auto pa-1" style="scrollbar-width: none;">
         @if (isLoading)
         {
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="80px" Class="rounded-lg mb-2" />
             <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="100px" Class="rounded-lg" />
         }
         else
         {
-            <!-- TOP ROW: Steps + Sleep -->
-            <div class="d-flex align-center justify-space-around px-2 py-2">
-                <div class="d-flex flex-column align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Size="Size.Small" Style="opacity: 0.5;" Class="mb-1" />
-                    <MudText Typo="Typo.h6" Class="font-weight-bold">@totalSteps</MudText>
-                    <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 10px;">steps</MudText>
+            <!-- 1. ACTIVITY & SLEEP SUMMARY DUAL PILL -->
+            <div class="d-flex align-center justify-space-between gap-2">
+                <!-- Steps Card -->
+                <div class="rounded-lg pa-2 flex-grow-1 cursor-pointer" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); cursor: pointer;" @onclick="NavigateToSensors">
+                    <div class="d-flex align-center justify-space-between mb-1">
+                        <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Size="Size.Small" Style="color: #00E676; font-size: 16px;" />
+                        <MudText Typo="Typo.caption" Style="font-size: 9px; color: #00E676; font-weight: 600;">@stepPct%</MudText>
+                    </div>
+                    <MudText Typo="Typo.h6" Class="font-weight-bold" Style="line-height: 1.1;">@totalSteps</MudText>
+                    <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">steps today</MudText>
                 </div>
-                
-                <MudDivider Vertical="true" FlexItem="true" Style="height: 40px;" Class="mx-2" />
 
-                <div class="d-flex flex-column align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.Bedtime" Color="Color.Secondary" Size="Size.Small" Class="mb-1" />
-                    <MudText Typo="Typo.h6" Color="Color.Secondary" Class="font-weight-bold">@totalSleep</MudText>
-                    <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 10px;">sleep</MudText>
+                <!-- Sleep Card -->
+                <div class="rounded-lg pa-2 flex-grow-1 cursor-pointer" style="background: rgba(124, 77, 255, 0.08); border: 1px solid rgba(124, 77, 255, 0.15); cursor: pointer;" @onclick="NavigateToSleep">
+                    <div class="d-flex align-center justify-space-between mb-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Bedtime" Size="Size.Small" Style="color: #B388FF; font-size: 16px;" />
+                        @if (primarySleep?.SleepScore > 0)
+                        {
+                            <MudText Typo="Typo.caption" Style="font-size: 9px; color: #B388FF; font-weight: 600;">Score: @primarySleep.SleepScore</MudText>
+                        }
+                    </div>
+                    <MudText Typo="Typo.h6" Class="font-weight-bold" Style="line-height: 1.1; color: #E1BEE7;">@totalSleep</MudText>
+                    <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">sleep last night</MudText>
                 </div>
             </div>
 
-            <MudPaper Elevation="0" Class="pa-2 rounded-lg" Style="background-color: var(--mud-palette-background-grey);">
-                <MudText Typo="Typo.caption" Class="font-weight-bold mb-1" Style="opacity: 0.5;">HEART RATE</MudText>
+            <!-- Mini Hypnogram Strip if Sleep exists -->
+            @if (primarySleep != null && primarySleep.DurationSeconds > 0)
+            {
+                <div class="rounded-lg pa-2 cursor-pointer" style="background: rgba(124, 77, 255, 0.05); cursor: pointer;" @onclick="NavigateToSleep">
+                    <div class="d-flex align-center justify-space-between mb-1">
+                        <MudText Typo="Typo.caption" Style="font-size: 9px; color: #B388FF; font-weight: 600;">SLEEP HYPNOGRAM</MudText>
+                        <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.6;">@primarySleep.BedtimeFormatted - @primarySleep.WakeTimeFormatted</MudText>
+                    </div>
+                    <div class="d-flex w-100 rounded-sm" style="height: 8px; overflow: hidden; background: rgba(0,0,0,0.2);">
+                        @if (primarySleep.Stages != null && primarySleep.Stages.Any())
+                        {
+                            var sessionStart = primarySleep.StartTime;
+                            var sessionEnd = primarySleep.EndTime;
+                            var totalSec = Math.Max(1, (sessionEnd - sessionStart).TotalSeconds);
+                            @foreach (var stg in primarySleep.Stages.OrderBy(x => x.LocalStartTime))
+                            {
+                                var dur = Math.Max((stg.LocalEndTime - stg.LocalStartTime).TotalSeconds, stg.DurationSeconds);
+                                var wPct = Math.Max(0.5, (dur / totalSec) * 100.0);
+                                <div style="width: @(wPct)%; height: 100%; background-color: @GetStageColor(stg.SleepCategory);"></div>
+                            }
+                        }
+                        else
+                        {
+                            <div style="width: @(primarySleep.DeepPercent)%; height: 100%; background: #3949AB;"></div>
+                            <div style="width: @(primarySleep.LightPercent)%; height: 100%; background: #42A5F5;"></div>
+                            <div style="width: @(primarySleep.RemPercent)%; height: 100%; background: #26C6DA;"></div>
+                            <div style="width: @(primarySleep.AwakePercent)%; height: 100%; background: #FF7043;"></div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- 2. HEART RATE INTRADAY SPARKLINE & ZONES -->
+            <MudPaper Elevation="0" Class="pa-3 rounded-lg cursor-pointer" Style="background-color: var(--mud-palette-background-grey); cursor: pointer;" @onclick="NavigateToSensors">
+                <div class="d-flex align-center justify-space-between mb-1">
+                    <div class="d-flex align-center gap-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Small" Style="color: #F44336; font-size: 14px;"/>
+                        <MudText Typo="Typo.caption" Class="font-weight-bold" Style="opacity: 0.8; font-size: 10px;">HEART RATE INTRADAY</MudText>
+                    </div>
+                    @if (minHr > 0 && maxHr > 0)
+                    {
+                        <MudText Typo="Typo.caption" Style="font-size: 10px; opacity: 0.6;">
+                            Range: @minHr - @maxHr bpm
+                        </MudText>
+                    }
+                </div>
+
                 @if (hrSeries.Any())
                 {
-                    <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="60px" ChartOptions="chartOptions" />
+                    <div style="margin-left: -12px; margin-right: -12px;">
+                        <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="75px" ChartOptions="chartOptions" />
+                    </div>
                 }
                 else
                 {
-                    <div class="d-flex align-center justify-center py-2" style="opacity: 0.5;">
-                        <MudText Typo="Typo.caption">No heart rate data</MudText>
+                    <div class="d-flex align-center justify-center py-3" style="opacity: 0.5;">
+                        <MudText Typo="Typo.caption">No sensor telemetry for this date</MudText>
                     </div>
                 }
+
+                <!-- Intraday Stats Row -->
+                <div class="d-flex align-center justify-space-around pt-2 border-t mt-1" style="border-color: rgba(255,255,255,0.06) !important;">
+                    <div class="d-flex flex-column align-center">
+                        <MudText Typo="Typo.caption" Style="font-size: 8px; opacity: 0.5;">AVG HR</MudText>
+                        <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 11px;">@(avgHr > 0 ? $"{avgHr:N0} bpm" : "--")</MudText>
+                    </div>
+                    <div class="d-flex flex-column align-center">
+                        <MudText Typo="Typo.caption" Style="font-size: 8px; opacity: 0.5;">STRESS</MudText>
+                        <MudText Typo="Typo.caption" Class="font-weight-bold" Style="@($"font-size: 11px; color: {GetStressColor(stressScore)};")">@(stressScore > 0 ? $"{stressScore:N0}" : "--")</MudText>
+                    </div>
+                    <div class="d-flex flex-column align-center">
+                        <MudText Typo="Typo.caption" Style="font-size: 8px; opacity: 0.5;">PAI</MudText>
+                        <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 11px; color: #FFD54F;">@(paiScore > 0 ? $"{paiScore:N0}" : "--")</MudText>
+                    </div>
+                    <div class="d-flex flex-column align-center">
+                        <MudText Typo="Typo.caption" Style="font-size: 8px; opacity: 0.5;">SAMPLES</MudText>
+                        <MudText Typo="Typo.caption" Class="font-weight-bold" Style="font-size: 11px;">@sampleCount</MudText>
+                    </div>
+                </div>
             </MudPaper>
         }
     </div>
@@ -79,21 +156,40 @@
 
     private bool isLoading = true;
     private List<HealthTelemetry> telemetryData = new();
+    private SleepSession? primarySleep;
     private string totalSteps = "--";
+    private int stepPct = 0;
     private string totalSleep = "--";
+    private double minHr = 0;
+    private double maxHr = 0;
+    private double avgHr = 0;
+    private double stressScore = 0;
+    private double paiScore = 0;
+    private int sampleCount = 0;
+
     private List<ChartSeries<double>> hrSeries = new();
     private string[] hrLabels = Array.Empty<string>();
 
     private ChartOptions chartOptions = new ChartOptions
     {
-        ChartPalette = new[] { "var(--mud-palette-error)" }
+        ChartPalette = new[] { "#F44336" }
     };
 
     protected override async Task OnInitializedAsync()
     {
         RefreshService.HealthRefreshRequested += OnHealthRefreshRequested;
         RefreshService.RefreshRequested += OnHealthRefreshRequested;
+        HealthService.OnSelectedDateChanged += OnSelectedDateChanged;
         await LoadDataAsync();
+    }
+
+    private void OnSelectedDateChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        });
     }
 
     private async Task OnHealthRefreshRequested()
@@ -111,44 +207,55 @@
 
         try
         {
-            var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(18);
-            var endOfToday = DateTime.Today.AddDays(1).AddTicks(-1);
+            var selDate = HealthService.SelectedDate.Date;
+            var startOfDay = selDate;
+            var endOfDay = selDate.AddDays(1).AddTicks(-1);
 
-            telemetryData = await HealthService.GetHealthTelemetryAsync(yesterdayEvening, endOfToday);
+            telemetryData = await HealthService.GetHealthTelemetryAsync(startOfDay, endOfDay);
+            var (primary, _) = await HealthService.GetSleepSessionsAsync(selDate);
+            primarySleep = primary;
 
-            var today = DateTime.Today;
-            
-            // Steps
+            // Steps strictly for this date
             var steps = telemetryData
-                .Where(x => x.IsSteps && x.LocalStartTime >= today)
+                .Where(x => x.IsSteps && x.LocalStartTime.Date == selDate)
                 .Sum(x => x.Value ?? 0);
+            
+            if (steps <= 0)
+            {
+                var vitals = await HealthService.FetchMetricsForDateAsync(selDate);
+                var stepsV = vitals.FirstOrDefault(v => v.MatchesType(VitalType.Steps));
+                if (stepsV != null) steps = stepsV.Value;
+            }
+
             totalSteps = steps > 0 ? steps.ToString("N0") : "--";
+            stepPct = Math.Min(100, (int)((steps / 10000.0) * 100));
 
             // Sleep
-            var sleepSeconds = telemetryData
-                .Where(x => x.IsSleep)
-                .Sum(x => x.DurationSeconds);
-            
-            if (sleepSeconds > 0)
+            if (primarySleep != null && primarySleep.DurationSeconds > 0)
             {
-                var ts = TimeSpan.FromSeconds(sleepSeconds);
-                totalSleep = $"{(int)ts.TotalHours}h {ts.Minutes}m";
+                totalSleep = primarySleep.TotalAsleepFormatted;
             }
             else
             {
                 totalSleep = "--";
             }
 
-            // Heart Rate for sparkline (Line chart)
+            // Heart Rate
             var hrEntries = telemetryData
-                .Where(x => x.IsHeartRate && x.LocalStartTime >= today && x.Value.HasValue)
+                .Where(x => x.IsHeartRate && x.LocalStartTime.Date == selDate && x.Value.HasValue)
                 .OrderBy(x => x.StartTime)
                 .ToList();
             
+            sampleCount = telemetryData.Count(x => x.LocalStartTime.Date == selDate);
+
             if (hrEntries.Any())
             {
+                minHr = hrEntries.Min(x => x.Value!.Value);
+                maxHr = hrEntries.Max(x => x.Value!.Value);
+                avgHr = Math.Round(hrEntries.Average(x => x.Value!.Value), 0);
+
                 var hourlyHr = hrEntries.GroupBy(x => x.LocalStartTime.Hour)
-                                     .Select(g => new { Hour = g.Key, Avg = g.Average(x => x.Value.Value) })
+                                     .Select(g => new { Hour = g.Key, Avg = Math.Round(g.Average(x => x.Value!.Value), 0) })
                                      .OrderBy(x => x.Hour)
                                      .ToList();
                 hrSeries = new List<ChartSeries<double>>
@@ -159,13 +266,23 @@
             }
             else
             {
+                minHr = 0;
+                maxHr = 0;
+                avgHr = 0;
                 hrSeries = new List<ChartSeries<double>>();
                 hrLabels = Array.Empty<string>();
             }
+
+            // Stress & PAI
+            var stressEntry = telemetryData.Where(x => x.NormalizedType == "stress" && x.LocalStartTime.Date == selDate && x.Value.HasValue).ToList();
+            stressScore = stressEntry.Any() ? Math.Round(stressEntry.Average(x => x.Value!.Value), 0) : 0;
+
+            var paiEntry = telemetryData.Where(x => x.NormalizedType == "pai" && x.LocalStartTime.Date == selDate && x.Value.HasValue).ToList();
+            paiScore = paiEntry.Any() ? paiEntry.OrderByDescending(x => x.StartTime).First().Value!.Value : 0;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading telemetry widget: {ex}");
+            Console.WriteLine($"[HealthTelemetryWidget] Error: {ex}");
         }
         finally
         {
@@ -174,15 +291,55 @@
         }
     }
 
+    private string GetFormattedSelectedDate()
+    {
+        var sel = HealthService.SelectedDate.Date;
+        var today = DateTime.Today;
+        if (sel == today) return "Today";
+        if (sel == today.AddDays(-1)) return "Yesterday";
+        return sel.ToString("ddd, MMM d");
+    }
+
+    private string GetStageColor(string cat) => cat switch
+    {
+        "Awake" => "#FF7043",
+        "REM" => "#26C6DA",
+        "Core" => "#42A5F5",
+        "Deep" => "#3949AB",
+        _ => "#42A5F5"
+    };
+
+    private string GetStressColor(double stress)
+    {
+        if (stress <= 0) return "inherit";
+        if (stress < 30) return "#00E676";
+        if (stress < 60) return "#29B6F6";
+        if (stress < 80) return "#FFA726";
+        return "#EF5350";
+    }
+
     private void NavigateToDetail()
     {
-        HealthService.CurrentViewType = "Sleep";
+        HealthService.CurrentViewType = "Sensors";
         WindowManager.OpenDetail("HealthTelemetry", "Health Telemetry");
+    }
+
+    private void NavigateToSleep()
+    {
+        HealthService.CurrentViewType = "Sleep";
+        WindowManager.OpenDetail("Health", "Health");
+    }
+
+    private void NavigateToSensors()
+    {
+        HealthService.CurrentViewType = "Sensors";
+        WindowManager.OpenDetail("Health", "Health");
     }
 
     public void Dispose()
     {
         RefreshService.HealthRefreshRequested -= OnHealthRefreshRequested;
         RefreshService.RefreshRequested -= OnHealthRefreshRequested;
+        HealthService.OnSelectedDateChanged -= OnSelectedDateChanged;
     }
 }

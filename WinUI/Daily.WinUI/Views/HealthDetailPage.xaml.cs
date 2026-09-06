@@ -55,7 +55,9 @@ namespace Daily_WinUI.Views
             if (_healthService != null)
             {
                 _healthService.OnViewTypeChanged += OnViewTypeChanged;
+                _healthService.OnSelectedDateChanged += OnSelectedDateChanged;
                 SyncTabFromService();
+                UpdateDayNavigatorUi();
             }
 
             await LoadDataAsync();
@@ -72,6 +74,65 @@ namespace Daily_WinUI.Views
             if (_healthService != null)
             {
                 _healthService.OnViewTypeChanged -= OnViewTypeChanged;
+                _healthService.OnSelectedDateChanged -= OnSelectedDateChanged;
+            }
+        }
+
+        private void OnSelectedDateChanged()
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                UpdateDayNavigatorUi();
+                await LoadDataAsync();
+            });
+        }
+
+        private void UpdateDayNavigatorUi()
+        {
+            if (_healthService == null || SelectedDateTextBlock == null) return;
+            var sel = _healthService.SelectedDate.Date;
+            var today = DateTime.Today;
+            if (sel == today)
+            {
+                SelectedDateTextBlock.Text = $"Today, {sel:ddd, MMM d, yyyy}";
+                if (NextDayButton != null) NextDayButton.IsEnabled = false;
+                if (JumpTodayButton != null) JumpTodayButton.Visibility = Visibility.Collapsed;
+            }
+            else if (sel == today.AddDays(-1))
+            {
+                SelectedDateTextBlock.Text = $"Yesterday, {sel:ddd, MMM d, yyyy}";
+                if (NextDayButton != null) NextDayButton.IsEnabled = true;
+                if (JumpTodayButton != null) JumpTodayButton.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                SelectedDateTextBlock.Text = $"{sel:ddd, MMM d, yyyy}";
+                if (NextDayButton != null) NextDayButton.IsEnabled = sel < today;
+                if (JumpTodayButton != null) JumpTodayButton.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void PrevDayButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_healthService != null)
+            {
+                _healthService.SelectedDate = _healthService.SelectedDate.AddDays(-1);
+            }
+        }
+
+        private void NextDayButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_healthService != null && _healthService.SelectedDate.Date < DateTime.Today)
+            {
+                _healthService.SelectedDate = _healthService.SelectedDate.AddDays(1);
+            }
+        }
+
+        private void JumpTodayButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_healthService != null)
+            {
+                _healthService.SelectedDate = DateTime.Today;
             }
         }
 
@@ -149,15 +210,23 @@ namespace Daily_WinUI.Views
             }
         }
 
+        private SleepSession? _primarySleepSession;
+        private List<SleepSession> _allSleepSessions = new();
+
         private async Task LoadDataAsync()
         {
             try
             {
-                _metrics = await _healthService.FetchMetricsAsync(DateTime.Now);
+                var selDate = _healthService?.SelectedDate.Date ?? DateTime.Today;
+                _metrics = await _healthService.FetchMetricsForDateAsync(selDate);
 
-                var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(18);
-                var endOfToday = DateTime.Today.AddDays(1).AddTicks(-1);
-                _telemetryData = await _healthService.GetHealthTelemetryAsync(yesterdayEvening, endOfToday);
+                var (primary, all) = await _healthService.GetSleepSessionsAsync(selDate);
+                _primarySleepSession = primary;
+                _allSleepSessions = all;
+
+                var startOfDay = selDate;
+                var endOfDay = selDate.AddDays(1).AddTicks(-1);
+                _telemetryData = await _healthService.GetHealthTelemetryAsync(startOfDay, endOfDay);
 
                 ProcessSleepTelemetry();
                 ProcessSensorsTelemetry();
@@ -197,52 +266,30 @@ namespace Daily_WinUI.Views
 
         private void ProcessSleepTelemetry()
         {
-            _sleepTelemetry = _telemetryData
-                .Where(x => x.IsSleep)
-                .OrderBy(x => x.LocalStartTime)
-                .ToList();
-
-            if (_sleepTelemetry.Any())
+            if (_primarySleepSession != null && _primarySleepSession.DurationSeconds > 0)
             {
-                _sleepMinTime = _sleepTelemetry.Min(x => x.LocalStartTime);
-                _sleepMaxTime = _sleepTelemetry.Max(x => x.LocalEndTime);
+                _sleepTelemetry = _primarySleepSession.Stages;
+                _sleepMinTime = _primarySleepSession.StartTime;
+                _sleepMaxTime = _primarySleepSession.EndTime;
 
-                var deepSec = _sleepTelemetry.Where(x => x.SleepCategory == "Deep").Sum(x => x.DurationSeconds);
-                var remSec = _sleepTelemetry.Where(x => x.SleepCategory == "REM").Sum(x => x.DurationSeconds);
-                var lightSec = _sleepTelemetry.Where(x => x.SleepCategory == "Core").Sum(x => x.DurationSeconds);
-                var awakeSec = _sleepTelemetry.Where(x => x.SleepCategory == "Awake").Sum(x => x.DurationSeconds);
+                var asleepSec = _primarySleepSession.DurationSeconds - _primarySleepSession.AwakeSeconds;
+                var inBedSec = _primarySleepSession.DurationSeconds;
 
-                var asleepSec = deepSec + remSec + lightSec;
-                var totalSec = (_sleepMaxTime - _sleepMinTime).TotalSeconds;
-                var inBedSec = Math.Max(asleepSec + awakeSec, totalSec > 0 ? totalSec : asleepSec);
-
-                _sleepAsleepFormatted = FormatSeconds(asleepSec);
+                _sleepAsleepFormatted = _primarySleepSession.TotalAsleepFormatted;
                 _sleepInBedFormatted = FormatSeconds(inBedSec);
-                _deepDurationFormatted = FormatSeconds(deepSec);
-                _remDurationFormatted = FormatSeconds(remSec);
-                _lightDurationFormatted = FormatSeconds(lightSec);
-                _awakeDurationFormatted = FormatSeconds(awakeSec);
+                _deepDurationFormatted = FormatSeconds(_primarySleepSession.DeepSeconds);
+                _remDurationFormatted = FormatSeconds(_primarySleepSession.RemSeconds);
+                _lightDurationFormatted = FormatSeconds(_primarySleepSession.LightSeconds);
+                _awakeDurationFormatted = FormatSeconds(_primarySleepSession.AwakeSeconds);
 
-                _awakeCount = _sleepTelemetry.Count(x => x.SleepCategory == "Awake");
-
-                if (asleepSec > 0)
-                {
-                    _deepPct = (int)((deepSec / asleepSec) * 100);
-                    _remPct = (int)((remSec / asleepSec) * 100);
-                    _lightPct = (int)((lightSec / asleepSec) * 100);
-                    _restorativePct = _deepPct + _remPct;
-                }
-
-                if (inBedSec > 0)
-                {
-                    _awakePct = (int)((awakeSec / inBedSec) * 100);
-                    _sleepEfficiency = Math.Min((int)((asleepSec / inBedSec) * 100), 100);
-                }
-
-                double durationScore = Math.Min((asleepSec / (8.0 * 3600.0)) * 50.0, 50.0);
-                double efficiencyScore = (_sleepEfficiency / 100.0) * 30.0;
-                double qualityScore = Math.Min((_restorativePct / 40.0) * 20.0, 20.0);
-                _sleepScore = Math.Clamp((int)(durationScore + efficiencyScore + qualityScore), 0, 100);
+                _awakeCount = _primarySleepSession.AwakeCount;
+                _deepPct = _primarySleepSession.DeepPercent;
+                _remPct = _primarySleepSession.RemPercent;
+                _lightPct = _primarySleepSession.LightPercent;
+                _awakePct = _primarySleepSession.AwakePercent;
+                _restorativePct = _primarySleepSession.RestorativePercent;
+                _sleepEfficiency = _primarySleepSession.EfficiencyPercent;
+                _sleepScore = _primarySleepSession.SleepScore;
             }
             else
             {
@@ -268,12 +315,25 @@ namespace Daily_WinUI.Views
                     _lightPct = (int)((lM / totalM) * 100);
                     _restorativePct = _deepPct + _remPct;
                 }
+                else
+                {
+                    _deepPct = 0; _remPct = 0; _lightPct = 0; _restorativePct = 0;
+                }
+
                 if (inBedM > 0)
                 {
                     _awakePct = (int)((aM / inBedM) * 100);
                     _sleepEfficiency = (int)((totalM / inBedM) * 100);
                 }
+                else
+                {
+                    _awakePct = 0; _sleepEfficiency = 0;
+                }
+
                 _sleepScore = totalM > 0 ? Math.Clamp((int)((totalM / 480.0) * 85.0 + 10), 40, 95) : 0;
+                _sleepTelemetry = new List<HealthTelemetry>();
+                _sleepMinTime = DateTime.MinValue;
+                _sleepMaxTime = DateTime.MinValue;
             }
         }
 
@@ -419,10 +479,10 @@ namespace Daily_WinUI.Views
 
         private void ProcessSensorsTelemetry()
         {
-            var today = DateTime.Today;
+            var selDate = _healthService?.SelectedDate.Date ?? DateTime.Today;
 
             HeartRateTelemetryData = _telemetryData
-                .Where(x => x.IsHeartRate && x.LocalStartTime >= today && x.Value.HasValue)
+                .Where(x => x.IsHeartRate && x.LocalStartTime.Date == selDate && x.Value.HasValue)
                 .OrderBy(x => x.LocalStartTime)
                 .ToList();
 
@@ -435,6 +495,19 @@ namespace Daily_WinUI.Views
                 _hrCardioPct = (int)((HeartRateTelemetryData.Count(x => x.Value >= 120 && x.Value < 150) / (double)total) * 100);
                 _hrPeakPct = Math.Max(0, 100 - (_hrRestingPct + _hrFatBurnPct + _hrCardioPct));
             }
+            else
+            {
+                _avgIntradayHr = 0;
+                _hrRestingPct = 0;
+                _hrFatBurnPct = 0;
+                _hrCardioPct = 0;
+                _hrPeakPct = 0;
+            }
+
+            var stressMetric = GetMetric(VitalType.Stress);
+            if (stressMetric != null) _stressLevel = (int)stressMetric.Value;
+            var paiMetric = GetMetric(VitalType.PAI);
+            if (paiMetric != null) _paiScore = (int)paiMetric.Value;
         }
 
         // ==========================================

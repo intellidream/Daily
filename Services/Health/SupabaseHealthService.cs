@@ -43,6 +43,21 @@ namespace Daily.Services.Health
         }
         public event Action? OnViewTypeChanged;
 
+        private DateTime _selectedDate = DateTime.Today;
+        public DateTime SelectedDate
+        {
+            get => _selectedDate;
+            set
+            {
+                if (_selectedDate.Date != value.Date)
+                {
+                    _selectedDate = value.Date;
+                    OnSelectedDateChanged?.Invoke();
+                }
+            }
+        }
+        public event Action? OnSelectedDateChanged;
+
         private async Task EnsureFreshSessionAsync()
         {
             var auth = _supabase.Auth;
@@ -563,7 +578,7 @@ namespace Daily.Services.Health
                                       .OrderByDescending(v => v.UpdatedAt)
                                       .FirstOrDefaultAsync();
 
-                List<VitalMetric> remoteRecords;
+                List<VitalMetric> remoteRecords = new();
                 if (latestLocal != null)
                 {
                     var lastLocalUpdate = DateTime.SpecifyKind(latestLocal.UpdatedAt, DateTimeKind.Utc).AddMinutes(-5);
@@ -572,7 +587,23 @@ namespace Daily.Services.Health
                                               .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
                                               .Filter("updated_at", Supabase.Postgrest.Constants.Operator.GreaterThan, lastLocalUpdate.ToString("O"))
                                               .Get();
-                    remoteRecords = result.Models;
+                    if (result.Models != null) remoteRecords.AddRange(result.Models);
+
+                    try
+                    {
+                        var hvResult = await _supabase.From<HealthVitalMetric>()
+                                                  .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
+                                                  .Filter("updated_at", Supabase.Postgrest.Constants.Operator.GreaterThan, lastLocalUpdate.ToString("O"))
+                                                  .Get();
+                        if (hvResult.Models != null && hvResult.Models.Any())
+                        {
+                            remoteRecords.AddRange(hvResult.Models.Select(hv => hv.ToVitalMetric()));
+                        }
+                    }
+                    catch (Exception hvex)
+                    {
+                        Console.WriteLine($"[SupabaseHealthService] Non-fatal error pulling health_vitals deltas: {hvex.Message}");
+                    }
                 }
                 else
                 {
@@ -583,7 +614,23 @@ namespace Daily.Services.Health
                                               .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
                                               .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, dateThreshold.ToString("O"))
                                               .Get();
-                    remoteRecords = result.Models;
+                    if (result.Models != null) remoteRecords.AddRange(result.Models);
+
+                    try
+                    {
+                        var hvResult = await _supabase.From<HealthVitalMetric>()
+                                                  .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
+                                                  .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, dateThreshold.ToString("O"))
+                                                  .Get();
+                        if (hvResult.Models != null && hvResult.Models.Any())
+                        {
+                            remoteRecords.AddRange(hvResult.Models.Select(hv => hv.ToVitalMetric()));
+                        }
+                    }
+                    catch (Exception hvex)
+                    {
+                        Console.WriteLine($"[SupabaseHealthService] Non-fatal error pulling health_vitals initial: {hvex.Message}");
+                    }
                 }
 
                 if (remoteRecords != null && remoteRecords.Any())
@@ -592,7 +639,7 @@ namespace Daily.Services.Health
                     
                     // Group remote records by Type and Date to find the best remote record for each day/type
                     var groupedRemotes = remoteRecords
-                        .GroupBy(r => new { r.TypeString, Date = r.Date.NormalizeToUtcMidnight() })
+                        .GroupBy(r => new { r.Type, Date = r.Date.NormalizeToUtcMidnight() })
                         .ToList();
 
                     var localsToSave = new List<LocalVitalMetric>();
@@ -601,7 +648,8 @@ namespace Daily.Services.Health
                     {
                         // Determine the best remote record in this group
                         VitalMetric bestRemote;
-                        if (IsCumulative(group.Key.TypeString))
+                        var typeString = group.Key.Type.ToString();
+                        if (IsCumulative(typeString))
                         {
                             bestRemote = group.OrderByDescending(r => r.Value).First();
                         }
@@ -720,6 +768,11 @@ namespace Daily.Services.Health
 
         public async Task<List<VitalMetric>> FetchMetricsAsync(DateTime date)
         {
+            return await FetchMetricsForDateAsync(date);
+        }
+
+        public async Task<List<VitalMetric>> FetchMetricsForDateAsync(DateTime date)
+        {
             try
             {
                 var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
@@ -731,37 +784,444 @@ namespace Daily.Services.Health
 
                 await _databaseService.InitializeAsync();
 
-                var start = date.Date.AddDays(-30);
-                var end = date.Date.AddDays(2);
+                var targetDate = date.Date;
+                var nextDate = targetDate.AddDays(1);
 
+                // 1. Fetch exact date records from local SQLite
                 var localRecords = await _databaseService.Connection.Table<LocalVitalMetric>()
-                                      .Where(v => v.UserId == userIdStr && v.Date >= start && v.Date < end)
-                                      .OrderByDescending(v => v.Date)
+                                      .Where(v => v.UserId == userIdStr && v.Date >= targetDate && v.Date < nextDate)
                                       .ToListAsync();
+
+                var resultMetrics = new Dictionary<VitalType, VitalMetric>();
+
+                foreach (var rec in localRecords)
+                {
+                    var domain = rec.ToDomain();
+                    var vType = domain.Type;
+                    if (!resultMetrics.ContainsKey(vType) || domain.UpdatedAt > resultMetrics[vType].UpdatedAt)
+                    {
+                        resultMetrics[vType] = domain;
+                    }
+                }
+
+                // 2. Aggregate from health_telemetry for this exact day if telemetry has data
+                try
+                {
+                    var startOfDay = targetDate;
+                    var endOfDay = nextDate.AddTicks(-1);
+                    var telemetryToday = await GetHealthTelemetryAsync(startOfDay, endOfDay);
+
+                    if (telemetryToday != null && telemetryToday.Any())
+                    {
+                        // Steps
+                        var tSteps = telemetryToday.Where(x => x.IsSteps && x.LocalStartTime.Date == targetDate).Sum(x => x.Value ?? 0);
+                        if (tSteps > 0)
+                        {
+                            if (!resultMetrics.ContainsKey(VitalType.Steps) || tSteps > resultMetrics[VitalType.Steps].Value)
+                            {
+                                resultMetrics[VitalType.Steps] = new VitalMetric
+                                {
+                                    Type = VitalType.Steps,
+                                    Value = tSteps,
+                                    Unit = "count",
+                                    Date = targetDate,
+                                    SourceDevice = telemetryToday.FirstOrDefault(x => x.IsSteps)?.SourceDevice ?? "Wearable"
+                                };
+                            }
+                        }
+
+                        // Active Energy
+                        var tCal = telemetryToday.Where(x => x.IsActiveEnergy && x.LocalStartTime.Date == targetDate).Sum(x => x.Value ?? 0);
+                        if (tCal > 0)
+                        {
+                            if (!resultMetrics.ContainsKey(VitalType.ActiveEnergy) || tCal > resultMetrics[VitalType.ActiveEnergy].Value)
+                            {
+                                resultMetrics[VitalType.ActiveEnergy] = new VitalMetric
+                                {
+                                    Type = VitalType.ActiveEnergy,
+                                    Value = tCal,
+                                    Unit = "kcal",
+                                    Date = targetDate,
+                                    SourceDevice = telemetryToday.FirstOrDefault(x => x.IsActiveEnergy)?.SourceDevice ?? "Wearable"
+                                };
+                            }
+                        }
+
+                        // Heart Rate (most recent reading of the day)
+                        var hrEntries = telemetryToday.Where(x => x.IsHeartRate && x.LocalStartTime.Date == targetDate && x.Value.HasValue)
+                                                      .OrderByDescending(x => x.StartTime)
+                                                      .ToList();
+                        if (hrEntries.Any() && !resultMetrics.ContainsKey(VitalType.HeartRate))
+                        {
+                            var latestHr = hrEntries.First();
+                            resultMetrics[VitalType.HeartRate] = new VitalMetric
+                            {
+                                Type = VitalType.HeartRate,
+                                Value = latestHr.Value!.Value,
+                                Unit = "bpm",
+                                Date = targetDate,
+                                SourceDevice = latestHr.SourceDevice ?? "Wearable"
+                            };
+                        }
+
+                        // Stress from telemetry
+                        var stressEntries = telemetryToday.Where(x => x.NormalizedType == "stress" && x.LocalStartTime.Date == targetDate && x.Value.HasValue).ToList();
+                        if (stressEntries.Any() && !resultMetrics.ContainsKey(VitalType.Stress))
+                        {
+                            resultMetrics[VitalType.Stress] = new VitalMetric
+                            {
+                                Type = VitalType.Stress,
+                                Value = Math.Round(stressEntries.Average(x => x.Value!.Value), 0),
+                                Unit = "score",
+                                Date = targetDate,
+                                SourceDevice = stressEntries.First().SourceDevice ?? "Wearable"
+                            };
+                        }
+
+                        // PAI from telemetry
+                        var paiEntries = telemetryToday.Where(x => x.NormalizedType == "pai" && x.LocalStartTime.Date == targetDate && x.Value.HasValue).ToList();
+                        if (paiEntries.Any() && !resultMetrics.ContainsKey(VitalType.PAI))
+                        {
+                            resultMetrics[VitalType.PAI] = new VitalMetric
+                            {
+                                Type = VitalType.PAI,
+                                Value = paiEntries.OrderByDescending(x => x.StartTime).First().Value!.Value,
+                                Unit = "score",
+                                Date = targetDate,
+                                SourceDevice = paiEntries.First().SourceDevice ?? "Wearable"
+                            };
+                        }
+
+                        // Distance from telemetry
+                        var distEntries = telemetryToday.Where(x => x.NormalizedType == "distance" && x.LocalStartTime.Date == targetDate && x.Value.HasValue).ToList();
+                        if (distEntries.Any() && (!resultMetrics.ContainsKey(VitalType.Distance) || distEntries.Sum(x => x.Value!.Value) > resultMetrics[VitalType.Distance].Value))
+                        {
+                            var totalDist = distEntries.Sum(x => x.Value!.Value);
+                            resultMetrics[VitalType.Distance] = new VitalMetric
+                            {
+                                Type = VitalType.Distance,
+                                Value = Math.Round(totalDist, 2),
+                                Unit = distEntries.First().Unit ?? "m",
+                                Date = targetDate,
+                                SourceDevice = distEntries.First().SourceDevice ?? "Wearable"
+                            };
+                        }
+
+                        // SpO2 / Blood Oxygen from telemetry
+                        var spo2Entries = telemetryToday.Where(x => (x.NormalizedType == "bloodoxygen" || x.NormalizedType == "oxygensaturation" || x.NormalizedType == "spo2") && x.LocalStartTime.Date == targetDate && x.Value.HasValue).ToList();
+                        if (spo2Entries.Any() && !resultMetrics.ContainsKey(VitalType.OxygenSaturation))
+                        {
+                            var latestSpo2 = spo2Entries.OrderByDescending(x => x.StartTime).First();
+                            var val = latestSpo2.Value!.Value;
+                            if (val <= 1.0 && val > 0) val *= 100.0;
+                            resultMetrics[VitalType.OxygenSaturation] = new VitalMetric
+                            {
+                                Type = VitalType.OxygenSaturation,
+                                Value = Math.Round(val, 1),
+                                Unit = "%",
+                                Date = targetDate,
+                                SourceDevice = latestSpo2.SourceDevice ?? "Wearable"
+                            };
+                        }
+
+                        // HRV from telemetry
+                        var hrvEntries = telemetryToday.Where(x => (x.NormalizedType == "hrv" || x.NormalizedType == "hrvsdnn" || x.NormalizedType == "heartratevariabilitysdnn" || x.NormalizedType == "heartratevariabilityrmssd" || x.NormalizedType == "hrvrmssd") && x.LocalStartTime.Date == targetDate && x.Value.HasValue).ToList();
+                        if (hrvEntries.Any() && !resultMetrics.ContainsKey(VitalType.HeartRateVariabilitySDNN))
+                        {
+                            var latestHrv = hrvEntries.OrderByDescending(x => x.StartTime).First();
+                            resultMetrics[VitalType.HeartRateVariabilitySDNN] = new VitalMetric
+                            {
+                                Type = VitalType.HeartRateVariabilitySDNN,
+                                Value = Math.Round(latestHrv.Value!.Value, 1),
+                                Unit = "ms",
+                                Date = targetDate,
+                                SourceDevice = latestHrv.SourceDevice ?? "Wearable"
+                            };
+                        }
+
+                        // Respiratory rate from telemetry
+                        var respEntries = telemetryToday.Where(x => (x.NormalizedType == "respiratoryrate" || x.NormalizedType == "resp") && x.LocalStartTime.Date == targetDate && x.Value.HasValue).ToList();
+                        if (respEntries.Any() && !resultMetrics.ContainsKey(VitalType.RespiratoryRate))
+                        {
+                            var latestResp = respEntries.OrderByDescending(x => x.StartTime).First();
+                            resultMetrics[VitalType.RespiratoryRate] = new VitalMetric
+                            {
+                                Type = VitalType.RespiratoryRate,
+                                Value = Math.Round(latestResp.Value!.Value, 1),
+                                Unit = "brpm",
+                                Date = targetDate,
+                                SourceDevice = latestResp.SourceDevice ?? "Wearable"
+                            };
+                        }
+
+                        // Daytime Nap duration from telemetry
+                        var napEntries = telemetryToday.Where(x => (x.NormalizedType == "sleepnap" || x.NormalizedType == "nap") && x.LocalStartTime.Date == targetDate && x.Value.HasValue).ToList();
+                        if (napEntries.Any() && !resultMetrics.ContainsKey(VitalType.NapDuration))
+                        {
+                            double totalNapMins = 0;
+                            foreach (var nap in napEntries)
+                            {
+                                var u = nap.Unit?.ToLowerInvariant();
+                                if (u == "hours" || u == "h") totalNapMins += (nap.Value!.Value * 60.0);
+                                else if (u == "seconds" || u == "s") totalNapMins += (nap.Value!.Value / 60.0);
+                                else totalNapMins += nap.Value!.Value;
+                            }
+                            resultMetrics[VitalType.NapDuration] = new VitalMetric
+                            {
+                                Type = VitalType.NapDuration,
+                                Value = Math.Round(totalNapMins, 0),
+                                Unit = "min",
+                                Date = targetDate,
+                                SourceDevice = napEntries.First().SourceDevice ?? "Wearable"
+                            };
+                        }
+                    }
+                }
+                catch (Exception tex)
+                {
+                    Console.WriteLine($"[SupabaseHealthService] Non-fatal error aggregating telemetry for date: {tex.Message}");
+                }
+
+                // Check if Hydration can be retrieved from habits if not in vitals
+                if (!resultMetrics.ContainsKey(VitalType.Hydration))
+                {
+                    try
+                    {
+                        var waterSummary = await _databaseService.Connection.Table<LocalDailySummary>()
+                            .Where(s => s.UserId == userIdStr && s.HabitType == "water" && s.Date >= targetDate && s.Date < nextDate)
+                            .FirstOrDefaultAsync();
+                        if (waterSummary != null && waterSummary.TotalValue > 0)
+                        {
+                            resultMetrics[VitalType.Hydration] = new VitalMetric
+                            {
+                                Type = VitalType.Hydration,
+                                Value = waterSummary.TotalValue,
+                                Unit = "ml",
+                                Date = targetDate,
+                                SourceDevice = "Habits"
+                            };
+                        }
+                        else
+                        {
+                            var waterLogs = await _databaseService.Connection.Table<LocalHabitLog>()
+                                .Where(l => l.UserId == userIdStr && l.HabitType == "water" && !l.IsDeleted && l.LoggedAt >= targetDate && l.LoggedAt < nextDate)
+                                .ToListAsync();
+                            if (waterLogs.Any())
+                            {
+                                var totalWater = waterLogs.Sum(x => x.Value);
+                                if (totalWater > 0)
+                                {
+                                    resultMetrics[VitalType.Hydration] = new VitalMetric
+                                    {
+                                        Type = VitalType.Hydration,
+                                        Value = totalWater,
+                                        Unit = waterLogs.First().Unit ?? "ml",
+                                        Date = targetDate,
+                                        SourceDevice = "Habits"
+                                    };
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                // Check Caffeine from habits if not in vitals
+                if (!resultMetrics.ContainsKey(VitalType.Caffeine))
+                {
+                    try
+                    {
+                        var cafLogs = await _databaseService.Connection.Table<LocalHabitLog>()
+                            .Where(l => l.UserId == userIdStr && (l.HabitType == "caffeine" || l.HabitType == "coffee") && !l.IsDeleted && l.LoggedAt >= targetDate && l.LoggedAt < nextDate)
+                            .ToListAsync();
+                        if (cafLogs.Any())
+                        {
+                            var totalCaf = cafLogs.Sum(x => x.Value);
+                            if (totalCaf > 0)
+                            {
+                                resultMetrics[VitalType.Caffeine] = new VitalMetric
+                                {
+                                    Type = VitalType.Caffeine,
+                                    Value = totalCaf,
+                                    Unit = "mg",
+                                    Date = targetDate,
+                                    SourceDevice = "Habits"
+                                };
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                // 3. For Persistent Snapshot Metrics ONLY (Weight, Height, Body Fat, Blood Pressure, Glucose):
+                // If not recorded on targetDate, look for the most recent historical reading, marked as IsHistorical = true
+                var persistentTypes = new[] 
+                { 
+                    VitalType.Weight, 
+                    VitalType.Height, 
+                    VitalType.BodyFatPercentage, 
+                    VitalType.LeanBodyMass, 
+                    VitalType.BoneMass, 
+                    VitalType.BloodPressureSystolic, 
+                    VitalType.BloodPressureDiastolic, 
+                    VitalType.BloodGlucose 
+                };
+
+                foreach (var pType in persistentTypes)
+                {
+                    if (!resultMetrics.ContainsKey(pType))
+                    {
+                        var pTypeStr = pType.ToString();
+                        var pastRecord = await _databaseService.Connection.Table<LocalVitalMetric>()
+                                              .Where(v => v.UserId == userIdStr && v.Date < targetDate && (v.TypeString == pTypeStr || v.TypeString == pTypeStr.ToLowerInvariant()))
+                                              .OrderByDescending(v => v.Date)
+                                              .FirstOrDefaultAsync();
+                        if (pastRecord != null)
+                        {
+                            var dom = pastRecord.ToDomain();
+                            dom.IsHistorical = true;
+                            resultMetrics[pType] = dom;
+                        }
+                    }
+                }
 
                 CheckCacheStalenessAndPullAsync();
 
-                if (localRecords.Any())
-                {
-                    var latestMetrics = localRecords
-                        .GroupBy(m => m.TypeString)
-                        .Select(g => g.OrderByDescending(x => x.Date).ThenByDescending(x => x.UpdatedAt).First().ToDomain())
-                        .ToList();
-
-                    var sync = _serviceProvider.GetService<ISyncService>();
-                    // sync?.Log($"[Read] Found {latestMetrics.Count} recent metrics from local DB (Window: -30 days).");
-                    return latestMetrics;
-                }
-
-                return new List<VitalMetric>();
+                return resultMetrics.Values.ToList();
             }
             catch (Exception ex)
             {
-                var msg = $"Failed to read metrics from local SQLite cache: {ex.Message}";
+                var msg = $"Failed to read metrics from local SQLite cache for date: {ex.Message}";
                 Console.WriteLine(msg);
                 _logger.LogError(ex, msg);
                 return new List<VitalMetric>();
             }
+        }
+
+        public async Task<(SleepSession? PrimarySession, List<SleepSession> AllSessions)> GetSleepSessionsAsync(DateTime date)
+        {
+            var allSessions = new List<SleepSession>();
+            try
+            {
+                var targetDate = date.Date;
+                var windowStart = targetDate.AddDays(-1).AddHours(18); // yesterday 18:00
+                var windowEnd = targetDate.AddHours(16); // today 16:00
+
+                var telemetry = await GetHealthTelemetryAsync(windowStart, windowEnd);
+                var sleepTelemetry = telemetry
+                    .Where(x => x.IsSleep && x.LocalStartTime >= windowStart && x.LocalStartTime <= windowEnd)
+                    .OrderBy(x => x.LocalStartTime)
+                    .ToList();
+
+                if (sleepTelemetry.Any())
+                {
+                    // Cluster stages into distinct sessions if gap between stages >= 90 minutes
+                    var currentCluster = new List<HealthTelemetry> { sleepTelemetry[0] };
+
+                    for (int i = 1; i < sleepTelemetry.Count; i++)
+                    {
+                        var prev = currentCluster.Last();
+                        var curr = sleepTelemetry[i];
+                        var gap = (curr.LocalStartTime - prev.LocalEndTime).TotalMinutes;
+
+                        if (gap < 90)
+                        {
+                            currentCluster.Add(curr);
+                        }
+                        else
+                        {
+                            var s = CreateSessionFromStages(currentCluster, targetDate);
+                            if (s.DurationSeconds >= 600) // at least 10 minutes
+                            {
+                                allSessions.Add(s);
+                            }
+                            currentCluster = new List<HealthTelemetry> { curr };
+                        }
+                    }
+
+                    if (currentCluster.Any())
+                    {
+                        var s = CreateSessionFromStages(currentCluster, targetDate);
+                        if (s.DurationSeconds >= 600)
+                        {
+                            allSessions.Add(s);
+                        }
+                    }
+                }
+
+                // If no telemetry sessions formed, fallback to check aggregated vitals for targetDate
+                if (!allSessions.Any())
+                {
+                    var vitals = await FetchMetricsForDateAsync(targetDate);
+                    var sleepM = vitals.FirstOrDefault(v => v.MatchesType(VitalType.SleepDuration));
+                    if (sleepM != null && sleepM.Value > 0)
+                    {
+                        var deepM = vitals.FirstOrDefault(v => v.MatchesType(VitalType.SleepDeep))?.Value ?? 0;
+                        var remM = vitals.FirstOrDefault(v => v.MatchesType(VitalType.SleepREM))?.Value ?? 0;
+                        var lightM = vitals.FirstOrDefault(v => v.MatchesType(VitalType.SleepLight))?.Value ?? 0;
+                        var awakeM = vitals.FirstOrDefault(v => v.MatchesType(VitalType.SleepAwake))?.Value ?? 0;
+
+                        var syntheticSession = new SleepSession
+                        {
+                            StartTime = targetDate.AddHours(-1).AddMinutes(-30),
+                            EndTime = targetDate.AddHours(7),
+                            IsNap = false
+                        };
+
+                        var t = syntheticSession.StartTime;
+                        if (awakeM > 0)
+                        {
+                            syntheticSession.Stages.Add(new HealthTelemetry { TypeString = "SleepAwake", Value = awakeM, Unit = "minutes", StartTime = t.ToUniversalTime(), EndTime = t.AddMinutes(awakeM).ToUniversalTime() });
+                            t = t.AddMinutes(awakeM);
+                        }
+                        if (lightM > 0)
+                        {
+                            syntheticSession.Stages.Add(new HealthTelemetry { TypeString = "SleepLight", Value = lightM, Unit = "minutes", StartTime = t.ToUniversalTime(), EndTime = t.AddMinutes(lightM).ToUniversalTime() });
+                            t = t.AddMinutes(lightM);
+                        }
+                        if (deepM > 0)
+                        {
+                            syntheticSession.Stages.Add(new HealthTelemetry { TypeString = "SleepDeep", Value = deepM, Unit = "minutes", StartTime = t.ToUniversalTime(), EndTime = t.AddMinutes(deepM).ToUniversalTime() });
+                            t = t.AddMinutes(deepM);
+                        }
+                        if (remM > 0)
+                        {
+                            syntheticSession.Stages.Add(new HealthTelemetry { TypeString = "SleepREM", Value = remM, Unit = "minutes", StartTime = t.ToUniversalTime(), EndTime = t.AddMinutes(remM).ToUniversalTime() });
+                        }
+
+                        allSessions.Add(syntheticSession);
+                    }
+                }
+
+                // Pick primary nocturnal session:
+                // Prioritize sessions waking up in morning of targetDate (04:00 to 14:00) with largest duration
+                var primary = allSessions
+                    .OrderByDescending(s => !s.IsNap)
+                    .ThenByDescending(s => s.AsleepSeconds)
+                    .FirstOrDefault();
+
+                return (primary, allSessions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error clustering sleep sessions");
+                return (null, allSessions);
+            }
+        }
+
+        private SleepSession CreateSessionFromStages(List<HealthTelemetry> stages, DateTime targetDate)
+        {
+            var start = stages.Min(x => x.LocalStartTime);
+            var end = stages.Max(x => x.LocalEndTime);
+            var isNap = (end - start).TotalHours < 3.5 && (start.Date == targetDate && start.Hour >= 11);
+
+            return new SleepSession
+            {
+                StartTime = start,
+                EndTime = end,
+                IsNap = isNap,
+                Stages = stages
+            };
         }
 
         public async Task SyncNativeHealthDataAsync()

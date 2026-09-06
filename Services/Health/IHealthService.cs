@@ -58,5 +58,25 @@ namespace Daily.Services.Health
         /// Event fired when the active tab / view category changes.
         /// </summary>
         event Action? OnViewTypeChanged;
+
+        /// <summary>
+        /// Current selected date for Health views (defaults to DateTime.Today).
+        /// </summary>
+        DateTime SelectedDate { get; set; }
+
+        /// <summary>
+        /// Event fired when the selected date changes.
+        /// </summary>
+        event Action? OnSelectedDateChanged;
+
+        /// <summary>
+        /// Fetches metrics strictly for a specific date, with historical fallback flags for spot metrics.
+        /// </summary>
+        Task<List<VitalMetric>> FetchMetricsForDateAsync(DateTime date);
+
+        /// <summary>
+        /// Retrieves and clusters nocturnal sleep session and naps for a given date.
+        /// </summary>
+        Task<(SleepSession? PrimarySession, List<SleepSession> AllSessions)> GetSleepSessionsAsync(DateTime date);
     }
 }

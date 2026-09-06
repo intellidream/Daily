@@ -5,10 +5,32 @@ import { BasePage } from '@zeppos/zml/base-page'
 import { exit } from '@zos/router'
 import { statSync, writeFileSync, readFileSync } from '@zos/fs'
 import { setScrollMode, SCROLL_MODE_SWIPER } from '@zos/page'
-import { HeartRate, Sleep, Step, BloodOxygen, Calorie, Stress, Pai } from '@zos/sensor'
+import { HeartRate, Sleep, Step, BloodOxygen, Calorie, Stress, Pai, Vibrator, VIBRATOR_SCENE_SHORT_MIDDLE, VIBRATOR_SCENE_NOTIFICATION } from '@zos/sensor'
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 
 const logger = log.getLogger('dayone-orbit')
+
+let vibrator = null
+try {
+  vibrator = new Vibrator()
+} catch (e) {
+  logger.error('Vibrator init error', e)
+}
+
+const triggerHaptic = (scene = VIBRATOR_SCENE_SHORT_MIDDLE) => {
+  if (!vibrator) return
+  try {
+    vibrator.stop()
+    vibrator.setMode({ mode: scene })
+    vibrator.start()
+  } catch (e) {
+    try {
+      vibrator.start({ mode: scene })
+    } catch (err) {
+      logger.error('Haptic trigger error', err)
+    }
+  }
+}
 
 const SQUARE_CONFIG = {
   screenW: 390,
@@ -194,9 +216,13 @@ Page(
           let isDashboardBuilt = false
 
           const setSyncing = (isSyncing) => {
+             const wasSyncing = isSyncingState
              isSyncingState = isSyncing
              if (syncIcon) syncIcon.setProperty(prop.VISIBLE, isSyncing)
              if (syncText) syncText.setProperty(prop.VISIBLE, isSyncing)
+             if (wasSyncing && !isSyncing) {
+                triggerHaptic(VIBRATOR_SCENE_NOTIFICATION)
+             }
           }
 
           const saveCache = () => {
@@ -416,6 +442,7 @@ Page(
           }
 
           const logWater = (amount, type) => {
+             triggerHaptic(VIBRATOR_SCENE_SHORT_MIDDLE)
              waterTotal += amount
              waterWeek[6] += amount
              if (type.includes('Coffee')) {
@@ -453,6 +480,7 @@ Page(
           }
           
           const logSmoke = (amount, type) => {
+             triggerHaptic(VIBRATOR_SCENE_SHORT_MIDDLE)
              smokeTotal += amount
              smokeWeek[6] += amount
              if (type.includes('Heat') || type.includes('Vape')) {
@@ -929,6 +957,8 @@ Page(
     },
     
     onInit() {},
-    onDestroy() {}
+    onDestroy() {
+      try { if (vibrator) vibrator.stop() } catch (e) {}
+    }
   })
 )

@@ -16,75 +16,126 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Grid Grid.Row="0" Margin="0,0,0,12">
-            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="12" Padding="12,6" Tapped="Header_Tapped">
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="12" Padding="12,6" Tapped="Header_Tapped" Cursor="Hand">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     
                     <FontIcon Glyph="&#xEC0A;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" Margin="0,0,8,0" />
-                    <TextBlock Grid.Column="1" Text="Health" FontSize="14" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="Sensors &amp; Telemetry" FontSize="14" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Text="{x:Bind FormattedDate, Mode=OneWay}" FontSize="11" Foreground="White" Opacity="0.85" VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </Grid>
 
         <!-- Main Content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="120" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+            <StackPanel Spacing="10">
 
-                <!-- Steps and HR summary -->
-                <Grid Grid.Row="0" Margin="0,0,0,12">
+                <!-- 1. ACTIVITY & SLEEP SUMMARY DUAL PILL -->
+                <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- Steps -->
-                    <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE7EE;" FontFamily="Segoe Fluent Icons" FontSize="16" Opacity="0.5" Margin="0,0,0,4" />
-                        <TextBlock Text="{x:Bind TotalSteps, Mode=OneWay}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" />
-                        <TextBlock Text="steps" FontSize="10" Opacity="0.5" HorizontalAlignment="Center" />
-                    </StackPanel>
+                    <!-- Steps Card -->
+                    <Border Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="10" Padding="10,8" Tapped="Header_Tapped" Cursor="Hand">
+                        <StackPanel Spacing="2">
+                            <Grid>
+                                <FontIcon Glyph="&#xE7EE;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#00E676" VerticalAlignment="Center" />
+                                <TextBlock Text="{x:Bind StepGoalPercentText, Mode=OneWay}" FontSize="9" FontWeight="Bold" Foreground="#00E676" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Text="{x:Bind TotalSteps, Mode=OneWay}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                            <TextBlock Text="steps today" FontSize="9" Opacity="0.5" />
+                        </StackPanel>
+                    </Border>
 
-                    <Border Grid.Column="1" Width="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,4" />
-
-                    <!-- Sleep -->
-                    <StackPanel Grid.Column="2" HorizontalAlignment="Center" Tapped="Sleep_Tapped">
-                        <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#7C4DFF" Margin="0,0,0,4" />
-                        <TextBlock Text="{x:Bind TotalSleep, Mode=OneWay}" FontSize="20" FontWeight="Bold" Foreground="#7C4DFF" HorizontalAlignment="Center" />
-                        <TextBlock Text="sleep" FontSize="10" Opacity="0.5" HorizontalAlignment="Center" />
-                    </StackPanel>
+                    <!-- Sleep Card -->
+                    <Border Grid.Column="1" Background="#127C4DFF" BorderBrush="#337C4DFF" BorderThickness="1" CornerRadius="10" Padding="10,8" Tapped="Sleep_Tapped" Cursor="Hand">
+                        <StackPanel Spacing="2">
+                            <Grid>
+                                <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#B388FF" VerticalAlignment="Center" />
+                                <TextBlock Text="{x:Bind SleepScoreText, Mode=OneWay}" FontSize="9" FontWeight="Bold" Foreground="#B388FF" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Text="{x:Bind TotalSleep, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#E1BEE7" Margin="0,2,0,0" />
+                            <TextBlock Text="sleep last night" FontSize="9" Opacity="0.5" />
+                        </StackPanel>
+                    </Border>
                 </Grid>
 
-                <!-- Heart Rate Sparkline -->
-                <Border Grid.Row="1" Background="{ThemeResource AppGlassColorBrush}" CornerRadius="8" Padding="8" Margin="0,0,0,12">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Text="HEART RATE" FontSize="10" FontWeight="Bold" Opacity="0.5" Margin="4,0,0,4" />
-                        
-                        <chart:SfCartesianChart Height="40" Margin="0" Background="Transparent">
+                <!-- Mini Hypnogram Strip if nocturnal sleep exists -->
+                <Border Background="#127C4DFF" BorderBrush="#337C4DFF" BorderThickness="1" CornerRadius="8" Padding="8,6" Visibility="{x:Bind HasSleepSession, Mode=OneWay}" Tapped="Sleep_Tapped" Cursor="Hand">
+                    <StackPanel Spacing="4">
+                        <Grid>
+                            <TextBlock Text="SLEEP HYPNOGRAM" FontSize="9" FontWeight="Bold" Foreground="#B388FF" VerticalAlignment="Center" />
+                            <TextBlock Text="{x:Bind SleepScheduleText, Mode=OneWay}" FontSize="9" Opacity="0.6" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Grid Height="8" Background="#26000000" CornerRadius="3">
+                            <Canvas x:Name="MiniHypnogramCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" SizeChanged="MiniHypnogramCanvas_SizeChanged" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 2. HEART RATE INTRADAY SPARKLINE & ZONES -->
+                <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="10" Padding="10" Tapped="Header_Tapped" Cursor="Hand">
+                    <StackPanel Spacing="6">
+                        <Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xEB51;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#F44336" />
+                                <TextBlock Text="HEART RATE INTRADAY" FontSize="9" FontWeight="Bold" Opacity="0.8" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind HrRangeText, Mode=OneWay}" FontSize="9" Opacity="0.6" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <chart:SfCartesianChart Height="65" Margin="0,2" Background="Transparent">
                             <chart:SfCartesianChart.XAxes>
-                                <chart:DateTimeAxis ShowMajorGridLines="False" />
+                                <chart:DateTimeAxis ShowMajorGridLines="False" Visibility="Collapsed" />
                             </chart:SfCartesianChart.XAxes>
                             <chart:SfCartesianChart.YAxes>
-                                <chart:NumericalAxis ShowMajorGridLines="False" />
+                                <chart:NumericalAxis ShowMajorGridLines="False" Visibility="Collapsed" />
                             </chart:SfCartesianChart.YAxes>
                             <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="LocalStartTime" YBindingPath="NumericValue" Fill="#FF5252" />
                         </chart:SfCartesianChart>
-                    </Grid>
+
+                        <!-- Intraday Stats Row -->
+                        <Grid ColumnSpacing="4" Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                <TextBlock Text="AVG HR" FontSize="8" Opacity="0.5" HorizontalAlignment="Center" />
+                                <TextBlock Text="{x:Bind AvgHrText, Mode=OneWay}" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                <TextBlock Text="STRESS" FontSize="8" Opacity="0.5" HorizontalAlignment="Center" />
+                                <TextBlock Text="{x:Bind StressText, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="{x:Bind StressBrush, Mode=OneWay}" HorizontalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                <TextBlock Text="PAI" FontSize="8" Opacity="0.5" HorizontalAlignment="Center" />
+                                <TextBlock Text="{x:Bind PaiText, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="#FFD54F" HorizontalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="3" HorizontalAlignment="Center">
+                                <TextBlock Text="SAMPLES" FontSize="8" Opacity="0.5" HorizontalAlignment="Center" />
+                                <TextBlock Text="{x:Bind HrCountText, Mode=OneWay}" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
                 </Border>
-            </Grid>
+
+            </StackPanel>
         </ScrollViewer>
     </Grid>
 </UserControl>

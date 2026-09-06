@@ -318,12 +318,13 @@ namespace Daily.Services
         {
             var normalizedDate = domain.Date.NormalizeToUtcMidnight();
             var dateStr = normalizedDate.ToString("yyyy-MM-dd");
-            var deterministicId = GenerateGuid($"{domain.UserId.ToString().ToLowerInvariant()}_{domain.TypeString}_{dateStr}").ToString().ToLowerInvariant();
+            var normalizedType = domain.Type.ToString();
+            var deterministicId = GenerateGuid($"{domain.UserId.ToString().ToLowerInvariant()}_{normalizedType}_{dateStr}").ToString().ToLowerInvariant();
             return new LocalVitalMetric
             {
                 Id = deterministicId,
                 UserId = domain.UserId.ToString().ToLowerInvariant(),
-                TypeString = domain.TypeString,
+                TypeString = normalizedType,
                 Value = domain.Value,
                 Unit = domain.Unit,
                 Date = normalizedDate,

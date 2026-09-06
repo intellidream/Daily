@@ -65,6 +65,29 @@ Aggregates and organizes 35+ metrics into structured categories:
   - **Hourly Step Cadence**: Hourly step cadence bar distribution and active hours count.
   - **Raw Telemetry Log**: Interactive data table displaying timestamped telemetry entries with device attribution.
 
+### 1.6 Date Isolation, Sleep Clustering & Day Navigation
+- **Multi-Day Data Separation**: Prior versions of the application suffered from cross-day metric bleeding where sleep from prior days or sensor telemetry over 30+ hours were displayed on the same timeline. The system now enforces strict temporal boundaries:
+  - **Cumulative Metrics (Steps, Calories, Distance, Floors, Hydration)**: Strictly filtered to `[targetDate, targetDate + 1 day)`.
+  - **Persistent Snapshot Metrics (Weight, Height, Body Fat, Blood Pressure, Glucose)**: Displayed as snapshot values; if not measured on `SelectedDate`, they carry an `IsHistorical = true` badge indicating the measurement date.
+  - **Nocturnal Sleep Clustering (`SleepSession.cs`)**:
+    - Sleep belongs to the morning of the day the user wakes up. Telemetry is queried for `[targetDate.AddDays(-1).AddHours(18), targetDate.AddHours(16)]`.
+    - Stage records separated by $\ge 90$ minutes of continuous absence are automatically clustered into distinct sessions (`SleepSession`).
+    - The primary nocturnal session is identified (longest duration or nighttime overlap) and separate daytime naps (`IsNap = true`) are isolated.
+    - Full-screen views offer session switcher chips allowing the user to inspect each session independently without multi-day timeline stretching.
+  - **Universal Day Navigator**: Detail pages (`HealthDetail.razor`, `HealthTelemetryDetail.razor`, `HealthDetailPage.xaml`, `HealthTelemetryDetailPage.xaml`) feature an interactive top navigation bar (`[ ◀ ] [ Date Label ] [ ▶ ]` + `Jump to Today`) powered by `IHealthService.SelectedDate` and `OnSelectedDateChanged`.
+
+### 1.7 High-Density Widget Redesign
+Both MAUI Blazor Hybrid and WinUI controls (`HealthWidget`, `HealthWidgetControl`, `HealthTelemetryWidget`, `HealthTelemetryWidgetControl`) feature a clinical, high-density layout:
+- **Health Widget**:
+  - **Activity Cluster**: Linear progress bar against 10k goal, goal percentage, large steps counter, and compact pills for Kcal, Distance, and Floors.
+  - **Sleep Architecture Card**: Sleep score badge, total sleep duration, bedtime/wake time schedule, efficiency percentage, awake count, and a segmented mini-hypnogram stage strip (Deep `#3949AB`, REM `#26C6DA`, Core `#42A5F5`, Awake `#FF7043`) with micro duration badges.
+  - **Cardiovascular & Vitals Cluster**: Live heart rate with pulsing indicator, resting HR, HRV, SpO2, respiration rate, wearable stress score, PAI, and blood pressure.
+  - **Hydration & Body Snapshot**: Hydration progress bar against 2,500 ml target, weight, and BMI.
+- **Health Telemetry Widget**:
+  - **Dual Pill**: Steps today vs goal & Sleep last night.
+  - **Mini Hypnogram Strip**: Visual breakdown of nocturnal sleep stages.
+  - **Intraday Heart Rate Curve & Stats**: BPM sparkline with min-max range, average HR, stress score, PAI, and sample count.
+
 ---
 
 ## 2. Technical Architecture & Data Model

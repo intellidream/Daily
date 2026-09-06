@@ -61,5 +61,30 @@ namespace Daily_WinUI.Services
             }
         }
         public event Action? OnViewTypeChanged;
+
+        private DateTime _selectedDate = DateTime.Today;
+        public DateTime SelectedDate
+        {
+            get => _selectedDate;
+            set
+            {
+                if (_selectedDate.Date != value.Date)
+                {
+                    _selectedDate = value.Date;
+                    OnSelectedDateChanged?.Invoke();
+                }
+            }
+        }
+        public event Action? OnSelectedDateChanged;
+
+        public Task<List<VitalMetric>> FetchMetricsForDateAsync(DateTime date)
+        {
+            return Task.FromResult(new List<VitalMetric>());
+        }
+
+        public Task<(SleepSession? PrimarySession, List<SleepSession> AllSessions)> GetSleepSessionsAsync(DateTime date)
+        {
+            return Task.FromResult<(SleepSession?, List<SleepSession>)>((null, new List<SleepSession>()));
+        }
     }
 }

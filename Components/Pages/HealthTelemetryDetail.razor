@@ -8,9 +8,34 @@
 @implements IDisposable
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
-    <div class="d-flex align-center mb-6">
+    <div class="d-flex align-center mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" Edge="Edge.Start" OnClick="GoBack" />
         <MudText Typo="Typo.h5" Class="ml-3 font-weight-bold">Health Telemetry & Sensors</MudText>
+    </div>
+
+    <!-- DAY NAVIGATOR BAR -->
+    <div class="d-flex align-center justify-space-between px-3 py-2 rounded-xl mb-4" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);">
+        <div class="d-flex align-center gap-2">
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" OnClick="PreviousDay" Title="Previous Day" />
+            <div class="d-flex align-center gap-2">
+                <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Size="Size.Small" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Class="font-weight-bold">
+                    @(HealthService.SelectedDate.Date == DateTime.Today ? "Today, " : (HealthService.SelectedDate.Date == DateTime.Today.AddDays(-1) ? "Yesterday, " : ""))@HealthService.SelectedDate.ToString("ddd, MMM d, yyyy")
+                </MudText>
+            </div>
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" OnClick="NextDay" Disabled="@(HealthService.SelectedDate.Date >= DateTime.Today)" Title="Next Day" />
+        </div>
+
+        @if (HealthService.SelectedDate.Date != DateTime.Today)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" OnClick="GoToToday" StartIcon="@Icons.Material.Filled.Today">
+                Jump to Today
+            </MudButton>
+        }
+        else
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="font-weight-bold">Live</MudChip>
+        }
     </div>
 
     @if (isLoading)
@@ -68,6 +93,28 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Session Switcher Chips if Multiple Sessions (e.g. Night Sleep + Afternoon Nap) -->
+                    @if (_allSleepSessions.Count > 1)
+                    {
+                        <div class="d-flex align-center gap-2 mb-4 overflow-x-auto pb-1" style="scrollbar-width: none;">
+                            <MudText Typo="Typo.caption" Style="opacity: 0.6; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;">Sessions:</MudText>
+                            @for (int i = 0; i < _allSleepSessions.Count; i++)
+                            {
+                                var sIdx = i;
+                                var sess = _allSleepSessions[i];
+                                var isSelected = (sIdx == _selectedSessionIndex);
+                                <MudChip T="string" 
+                                         Variant="@(isSelected ? Variant.Filled : Variant.Outlined)" 
+                                         Color="@(isSelected ? (sess.IsNap ? Color.Warning : Color.Secondary) : Color.Default)"
+                                         Size="Size.Small"
+                                         OnClick="() => SelectSession(sIdx)"
+                                         Class="cursor-pointer">
+                                    @(sess.IsNap ? "Nap: " : "Main: ")@sess.BedtimeFormatted - @sess.WakeTimeFormatted (@sess.TotalAsleepFormatted)
+                                </MudChip>
+                            }
+                        </div>
+                    }
 
                     <!-- Clinical Multi-Level Canvas -->
                     @if (sleepEntries.Any())
@@ -363,6 +410,10 @@
     private DateTime sleepMaxTime = DateTime.MinValue;
     private List<(double LeftPct, string Label)> hourlyTicks = new();
 
+    private List<SleepSession> _allSleepSessions = new();
+    private SleepSession? _activeSession = null;
+    private int _selectedSessionIndex = 0;
+
     // HR
     private double avgHeartRate = 0;
     private int hrRestingPct = 70;
@@ -379,7 +430,46 @@
     {
         RefreshService.HealthRefreshRequested += OnHealthRefreshRequested;
         RefreshService.RefreshRequested += OnHealthRefreshRequested;
+        HealthService.OnSelectedDateChanged += OnSelectedDateChanged;
         await LoadDataAsync();
+    }
+
+    private void OnSelectedDateChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void PreviousDay()
+    {
+        HealthService.SelectedDate = HealthService.SelectedDate.AddDays(-1);
+    }
+
+    private void NextDay()
+    {
+        if (HealthService.SelectedDate.Date < DateTime.Today)
+        {
+            HealthService.SelectedDate = HealthService.SelectedDate.AddDays(1);
+        }
+    }
+
+    private void GoToToday()
+    {
+        HealthService.SelectedDate = DateTime.Today;
+    }
+
+    private void SelectSession(int index)
+    {
+        if (index >= 0 && index < _allSleepSessions.Count)
+        {
+            _selectedSessionIndex = index;
+            _activeSession = _allSleepSessions[index];
+            ApplySleepSession(_activeSession);
+            StateHasChanged();
+        }
     }
 
     private async Task OnHealthRefreshRequested()
@@ -397,15 +487,16 @@
 
         try
         {
-            var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(18);
-            var endOfToday = DateTime.Today.AddDays(1).AddTicks(-1);
+            var selDate = HealthService.SelectedDate.Date;
+            var startOfDay = selDate;
+            var endOfDay = selDate.AddDays(1).AddTicks(-1);
 
-            var telemetryData = await HealthService.GetHealthTelemetryAsync(yesterdayEvening, endOfToday);
-            var today = DateTime.Today;
+            // Fetch intraday telemetry strictly for selected day
+            var telemetryData = await HealthService.GetHealthTelemetryAsync(startOfDay, endOfDay);
 
-            // Process Steps
+            // Process Steps (strictly bounded to selDate)
             var stepsData = telemetryData
-                .Where(x => x.IsSteps && x.LocalStartTime >= today && x.Value.HasValue)
+                .Where(x => x.IsSteps && x.LocalStartTime.Date == selDate && x.Value.HasValue)
                 .OrderBy(x => x.LocalStartTime)
                 .ToList();
 
@@ -427,90 +518,27 @@
             }
             else
             {
+                // Fallback to daily vitals step count if telemetry is aggregated
+                var vitals = await HealthService.FetchMetricsForDateAsync(selDate);
+                var stepMetric = vitals.FirstOrDefault(v => v.MatchesType(VitalType.Steps));
+                if (stepMetric != null) totalSteps = stepMetric.Value;
+
                 stepsSeries = new List<ChartSeries<double>>();
                 stepsLabels = Array.Empty<string>();
+                activeHours = 0;
             }
 
-            // Process Sleep
-            sleepEntries = telemetryData
-                .Where(x => x.IsSleep)
-                .OrderBy(x => x.LocalStartTime)
-                .ToList();
+            // Process Sleep Sessions (nocturnal clustering algorithm)
+            var (primary, all) = await HealthService.GetSleepSessionsAsync(selDate);
+            _allSleepSessions = all;
+            _selectedSessionIndex = 0;
+            _activeSession = primary;
 
-            if (sleepEntries.Any())
-            {
-                sleepMinTime = sleepEntries.Min(x => x.LocalStartTime);
-                sleepMaxTime = sleepEntries.Max(x => x.LocalEndTime);
+            ApplySleepSession(_activeSession);
 
-                // Hourly ticks
-                hourlyTicks.Clear();
-                var startHour = new DateTime(sleepMinTime.Year, sleepMinTime.Month, sleepMinTime.Day, sleepMinTime.Hour, 0, 0);
-                var endHour = sleepMaxTime.AddHours(1);
-                var totalDuration = (sleepMaxTime - sleepMinTime).TotalSeconds;
-
-                if (totalDuration > 0)
-                {
-                    var cur = startHour;
-                    while (cur <= endHour)
-                    {
-                        if (cur >= sleepMinTime && cur <= sleepMaxTime)
-                        {
-                            var left = ((cur - sleepMinTime).TotalSeconds / totalDuration) * 100.0;
-                            hourlyTicks.Add((left, cur.ToString("HH:mm")));
-                        }
-                        cur = cur.AddHours(1);
-                    }
-                }
-
-                var deepSeconds = sleepEntries.Where(x => x.SleepCategory == "Deep").Sum(x => x.DurationSeconds);
-                var remSeconds = sleepEntries.Where(x => x.SleepCategory == "REM").Sum(x => x.DurationSeconds);
-                var lightSeconds = sleepEntries.Where(x => x.SleepCategory == "Core").Sum(x => x.DurationSeconds);
-                var awakeSeconds = sleepEntries.Where(x => x.SleepCategory == "Awake").Sum(x => x.DurationSeconds);
-                var asleepSeconds = deepSeconds + remSeconds + lightSeconds;
-                var inBedSeconds = Math.Max(asleepSeconds + awakeSeconds, (totalDuration > 0 ? totalDuration : asleepSeconds));
-
-                totalSleepText = FormatSeconds(asleepSeconds);
-                timeInBedText = FormatSeconds(inBedSeconds);
-                deepDurationText = FormatSeconds(deepSeconds);
-                remDurationText = FormatSeconds(remSeconds);
-                lightDurationText = FormatSeconds(lightSeconds);
-                awakeDurationText = FormatSeconds(awakeSeconds);
-
-                awakeCount = sleepEntries.Count(x => x.SleepCategory == "Awake");
-
-                if (asleepSeconds > 0)
-                {
-                    deepPct = (int)((deepSeconds / asleepSeconds) * 100);
-                    remPct = (int)((remSeconds / asleepSeconds) * 100);
-                    lightPct = (int)((lightSeconds / asleepSeconds) * 100);
-                    restorativePct = deepPct + remPct;
-                }
-
-                if (inBedSeconds > 0)
-                {
-                    awakePct = (int)((awakeSeconds / inBedSeconds) * 100);
-                    sleepEfficiency = Math.Min((int)((asleepSeconds / inBedSeconds) * 100), 100);
-                }
-                else
-                {
-                    sleepEfficiency = 90;
-                }
-
-                double durationScore = Math.Min((asleepSeconds / (8.0 * 3600.0)) * 50.0, 50.0);
-                double efficiencyScore = (sleepEfficiency / 100.0) * 30.0;
-                double qualityScore = Math.Min((restorativePct / 40.0) * 20.0, 20.0);
-                sleepScore = Math.Clamp((int)(durationScore + efficiencyScore + qualityScore), 0, 100);
-            }
-            else
-            {
-                totalSleepText = "--";
-                timeInBedText = "--";
-                sleepScore = 0;
-            }
-
-            // Process HR
+            // Process Heart Rate (strictly bounded to selDate)
             var hrData = telemetryData
-                .Where(x => x.IsHeartRate && x.LocalStartTime >= today && x.Value.HasValue)
+                .Where(x => x.IsHeartRate && x.LocalStartTime.Date == selDate && x.Value.HasValue)
                 .OrderBy(x => x.LocalStartTime)
                 .ToList();
 
@@ -544,12 +572,79 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading detailed health telemetry: {ex}");
+            Console.WriteLine($"[HealthTelemetryDetail] Error loading detailed health telemetry: {ex}");
         }
         finally
         {
             isLoading = false;
             StateHasChanged();
+        }
+    }
+
+    private void ApplySleepSession(SleepSession? session)
+    {
+        if (session != null && session.DurationSeconds > 0)
+        {
+            sleepEntries = session.Stages;
+            sleepMinTime = session.StartTime;
+            sleepMaxTime = session.EndTime;
+
+            hourlyTicks.Clear();
+            var totalDuration = (sleepMaxTime - sleepMinTime).TotalSeconds;
+
+            if (totalDuration > 0)
+            {
+                var startHour = new DateTime(sleepMinTime.Year, sleepMinTime.Month, sleepMinTime.Day, sleepMinTime.Hour, 0, 0);
+                var endHour = sleepMaxTime.AddHours(1);
+                var cur = startHour;
+                while (cur <= endHour)
+                {
+                    if (cur >= sleepMinTime && cur <= sleepMaxTime)
+                    {
+                        var left = ((cur - sleepMinTime).TotalSeconds / totalDuration) * 100.0;
+                        hourlyTicks.Add((left, cur.ToString("HH:mm")));
+                    }
+                    cur = cur.AddHours(1);
+                }
+            }
+
+            totalSleepText = session.TotalAsleepFormatted;
+            timeInBedText = FormatSeconds(session.DurationSeconds);
+            deepDurationText = FormatSeconds(session.DeepSeconds);
+            remDurationText = FormatSeconds(session.RemSeconds);
+            lightDurationText = FormatSeconds(session.LightSeconds);
+            awakeDurationText = FormatSeconds(session.AwakeSeconds);
+
+            awakeCount = session.AwakeCount;
+            deepPct = session.DeepPercent;
+            remPct = session.RemPercent;
+            lightPct = session.LightPercent;
+            awakePct = session.AwakePercent;
+            restorativePct = session.RestorativePercent;
+            sleepEfficiency = session.EfficiencyPercent;
+            sleepScore = session.SleepScore;
+        }
+        else
+        {
+            sleepEntries = new List<HealthTelemetry>();
+            sleepMinTime = DateTime.MinValue;
+            sleepMaxTime = DateTime.MinValue;
+            hourlyTicks.Clear();
+
+            totalSleepText = "--";
+            timeInBedText = "--";
+            deepDurationText = "--";
+            remDurationText = "--";
+            lightDurationText = "--";
+            awakeDurationText = "--";
+            sleepScore = 0;
+            sleepEfficiency = 0;
+            restorativePct = 0;
+            awakeCount = 0;
+            deepPct = 0;
+            remPct = 0;
+            lightPct = 0;
+            awakePct = 0;
         }
     }
 
@@ -613,5 +708,6 @@
     {
         RefreshService.HealthRefreshRequested -= OnHealthRefreshRequested;
         RefreshService.RefreshRequested -= OnHealthRefreshRequested;
+        HealthService.OnSelectedDateChanged -= OnSelectedDateChanged;
     }
 }

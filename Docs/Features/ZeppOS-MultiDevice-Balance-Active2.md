@@ -69,7 +69,23 @@ const cfg = isRound ? ROUND_CONFIG : SQUARE_CONFIG
 
 ---
 
-## 4. Verification & Build
+## 4. Haptic Feedback Integration (`@zos/sensor.Vibrator`)
+
+Both Amazfit Balance and Amazfit Active 2 support tactile feedback through their integrated vibration hardware without requiring special permissions in `app.json`:
+
+1. **Habit Logging (Bubbles & Smokes)**:
+   - **Scene**: `VIBRATOR_SCENE_SHORT_MIDDLE` (20ms medium-intensity pulse).
+   - **Trigger**: Fired immediately on tapping any action button (`💧 300`, `💧 150`, `☕ 100`, `🔥 Cig`, `⚡ Heat`), providing instant tactile feedback alongside optimistic UI redraw.
+2. **Sync Completion**:
+   - **Scene**: `VIBRATOR_SCENE_NOTIFICATION` (two short, continuous pulses).
+   - **Trigger**: Fired whenever `setSyncing` transitions from `true` to `false` (i.e. fresh habits or health sensor telemetry successfully synchronized).
+3. **Safety & Lifecycle**:
+   - Initialized inside a `try...catch` block to handle Do Not Disturb (DND) or emulator environments gracefully.
+   - `vibrator.stop()` is invoked in `onDestroy()` to prevent any stray motor engagement.
+
+---
+
+## 5. Verification & Build
 The multi-target build is compiled using the Zeus CLI:
 ```bash
 npm run build
