@@ -6,8 +6,137 @@ import { exit } from '@zos/router'
 import { statSync, writeFileSync, readFileSync } from '@zos/fs'
 import { setScrollMode, SCROLL_MODE_SWIPER } from '@zos/page'
 import { HeartRate, Sleep, Step, BloodOxygen, Calorie, Stress, Pai } from '@zos/sensor'
+import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 
 const logger = log.getLogger('dayone-orbit')
+
+const SQUARE_CONFIG = {
+  screenW: 390,
+  screenH: 450,
+  pageH: 450,
+  syncIndicator: { x: 0, y: 410, w: 390, h: 30, text_size: 14 },
+  loading: {
+    arc: { x: 145, y: 125, w: 100, h: 100, line_width: 8 },
+    text: { x: 0, y: 240, w: 390, h: 50, text_size: 20 },
+    btn: { x: 45, y: 300, w: 300, h: 60, radius: 30, text_size: 20 }
+  },
+  pageTitleY: 80,
+  pageTitleSize: 24,
+  arc: { x: 20, y: 160, w: 200, h: 200, line_width: 16, text_size: 26 },
+  breakdownText: { x: 10, y: 370, w: 220, h: 40, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP },
+  p1Buttons: {
+    x: 240,
+    w: 130,
+    h: 60,
+    radius: 30,
+    text_size: 22,
+    y1: 150,
+    y2: 230,
+    y3: 310
+  },
+  p3Buttons: {
+    x: 240,
+    w: 130,
+    h: 60,
+    radius: 30,
+    text_size: 22,
+    y1: 185,
+    y2: 275
+  },
+  chart: {
+    titleY: 80,
+    titleSize: 24,
+    subtitleY: 130,
+    subtitleSize: 16,
+    x: 20,
+    y: 180,
+    w: 350,
+    h: 180,
+    item_width: 30,
+    item_space: 15,
+    item_radius: 10
+  },
+  about: {
+    iconSrc: 'icon.png',
+    iconX: 133,
+    iconY: 40,
+    nameY: 180,
+    nameSize: 24,
+    verY: 220,
+    verSize: 16,
+    debug: { x: 10, y: 250, w: 370, h: 80, text_size: 14 },
+    unpairBtn: { x: 45, y: 340, w: 300, h: 60, radius: 30, text_size: 20 }
+  },
+  pairing: {
+    title: { x: 0, y: 80, w: 390, h: 80, text_size: 24 },
+    pin: { x: 0, y: 180, w: 390, h: 100, text_size: 48 },
+    status: { x: 0, y: 280, w: 390, h: 50, text_size: 16 }
+  }
+}
+
+const ROUND_CONFIG = {
+  screenW: 480,
+  screenH: 480,
+  pageH: 480,
+  syncIndicator: { x: 0, y: 412, w: 480, h: 24, text_size: 13 },
+  loading: {
+    arc: { x: 180, y: 140, w: 120, h: 120, line_width: 10 },
+    text: { x: 0, y: 280, w: 480, h: 50, text_size: 22 },
+    btn: { x: 80, y: 320, w: 320, h: 64, radius: 32, text_size: 22 }
+  },
+  pageTitleY: 50,
+  pageTitleSize: 26,
+  arc: { x: 30, y: 125, w: 216, h: 216, line_width: 18, text_size: 28 },
+  breakdownText: { x: 30, y: 350, w: 420, h: 30, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
+  p1Buttons: {
+    x: 265,
+    w: 165,
+    h: 62,
+    radius: 31,
+    text_size: 22,
+    y1: 120,
+    y2: 195,
+    y3: 270
+  },
+  p3Buttons: {
+    x: 265,
+    w: 165,
+    h: 68,
+    radius: 34,
+    text_size: 24,
+    y1: 150,
+    y2: 240
+  },
+  chart: {
+    titleY: 50,
+    titleSize: 26,
+    subtitleY: 92,
+    subtitleSize: 16,
+    x: 70,
+    y: 135,
+    w: 340,
+    h: 210,
+    item_width: 28,
+    item_space: 14,
+    item_radius: 10
+  },
+  about: {
+    iconSrc: 'logo.png',
+    iconX: 185,
+    iconY: 35,
+    nameY: 165,
+    nameSize: 26,
+    verY: 202,
+    verSize: 16,
+    debug: { x: 40, y: 235, w: 400, h: 75, text_size: 14 },
+    unpairBtn: { x: 70, y: 325, w: 340, h: 60, radius: 30, text_size: 20 }
+  },
+  pairing: {
+    title: { x: 0, y: 80, w: 480, h: 80, text_size: 26 },
+    pin: { x: 0, y: 175, w: 480, h: 100, text_size: 54 },
+    status: { x: 0, y: 295, w: 480, h: 50, text_size: 18 }
+  }
+}
 
 function saveFileStr(filename, dataStr) {
   try { writeFileSync({ path: filename, data: dataStr, options: { encoding: 'utf8' } }) } catch(e) {}
@@ -24,6 +153,21 @@ function loadFileStr(filename) {
 Page(
   BasePage({
     build() {
+      let isRound = false
+      let screenW = 390
+      let screenH = 450
+      try {
+        const devInfo = getDeviceInfo()
+        if (devInfo) {
+          screenW = devInfo.width || 390
+          screenH = devInfo.height || 450
+          isRound = devInfo.screenShape === SCREEN_SHAPE_ROUND || screenW === 480 || (devInfo.width === devInfo.height && devInfo.width >= 454)
+        }
+      } catch (e) {
+        logger.error('getDeviceInfo error', e)
+      }
+      const cfg = isRound ? ROUND_CONFIG : SQUARE_CONFIG
+
       try {
         logger.info('page build invoked')
         
@@ -76,9 +220,9 @@ Page(
           let loadingBg, loadingArc, loadingText, loadingTimer
           
           if (!hasCache) {
-              loadingBg = createWidget(widget.ARC, { x: 145, y: 125, w: 100, h: 100, start_angle: -90, end_angle: 270, color: 0x222222, line_width: 8 })
-              loadingArc = createWidget(widget.ARC, { x: 145, y: 125, w: 100, h: 100, start_angle: -90, end_angle: 0, color: 0x00aaff, line_width: 8 })
-              loadingText = createWidget(widget.TEXT, { x: 0, y: 240, w: 390, h: 50, color: 0xffffff, text_size: 20, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Orbiting...' })
+              loadingBg = createWidget(widget.ARC, { x: cfg.loading.arc.x, y: cfg.loading.arc.y, w: cfg.loading.arc.w, h: cfg.loading.arc.h, start_angle: -90, end_angle: 270, color: 0x222222, line_width: cfg.loading.arc.line_width })
+              loadingArc = createWidget(widget.ARC, { x: cfg.loading.arc.x, y: cfg.loading.arc.y, w: cfg.loading.arc.w, h: cfg.loading.arc.h, start_angle: -90, end_angle: 0, color: 0x00aaff, line_width: cfg.loading.arc.line_width })
+              loadingText = createWidget(widget.TEXT, { x: cfg.loading.text.x, y: cfg.loading.text.y, w: cfg.loading.text.w, h: cfg.loading.text.h, color: 0xffffff, text_size: cfg.loading.text.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Orbiting...' })
               
               let loadingAngle = -90;
               loadingTimer = setInterval(() => {
@@ -105,8 +249,8 @@ Page(
              }
              
              createWidget(widget.BUTTON, {
-               x: 45, y: 300, w: 300, h: 60, radius: 30, normal_color: 0x222222, press_color: 0x111111,
-               text: '⚙️ Reset App', color: 0xffffff, text_size: 20,
+               x: cfg.loading.btn.x, y: cfg.loading.btn.y, w: cfg.loading.btn.w, h: cfg.loading.btn.h, radius: cfg.loading.btn.radius, normal_color: 0x222222, press_color: 0x111111,
+               text: '⚙️ Reset App', color: 0xffffff, text_size: cfg.loading.btn.text_size,
                click_func: () => { saveFileStr('token.txt', ''); saveFileStr('refresh_token.txt', ''); saveFileStr('userid.txt', ''); exit() }
              })
           }
@@ -343,7 +487,7 @@ Page(
           }
 
           const buildDashboard = () => {
-             const h = 450 // Screen height
+             const h = cfg.pageH
              
              // Snap-to-page scrolling
              try {
@@ -353,32 +497,71 @@ Page(
              }
 
              // ================== PAGE 1: BUBBLES ==================
-             syncIndicator = createWidget(widget.TEXT, { x: 0, y: 410, w: 390, h: 30, color: 0x00ff00, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '' })
+             syncIndicator = createWidget(widget.TEXT, {
+                x: cfg.syncIndicator.x, y: cfg.syncIndicator.y, w: cfg.syncIndicator.w, h: cfg.syncIndicator.h,
+                color: 0x00ff00, text_size: cfg.syncIndicator.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text: ''
+             })
              
-             createWidget(widget.TEXT, { x: 0, y: 80, w: 390, h: 40, color: 0x00aaff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles' })
+             createWidget(widget.TEXT, {
+                x: 0, y: cfg.pageTitleY, w: cfg.screenW, h: 40,
+                color: 0x00aaff, text_size: cfg.pageTitleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles'
+             })
              
-             createWidget(widget.ARC, { x: 20, y: 160, w: 200, h: 200, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 16 })
-             waterArc = createWidget(widget.ARC, { x: 20, y: 160, w: 200, h: 200, start_angle: -90, end_angle: -90, color: 0x00ffff, line_width: 16 })
-             coffeeArc = createWidget(widget.ARC, { x: 20, y: 160, w: 200, h: 200, start_angle: -90, end_angle: -90, color: 0xffa500, line_width: 16 })
-             waterCenterText = createWidget(widget.TEXT, { x: 20, y: 160, w: 200, h: 200, color: 0xffffff, text_size: 26, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...' })
+             createWidget(widget.ARC, {
+                x: cfg.arc.x, y: cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
+                start_angle: -90, end_angle: 270, color: 0x333333, line_width: cfg.arc.line_width
+             })
+             waterArc = createWidget(widget.ARC, {
+                x: cfg.arc.x, y: cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
+                start_angle: -90, end_angle: -90, color: 0x00ffff, line_width: cfg.arc.line_width
+             })
+             coffeeArc = createWidget(widget.ARC, {
+                x: cfg.arc.x, y: cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
+                start_angle: -90, end_angle: -90, color: 0xffa500, line_width: cfg.arc.line_width
+             })
+             waterCenterText = createWidget(widget.TEXT, {
+                x: cfg.arc.x, y: cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
+                color: 0xffffff, text_size: cfg.arc.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...'
+             })
              
-             waterBreakdownText = createWidget(widget.TEXT, { x: 10, y: 370, w: 220, h: 40, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
+             waterBreakdownText = createWidget(widget.TEXT, {
+                x: cfg.breakdownText.x, y: cfg.breakdownText.y, w: cfg.breakdownText.w, h: cfg.breakdownText.h,
+                color: 0xaaaaaa, text_size: cfg.breakdownText.text_size, align_h: cfg.breakdownText.align_h, align_v: cfg.breakdownText.align_v, text: 'Loading...'
+             })
              
-             createWidget(widget.BUTTON, { x: 240, y: 150, w: 130, h: 60, radius: 30, normal_color: 0x0055ff, press_color: 0x0033aa, text: '💧 300', color: 0xffffff, text_size: 22, click_func: () => logWater(300, 'Large Water') })
-             createWidget(widget.BUTTON, { x: 240, y: 230, w: 130, h: 60, radius: 30, normal_color: 0x0055ff, press_color: 0x0033aa, text: '💧 150', color: 0xffffff, text_size: 22, click_func: () => logWater(150, 'Small Water') })
-             createWidget(widget.BUTTON, { x: 240, y: 310, w: 130, h: 60, radius: 30, normal_color: 0x8b4513, press_color: 0x5a2d0c, text: '☕ 100', color: 0xffffff, text_size: 22, click_func: () => logWater(100, 'Coffee') })
+             createWidget(widget.BUTTON, {
+                x: cfg.p1Buttons.x, y: cfg.p1Buttons.y1, w: cfg.p1Buttons.w, h: cfg.p1Buttons.h, radius: cfg.p1Buttons.radius,
+                normal_color: 0x222222, press_color: 0x111111, text: '💧 300', color: 0xffffff, text_size: cfg.p1Buttons.text_size,
+                click_func: () => logWater(300, 'Large Water')
+             })
+             createWidget(widget.BUTTON, {
+                x: cfg.p1Buttons.x, y: cfg.p1Buttons.y2, w: cfg.p1Buttons.w, h: cfg.p1Buttons.h, radius: cfg.p1Buttons.radius,
+                normal_color: 0x222222, press_color: 0x111111, text: '💧 150', color: 0xffffff, text_size: cfg.p1Buttons.text_size,
+                click_func: () => logWater(150, 'Small Water')
+             })
+             createWidget(widget.BUTTON, {
+                x: cfg.p1Buttons.x, y: cfg.p1Buttons.y3, w: cfg.p1Buttons.w, h: cfg.p1Buttons.h, radius: cfg.p1Buttons.radius,
+                normal_color: 0x222222, press_color: 0x111111, text: '☕ 100', color: 0xffffff, text_size: cfg.p1Buttons.text_size,
+                click_func: () => logWater(100, 'Coffee')
+             })
 
              // ================== PAGE 2: BUBBLES STATS ==================
-             createWidget(widget.TEXT, { x: 0, y: h + 80, w: 390, h: 40, color: 0x00aaff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles 7 Days' })
-             createWidget(widget.TEXT, { x: 0, y: h + 130, w: 390, h: 30, color: 0xffa500, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Blue: Water | Orange: Coffee' })
+             createWidget(widget.TEXT, {
+                x: 0, y: h + cfg.chart.titleY, w: cfg.screenW, h: 40,
+                color: 0x00aaff, text_size: cfg.chart.titleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles 7 Days'
+             })
+             createWidget(widget.TEXT, {
+                x: 0, y: h + cfg.chart.subtitleY, w: cfg.screenW, h: 30,
+                color: 0xffa500, text_size: cfg.chart.subtitleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Blue: Water | Orange: Coffee'
+             })
              
              waterHistogram = createWidget(widget.HISTOGRAM, {
-               x: 20, y: h + 180, w: 350, h: 180,
+               x: cfg.chart.x, y: h + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
                item_color: 0x00aaff,
                item_bg_color: 0x333333,
-               item_width: 30,
-               item_space: 15,
-               item_radius: 10,
+               item_width: cfg.chart.item_width,
+               item_space: cfg.chart.item_space,
+               item_radius: cfg.chart.item_radius,
                data_array: waterWeek,
                data_count: 7,
                data_min_value: 0,
@@ -386,12 +569,12 @@ Page(
              })
              
              coffeeHistogram = createWidget(widget.HISTOGRAM, {
-               x: 20, y: h + 180, w: 350, h: 180,
+               x: cfg.chart.x, y: h + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
                item_color: 0xffa500,
                item_bg_color: 0x00000000,
-               item_width: 30,
-               item_space: 15,
-               item_radius: 10,
+               item_width: cfg.chart.item_width,
+               item_space: cfg.chart.item_space,
+               item_radius: cfg.chart.item_radius,
                data_array: coffeeWeek,
                data_count: 7,
                data_min_value: 0,
@@ -399,28 +582,57 @@ Page(
              })
 
              // ================== PAGE 3: SMOKES ==================
-             createWidget(widget.TEXT, { x: 0, y: h*2 + 80, w: 390, h: 40, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 Smokes' })
+             createWidget(widget.TEXT, {
+                x: 0, y: h*2 + cfg.pageTitleY, w: cfg.screenW, h: 40,
+                color: 0xff5555, text_size: cfg.pageTitleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 Smokes'
+             })
              
-             createWidget(widget.ARC, { x: 20, y: h*2 + 160, w: 200, h: 200, start_angle: -90, end_angle: 270, color: 0x333333, line_width: 16 })
-             smokeArc = createWidget(widget.ARC, { x: 20, y: h*2 + 160, w: 200, h: 200, start_angle: -90, end_angle: -90, color: 0x00ff00, line_width: 16 })
-             smokeCenterText = createWidget(widget.TEXT, { x: 20, y: h*2 + 160, w: 200, h: 200, color: 0xffffff, text_size: 26, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...' })
+             createWidget(widget.ARC, {
+                x: cfg.arc.x, y: h*2 + cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
+                start_angle: -90, end_angle: 270, color: 0x333333, line_width: cfg.arc.line_width
+             })
+             smokeArc = createWidget(widget.ARC, {
+                x: cfg.arc.x, y: h*2 + cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
+                start_angle: -90, end_angle: -90, color: 0x00ff00, line_width: cfg.arc.line_width
+             })
+             smokeCenterText = createWidget(widget.TEXT, {
+                x: cfg.arc.x, y: h*2 + cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
+                color: 0xffffff, text_size: cfg.arc.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...'
+             })
              
-             smokeBreakdownText = createWidget(widget.TEXT, { x: 10, y: h*2 + 370, w: 220, h: 40, color: 0xaaaaaa, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP, text: 'Loading...' })
+             smokeBreakdownText = createWidget(widget.TEXT, {
+                x: cfg.breakdownText.x, y: h*2 + cfg.breakdownText.y, w: cfg.breakdownText.w, h: cfg.breakdownText.h,
+                color: 0xaaaaaa, text_size: cfg.breakdownText.text_size, align_h: cfg.breakdownText.align_h, align_v: cfg.breakdownText.align_v, text: 'Loading...'
+             })
 
-             createWidget(widget.BUTTON, { x: 240, y: h*2 + 185, w: 130, h: 60, radius: 30, normal_color: 0x990000, press_color: 0x660000, text: '🔥 Cig', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Cigarette') })
-             createWidget(widget.BUTTON, { x: 240, y: h*2 + 275, w: 130, h: 60, radius: 30, normal_color: 0x007aff, press_color: 0x005bb5, text: '⚡ Heat', color: 0xffffff, text_size: 22, click_func: () => logSmoke(1, 'Heated Tobacco') })
+             createWidget(widget.BUTTON, {
+                x: cfg.p3Buttons.x, y: h*2 + cfg.p3Buttons.y1, w: cfg.p3Buttons.w, h: cfg.p3Buttons.h, radius: cfg.p3Buttons.radius,
+                normal_color: 0x222222, press_color: 0x111111, text: '🔥 Cig', color: 0xffffff, text_size: cfg.p3Buttons.text_size,
+                click_func: () => logSmoke(1, 'Cigarette')
+             })
+             createWidget(widget.BUTTON, {
+                x: cfg.p3Buttons.x, y: h*2 + cfg.p3Buttons.y2, w: cfg.p3Buttons.w, h: cfg.p3Buttons.h, radius: cfg.p3Buttons.radius,
+                normal_color: 0x222222, press_color: 0x111111, text: '⚡ Heat', color: 0xffffff, text_size: cfg.p3Buttons.text_size,
+                click_func: () => logSmoke(1, 'Heated Tobacco')
+             })
 
              // ================== PAGE 4: SMOKES STATS ==================
-             createWidget(widget.TEXT, { x: 0, y: h*3 + 80, w: 390, h: 40, color: 0xff5555, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 Smokes 7 Days' })
-             createWidget(widget.TEXT, { x: 0, y: h*3 + 130, w: 390, h: 30, color: 0x007aff, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Red: Cigs | Blue: Heat' })
+             createWidget(widget.TEXT, {
+                x: 0, y: h*3 + cfg.chart.titleY, w: cfg.screenW, h: 40,
+                color: 0xff5555, text_size: cfg.chart.titleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 Smokes 7 Days'
+             })
+             createWidget(widget.TEXT, {
+                x: 0, y: h*3 + cfg.chart.subtitleY, w: cfg.screenW, h: 30,
+                color: 0x007aff, text_size: cfg.chart.subtitleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Red: Cigs | Blue: Heat'
+             })
              
              smokeHistogram = createWidget(widget.HISTOGRAM, {
-               x: 20, y: h*3 + 180, w: 350, h: 180,
-               item_color: 0x990000,
+               x: cfg.chart.x, y: h*3 + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
+               item_color: 0xff3b30,
                item_bg_color: 0x333333,
-               item_width: 30,
-               item_space: 15,
-               item_radius: 10,
+               item_width: cfg.chart.item_width,
+               item_space: cfg.chart.item_space,
+               item_radius: cfg.chart.item_radius,
                data_array: smokeWeek,
                data_count: 7,
                data_min_value: 0,
@@ -428,12 +640,12 @@ Page(
              })
              
              heatHistogram = createWidget(widget.HISTOGRAM, {
-               x: 20, y: h*3 + 180, w: 350, h: 180,
+               x: cfg.chart.x, y: h*3 + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
                item_color: 0x007aff,
                item_bg_color: 0x00000000,
-               item_width: 30,
-               item_space: 15,
-               item_radius: 10,
+               item_width: cfg.chart.item_width,
+               item_space: cfg.chart.item_space,
+               item_radius: cfg.chart.item_radius,
                data_array: heatWeek,
                data_count: 7,
                data_min_value: 0,
@@ -441,13 +653,26 @@ Page(
              })
 
              // ================== PAGE 5: ABOUT / SETTINGS ==================
-             createWidget(widget.IMG, { x: 133, y: h*4 + 40, src: 'icon.png' })
-             createWidget(widget.TEXT, { x: 0, y: h*4 + 180, w: 390, h: 40, color: 0xffffff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'DayOne Orbit' })
-             createWidget(widget.TEXT, { x: 0, y: h*4 + 220, w: 390, h: 30, color: 0xaaaaaa, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'v1.0' })
+             createWidget(widget.IMG, { x: cfg.about.iconX, y: h*4 + cfg.about.iconY, src: cfg.about.iconSrc })
+             createWidget(widget.TEXT, {
+                x: 0, y: h*4 + cfg.about.nameY, w: cfg.screenW, h: 40,
+                color: 0xffffff, text_size: cfg.about.nameSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'DayOne Orbit'
+             })
+             createWidget(widget.TEXT, {
+                x: 0, y: h*4 + cfg.about.verY, w: cfg.screenW, h: 30,
+                color: 0xaaaaaa, text_size: cfg.about.verSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'v1.0'
+             })
              
-             debugText = createWidget(widget.TEXT, { x: 10, y: h*4 + 250, w: 370, h: 80, color: 0xffa500, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: 'Waiting for health sync...' })
+             debugText = createWidget(widget.TEXT, {
+                x: cfg.about.debug.x, y: h*4 + cfg.about.debug.y, w: cfg.about.debug.w, h: cfg.about.debug.h,
+                color: 0xffa500, text_size: cfg.about.debug.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: 'Waiting for health sync...'
+             })
              
-             createWidget(widget.BUTTON, { x: 45, y: h*4 + 340, w: 300, h: 60, radius: 30, normal_color: 0x222222, press_color: 0x111111, text: '⚙️ Unpair & Logout', color: 0xffffff, text_size: 20, click_func: () => { saveFileStr('token.txt', ''); saveFileStr('refresh_token.txt', ''); saveFileStr('userid.txt', ''); exit() } })
+             createWidget(widget.BUTTON, {
+                x: cfg.about.unpairBtn.x, y: h*4 + cfg.about.unpairBtn.y, w: cfg.about.unpairBtn.w, h: cfg.about.unpairBtn.h, radius: cfg.about.unpairBtn.radius,
+                normal_color: 0x222222, press_color: 0x111111, text: '⚙️ Unpair & Logout', color: 0xffffff, text_size: cfg.about.unpairBtn.text_size,
+                click_func: () => { saveFileStr('token.txt', ''); saveFileStr('refresh_token.txt', ''); saveFileStr('userid.txt', ''); exit() }
+             })
 
              
              updateWaterUI()
@@ -625,10 +850,19 @@ Page(
           // --- PAIRING UI ---
           const pin = Math.floor(100000 + Math.random() * 900000).toString()
 
-          createWidget(widget.TEXT, { x: 0, y: 80, w: 390, h: 80, color: 0xffffff, text_size: 24, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: 'DayOne Orbit\nPairing PIN' })
-          createWidget(widget.TEXT, { x: 0, y: 180, w: 390, h: 100, color: 0x00ff00, text_size: 48, align_h: align.CENTER_H, align_v: align.CENTER_V, text: pin })
+          createWidget(widget.TEXT, {
+            x: cfg.pairing.title.x, y: cfg.pairing.title.y, w: cfg.pairing.title.w, h: cfg.pairing.title.h,
+            color: 0xffffff, text_size: cfg.pairing.title.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: 'DayOne Orbit\nPairing PIN'
+          })
+          createWidget(widget.TEXT, {
+            x: cfg.pairing.pin.x, y: cfg.pairing.pin.y, w: cfg.pairing.pin.w, h: cfg.pairing.pin.h,
+            color: 0x00ff00, text_size: cfg.pairing.pin.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text: pin
+          })
           
-          const statusText = createWidget(widget.TEXT, { x: 0, y: 280, w: 390, h: 50, color: 0xaaaaaa, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Connecting to phone...' })
+          const statusText = createWidget(widget.TEXT, {
+            x: cfg.pairing.status.x, y: cfg.pairing.status.y, w: cfg.pairing.status.w, h: cfg.pairing.status.h,
+            color: 0xaaaaaa, text_size: cfg.pairing.status.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Connecting to phone...'
+          })
 
           setTimeout(() => {
             statusText.setProperty(prop.TEXT, 'Sending to Phone...')
@@ -678,7 +912,7 @@ Page(
           }, 3000)
         }
       } catch (fatalErr) {
-        createWidget(widget.TEXT, { x: 0, y: 0, w: 390, h: 400, color: 0xff0000, text_size: 20, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: fatalErr ? fatalErr.toString() : 'Unknown Error' })
+        createWidget(widget.TEXT, { x: 0, y: 0, w: cfg.screenW, h: cfg.screenH, color: 0xff0000, text_size: 20, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: fatalErr ? fatalErr.toString() : 'Unknown Error' })
       }
     },
     

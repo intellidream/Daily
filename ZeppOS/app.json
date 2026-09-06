@@ -62,6 +62,7 @@
     "data:user.hd.heart_rate",
     "data:user.hd.spo2",
     "data:user.hd.stress",
-    "data:user.hd.pai"
+    "data:user.hd.pai",
+    "data:os.device.info"
   ]
 }
