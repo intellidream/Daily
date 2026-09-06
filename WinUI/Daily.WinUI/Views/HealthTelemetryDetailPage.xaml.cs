@@ -122,7 +122,7 @@ namespace Daily_WinUI.Views
                 if (sleepEntries.Any())
                 {
                     var firstSleep = sleepEntries.Min(x => x.StartTime);
-                    var lastSleep = sleepEntries.Max(x => x.EndTime);
+                    var lastSleep = sleepEntries.Max(x => x.EndTime ?? x.StartTime);
                     var totalDuration = (lastSleep - firstSleep).TotalSeconds;
 
                     foreach (var entry in sleepEntries)
@@ -138,14 +138,15 @@ namespace Daily_WinUI.Views
                             default: color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 158, 158, 158)); break; // Gray
                         }
 
+                        var endTime = entry.EndTime ?? entry.StartTime;
                         double left = totalDuration > 0 ? (entry.StartTime - firstSleep).TotalSeconds / totalDuration * 100 : 0;
-                        double width = totalDuration > 0 ? (entry.EndTime - entry.StartTime).TotalSeconds / totalDuration * 100 : 0;
+                        double width = totalDuration > 0 ? (endTime - entry.StartTime).TotalSeconds / totalDuration * 100 : 0;
 
                         items.Add(new SleepChartItem
                         {
                             Category = "Sleep",
                             StartDateTime = entry.StartTime,
-                            EndDateTime = entry.EndTime,
+                            EndDateTime = endTime,
                             ColorBrush = color,
                             LeftPercentage = left,
                             WidthPercentage = width

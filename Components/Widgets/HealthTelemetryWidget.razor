@@ -92,14 +92,14 @@
             var today = DateTime.Today;
             
             // Steps
-            var steps = telemetryData.Where(x => x.TypeString == "Steps" && x.StartTime >= today).Sum(x => x.Value);
+            var steps = telemetryData.Where(x => x.TypeString == "Steps" && x.StartTime >= today).Sum(x => x.Value ?? 0);
             totalSteps = steps > 0 ? steps.ToString("N0") : "--";
 
             // Sleep
             var sleepTypes = new[] { "SleepAsleep", "SleepDeep", "SleepLight", "SleepREM", "SleepCore" };
             var sleepSeconds = telemetryData
                 .Where(x => sleepTypes.Contains(x.TypeString))
-                .Sum(x => (x.EndTime - x.StartTime).TotalSeconds);
+                .Sum(x => ((x.EndTime ?? x.StartTime) - x.StartTime).TotalSeconds);
             
             if (sleepSeconds > 0)
             {
@@ -109,14 +109,14 @@
 
             // Heart Rate for sparkline (Line chart)
             var hrEntries = telemetryData
-                .Where(x => x.TypeString == "HeartRate" && x.StartTime >= today)
+                .Where(x => x.TypeString == "HeartRate" && x.StartTime >= today && x.Value.HasValue)
                 .OrderBy(x => x.StartTime)
                 .ToList();
             
             if (hrEntries.Any())
             {
                 var hourlyHr = hrEntries.GroupBy(x => x.StartTime.Hour)
-                                     .Select(g => new { Hour = g.Key, Avg = g.Average(x => x.Value) })
+                                     .Select(g => new { Hour = g.Key, Avg = g.Average(x => x.Value.Value) })
                                      .OrderBy(x => x.Hour)
                                      .ToList();
                 hrSeries = new List<ChartSeries<double>>

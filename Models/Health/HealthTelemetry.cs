@@ -17,16 +17,16 @@ namespace Daily.Models.Health
         public string TypeString { get; set; }
 
         [Column("value")]
-        public double Value { get; set; }
+        public double? Value { get; set; }
 
         [Column("unit")]
-        public string Unit { get; set; }
+        public string? Unit { get; set; }
 
         [Column("start_time")]
         public DateTime StartTime { get; set; }
 
         [Column("end_time")]
-        public DateTime EndTime { get; set; }
+        public DateTime? EndTime { get; set; }
 
         [Column("source_device")]
         public string SourceDevice { get; set; }

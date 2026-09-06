@@ -61,7 +61,11 @@ namespace Daily_WinUI.Controls
             get
             {
                 var today = DateTime.Today;
-                return _telemetryData.Where(x => x.TypeString == "HeartRate" && x.StartTime >= today).ToList();
+                var hrEntries = _telemetryData
+                    .Where(x => x.TypeString == "HeartRate" && x.Value.HasValue)
+                    .OrderBy(x => x.StartTime)
+                    .ToList();
+                return hrEntries;
             }
         }
 
@@ -70,7 +74,7 @@ namespace Daily_WinUI.Controls
             get
             {
                 var today = DateTime.Today;
-                var steps = _telemetryData.Where(x => x.TypeString == "Steps" && x.StartTime >= today).Sum(x => x.Value);
+                var steps = _telemetryData.Where(x => x.TypeString == "Steps" && x.StartTime >= today).Sum(x => x.Value ?? 0);
                 return steps > 0 ? steps.ToString("N0") : "--";
             }
         }
@@ -83,7 +87,7 @@ namespace Daily_WinUI.Controls
                 // Calculate total duration in hours where type is a sleep type (excluding Awake)
                 var sleepDurationSeconds = _telemetryData
                     .Where(x => sleepTypes.Contains(x.TypeString))
-                    .Sum(x => (x.EndTime - x.StartTime).TotalSeconds);
+                    .Sum(x => ((x.EndTime ?? x.StartTime) - x.StartTime).TotalSeconds);
 
                 if (sleepDurationSeconds <= 0) return "--";
 

@@ -933,7 +933,7 @@ namespace Daily.Services.Health
                 var result = await _supabase.From<HealthTelemetry>()
                                           .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
                                           .Filter("start_time", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
-                                          .Filter("end_time", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
+                                          .Filter("start_time", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
                                           .Order("start_time", Supabase.Postgrest.Constants.Ordering.Ascending)
                                           .Get();
 
