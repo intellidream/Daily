@@ -136,9 +136,9 @@ const SQUARE_CONFIG = {
   chart: {
     titleY: 80,
     titleSize: 24,
-    x: 20,
+    x: 45,
     y: 145,
-    w: 350,
+    w: 300,
     h: 195,
     item_width: 30,
     item_space: 15,
@@ -200,12 +200,12 @@ const ROUND_CONFIG = {
   chart: {
     titleY: 50,
     titleSize: 26,
-    x: 70,
+    x: 80,
     y: 135,
-    w: 340,
+    w: 320,
     h: 215,
-    item_width: 28,
-    item_space: 14,
+    item_width: 32,
+    item_space: 16,
     item_radius: 10,
     legendY: 366,
     legendSize: 15

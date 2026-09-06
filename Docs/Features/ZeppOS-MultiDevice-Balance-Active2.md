@@ -59,7 +59,7 @@ const cfg = isRound ? ROUND_CONFIG : SQUARE_CONFIG
 | **P1 Button Sizes** | `x: 240, w: 130, h: 58, r: 29, y: [145, 217, 289]` | `x: 265, w: 165, h: 62, r: 31, y: [136, 210, 284]` | Centered vertically, ending before breakdown text. |
 | **P3 Button Sizes** | `x: 240, w: 130, h: 62, r: 31, y: [180, 258]` | `x: 265, w: 165, h: 68, r: 34, y: [168, 252]` | Vertically centered with arc midpoint. |
 | **Breakdown Details Text**| `x: 0, y: 358, w: 390, h: 26` (centered) | `x: 30, y: 366, w: 420, h: 26, text_size: 14` (centered) | Placed below rings & buttons; aligned across the bottom. |
-| **7-Day Histograms** | `x: 20, y: 145, w: 350, h: 195, bar: 30, space: 15` | `x: 70, y: 135, w: 340, h: 215, bar: 28, space: 14` | Centered vertically below title, ample breathing room and no clipping. |
+| **7-Day Histograms** | `x: 45, y: 145, w: 300, h: 195, bar: 30, space: 15` | `x: 80, y: 135, w: 320, h: 215, bar: 32, space: 16` | Mathematically centered horizontally on screen center axis (45px margins on Active 2, 80px margins on Balance). |
 | **Chart Color Legends** | `y: 358, h: 30, text_size: 15` (centered) | `y: 366, h: 30, text_size: 15` (centered) | Positioned below histogram, aligning with breakdown texts baseline. |
 | **Smokes Chart Color** | `item_color: 0xff3b30` (Apple watchOS Red) | `item_color: 0xff3b30` (Apple watchOS Red) | Restored vibrant red matching watchOS (`Color.red`). |
 | **About Page Icon** | `icon.png` (124x124) at `x: 133, y: 40` | `logo.png` (110x110) at `x: 185, y: 35` | Perfectly centered `(480-110)/2 = 185`, eliminating overlap with text. |
