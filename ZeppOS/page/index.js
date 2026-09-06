@@ -5,30 +5,98 @@ import { BasePage } from '@zeppos/zml/base-page'
 import { exit } from '@zos/router'
 import { statSync, writeFileSync, readFileSync } from '@zos/fs'
 import { setScrollMode, SCROLL_MODE_SWIPER } from '@zos/page'
-import { HeartRate, Sleep, Step, BloodOxygen, Calorie, Stress, Pai, Vibrator, VIBRATOR_SCENE_SHORT_MIDDLE, VIBRATOR_SCENE_NOTIFICATION } from '@zos/sensor'
+import {
+  HeartRate, Sleep, Step, BloodOxygen, Calorie, Stress, Pai,
+  Vibrator,
+  VIBRATOR_SCENE_SHORT_STRONG,
+  VIBRATOR_SCENE_DURATION,
+  VIBRATOR_SCENE_NOTIFICATION
+} from '@zos/sensor'
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 
 const logger = log.getLogger('dayone-orbit')
 
-let vibrator = null
-try {
-  vibrator = new Vibrator()
-} catch (e) {
-  logger.error('Vibrator init error', e)
+let vibratorInstance = null
+
+function ensureVibrator() {
+  if (!vibratorInstance) {
+    try {
+      if (typeof Vibrator !== 'undefined') {
+        vibratorInstance = new Vibrator()
+      }
+    } catch (e) {
+      try {
+        vibratorInstance = Vibrator()
+      } catch (e2) {
+        logger.error('Vibrator instantiation error', e2)
+      }
+    }
+  }
+  return vibratorInstance
 }
 
-const triggerHaptic = (scene = VIBRATOR_SCENE_SHORT_MIDDLE) => {
-  if (!vibrator) return
+const triggerHaptic = (sceneType = 'habit') => {
   try {
-    vibrator.stop()
-    vibrator.setMode({ mode: scene })
-    vibrator.start()
-  } catch (e) {
-    try {
-      vibrator.start({ mode: scene })
-    } catch (err) {
-      logger.error('Haptic trigger error', err)
+    const v = ensureVibrator()
+
+    // Mode determination:
+    // Sync completion: notification double vibration (mode 0)
+    // Habit log: high-intensity 600ms duration vibration (mode 28) for clear tactile feedback
+    const mode = (sceneType === 'sync')
+      ? (typeof VIBRATOR_SCENE_NOTIFICATION !== 'undefined' ? VIBRATOR_SCENE_NOTIFICATION : 0)
+      : (typeof VIBRATOR_SCENE_DURATION !== 'undefined' ? VIBRATOR_SCENE_DURATION : 28)
+
+    if (v) {
+      // 1. Set mode (Zepp OS 3.0 TypeScript spec expects { mode: number })
+      try {
+        if (typeof v.setMode === 'function') {
+          v.setMode({ mode: mode })
+        }
+      } catch (e1) {
+        try { v.setMode(mode) } catch (e2) {}
+      }
+
+      // 2. Start vibration with mode or default
+      let started = false
+      try {
+        v.start({ mode: mode })
+        started = true
+      } catch (e3) {}
+
+      if (!started) {
+        try {
+          v.start()
+          started = true
+        } catch (e4) {
+          logger.error('v.start failed', e4)
+        }
+      }
+
+      // 3. Reset motor channel after vibration finishes so next start() is always clean
+      setTimeout(() => {
+        try {
+          if (v && typeof v.stop === 'function') {
+            v.stop()
+          }
+        } catch (eStop) {}
+      }, 700)
     }
+
+    // Fallback: legacy hmSensor API
+    try {
+      if (typeof hmSensor !== 'undefined' && hmSensor && typeof hmSensor.createSensor === 'function' && hmSensor.id && hmSensor.id.VIBRATE) {
+        const hmSensorVibrate = hmSensor.createSensor(hmSensor.id.VIBRATE)
+        if (hmSensorVibrate) {
+          hmSensorVibrate.scene = mode
+          hmSensorVibrate.start()
+          setTimeout(() => {
+            try { hmSensorVibrate.stop() } catch (e) {}
+          }, 700)
+        }
+      }
+    } catch (eHm) {}
+  } catch (err) {
+    logger.error('triggerHaptic error', err)
   }
 }
 
@@ -221,7 +289,7 @@ Page(
              if (syncIcon) syncIcon.setProperty(prop.VISIBLE, isSyncing)
              if (syncText) syncText.setProperty(prop.VISIBLE, isSyncing)
              if (wasSyncing && !isSyncing) {
-                triggerHaptic(VIBRATOR_SCENE_NOTIFICATION)
+                triggerHaptic('sync')
              }
           }
 
@@ -442,7 +510,7 @@ Page(
           }
 
           const logWater = (amount, type) => {
-             triggerHaptic(VIBRATOR_SCENE_SHORT_MIDDLE)
+             triggerHaptic('habit')
              waterTotal += amount
              waterWeek[6] += amount
              if (type.includes('Coffee')) {
@@ -480,7 +548,7 @@ Page(
           }
           
           const logSmoke = (amount, type) => {
-             triggerHaptic(VIBRATOR_SCENE_SHORT_MIDDLE)
+             triggerHaptic('habit')
              smokeTotal += amount
              smokeWeek[6] += amount
              if (type.includes('Heat') || type.includes('Vape')) {
@@ -956,9 +1024,17 @@ Page(
       }
     },
     
-    onInit() {},
+    onInit() {
+      try {
+        ensureVibrator()
+      } catch (e) {}
+    },
     onDestroy() {
-      try { if (vibrator) vibrator.stop() } catch (e) {}
+      try {
+        if (vibratorInstance && typeof vibratorInstance.stop === 'function') {
+          vibratorInstance.stop()
+        }
+      } catch (e) {}
     }
   })
 )

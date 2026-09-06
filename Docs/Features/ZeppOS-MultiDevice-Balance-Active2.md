@@ -73,15 +73,20 @@ const cfg = isRound ? ROUND_CONFIG : SQUARE_CONFIG
 
 Both Amazfit Balance and Amazfit Active 2 support tactile feedback through their integrated vibration hardware without requiring special permissions in `app.json`:
 
-1. **Habit Logging (Bubbles & Smokes)**:
-   - **Scene**: `VIBRATOR_SCENE_SHORT_MIDDLE` (20ms medium-intensity pulse).
-   - **Trigger**: Fired immediately on tapping any action button (`💧 300`, `💧 150`, `☕ 100`, `🔥 Cig`, `⚡ Heat`), providing instant tactile feedback alongside optimistic UI redraw.
-2. **Sync Completion**:
-   - **Scene**: `VIBRATOR_SCENE_NOTIFICATION` (two short, continuous pulses).
-   - **Trigger**: Fired whenever `setSyncing` transitions from `true` to `false` (i.e. fresh habits or health sensor telemetry successfully synchronized).
-3. **Safety & Lifecycle**:
-   - Initialized inside a `try...catch` block to handle Do Not Disturb (DND) or emulator environments gracefully.
-   - `vibrator.stop()` is invoked in `onDestroy()` to prevent any stray motor engagement.
+1. **Sensor & Constants Initialization (`@zos/sensor`)**:
+   - Imports official constants: `Vibrator`, `VIBRATOR_SCENE_SHORT_STRONG` (mode 25), `VIBRATOR_SCENE_DURATION` (mode 28), `VIBRATOR_SCENE_NOTIFICATION` (mode 0).
+   - Instantiates `vibratorInstance = new Vibrator()` lazily / in `onInit()`.
+2. **Motor Mechanics & Scene Selection**:
+   - **Habit Logging (Bubbles & Smokes)**: Uses `VIBRATOR_SCENE_DURATION` (600ms solid pulse, mode 28). On ERM (eccentric rotating mass) motors like in Amazfit Active 2, ultra-short 20ms pulses lack the mechanical time for the motor coil to spin up the rotor weight; 600ms provides palpable, satisfying tactile confirmation on both Active 2 and Balance.
+   - **Sync Completion**: Uses `VIBRATOR_SCENE_NOTIFICATION` (mode 0, two short continuous pulses) triggered when `setSyncing` transitions from `true` to `false`.
+3. **Multi-Signature Invocation Strategy**:
+   - Executes `v.setMode({ mode })` per Zepp OS 3.0 TypeScript specification, with fallback to `v.setMode(mode)`.
+   - Fires `v.start({ mode })` and `v.start()`.
+   - Never calls `v.stop()` immediately before `v.start()` (which previously interrupted the motor queue). Instead, a delayed `v.stop()` is scheduled 700ms post-trigger to cleanly reset the motor channel for subsequent calls.
+   - Includes fallback to legacy `hmSensor.createSensor(hmSensor.id.VIBRATE)` for backward compatibility.
+4. **Lifecycle**:
+   - Sensor reference created in `onInit()`.
+   - Any active motor vibration cleanly stopped in `onDestroy()`.
 
 ---
 
