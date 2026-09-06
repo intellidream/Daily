@@ -52,19 +52,20 @@ const cfg = isRound ? ROUND_CONFIG : SQUARE_CONFIG
 | Component / Screen | Amazfit Active 2 (Square 390x450) | Amazfit Balance (Round 480x480) | Design Rationale |
 | :--- | :--- | :--- | :--- |
 | **Viewport & Swiper** | `w: 390, h: 450, pageH: 450` | `w: 480, h: 480, pageH: 480` | Native screen resolution matching. |
-| **Page Title** | `y: 80, text_size: 24` | `y: 50, text_size: 26` | Lifted upward to avoid crowding circular center. |
-| **Progress Arc (P1 & P3)** | `x: 20, y: 160, w: 200, h: 200, line_width: 16` | `x: 30, y: 125, w: 216, h: 216, line_width: 18` | Larger ring, thicker arc stroke. |
+| **Page Titles (All 4)**| `y: 80, text_size: 24` | `y: 50, text_size: 26` | Retained at top positions with clean top margins. |
+| **Progress Arc (P1 & P3)** | `x: 20, y: 150, w: 200, h: 200, line_width: 16` | `x: 30, y: 136, w: 216, h: 216, line_width: 18` | Centered vertically alongside action buttons; thicker stroke on Round. |
 | **Arc Center Text** | `text_size: 26` | `text_size: 28` | Better readability on 1.5" screen. |
 | **Action Buttons (P1 & P3)**| Dark gray (`0x222222`, press `0x111111`) | Dark gray (`0x222222`, press `0x111111`) | Unified dark aesthetic, letting emojis (💧, ☕, 🔥, ⚡) stand out. |
-| **P1 Button Sizes** | `x: 240, w: 130, h: 60, r: 30, y: [150, 230, 310]` | `x: 265, w: 165, h: 62, r: 31, y: [120, 195, 270]` | Wider touch targets (165px) within circle safe zone. |
-| **P3 Button Sizes** | `x: 240, w: 130, h: 60, r: 30, y: [185, 275]` | `x: 265, w: 165, h: 68, r: 34, y: [150, 240]` | Larger button height (68px) and font (24). |
-| **Breakdown Details Text**| `x: 10, y: 370, w: 220, h: 40` (left aligned) | `x: 30, y: 350, w: 420, h: 30, text_size: 14` (centered) | Prevents bottom-left bezel clipping and leaves clear gap above sync. |
-| **7-Day Histograms** | `x: 20, y: 180, w: 350, h: 180, bar: 30, space: 15` | `x: 70, y: 135, w: 340, h: 210, bar: 28, space: 14` | Centered 280px bar spread inside 340px container, eliminating right truncation. |
+| **P1 Button Sizes** | `x: 240, w: 130, h: 58, r: 29, y: [145, 217, 289]` | `x: 265, w: 165, h: 62, r: 31, y: [136, 210, 284]` | Centered vertically, ending before breakdown text. |
+| **P3 Button Sizes** | `x: 240, w: 130, h: 62, r: 31, y: [180, 258]` | `x: 265, w: 165, h: 68, r: 34, y: [168, 252]` | Vertically centered with arc midpoint. |
+| **Breakdown Details Text**| `x: 0, y: 358, w: 390, h: 26` (centered) | `x: 30, y: 366, w: 420, h: 26, text_size: 14` (centered) | Placed below rings & buttons; aligned across the bottom. |
+| **7-Day Histograms** | `x: 20, y: 145, w: 350, h: 195, bar: 30, space: 15` | `x: 70, y: 135, w: 340, h: 215, bar: 28, space: 14` | Centered vertically below title, ample breathing room and no clipping. |
+| **Chart Color Legends** | `y: 358, h: 30, text_size: 15` (centered) | `y: 366, h: 30, text_size: 15` (centered) | Positioned below histogram, aligning with breakdown texts baseline. |
 | **Smokes Chart Color** | `item_color: 0xff3b30` (Apple watchOS Red) | `item_color: 0xff3b30` (Apple watchOS Red) | Restored vibrant red matching watchOS (`Color.red`). |
 | **About Page Icon** | `icon.png` (124x124) at `x: 133, y: 40` | `logo.png` (110x110) at `x: 185, y: 35` | Perfectly centered `(480-110)/2 = 185`, eliminating overlap with text. |
 | **Unpair Button (P5)** | `x: 45, y: 340, w: 300, h: 60, r: 30` | `x: 70, y: 325, w: 340, h: 60, r: 30` | Centered with safe margins (`dy=145, dx_max=191`). |
 | **Pairing PIN** | `x: 0, y: 180, w: 390, h: 100, text_size: 48` | `x: 0, y: 175, w: 480, h: 100, text_size: 54` | Prominent 54pt green OTP PIN. |
-| **Syncing Indicator** | `x: 0, y: 410, w: 390, h: 30` | `x: 0, y: 412, w: 480, h: 24, text_size: 13` | Centered, positioned comfortably without truncation. |
+| **Syncing Indicator** | `icon: (141, 406, 20x20)`, `text: (169, 404, 15pt)` | `icon: (186, 418, 20x20)`, `text: (214, 416, 15pt)` | Dedicated 20x20 crisp PNG sync icon paired with 15pt text, centered with 22-26px gap below breakdown text. |
 
 ---
 

@@ -14,7 +14,7 @@ const SQUARE_CONFIG = {
   screenW: 390,
   screenH: 450,
   pageH: 450,
-  syncIndicator: { x: 0, y: 410, w: 390, h: 30, text_size: 14 },
+  syncIndicator: { iconX: 141, iconY: 406, iconW: 20, iconH: 20, textX: 169, textY: 404, textW: 100, textH: 24, text_size: 15 },
   loading: {
     arc: { x: 145, y: 125, w: 100, h: 100, line_width: 8 },
     text: { x: 0, y: 240, w: 390, h: 50, text_size: 20 },
@@ -22,39 +22,39 @@ const SQUARE_CONFIG = {
   },
   pageTitleY: 80,
   pageTitleSize: 24,
-  arc: { x: 20, y: 160, w: 200, h: 200, line_width: 16, text_size: 26 },
-  breakdownText: { x: 10, y: 370, w: 220, h: 40, text_size: 14, align_h: align.CENTER_H, align_v: align.TOP },
+  arc: { x: 20, y: 150, w: 200, h: 200, line_width: 16, text_size: 26 },
+  breakdownText: { x: 0, y: 358, w: 390, h: 26, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
   p1Buttons: {
     x: 240,
     w: 130,
-    h: 60,
-    radius: 30,
+    h: 58,
+    radius: 29,
     text_size: 22,
-    y1: 150,
-    y2: 230,
-    y3: 310
+    y1: 145,
+    y2: 217,
+    y3: 289
   },
   p3Buttons: {
     x: 240,
     w: 130,
-    h: 60,
-    radius: 30,
+    h: 62,
+    radius: 31,
     text_size: 22,
-    y1: 185,
-    y2: 275
+    y1: 180,
+    y2: 258
   },
   chart: {
     titleY: 80,
     titleSize: 24,
-    subtitleY: 130,
-    subtitleSize: 16,
     x: 20,
-    y: 180,
+    y: 145,
     w: 350,
-    h: 180,
+    h: 195,
     item_width: 30,
     item_space: 15,
-    item_radius: 10
+    item_radius: 10,
+    legendY: 358,
+    legendSize: 15
   },
   about: {
     iconSrc: 'icon.png',
@@ -78,7 +78,7 @@ const ROUND_CONFIG = {
   screenW: 480,
   screenH: 480,
   pageH: 480,
-  syncIndicator: { x: 0, y: 412, w: 480, h: 24, text_size: 13 },
+  syncIndicator: { iconX: 186, iconY: 418, iconW: 20, iconH: 20, textX: 214, textY: 416, textW: 100, textH: 24, text_size: 15 },
   loading: {
     arc: { x: 180, y: 140, w: 120, h: 120, line_width: 10 },
     text: { x: 0, y: 280, w: 480, h: 50, text_size: 22 },
@@ -86,17 +86,17 @@ const ROUND_CONFIG = {
   },
   pageTitleY: 50,
   pageTitleSize: 26,
-  arc: { x: 30, y: 125, w: 216, h: 216, line_width: 18, text_size: 28 },
-  breakdownText: { x: 30, y: 350, w: 420, h: 30, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
+  arc: { x: 30, y: 136, w: 216, h: 216, line_width: 18, text_size: 28 },
+  breakdownText: { x: 30, y: 366, w: 420, h: 26, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
   p1Buttons: {
     x: 265,
     w: 165,
     h: 62,
     radius: 31,
     text_size: 22,
-    y1: 120,
-    y2: 195,
-    y3: 270
+    y1: 136,
+    y2: 210,
+    y3: 284
   },
   p3Buttons: {
     x: 265,
@@ -104,21 +104,21 @@ const ROUND_CONFIG = {
     h: 68,
     radius: 34,
     text_size: 24,
-    y1: 150,
-    y2: 240
+    y1: 168,
+    y2: 252
   },
   chart: {
     titleY: 50,
     titleSize: 26,
-    subtitleY: 92,
-    subtitleSize: 16,
     x: 70,
     y: 135,
     w: 340,
-    h: 210,
+    h: 215,
     item_width: 28,
     item_space: 14,
-    item_radius: 10
+    item_radius: 10,
+    legendY: 366,
+    legendSize: 15
   },
   about: {
     iconSrc: 'logo.png',
@@ -189,11 +189,14 @@ Page(
           
           let waterHistogram, coffeeHistogram, smokeHistogram, heatHistogram
           let debugText, waterBreakdownText, smokeBreakdownText
-          let syncIndicator
+          let syncIcon, syncText
+          let isSyncingState = false
           let isDashboardBuilt = false
 
           const setSyncing = (isSyncing) => {
-             if (syncIndicator) syncIndicator.setProperty(prop.TEXT, isSyncing ? '🔄 Syncing...' : '')
+             isSyncingState = isSyncing
+             if (syncIcon) syncIcon.setProperty(prop.VISIBLE, isSyncing)
+             if (syncText) syncText.setProperty(prop.VISIBLE, isSyncing)
           }
 
           const saveCache = () => {
@@ -497,10 +500,17 @@ Page(
              }
 
              // ================== PAGE 1: BUBBLES ==================
-             syncIndicator = createWidget(widget.TEXT, {
-                x: cfg.syncIndicator.x, y: cfg.syncIndicator.y, w: cfg.syncIndicator.w, h: cfg.syncIndicator.h,
-                color: 0x00ff00, text_size: cfg.syncIndicator.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text: ''
+             syncIcon = createWidget(widget.IMG, {
+                x: cfg.syncIndicator.iconX, y: cfg.syncIndicator.iconY,
+                src: 'sync.png'
              })
+             syncIcon.setProperty(prop.VISIBLE, isSyncingState)
+
+             syncText = createWidget(widget.TEXT, {
+                x: cfg.syncIndicator.textX, y: cfg.syncIndicator.textY, w: cfg.syncIndicator.textW, h: cfg.syncIndicator.textH,
+                color: 0x00ff00, text_size: cfg.syncIndicator.text_size, align_h: align.LEFT, align_v: align.CENTER_V, text: 'Syncing...'
+             })
+             syncText.setProperty(prop.VISIBLE, isSyncingState)
              
              createWidget(widget.TEXT, {
                 x: 0, y: cfg.pageTitleY, w: cfg.screenW, h: 40,
@@ -550,10 +560,6 @@ Page(
                 x: 0, y: h + cfg.chart.titleY, w: cfg.screenW, h: 40,
                 color: 0x00aaff, text_size: cfg.chart.titleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles 7 Days'
              })
-             createWidget(widget.TEXT, {
-                x: 0, y: h + cfg.chart.subtitleY, w: cfg.screenW, h: 30,
-                color: 0xffa500, text_size: cfg.chart.subtitleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Blue: Water | Orange: Coffee'
-             })
              
              waterHistogram = createWidget(widget.HISTOGRAM, {
                x: cfg.chart.x, y: h + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
@@ -579,6 +585,11 @@ Page(
                data_count: 7,
                data_min_value: 0,
                data_max_value: Math.max(waterGoal, ...waterWeek, 1000)
+             })
+
+             createWidget(widget.TEXT, {
+                x: 0, y: h + cfg.chart.legendY, w: cfg.screenW, h: 30,
+                color: 0xffa500, text_size: cfg.chart.legendSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Blue: Water | Orange: Coffee'
              })
 
              // ================== PAGE 3: SMOKES ==================
@@ -621,10 +632,6 @@ Page(
                 x: 0, y: h*3 + cfg.chart.titleY, w: cfg.screenW, h: 40,
                 color: 0xff5555, text_size: cfg.chart.titleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 Smokes 7 Days'
              })
-             createWidget(widget.TEXT, {
-                x: 0, y: h*3 + cfg.chart.subtitleY, w: cfg.screenW, h: 30,
-                color: 0x007aff, text_size: cfg.chart.subtitleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Red: Cigs | Blue: Heat'
-             })
              
              smokeHistogram = createWidget(widget.HISTOGRAM, {
                x: cfg.chart.x, y: h*3 + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
@@ -650,6 +657,11 @@ Page(
                data_count: 7,
                data_min_value: 0,
                data_max_value: Math.max(smokeBaseline, ...smokeWeek, 10)
+             })
+
+             createWidget(widget.TEXT, {
+                x: 0, y: h*3 + cfg.chart.legendY, w: cfg.screenW, h: 30,
+                color: 0x007aff, text_size: cfg.chart.legendSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Red: Cigs | Blue: Heat'
              })
 
              // ================== PAGE 5: ABOUT / SETTINGS ==================
