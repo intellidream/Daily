@@ -80,7 +80,7 @@
                             <chart:SfCartesianChart.YAxes>
                                 <chart:NumericalAxis ShowMajorGridLines="False" />
                             </chart:SfCartesianChart.YAxes>
-                            <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="StartTime" YBindingPath="Value" Fill="#FF5252" />
+                            <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="LocalStartTime" YBindingPath="NumericValue" Fill="#FF5252" />
                         </chart:SfCartesianChart>
                     </Grid>
                 </Border>

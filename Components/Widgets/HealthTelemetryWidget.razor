@@ -1,7 +1,11 @@
 @using Daily.Models.Health
 @using Daily.Services.Health
+@using Daily.Services
 @using MudBlazor
 @inject IHealthService HealthService
+@inject IRefreshService RefreshService
+@inject IWindowManagerService WindowManager
+@implements IDisposable
 
 <div class="d-flex flex-column h-100 w-100 gap-3">
     <!-- Header -->
@@ -22,6 +26,10 @@
                  </MudCarouselItem>
             </MudCarousel>
         </div>
+        @if (HeaderAction != null)
+        {
+             @HeaderAction
+        }
     </div>
 
     <!-- Main Content -->
@@ -51,13 +59,24 @@
 
             <MudPaper Elevation="0" Class="pa-2 rounded-lg" Style="background-color: var(--mud-palette-background-grey);">
                 <MudText Typo="Typo.caption" Class="font-weight-bold mb-1" Style="opacity: 0.5;">HEART RATE</MudText>
-                <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="60px" ChartOptions="chartOptions" />
+                @if (hrSeries.Any())
+                {
+                    <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="60px" ChartOptions="chartOptions" />
+                }
+                else
+                {
+                    <div class="d-flex align-center justify-center py-2" style="opacity: 0.5;">
+                        <MudText Typo="Typo.caption">No heart rate data</MudText>
+                    </div>
+                }
             </MudPaper>
         }
     </div>
 </div>
 
 @code {
+    [Parameter] public RenderFragment? HeaderAction { get; set; }
+
     private bool isLoading = true;
     private List<HealthTelemetry> telemetryData = new();
     private string totalSteps = "--";
@@ -70,11 +89,19 @@
         ChartPalette = new[] { "var(--mud-palette-error)" }
     };
 
-    [Inject] private NavigationManager Navigation { get; set; }
-
     protected override async Task OnInitializedAsync()
     {
+        RefreshService.HealthRefreshRequested += OnHealthRefreshRequested;
+        RefreshService.RefreshRequested += OnHealthRefreshRequested;
         await LoadDataAsync();
+    }
+
+    private async Task OnHealthRefreshRequested()
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+        });
     }
 
     public async Task LoadDataAsync()
@@ -84,7 +111,7 @@
 
         try
         {
-            var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(20);
+            var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(18);
             var endOfToday = DateTime.Today.AddDays(1).AddTicks(-1);
 
             telemetryData = await HealthService.GetHealthTelemetryAsync(yesterdayEvening, endOfToday);
@@ -92,30 +119,35 @@
             var today = DateTime.Today;
             
             // Steps
-            var steps = telemetryData.Where(x => x.TypeString == "Steps" && x.StartTime >= today).Sum(x => x.Value ?? 0);
+            var steps = telemetryData
+                .Where(x => x.IsSteps && x.LocalStartTime >= today)
+                .Sum(x => x.Value ?? 0);
             totalSteps = steps > 0 ? steps.ToString("N0") : "--";
 
             // Sleep
-            var sleepTypes = new[] { "SleepAsleep", "SleepDeep", "SleepLight", "SleepREM", "SleepCore" };
             var sleepSeconds = telemetryData
-                .Where(x => sleepTypes.Contains(x.TypeString))
-                .Sum(x => ((x.EndTime ?? x.StartTime) - x.StartTime).TotalSeconds);
+                .Where(x => x.IsSleep)
+                .Sum(x => x.DurationSeconds);
             
             if (sleepSeconds > 0)
             {
                 var ts = TimeSpan.FromSeconds(sleepSeconds);
                 totalSleep = $"{(int)ts.TotalHours}h {ts.Minutes}m";
             }
+            else
+            {
+                totalSleep = "--";
+            }
 
             // Heart Rate for sparkline (Line chart)
             var hrEntries = telemetryData
-                .Where(x => x.TypeString == "HeartRate" && x.StartTime >= today && x.Value.HasValue)
+                .Where(x => x.IsHeartRate && x.LocalStartTime >= today && x.Value.HasValue)
                 .OrderBy(x => x.StartTime)
                 .ToList();
             
             if (hrEntries.Any())
             {
-                var hourlyHr = hrEntries.GroupBy(x => x.StartTime.Hour)
+                var hourlyHr = hrEntries.GroupBy(x => x.LocalStartTime.Hour)
                                      .Select(g => new { Hour = g.Key, Avg = g.Average(x => x.Value.Value) })
                                      .OrderBy(x => x.Hour)
                                      .ToList();
@@ -123,15 +155,12 @@
                 {
                     new ChartSeries<double> { Name = "HR", Data = hourlyHr.Select(x => x.Avg).ToArray() }
                 };
-                hrLabels = hourlyHr.Select(x => "").ToArray(); // Empty labels for small widget
+                hrLabels = hourlyHr.Select(x => $"{x.Hour}:00").ToArray();
             }
             else
             {
-                hrSeries = new List<ChartSeries<double>>
-                {
-                    new ChartSeries<double> { Name = "HR", Data = new double[] { 60, 60 } }
-                };
-                hrLabels = new string[] { "", "" };
+                hrSeries = new List<ChartSeries<double>>();
+                hrLabels = Array.Empty<string>();
             }
         }
         catch (Exception ex)
@@ -147,6 +176,12 @@
 
     private void NavigateToDetail()
     {
-        Navigation.NavigateTo("/health-telemetry");
+        WindowManager.OpenDetail("HealthTelemetry", "Health Telemetry");
+    }
+
+    public void Dispose()
+    {
+        RefreshService.HealthRefreshRequested -= OnHealthRefreshRequested;
+        RefreshService.RefreshRequested -= OnHealthRefreshRequested;
     }
 }

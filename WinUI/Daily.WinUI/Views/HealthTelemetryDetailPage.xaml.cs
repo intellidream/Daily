@@ -16,17 +16,24 @@ namespace Daily_WinUI.Views
 {
     public sealed partial class HealthTelemetryDetailPage : Page, INotifyPropertyChanged
     {
-        private IHealthService _healthService;
+        private IHealthService? _healthService;
+        private IRefreshService? _refreshService;
         private List<HealthTelemetry> _telemetryData = new();
 
         public HealthTelemetryDetailPage()
         {
             this.InitializeComponent();
             try { _healthService = App.Current.Services.GetService<IHealthService>(); } catch { }
+            try { _refreshService = App.Current.Services.GetService<IRefreshService>(); } catch { }
         }
 
         private async void Page_Loaded(object sender, RoutedEventArgs e)
         {
+            if (_refreshService != null)
+            {
+                _refreshService.RefreshRequested += OnRefreshRequested;
+                _refreshService.HealthRefreshRequested += OnRefreshRequested;
+            }
             var task = LoadDataAsync();
             MainPage.Current?.RegisterLoadingTask(task);
             await task;
@@ -34,8 +41,28 @@ namespace Daily_WinUI.Views
 
         private void Page_Unloaded(object sender, RoutedEventArgs e)
         {
+            if (_refreshService != null)
+            {
+                _refreshService.RefreshRequested -= OnRefreshRequested;
+                _refreshService.HealthRefreshRequested -= OnRefreshRequested;
+            }
         }
 
+        private Task OnRefreshRequested()
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    await LoadDataAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[HealthTelemetryDetail] Refresh error: {ex.Message}");
+                }
+            });
+            return Task.CompletedTask;
+        }
 
         private void SleepChartContainer_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
         {
@@ -49,12 +76,12 @@ namespace Daily_WinUI.Views
             if (data == null || !data.Any()) return;
 
             var width = SleepChartContainer.ActualWidth;
-            if (width == 0) return;
+            if (width <= 0) return;
 
             foreach (var item in data)
             {
                 var leftOffset = (item.LeftPercentage / 100.0) * width;
-                var rectWidth = (item.WidthPercentage / 100.0) * width;
+                var rectWidth = Math.Max((item.WidthPercentage / 100.0) * width, 2.0);
 
                 var border = new Border
                 {
@@ -62,8 +89,10 @@ namespace Daily_WinUI.Views
                     Width = rectWidth,
                     Height = SleepChartContainer.Height,
                     HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left,
-                    Margin = new Microsoft.UI.Xaml.Thickness(leftOffset, 0, 0, 0)
+                    Margin = new Microsoft.UI.Xaml.Thickness(leftOffset, 0, 0, 0),
+                    CornerRadius = new CornerRadius(2)
                 };
+                ToolTipService.SetToolTip(border, $"{item.Category}: {item.StartDateTime:HH:mm} - {item.EndDateTime:HH:mm}");
                 SleepChartContainer.Children.Add(border);
             }
         }
@@ -95,7 +124,10 @@ namespace Daily_WinUI.Views
             get
             {
                 var today = DateTime.Today;
-                return _telemetryData.Where(x => x.TypeString == "HeartRate" && x.StartTime >= today).ToList();
+                return _telemetryData
+                    .Where(x => x.IsHeartRate && x.Value.HasValue && x.LocalStartTime >= today)
+                    .OrderBy(x => x.StartTime)
+                    .ToList();
             }
         }
 
@@ -104,7 +136,10 @@ namespace Daily_WinUI.Views
             get
             {
                 var today = DateTime.Today;
-                return _telemetryData.Where(x => x.TypeString == "Steps" && x.StartTime >= today).ToList();
+                return _telemetryData
+                    .Where(x => x.IsSteps && x.Value.HasValue && x.LocalStartTime >= today)
+                    .OrderBy(x => x.StartTime)
+                    .ToList();
             }
         }
 
@@ -113,43 +148,39 @@ namespace Daily_WinUI.Views
             get
             {
                 var items = new List<SleepChartItem>();
-                var sleepTypes = new[] { "SleepAsleep", "SleepDeep", "SleepLight", "SleepREM", "SleepCore", "SleepAwake" };
                 var sleepEntries = _telemetryData
-                    .Where(x => sleepTypes.Contains(x.TypeString))
+                    .Where(x => x.IsSleep)
                     .OrderBy(x => x.StartTime)
                     .ToList();
 
                 if (sleepEntries.Any())
                 {
-                    var firstSleep = sleepEntries.Min(x => x.StartTime);
-                    var lastSleep = sleepEntries.Max(x => x.EndTime ?? x.StartTime);
+                    var firstSleep = sleepEntries.Min(x => x.LocalStartTime);
+                    var lastSleep = sleepEntries.Max(x => x.LocalEndTime);
                     var totalDuration = (lastSleep - firstSleep).TotalSeconds;
 
                     foreach (var entry in sleepEntries)
                     {
-                        Brush color = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-                        switch (entry.TypeString)
+                        Brush color = entry.SleepCategory switch
                         {
-                            case "SleepDeep": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 63, 81, 181)); break; // #3F51B5
-                            case "SleepLight":
-                            case "SleepCore": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 124, 77, 255)); break; // #7C4DFF
-                            case "SleepREM": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 188, 212)); break; // #00BCD4
-                            case "SleepAwake": color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 152, 0)); break; // #FF9800
-                            default: color = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 158, 158, 158)); break; // Gray
-                        }
+                            "Deep" => new SolidColorBrush(Windows.UI.Color.FromArgb(255, 63, 81, 181)), // #3F51B5
+                            "REM" => new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 188, 212)), // #00BCD4
+                            "Awake" => new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 152, 0)), // #FF9800
+                            _ => new SolidColorBrush(Windows.UI.Color.FromArgb(255, 124, 77, 255)) // Core / Light #7C4DFF
+                        };
 
-                        var endTime = entry.EndTime ?? entry.StartTime;
-                        double left = totalDuration > 0 ? (entry.StartTime - firstSleep).TotalSeconds / totalDuration * 100 : 0;
-                        double width = totalDuration > 0 ? (endTime - entry.StartTime).TotalSeconds / totalDuration * 100 : 0;
+                        var endTime = entry.LocalEndTime;
+                        double left = totalDuration > 0 ? (entry.LocalStartTime - firstSleep).TotalSeconds / totalDuration * 100.0 : 0;
+                        double width = totalDuration > 0 ? (endTime - entry.LocalStartTime).TotalSeconds / totalDuration * 100.0 : 0;
 
                         items.Add(new SleepChartItem
                         {
-                            Category = "Sleep",
-                            StartDateTime = entry.StartTime,
+                            Category = entry.SleepCategory,
+                            StartDateTime = entry.LocalStartTime,
                             EndDateTime = endTime,
                             ColorBrush = color,
-                            LeftPercentage = left,
-                            WidthPercentage = width
+                            LeftPercentage = Math.Max(left, 0),
+                            WidthPercentage = Math.Max(width, 1.0)
                         });
                     }
                 }
@@ -157,8 +188,8 @@ namespace Daily_WinUI.Views
             }
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }

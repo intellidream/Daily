@@ -22,6 +22,7 @@ namespace Daily.Services.Health
         private readonly IDatabaseService _databaseService;
         private Supabase.Realtime.RealtimeChannel? _vitalsChannel;
         private Supabase.Realtime.RealtimeChannel? _healthVitalsChannel;
+        private Supabase.Realtime.RealtimeChannel? _telemetryChannel;
         private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _authStateChangedHandler;
         private Supabase.Realtime.Interfaces.IRealtimeClient<Supabase.Realtime.RealtimeSocket, Supabase.Realtime.RealtimeChannel>.SocketStateEventHandler? _realtimeStateChangedHandler;
 
@@ -161,6 +162,15 @@ namespace Daily.Services.Health
                     catch { }
                     _healthVitalsChannel = null;
                 }
+                if (_telemetryChannel != null)
+                {
+                    try
+                    {
+                        _telemetryChannel.Unsubscribe();
+                    }
+                    catch { }
+                    _telemetryChannel = null;
+                }
             }
         }
 
@@ -252,6 +262,13 @@ namespace Daily.Services.Health
                     _healthVitalsChannel = null;
                 }
 
+                if (forceRecreate && _telemetryChannel != null)
+                {
+                    try { _telemetryChannel.Unsubscribe(); } catch { }
+                    try { _supabase.Realtime.Remove(_telemetryChannel); } catch { }
+                    _telemetryChannel = null;
+                }
+
                 if (_vitalsChannel != null && !_vitalsChannel.IsJoined)
                 {
                     Console.WriteLine("[SupabaseHealthService] Realtime vitals channel exists but is not joined. Removing to recreate...");
@@ -276,6 +293,16 @@ namespace Daily.Services.Health
                     _healthVitalsChannel = null;
                 }
 
+                if (_telemetryChannel != null && !_telemetryChannel.IsJoined)
+                {
+                    try
+                    {
+                        _supabase.Realtime.Remove(_telemetryChannel);
+                    }
+                    catch { }
+                    _telemetryChannel = null;
+                }
+
                 if (_vitalsChannel == null)
                 {
                     var userId = _supabase.Auth.CurrentUser?.Id ?? _supabase.Auth.CurrentSession?.User?.Id;
@@ -283,11 +310,13 @@ namespace Daily.Services.Health
                     {
                         _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
                         _healthVitalsChannel = _supabase.Realtime.Channel("realtime_health", "public", "health_vitals", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
+                        _telemetryChannel = _supabase.Realtime.Channel("realtime_telemetry", "public", "health_telemetry", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
                     }
                     else
                     {
                         _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", null, null, new Dictionary<string, string>());
                         _healthVitalsChannel = _supabase.Realtime.Channel("realtime_health", "public", "health_vitals", null, null, new Dictionary<string, string>());
+                        _telemetryChannel = _supabase.Realtime.Channel("realtime_telemetry", "public", "health_telemetry", null, null, new Dictionary<string, string>());
                     }
                     _vitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnVitalReceived);
                     await _vitalsChannel.Subscribe();
@@ -297,8 +326,14 @@ namespace Daily.Services.Health
                         _healthVitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHealthVitalReceived);
                         await _healthVitalsChannel.Subscribe();
                     }
+
+                    if (_telemetryChannel != null)
+                    {
+                        _telemetryChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnTelemetryReceived);
+                        await _telemetryChannel.Subscribe();
+                    }
                     
-                    Console.WriteLine($"[SupabaseHealthService] Realtime subscribed to vitals. Filtered user: {userId}");
+                    Console.WriteLine($"[SupabaseHealthService] Realtime subscribed to vitals, health_vitals, and health_telemetry. Filtered user: {userId}");
                 }
             }
             catch (Exception ex)
@@ -470,6 +505,22 @@ namespace Daily.Services.Health
             catch (Exception ex)
             {
                 Console.WriteLine($"[SupabaseHealthService] Realtime HealthVital Error in OnHealthVitalReceived: {ex}");
+            }
+        }
+
+        private void OnTelemetryReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
+        {
+            try
+            {
+                Console.WriteLine($"[SupabaseHealthService] Realtime HealthTelemetry change received! Event: {e.Event}, Topic: {e.Topic}");
+                Task.Run(async () =>
+                {
+                    await _refreshService.TriggerHealthRefreshAsync();
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SupabaseHealthService] Realtime Telemetry Error in OnTelemetryReceived: {ex}");
             }
         }
 
@@ -922,6 +973,7 @@ namespace Daily.Services.Health
                 var user = _supabase.Auth.CurrentUser ?? _supabase.Auth.CurrentSession?.User;
                 if (user == null || !Guid.TryParse(user.Id, out var uid))
                 {
+                    Console.WriteLine("[SupabaseHealthService] GetHealthTelemetryAsync: User is not authenticated or Id is invalid.");
                     return new List<HealthTelemetry>();
                 }
                 var userIdStr = uid.ToString().ToLowerInvariant();
@@ -930,14 +982,19 @@ namespace Daily.Services.Health
                 var startStr = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                 var endStr = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
+                Console.WriteLine($"[SupabaseHealthService] Fetching telemetry for user {userIdStr} between {startStr} and {endStr}...");
+
                 var result = await _supabase.From<HealthTelemetry>()
                                           .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
                                           .Filter("start_time", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
                                           .Filter("start_time", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
                                           .Order("start_time", Supabase.Postgrest.Constants.Ordering.Ascending)
+                                          .Limit(5000)
                                           .Get();
 
-                return result.Models ?? new List<HealthTelemetry>();
+                var list = result.Models ?? new List<HealthTelemetry>();
+                Console.WriteLine($"[SupabaseHealthService] Fetched {list.Count} telemetry records from Supabase.");
+                return list;
             }
             catch (Exception ex)
             {

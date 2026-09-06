@@ -63,7 +63,11 @@
                 }
                 else if (widget.ComponentType == "HealthTelemetryWidget")
                 {
-                    <Daily.Components.Widgets.HealthTelemetryWidget />
+                    <Daily.Components.Widgets.HealthTelemetryWidget>
+                        <HeaderAction>
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Medium" OnClick="@(() => OpenWidgetDetail(widget))" Color="Color.Primary" Style="transform: scaleX(-1);" />
+                        </HeaderAction>
+                    </Daily.Components.Widgets.HealthTelemetryWidget>
                 }
                 else if (widget.ComponentType == "HabitsWidget")
                 {
@@ -152,6 +156,10 @@
         else if (widget.ComponentType == "HealthWidget")
         {
             WindowManager.OpenDetail("vitals", "Vitals");
+        }
+        else if (widget.ComponentType == "HealthTelemetryWidget")
+        {
+            WindowManager.OpenDetail("HealthTelemetry", "Health Telemetry");
         }
         else if (widget.ComponentType == "HabitsWidget")
         {

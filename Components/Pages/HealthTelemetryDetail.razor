@@ -1,8 +1,11 @@
 @page "/health-telemetry"
 @using Daily.Models.Health
 @using Daily.Services.Health
+@using Daily.Services
 @using MudBlazor
 @inject IHealthService HealthService
+@inject IRefreshService RefreshService
+@implements IDisposable
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
     <div class="d-flex align-center mb-6">
@@ -61,17 +64,17 @@
                                             left: @(GetSleepStageLeft(stage))%; 
                                             width: @(GetSleepStageWidth(stage))%; 
                                             height: 100%; 
-                                            background-color: @GetSleepStageColor(stage.TypeString);"
-                                     title="@($"{stage.TypeString}: {stage.StartTime:HH:mm} - {stage.EndTime:HH:mm}")">
+                                            background-color: @GetSleepStageColor(stage.SleepCategory);"
+                                     title="@($"{stage.SleepCategory}: {stage.LocalStartTime:HH:mm} - {stage.LocalEndTime:HH:mm}")">
                                 </div>
                             }
                             
                             <!-- Current time indicator line if within bounds -->
-                            @if (IsTimeInSleepBounds(DateTime.Now))
+                            @if (IsTimeInSleepBounds(DateTime.UtcNow))
                             {
                                 <div class="current-time-indicator"
                                      style="position: absolute;
-                                            left: @(GetSleepStageLeft(new HealthTelemetry { StartTime = DateTime.Now }))%;
+                                            left: @(GetSleepStageLeft(new HealthTelemetry { StartTime = DateTime.UtcNow }))%;
                                             width: 2px;
                                             height: 100%;
                                             background-color: red;
@@ -87,8 +90,7 @@
                         
                         <div class="d-flex justify-center flex-wrap gap-4 mt-4">
                             <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #2b5c8f; margin-right: 6px;"></div><MudText Typo="Typo.caption">Deep</MudText></div>
-                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #4a90e2; margin-right: 6px;"></div><MudText Typo="Typo.caption">Core</MudText></div>
-                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #74b9ff; margin-right: 6px;"></div><MudText Typo="Typo.caption">Light</MudText></div>
+                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #4a90e2; margin-right: 6px;"></div><MudText Typo="Typo.caption">Core / Light</MudText></div>
                             <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #a29bfe; margin-right: 6px;"></div><MudText Typo="Typo.caption">REM</MudText></div>
                             <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #fdcb6e; margin-right: 6px;"></div><MudText Typo="Typo.caption">Awake</MudText></div>
                         </div>
@@ -148,12 +150,22 @@
         ChartPalette = new[] { "var(--mud-palette-primary)" }
     };
 
-    [Inject] private NavigationManager Navigation { get; set; }
-    [Inject] private IJSRuntime JSRuntime { get; set; }
+    [Inject] private NavigationManager Navigation { get; set; } = null!;
+    [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
 
     protected override async Task OnInitializedAsync()
     {
+        RefreshService.HealthRefreshRequested += OnHealthRefreshRequested;
+        RefreshService.RefreshRequested += OnHealthRefreshRequested;
         await LoadDataAsync();
+    }
+
+    private async Task OnHealthRefreshRequested()
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+        });
     }
 
     private async Task LoadDataAsync()
@@ -163,7 +175,7 @@
 
         try
         {
-            var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(20);
+            var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(18);
             var endOfToday = DateTime.Today.AddDays(1).AddTicks(-1);
 
             var telemetryData = await HealthService.GetHealthTelemetryAsync(yesterdayEvening, endOfToday);
@@ -171,17 +183,16 @@
 
             // Process Steps
             var stepsData = telemetryData
-                .Where(x => x.TypeString == "Steps" && x.StartTime >= today)
-                .OrderBy(x => x.StartTime)
+                .Where(x => x.IsSteps && x.LocalStartTime >= today)
+                .OrderBy(x => x.LocalStartTime)
                 .ToList();
 
-            totalSteps = stepsData.Sum(x => x.Value);
+            totalSteps = stepsData.Sum(x => x.Value ?? 0);
 
             if (stepsData.Any())
             {
-                // Group by hour for chart
-                var hourlySteps = stepsData.GroupBy(x => x.StartTime.Hour)
-                                           .Select(g => new { Hour = g.Key, Total = g.Sum(x => x.Value) })
+                var hourlySteps = stepsData.GroupBy(x => x.LocalStartTime.Hour)
+                                           .Select(g => new { Hour = g.Key, Total = g.Sum(x => x.Value ?? 0) })
                                            .OrderBy(x => x.Hour)
                                            .ToList();
                                            
@@ -191,41 +202,47 @@
                 };
                 stepsLabels = hourlySteps.Select(x => $"{x.Hour}:00").ToArray();
             }
+            else
+            {
+                stepsSeries = new List<ChartSeries<double>>();
+                stepsLabels = Array.Empty<string>();
+            }
 
             // Process Sleep
-            var sleepTypes = new[] { "SleepAsleep", "SleepDeep", "SleepLight", "SleepREM", "SleepCore", "SleepAwake" };
             sleepEntries = telemetryData
-                .Where(x => sleepTypes.Contains(x.TypeString))
-                .OrderBy(x => x.StartTime)
+                .Where(x => x.IsSleep)
+                .OrderBy(x => x.LocalStartTime)
                 .ToList();
 
             if (sleepEntries.Any())
             {
-                sleepMinTime = sleepEntries.Min(x => x.StartTime);
-                sleepMaxTime = sleepEntries.Max(x => x.EndTime);
+                sleepMinTime = sleepEntries.Min(x => x.LocalStartTime);
+                sleepMaxTime = sleepEntries.Max(x => x.LocalEndTime);
                 
-                var trueSleepTypes = new[] { "SleepAsleep", "SleepDeep", "SleepLight", "SleepREM", "SleepCore" };
                 var totalSleepSeconds = sleepEntries
-                    .Where(x => trueSleepTypes.Contains(x.TypeString))
-                    .Sum(x => (x.EndTime - x.StartTime).TotalSeconds);
+                    .Where(x => !x.NormalizedType.Contains("awake") && !x.NormalizedType.Contains("wake"))
+                    .Sum(x => x.DurationSeconds);
                 
                 var ts = TimeSpan.FromSeconds(totalSleepSeconds);
                 totalSleepText = $"{(int)ts.TotalHours}h {ts.Minutes}m";
             }
+            else
+            {
+                totalSleepText = "--";
+            }
 
             // Process HR
             var hrData = telemetryData
-                .Where(x => x.TypeString == "HeartRate" && x.StartTime >= today)
-                .OrderBy(x => x.StartTime)
+                .Where(x => x.IsHeartRate && x.LocalStartTime >= today && x.Value.HasValue)
+                .OrderBy(x => x.LocalStartTime)
                 .ToList();
 
             if (hrData.Any())
             {
-                avgHeartRate = Math.Round(hrData.Average(x => x.Value), 0);
+                avgHeartRate = Math.Round(hrData.Average(x => x.Value!.Value), 0);
                 
-                // Group by hour for chart to avoid too many points
-                var hourlyHr = hrData.GroupBy(x => x.StartTime.Hour)
-                                     .Select(g => new { Hour = g.Key, Avg = g.Average(x => x.Value) })
+                var hourlyHr = hrData.GroupBy(x => x.LocalStartTime.Hour)
+                                     .Select(g => new { Hour = g.Key, Avg = g.Average(x => x.Value!.Value) })
                                      .OrderBy(x => x.Hour)
                                      .ToList();
                 
@@ -234,6 +251,12 @@
                     new ChartSeries<double> { Name = "Heart Rate", Data = hourlyHr.Select(x => x.Avg).ToArray() }
                 };
                 hrLabels = hourlyHr.Select(x => $"{x.Hour}:00").ToArray();
+            }
+            else
+            {
+                avgHeartRate = 0;
+                hrSeries = new List<ChartSeries<double>>();
+                hrLabels = Array.Empty<string>();
             }
         }
         catch (Exception ex)
@@ -247,17 +270,14 @@
         }
     }
 
-    private string GetSleepStageColor(string typeString)
+    private string GetSleepStageColor(string stageCategory)
     {
-        return typeString switch
+        return stageCategory switch
         {
-            "SleepDeep" => "#2b5c8f",
-            "SleepCore" => "#4a90e2",
-            "SleepAsleep" => "#4a90e2",
-            "SleepLight" => "#74b9ff",
-            "SleepREM" => "#a29bfe",
-            "SleepAwake" => "#fdcb6e",
-            _ => "#bdc3c7"
+            "Deep" => "#2b5c8f",
+            "REM" => "#a29bfe",
+            "Awake" => "#fdcb6e",
+            _ => "#4a90e2"
         };
     }
 
@@ -268,7 +288,7 @@
         var totalDuration = (sleepMaxTime - sleepMinTime).TotalSeconds;
         if (totalDuration <= 0) return 0;
         
-        var offset = (stage.StartTime - sleepMinTime).TotalSeconds;
+        var offset = (stage.LocalStartTime - sleepMinTime).TotalSeconds;
         return (offset / totalDuration) * 100.0;
     }
 
@@ -279,8 +299,8 @@
         var totalDuration = (sleepMaxTime - sleepMinTime).TotalSeconds;
         if (totalDuration <= 0) return 0;
         
-        var stageDuration = (stage.EndTime - stage.StartTime).TotalSeconds;
-        return (stageDuration / totalDuration) * 100.0;
+        var stageDuration = (stage.LocalEndTime - stage.LocalStartTime).TotalSeconds;
+        return Math.Max((stageDuration / totalDuration) * 100.0, 1.0);
     }
     
     private bool IsTimeInSleepBounds(DateTime time)
@@ -291,5 +311,11 @@
     private async Task GoBack()
     {
         await JSRuntime.InvokeVoidAsync("history.back");
+    }
+
+    public void Dispose()
+    {
+        RefreshService.HealthRefreshRequested -= OnHealthRefreshRequested;
+        RefreshService.RefreshRequested -= OnHealthRefreshRequested;
     }
 }

@@ -15,17 +15,24 @@ namespace Daily_WinUI.Controls
 {
     public sealed partial class HealthTelemetryWidgetControl : UserControl, INotifyPropertyChanged
     {
-        private IHealthService _healthService;
+        private IHealthService? _healthService;
+        private IRefreshService? _refreshService;
         private List<HealthTelemetry> _telemetryData = new();
 
         public HealthTelemetryWidgetControl()
         {
             this.InitializeComponent();
             try { _healthService = App.Current.Services.GetService<IHealthService>(); } catch (Exception ex) { Console.WriteLine("HEALTHTELEMETRYWIDGET ERROR: " + ex); }
+            try { _refreshService = App.Current.Services.GetService<IRefreshService>(); } catch { }
         }
 
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
+            if (_refreshService != null)
+            {
+                _refreshService.RefreshRequested += OnRefreshRequested;
+                _refreshService.HealthRefreshRequested += OnRefreshRequested;
+            }
             var task = LoadDataAsync();
             MainPage.Current?.RegisterLoadingTask(task);
             await task;
@@ -33,6 +40,27 @@ namespace Daily_WinUI.Controls
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)
         {
+            if (_refreshService != null)
+            {
+                _refreshService.RefreshRequested -= OnRefreshRequested;
+                _refreshService.HealthRefreshRequested -= OnRefreshRequested;
+            }
+        }
+
+        private Task OnRefreshRequested()
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    await LoadDataAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[HealthTelemetryWidget] Refresh error: {ex.Message}");
+                }
+            });
+            return Task.CompletedTask;
         }
 
         public async Task LoadDataAsync()
@@ -41,7 +69,7 @@ namespace Daily_WinUI.Controls
 
             try
             {
-                var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(20);
+                var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(18);
                 var endOfToday = DateTime.Today.AddDays(1).AddTicks(-1);
 
                 _telemetryData = await _healthService.GetHealthTelemetryAsync(yesterdayEvening, endOfToday);
@@ -61,11 +89,10 @@ namespace Daily_WinUI.Controls
             get
             {
                 var today = DateTime.Today;
-                var hrEntries = _telemetryData
-                    .Where(x => x.TypeString == "HeartRate" && x.Value.HasValue)
+                return _telemetryData
+                    .Where(x => x.IsHeartRate && x.Value.HasValue && x.LocalStartTime >= today)
                     .OrderBy(x => x.StartTime)
                     .ToList();
-                return hrEntries;
             }
         }
 
@@ -74,7 +101,9 @@ namespace Daily_WinUI.Controls
             get
             {
                 var today = DateTime.Today;
-                var steps = _telemetryData.Where(x => x.TypeString == "Steps" && x.StartTime >= today).Sum(x => x.Value ?? 0);
+                var steps = _telemetryData
+                    .Where(x => x.IsSteps && x.LocalStartTime >= today)
+                    .Sum(x => x.Value ?? 0);
                 return steps > 0 ? steps.ToString("N0") : "--";
             }
         }
@@ -83,21 +112,19 @@ namespace Daily_WinUI.Controls
         {
             get
             {
-                var sleepTypes = new[] { "SleepAsleep", "SleepDeep", "SleepLight", "SleepREM", "SleepCore" };
-                // Calculate total duration in hours where type is a sleep type (excluding Awake)
-                var sleepDurationSeconds = _telemetryData
-                    .Where(x => sleepTypes.Contains(x.TypeString))
-                    .Sum(x => ((x.EndTime ?? x.StartTime) - x.StartTime).TotalSeconds);
+                var sleepSeconds = _telemetryData
+                    .Where(x => x.IsSleep)
+                    .Sum(x => x.DurationSeconds);
 
-                if (sleepDurationSeconds <= 0) return "--";
+                if (sleepSeconds <= 0) return "--";
 
-                var ts = TimeSpan.FromSeconds(sleepDurationSeconds);
+                var ts = TimeSpan.FromSeconds(sleepSeconds);
                 return $"{(int)ts.TotalHours}h {ts.Minutes}m";
             }
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }

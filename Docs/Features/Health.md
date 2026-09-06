@@ -38,12 +38,31 @@ Aggregates and organizes 35+ metrics into structured categories:
   - Cumulative metrics (Steps, Calories, Sleep) are scaled linearly against the maximum value in the range.
   - Spot/fluctuating metrics (Heart Rate, Weight, HRV) are normalized using a range-based formula `((val - min) / (max - min)) * 50.0` clamped between 15% and 100% height to emphasize relative daily fluctuations rather than absolute zeros.
 
-### 1.5 Granular Health Telemetry Data
-- **Health Telemetry Widget (`HealthTelemetryWidget`)**: A widget providing high-level telemetry insights for the day, including total steps, sleep duration, and a compact visual sparkline/line chart representing heart rate data.
-- **Detailed Telemetry View (`HealthTelemetryDetailPage`)**: A specialized detail page providing granular, raw data representation:
-  - **Sleep Timeline**: A horizontal Gantt-style timeline visualization tracking precise sleep cycles (Deep, Light, REM, Core, Awake).
-  - **Granular Heart Rate**: Hourly average heart rate visualizer.
-  - **Step Tracking**: Hourly step aggregations plotted in bar charts.
+### 1.5 Granular Health Telemetry Data (Smartwatches & Continuous Sensors)
+- **Multi-Device Telemetry Ingestion**: Captures high-frequency time-series biometrics directly from smartwatches and sensors:
+  - **Apple Watch**: Synchronized via `HealthTelemetryManager.swift` in `DailyWatchApp`, pushing discrete metrics to Supabase `health_telemetry`.
+  - **Zepp OS (Amazfit)**: Ingested via native Zepp OS app companion scripts.
+  - **Direct/Manual Telemetry**: Extensible to additional wearable platforms and automated test suites.
+- **Resilient Multi-Format Normalization (`HealthTelemetry.cs`)**:
+  - Raw records in Supabase use snake_case, lowercase, or PascalCase formats (`"heart_rate"`, `"steps"`, `"sleep"`, `"sleep_stage_deep"`, `"sleep_stage_rem"`, `"sleep_stage_awake"`).
+  - The `HealthTelemetry` domain model exposes robust computed properties:
+    - `NormalizedType`: Trims whitespace, underscores, and lowers case.
+    - `IsHeartRate`: Identifies heart rate records (`"heartrate"`, `"hr"`).
+    - `IsSteps`: Identifies step records (`"steps"`, `"stepcount"`).
+    - `IsSleep`: Identifies sleep segments (`"sleep..."`).
+    - `SleepCategory`: Accurately classifies sleep stages into `"Deep"`, `"REM"`, `"Awake"`, and `"Core"` (light).
+    - `DurationSeconds`: Derives accurate segment durations from either `(EndTime - StartTime)` or `Value` with flexible units (`hours`, `minutes`, `seconds`).
+    - `LocalStartTime` & `LocalEndTime`: Normalizes UTC database timestamps into the local timezone for accurate "Today" boundaries and chart time axes.
+    - `NumericValue`: Provides null-safe double representation for chart bindings.
+- **Health Telemetry Widget (`HealthTelemetryWidget`)**:
+  - High-level telemetry card providing today's total steps, total sleep duration, and real-time heart rate sparkline.
+  - Interactive header action allows users to open the full detail window.
+  - Subscribes to `IRefreshService.HealthRefreshRequested` to reactively update on new data inserts.
+- **Detailed Telemetry View (`HealthTelemetryDetailPage` / `HealthTelemetryDetail.razor`)**:
+  - **Sleep Stages Timeline**: Horizontal Gantt-style timeline visualization partitioning sleep into Deep, REM, Core, and Awake blocks.
+  - **Heart Rate Chart**: Full-day or recent-interval heart rate curve with statistical annotations (latest BPM, min/max).
+  - **Steps Chart**: Step cadence and accumulation throughout the day.
+  - **Raw Telemetry Log**: Interactive data table displaying recent timestamped telemetry entries with device attribution.
 
 ---
 
@@ -60,9 +79,11 @@ Aggregates and organizes 35+ metrics into structured categories:
 - **Cumulative Metrics** (e.g., Steps, Calories, Water): **Max Wins** — preserves the higher value between the local device total and the remote database total to prevent double-counting.
 - **Spot Metrics** (e.g., Heart Rate, Weight, Blood Pressure): **Last Write Wins** — updates the value using the most recent timestamp.
 - **Backfill**: Sync routines scan and upload data for both `Today` and `Yesterday` to account for offline logging.
-- **Cache Resilience, Realtime Re-authentication & Manual Refreshes**: Queries check for local cache staleness every 15 minutes before running remote updates. On wake/network reconnection, the service locks duplicate execution using semaphores. Expired JWT leases trigger `EnsureFreshSessionAsync()` to proactively restore authorization. The service listens to the `TokenRefreshed` auth state, updating the Realtime client authentication (`SetAuth(token)`) and force-recreating the Postgres changes channel (`_vitalsChannel`) to prevent silent connection dropouts. Manual dashboard refreshes bypass the 15-minute staleness check to force-await `PullDeltasAsync()` and reload the UI immediately. Window wake/restoration (`ShowAndActivate()`) triggers a background session verify, catch-up pull, and widget refresh.
+- **Cache Resilience, Realtime Re-authentication & Manual Refreshes**: Queries check for local cache staleness every 15 minutes before running remote updates. On wake/network reconnection, the service locks duplicate execution using semaphores. Expired JWT leases trigger `EnsureFreshSessionAsync()` to proactively restore authorization. The service listens to the `TokenRefreshed` auth state, updating the Realtime client authentication (`SetAuth(token)`) and force-recreating the Postgres changes channel (`_vitalsChannel` & `_telemetryChannel`) to prevent silent connection dropouts. Manual dashboard refreshes bypass the 15-minute staleness check to force-await `PullDeltasAsync()` and reload the UI immediately. Window wake/restoration (`ShowAndActivate()`) triggers a background session verify, catch-up pull, and widget refresh.
 
-### 2.3 Database Schema (Supabase `vitals` table)
+### 2.3 Database Schema
+
+#### Supabase `vitals` Table (Daily Aggregated Vitals)
 ```sql
 CREATE TABLE public.vitals (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -79,6 +100,30 @@ CREATE TABLE public.vitals (
 );
 -- RLS (Row Level Security) ensures users can only read/write their own vitals.
 ```
+
+#### Supabase `health_telemetry` Table (High-Frequency Wearable Telemetry)
+```sql
+CREATE TABLE public.health_telemetry (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users NOT NULL,
+  type TEXT NOT NULL,
+  value DOUBLE PRECISION,
+  unit TEXT,
+  start_time TIMESTAMPTZ NOT NULL,
+  end_time TIMESTAMPTZ,
+  source_device TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_health_telemetry_user_time ON public.health_telemetry (user_id, start_time DESC);
+```
+
+### 2.4 Realtime Wearable Reactivity
+- In addition to daily vitals, `SupabaseHealthService` sets up a dedicated Postgres change listener on the `health_telemetry` table (`realtime_telemetry` channel, filtered by `user_id=eq.{userId}`).
+- When a smartwatch syncs a new heart rate sample, step count, or sleep stage record:
+  1. The Realtime event fires on `_telemetryChannel`.
+  2. `OnTelemetryReceived` invokes `_refreshService.TriggerHealthRefreshAsync()`.
+  3. All active telemetry controls (`HealthTelemetryWidgetControl`, `HealthTelemetryDetailPage`, `HealthTelemetryWidget`, `HealthTelemetryDetail`) receive the refresh request on their respective UI dispatchers and update their models and charts instantly.
 
 ---
 
@@ -103,8 +148,11 @@ CREATE TABLE public.vitals (
 
 | Characteristic | WinUI Implementation | MAUI / Blazor Hybrid Implementation |
 | :--- | :--- | :--- |
-| **UI Technology** | Native XAML Controls (`HealthWidgetControl.xaml` & `HealthDetailPage.xaml`) | Blazor Hybrid Razor components (`HealthWidget.razor` & `HealthDetail.razor`) |
+| **Aggregated Vitals UI** | Native XAML Controls (`HealthWidgetControl.xaml` & `HealthDetailPage.xaml`) | Blazor Hybrid Razor components (`HealthWidget.razor` & `HealthDetail.razor`) |
+| **Telemetry Widget** | Native XAML (`HealthTelemetryWidgetControl.xaml` / `.xaml.cs`) | Blazor component (`HealthTelemetryWidget.razor` inside `WidgetContainer.razor`) |
+| **Telemetry Detail View** | Native XAML Page (`HealthTelemetryDetailPage.xaml` / `.xaml.cs`) | Dedicated Razor Page (`HealthTelemetryDetail.razor` hosted via `DetailPane.razor`) |
+| **Realtime Dispatching** | `DispatcherQueue.TryEnqueue` invoking `LoadDataAsync()` | `InvokeAsync(StateHasChanged)` with `IDisposable` event unsubscription |
 | **Vitals Store** | Fallback to `MockHealthService.cs` (or queries Supabase database for synced data) | Hooks into iOS `HealthKitService` and Android `HealthConnectService` native libraries |
 | **Breathing Control** | Native XAML custom shape rendering (`LungsControl.cs`) | Simplified static card grids (does not include the breathing animation) |
 | **Manual Logs** | Desktop manual logging modals using standard WinUI XAML dialogs | MudBlazor forms and dialog overlays |
-| **Charts & Trends** | Syncfusion line charts with a compact Stats Grid and a custom daily breakdown capsule bar chart | MudBlazor chart controls (`MudChart` line/bar visualizers) |
+| **Charts & Visualizers** | Syncfusion line/spline charts + custom Canvas/Border Gantt sleep bar | MudBlazor chart visualizers (`MudChart` line/bar) + responsive CSS sleep timeline |

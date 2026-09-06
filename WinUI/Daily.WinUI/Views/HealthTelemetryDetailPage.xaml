@@ -48,7 +48,7 @@
                             <chart:SfCartesianChart.YAxes>
                                 <chart:NumericalAxis ShowMajorGridLines="True" Minimum="40" Maximum="200" Interval="20" />
                             </chart:SfCartesianChart.YAxes>
-                            <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="StartTime" YBindingPath="Value" Fill="#FF5252" />
+                            <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="LocalStartTime" YBindingPath="NumericValue" Fill="#FF5252" />
                         </chart:SfCartesianChart>
                     </StackPanel>
                 </Border>
@@ -100,7 +100,7 @@
                             <chart:SfCartesianChart.YAxes>
                                 <chart:NumericalAxis ShowMajorGridLines="True" />
                             </chart:SfCartesianChart.YAxes>
-                            <chart:ColumnSeries ItemsSource="{x:Bind StepsData, Mode=OneWay}" XBindingPath="StartTime" YBindingPath="Value" Fill="#FF9800" />
+                            <chart:ColumnSeries ItemsSource="{x:Bind StepsData, Mode=OneWay}" XBindingPath="LocalStartTime" YBindingPath="NumericValue" Fill="#FF9800" />
                         </chart:SfCartesianChart>
                     </StackPanel>
                 </Border>
