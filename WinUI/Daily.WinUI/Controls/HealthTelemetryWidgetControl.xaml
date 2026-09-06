@@ -17,7 +17,7 @@
 
         <!-- Header -->
         <Grid Grid.Row="0" Margin="0,0,0,10">
-            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="12" Padding="12,6" Tapped="Header_Tapped" Cursor="Hand">
+            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="12" Padding="12,6" Tapped="Header_Tapped">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -44,7 +44,7 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Steps Card -->
-                    <Border Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="10" Padding="10,8" Tapped="Header_Tapped" Cursor="Hand">
+                    <Border Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="10" Padding="10,8" Tapped="Header_Tapped">
                         <StackPanel Spacing="2">
                             <Grid>
                                 <FontIcon Glyph="&#xE7EE;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#00E676" VerticalAlignment="Center" />
@@ -56,7 +56,7 @@
                     </Border>
 
                     <!-- Sleep Card -->
-                    <Border Grid.Column="1" Background="#127C4DFF" BorderBrush="#337C4DFF" BorderThickness="1" CornerRadius="10" Padding="10,8" Tapped="Sleep_Tapped" Cursor="Hand">
+                    <Border Grid.Column="1" Background="#127C4DFF" BorderBrush="#337C4DFF" BorderThickness="1" CornerRadius="10" Padding="10,8" Tapped="Sleep_Tapped">
                         <StackPanel Spacing="2">
                             <Grid>
                                 <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#B388FF" VerticalAlignment="Center" />
@@ -69,7 +69,7 @@
                 </Grid>
 
                 <!-- Mini Hypnogram Strip if nocturnal sleep exists -->
-                <Border Background="#127C4DFF" BorderBrush="#337C4DFF" BorderThickness="1" CornerRadius="8" Padding="8,6" Visibility="{x:Bind HasSleepSession, Mode=OneWay}" Tapped="Sleep_Tapped" Cursor="Hand">
+                <Border Background="#127C4DFF" BorderBrush="#337C4DFF" BorderThickness="1" CornerRadius="8" Padding="8,6" Visibility="{x:Bind HasSleepSession, Mode=OneWay}" Tapped="Sleep_Tapped">
                     <StackPanel Spacing="4">
                         <Grid>
                             <TextBlock Text="SLEEP HYPNOGRAM" FontSize="9" FontWeight="Bold" Foreground="#B388FF" VerticalAlignment="Center" />
@@ -83,7 +83,7 @@
                 </Border>
 
                 <!-- 2. HEART RATE INTRADAY SPARKLINE & ZONES -->
-                <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="10" Padding="10" Tapped="Header_Tapped" Cursor="Hand">
+                <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="10" Padding="10" Tapped="Header_Tapped">
                     <StackPanel Spacing="6">
                         <Grid>
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">

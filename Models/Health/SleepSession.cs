@@ -11,12 +11,42 @@ namespace Daily.Models.Health
         public bool IsNap { get; set; } = false;
         public List<HealthTelemetry> Stages { get; set; } = new();
 
-        public double DurationSeconds => Math.Max((EndTime - StartTime).TotalSeconds, AsleepSeconds + AwakeSeconds);
         public double DeepSeconds => Stages.Where(x => x.SleepCategory == "Deep").Sum(x => x.DurationSeconds);
         public double RemSeconds => Stages.Where(x => x.SleepCategory == "REM").Sum(x => x.DurationSeconds);
         public double LightSeconds => Stages.Where(x => x.SleepCategory == "Core").Sum(x => x.DurationSeconds);
         public double AwakeSeconds => Stages.Where(x => x.SleepCategory == "Awake").Sum(x => x.DurationSeconds);
         public double AsleepSeconds => DeepSeconds + RemSeconds + LightSeconds;
+        public double TotalStagesSeconds => DeepSeconds + RemSeconds + LightSeconds + AwakeSeconds;
+
+        public double DurationSeconds
+        {
+            get
+            {
+                if (Stages.Any())
+                {
+                    var sumStages = TotalStagesSeconds;
+                    var span = (EndTime - StartTime).TotalSeconds;
+                    if (sumStages > 0 && span > sumStages * 1.35)
+                    {
+                        return sumStages;
+                    }
+                    return Math.Max(span, sumStages);
+                }
+                return Math.Max(0, (EndTime - StartTime).TotalSeconds);
+            }
+        }
+
+        public DateTime EffectiveEndTime
+        {
+            get
+            {
+                if (Stages.Any() && DurationSeconds > 0 && (EndTime - StartTime).TotalSeconds > DurationSeconds * 1.35)
+                {
+                    return StartTime.AddSeconds(DurationSeconds);
+                }
+                return EndTime;
+            }
+        }
 
         public int AwakeCount => Stages.Count(x => x.SleepCategory == "Awake");
 
@@ -57,7 +87,7 @@ namespace Daily.Models.Health
         public string AwakeFormatted => FormatSeconds(AwakeSeconds);
 
         public string BedtimeFormatted => StartTime != DateTime.MinValue ? StartTime.ToString("HH:mm") : "--";
-        public string WakeTimeFormatted => EndTime != DateTime.MinValue ? EndTime.ToString("HH:mm") : "--";
+        public string WakeTimeFormatted => EffectiveEndTime != DateTime.MinValue ? EffectiveEndTime.ToString("HH:mm") : "--";
 
         private static string FormatSeconds(double s)
         {

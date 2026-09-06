@@ -858,7 +858,8 @@ Page(
                  if (paiVal > 0 && paiVal !== tCache.pai) payload.push({ type: 'pai', value: paiVal, unit: 'score' })
                  
                  const nowD = new Date()
-                 const midnightAnchor = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 0, 0, 0, 0).getTime()
+                 const todayMidnight = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 0, 0, 0, 0).getTime()
+                 const yesterdayMidnight = todayMidnight - 24 * 60 * 60 * 1000
 
                  // Granular sleep data using precise stages graph
                  const sleepInfo = sleep.getInfo() || {}
@@ -868,16 +869,20 @@ Page(
                          const constants = sleep.getStageConstantObj ? sleep.getStageConstantObj() : { LIGHT_STAGE: 1, DEEP_STAGE: 2, REM_STAGE: 3, WAKE_STAGE: 0 }
                          
                          stages.forEach(st => {
-                             const dur = st.stop - st.start
-                             if (dur > 0) {
+                             let startMs = (st.start >= 720) ? (yesterdayMidnight + st.start * 60000) : (todayMidnight + st.start * 60000)
+                             let stopMs = (st.stop >= 720 && st.start >= 720) ? (yesterdayMidnight + st.stop * 60000) : (todayMidnight + st.stop * 60000)
+                             if (stopMs < startMs) stopMs += 24 * 60 * 60 * 1000
+                             
+                             const dur = Math.round((stopMs - startMs) / 60000)
+                             if (dur > 0 && dur < 720) {
                                  let sType = 'sleep_stage_unknown'
                                  if (st.model === constants.LIGHT_STAGE) sType = 'sleep_stage_light'
                                  else if (st.model === constants.DEEP_STAGE) sType = 'sleep_stage_deep'
                                  else if (st.model === constants.REM_STAGE) sType = 'sleep_stage_rem'
                                  else if (st.model === constants.WAKE_STAGE) sType = 'sleep_stage_awake'
                                  
-                                 const startIso = new Date(midnightAnchor + st.start * 60000).toISOString()
-                                 const endIso = new Date(midnightAnchor + st.stop * 60000).toISOString()
+                                 const startIso = new Date(startMs).toISOString()
+                                 const endIso = new Date(stopMs).toISOString()
                                  const key = `${startIso}-${endIso}-${sType}`
                                  if (!tCache.sleep_keys.includes(key)) {
                                      payload.push({ type: sType, value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })
@@ -896,9 +901,9 @@ Page(
                      const naps = sleep.getNap() || []
                      naps.forEach(nap => {
                          const dur = nap.stop - nap.start
-                         if (dur > 0) {
-                             const startIso = new Date(midnightAnchor + nap.start * 60000).toISOString()
-                             const endIso = new Date(midnightAnchor + nap.stop * 60000).toISOString()
+                         if (dur > 0 && dur < 300) {
+                             const startIso = new Date(todayMidnight + nap.start * 60000).toISOString()
+                             const endIso = new Date(todayMidnight + nap.stop * 60000).toISOString()
                              const key = `${startIso}-${endIso}-sleep_nap`
                              if (!tCache.sleep_keys.includes(key)) {
                                  payload.push({ type: 'sleep_nap', value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })

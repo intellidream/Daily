@@ -47,6 +47,9 @@ namespace Daily.Models.Health
         public bool IsSleep => NormalizedType.StartsWith("sleep");
 
         [Newtonsoft.Json.JsonIgnore]
+        public bool IsSleepStage => NormalizedType.StartsWith("sleepstage");
+
+        [Newtonsoft.Json.JsonIgnore]
         public bool IsActiveEnergy => NormalizedType == "activeenergy" || NormalizedType == "calories" || NormalizedType == "energy";
 
         [Newtonsoft.Json.JsonIgnore]
@@ -57,10 +60,6 @@ namespace Daily.Models.Health
         {
             get
             {
-                if (EndTime.HasValue && EndTime.Value > StartTime)
-                {
-                    return (EndTime.Value - StartTime).TotalSeconds;
-                }
                 if (Value.HasValue && Value.Value > 0)
                 {
                     var u = Unit?.Trim().ToLowerInvariant();
@@ -68,14 +67,18 @@ namespace Daily.Models.Health
                     if (u == "minutes" || u == "minute" || u == "min" || u == "m") return Value.Value * 60.0;
                     if (u == "seconds" || u == "sec" || u == "s") return Value.Value;
                 }
+                if (EndTime.HasValue && EndTime.Value > StartTime)
+                {
+                    return (EndTime.Value - StartTime).TotalSeconds;
+                }
                 return 0;
             }
         }
 
         [Newtonsoft.Json.JsonIgnore]
-        public DateTime EffectiveEndTime => EndTime.HasValue && EndTime.Value > StartTime
-            ? EndTime.Value
-            : (DurationSeconds > 0 ? StartTime.AddSeconds(DurationSeconds) : StartTime);
+        public DateTime EffectiveEndTime => DurationSeconds > 0 
+            ? StartTime.AddSeconds(DurationSeconds) 
+            : (EndTime.HasValue && EndTime.Value > StartTime ? EndTime.Value : StartTime);
 
         [Newtonsoft.Json.JsonIgnore]
         public DateTime LocalStartTime => StartTime.Kind == DateTimeKind.Utc 

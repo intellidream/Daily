@@ -813,8 +813,9 @@ namespace Daily.Services.Health
 
                     if (telemetryToday != null && telemetryToday.Any())
                     {
-                        // Steps
-                        var tSteps = telemetryToday.Where(x => x.IsSteps && x.LocalStartTime.Date == targetDate).Sum(x => x.Value ?? 0);
+                        // Steps (Zepp OS & wearables report cumulative daily steps)
+                        var tSteps = telemetryToday.Where(x => x.IsSteps && x.LocalStartTime.Date == targetDate)
+                                                   .Select(x => x.Value ?? 0).DefaultIfEmpty(0).Max();
                         if (tSteps > 0)
                         {
                             if (!resultMetrics.ContainsKey(VitalType.Steps) || tSteps > resultMetrics[VitalType.Steps].Value)
@@ -830,8 +831,9 @@ namespace Daily.Services.Health
                             }
                         }
 
-                        // Active Energy
-                        var tCal = telemetryToday.Where(x => x.IsActiveEnergy && x.LocalStartTime.Date == targetDate).Sum(x => x.Value ?? 0);
+                        // Active Energy (cumulative daily kcal)
+                        var tCal = telemetryToday.Where(x => x.IsActiveEnergy && x.LocalStartTime.Date == targetDate)
+                                                 .Select(x => x.Value ?? 0).DefaultIfEmpty(0).Max();
                         if (tCal > 0)
                         {
                             if (!resultMetrics.ContainsKey(VitalType.ActiveEnergy) || tCal > resultMetrics[VitalType.ActiveEnergy].Value)
@@ -1113,15 +1115,34 @@ namespace Daily.Services.Health
                     .OrderBy(x => x.LocalStartTime)
                     .ToList();
 
-                if (sleepTelemetry.Any())
+                var naps = sleepTelemetry.Where(x => x.NormalizedType == "sleepnap" || x.NormalizedType == "nap").ToList();
+                var stageRecords = sleepTelemetry.Where(x => x.IsSleepStage).ToList();
+                var aggregateRecords = sleepTelemetry.Where(x => !x.IsSleepStage && x.NormalizedType != "sleepnap" && x.NormalizedType != "nap").ToList();
+
+                // 1. Separate daytime naps
+                foreach (var nap in naps)
+                {
+                    allSessions.Add(new SleepSession
+                    {
+                        StartTime = nap.LocalStartTime,
+                        EndTime = nap.LocalEndTime,
+                        IsNap = true,
+                        Stages = new List<HealthTelemetry> { nap }
+                    });
+                }
+
+                // 2. Select nocturnal candidates: prefer granular stage records if present, else fallback to aggregate
+                var nocturnalCandidates = stageRecords.Any() ? stageRecords : aggregateRecords;
+
+                if (nocturnalCandidates.Any())
                 {
                     // Cluster stages into distinct sessions if gap between stages >= 90 minutes
-                    var currentCluster = new List<HealthTelemetry> { sleepTelemetry[0] };
+                    var currentCluster = new List<HealthTelemetry> { nocturnalCandidates[0] };
 
-                    for (int i = 1; i < sleepTelemetry.Count; i++)
+                    for (int i = 1; i < nocturnalCandidates.Count; i++)
                     {
                         var prev = currentCluster.Last();
-                        var curr = sleepTelemetry[i];
+                        var curr = nocturnalCandidates[i];
                         var gap = (curr.LocalStartTime - prev.LocalEndTime).TotalMinutes;
 
                         if (gap < 90)
@@ -1212,7 +1233,12 @@ namespace Daily.Services.Health
         private SleepSession CreateSessionFromStages(List<HealthTelemetry> stages, DateTime targetDate)
         {
             var start = stages.Min(x => x.LocalStartTime);
-            var end = stages.Max(x => x.LocalEndTime);
+            var totalStageSec = stages.Sum(x => x.DurationSeconds);
+            var maxEnd = stages.Max(x => x.LocalEndTime);
+            var end = (maxEnd - start).TotalSeconds > totalStageSec * 1.35 && totalStageSec > 0
+                ? start.AddSeconds(totalStageSec)
+                : maxEnd;
+
             var isNap = (end - start).TotalHours < 3.5 && (start.Date == targetDate && start.Hour >= 11);
 
             return new SleepSession

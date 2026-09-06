@@ -227,8 +227,8 @@ AppSideService(
              type: t.type,
              value: t.value,
              unit: t.unit,
-             start_time: nowIso,
-             end_time: nowIso,
+             start_time: t.start_time || nowIso,
+             end_time: t.end_time || nowIso,
              source_device: 'Zepp OS Watch'
           }))
           

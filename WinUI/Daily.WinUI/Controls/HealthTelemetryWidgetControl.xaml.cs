@@ -332,8 +332,7 @@ namespace Daily_WinUI.Controls
 
         private void Sleep_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
-            if (_healthService != null) _healthService.CurrentViewType = "Sleep";
-            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage));
+            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthTelemetryDetailPage));
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

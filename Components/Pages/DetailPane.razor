@@ -10,7 +10,6 @@
 @inject IRssArticleService ArticleService
 @inject IWeatherService WeatherService
 @inject ISettingsService SettingsService
-@inject Daily.Services.Health.IHealthService HealthService
 @inject IHabitsService HabitsService
 @inject Services.Finances.IFinancesService FinancesService
 @implements IDisposable
@@ -246,41 +245,16 @@
                   </MudCarousel>
              </div>
         }
-        else if (NavService.CurrentView == "vitals" || NavService.CurrentView == "HealthTelemetry")
+        else if (NavService.CurrentView == "HealthTelemetry")
         {
              <div class="d-flex align-center flex-grow-1 position-relative ml-2 mr-4" style="min-width: 0; height: 100%;">
-                  <MudCarousel TData="object" ShowArrows="true" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
-                               SelectedIndex="@_selectedHealthIndex" SelectedIndexChanged="@OnHealthCarouselIndexChanged"
+                  <MudCarousel TData="object" ShowArrows="false" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
                                Class="flex-grow-1 rounded-pill mud-theme-primary">
                       <MudCarouselItem Transition="Transition.Slide">
                           <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
-                              <MudIcon Icon="@Icons.Material.Filled.Favorite" Class="mr-2" Size="Size.Small" Style="color: white;" />
-                              <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
-                                  Overview
-                              </MudText>
-                          </div>
-                      </MudCarouselItem>
-                      <MudCarouselItem Transition="Transition.Slide">
-                          <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
-                              <MudIcon Icon="@Icons.Material.Filled.Bedtime" Class="mr-2" Size="Size.Small" Style="color: white;" />
-                              <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
-                                  Sleep
-                              </MudText>
-                          </div>
-                      </MudCarouselItem>
-                      <MudCarouselItem Transition="Transition.Slide">
-                          <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
-                              <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Class="mr-2" Size="Size.Small" Style="color: white;" />
-                              <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
-                                  Sensors
-                              </MudText>
-                          </div>
-                      </MudCarouselItem>
-                      <MudCarouselItem Transition="Transition.Slide">
-                          <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
-                              <MudIcon Icon="@Icons.Material.Filled.Restaurant" Class="mr-2" Size="Size.Small" Style="color: white;" />
-                              <MudText Typo="Typo.body1" Class="font-weight-bold mr-3" Style="color: white !important;">
-                                  Nutrition
+                              <MudIcon Icon="@Icons.Material.Filled.DirectionsRun" Class="mr-2" Size="Size.Small" Style="color: white;" />
+                              <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: white !important;">
+                                  Health Telemetry
                               </MudText>
                           </div>
                       </MudCarouselItem>
@@ -450,7 +424,6 @@
         SettingsService.OnSettingsChanged += AsyncStateHasChanged; // Subscribe for auth changes
         HabitsService.OnViewTypeChanged += AsyncStateHasChanged; // Subscribe for habit view changes
         FinancesService.OnViewTypeChanged += AsyncStateHasChanged; // Subscribe for finances view changes
-        HealthService.OnViewTypeChanged += AsyncStateHasChanged; // Subscribe for health view changes
         NavService.OnDetailVisibilityChanged += OnDetailVisibilityChanged;
 
         if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android ||
@@ -532,7 +505,6 @@
         SettingsService.OnSettingsChanged -= AsyncStateHasChanged;
         HabitsService.OnViewTypeChanged -= AsyncStateHasChanged;
         FinancesService.OnViewTypeChanged -= AsyncStateHasChanged;
-        HealthService.OnViewTypeChanged -= AsyncStateHasChanged;
         if (Application.Current != null)
         {
         }
@@ -675,23 +647,6 @@
                 StateHasChanged();
             }
         }
-
-        // Sync Health Index
-        if (NavService.CurrentView == "vitals" || NavService.CurrentView == "HealthTelemetry")
-        {
-            var targetIndex = HealthService.CurrentViewType switch
-            {
-                "Sleep" => 1,
-                "Sensors" => 2,
-                "Nutrition" => 3,
-                _ => 0 // Overview
-            };
-            if (_selectedHealthIndex != targetIndex)
-            {
-                _selectedHealthIndex = targetIndex;
-                StateHasChanged();
-            }
-        }
     }
 
     private void OnCarouselIndexChanged(int index)
@@ -735,19 +690,6 @@
             1 => "Stocks",
             2 => "Money",
             _ => "World"
-        };
-    }
-
-    private int _selectedHealthIndex = 0;
-    private void OnHealthCarouselIndexChanged(int index)
-    {
-        _selectedHealthIndex = index;
-        HealthService.CurrentViewType = index switch
-        {
-            1 => "Sleep",
-            2 => "Sensors",
-            3 => "Nutrition",
-            _ => "Overview"
         };
     }
 

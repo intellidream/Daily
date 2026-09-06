@@ -326,14 +326,12 @@
 
     private void NavigateToSleep()
     {
-        HealthService.CurrentViewType = "Sleep";
-        WindowManager.OpenDetail("Health", "Health");
+        WindowManager.OpenDetail("HealthTelemetry", "Health Telemetry");
     }
 
     private void NavigateToSensors()
     {
-        HealthService.CurrentViewType = "Sensors";
-        WindowManager.OpenDetail("Health", "Health");
+        WindowManager.OpenDetail("HealthTelemetry", "Health Telemetry");
     }
 
     public void Dispose()
