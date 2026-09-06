@@ -14,7 +14,7 @@
             <MudCarousel TData="object" ShowArrows="false" ShowBullets="false" AutoCycle="false" Style="height: 40px; width: 100%;" 
                          Class="flex-grow-1 rounded-pill mud-theme-primary">
                  <MudCarouselItem Transition="Transition.Slide">
-                     <div class="d-flex align-center justify-center h-100 px-8" style="width: 100%;">
+                     <div class="d-flex align-center justify-center h-100 px-8 cursor-pointer" style="width: 100%; cursor: pointer;" @onclick="NavigateToOverview">
                          <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Class="mr-2" Size="Size.Small" Style="color: white;" />
                          <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: white !important;">
                              Vitals
@@ -70,7 +70,7 @@
         </div>
 
         <!-- SLEEP SECTION -->
-        <div class="rounded-lg pa-4" style="background: rgba(124, 77, 255, 0.06);">
+        <div class="rounded-lg pa-4 cursor-pointer" style="background: rgba(124, 77, 255, 0.06); cursor: pointer;" @onclick="NavigateToSleep">
             @{ var sleepM = GetMetric(VitalType.SleepDuration); }
             <div class="d-flex align-center justify-center gap-2 mb-3 relative">
                 <div style="@GetSourceDotStyle(sleepM?.SourceDevice); position: absolute; top: 0; right: 0;"></div>
@@ -229,6 +229,18 @@
         else if (source == "Health Connect" || source == "Android") color = "#00E676";
         
         return $"width: 6px; height: 6px; border-radius: 50%; background-color: {color}; display: inline-block;";
+    }
+
+    private void NavigateToOverview()
+    {
+        HealthService.CurrentViewType = "Overview";
+        WindowManager.OpenDetail("Health", "Health");
+    }
+
+    private void NavigateToSleep()
+    {
+        HealthService.CurrentViewType = "Sleep";
+        WindowManager.OpenDetail("Health", "Health");
     }
 
     public void Dispose()

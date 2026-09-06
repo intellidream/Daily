@@ -16,7 +16,7 @@
 
         <!-- Header -->
         <Grid Grid.Row="0" Margin="0,0,0,12">
-            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="12" Padding="12,6">
+            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="12" Padding="12,6" Tapped="Header_Tapped">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -80,7 +80,7 @@
             </Grid>
 
             <!-- SLEEP SECTION -->
-            <Border Grid.Row="1" Background="#0F7C4DFF" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+            <Border Grid.Row="1" Background="#0F7C4DFF" CornerRadius="8" Padding="12" Margin="0,0,0,12" Tapped="Sleep_Tapped">
                 <StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" Margin="0,0,0,12">
                         <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#7C4DFF" />

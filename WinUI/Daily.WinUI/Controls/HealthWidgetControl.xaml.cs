@@ -288,6 +288,18 @@ namespace Daily_WinUI.Controls
             return $"{(int)ts.TotalHours}h{ts.Minutes}m";
         }
 
+        private void Header_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            if (_healthService != null) _healthService.CurrentViewType = "Overview";
+            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage));
+        }
+
+        private void Sleep_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            if (_healthService != null) _healthService.CurrentViewType = "Sleep";
+            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage));
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {

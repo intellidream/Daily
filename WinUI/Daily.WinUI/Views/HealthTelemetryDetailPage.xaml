@@ -23,8 +23,8 @@
                     <FontIcon Glyph="&#xEC0A;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Health Telemetry" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
-                    <TextBlock Text="Detailed granular health data from devices" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                    <TextBlock Text="Health Telemetry &amp; Sensors" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                    <TextBlock Text="Detailed granular sensor data from smartwatches and wearables" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                 </StackPanel>
             </StackPanel>
         </Grid>
@@ -33,65 +33,215 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="24" Padding="20,16,20,20">
 
+                <!-- SLEEP SECTION: 4-LEVEL CLINICAL HYPNOGRAM -->
+                <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="20">
+                    <StackPanel Spacing="16">
+                        
+                        <!-- Sleep Score & Summary Header -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                                <Border Width="70" Height="70" CornerRadius="35" Background="#1A7C4DFF" BorderBrush="#7C4DFF" BorderThickness="3">
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock Text="{x:Bind SleepScoreText, Mode=OneWay}" FontSize="22" FontWeight="Bold" Foreground="#7C4DFF" HorizontalAlignment="Center" />
+                                        <TextBlock Text="SCORE" FontSize="9" Opacity="0.6" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Sleep Architecture" FontSize="18" FontWeight="SemiBold" />
+                                    <TextBlock Text="{x:Bind SleepScheduleText, Mode=OneWay}" FontSize="13" Opacity="0.6" Margin="0,2,0,0" />
+                                    <TextBlock Text="{x:Bind SleepEfficiencyText, Mode=OneWay}" FontSize="12" Opacity="0.5" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Grid Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" ColumnSpacing="20">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                    <TextBlock Text="ASLEEP" FontSize="10" Opacity="0.5" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{x:Bind TotalSleepText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#42A5F5" HorizontalAlignment="Center" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                    <TextBlock Text="IN BED" FontSize="10" Opacity="0.5" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{x:Bind TimeInBedText, Mode=OneWay}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                    <TextBlock Text="AWAKE" FontSize="10" Opacity="0.5" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{x:Bind AwakeCountText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#FF7043" HorizontalAlignment="Center" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="3" HorizontalAlignment="Center">
+                                    <TextBlock Text="DEEP+REM" FontSize="10" Opacity="0.5" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{x:Bind RestorativePctText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#26C6DA" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource AppGlassBorderColorBrush}" />
+
+                        <!-- Hypnogram Canvas & Legend -->
+                        <Grid>
+                            <TextBlock Text="Clinical Sleep Hypnogram" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="8" Height="8" Fill="#FF7043" /><TextBlock Text="Awake" FontSize="11" Opacity="0.7" /></StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="8" Height="8" Fill="#26C6DA" /><TextBlock Text="REM" FontSize="11" Opacity="0.7" /></StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="8" Height="8" Fill="#42A5F5" /><TextBlock Text="Core" FontSize="11" Opacity="0.7" /></StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="8" Height="8" Fill="#3949AB" /><TextBlock Text="Deep" FontSize="11" Opacity="0.7" /></StackPanel>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Multi-Level Hypnogram Grid -->
+                        <Grid Height="165" Background="#15000000" CornerRadius="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="65" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Y-Axis Stage Labels -->
+                            <StackPanel Grid.Column="0" VerticalAlignment="Stretch" Padding="8,8,0,8">
+                                <TextBlock Text="AWAKE" FontSize="10" FontWeight="SemiBold" Foreground="#FF7043" Height="40" VerticalAlignment="Center" />
+                                <TextBlock Text="REM" FontSize="10" FontWeight="SemiBold" Foreground="#26C6DA" Height="40" VerticalAlignment="Center" />
+                                <TextBlock Text="CORE" FontSize="10" FontWeight="SemiBold" Foreground="#42A5F5" Height="40" VerticalAlignment="Center" />
+                                <TextBlock Text="DEEP" FontSize="10" FontWeight="SemiBold" Foreground="#3949AB" Height="40" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <Border Grid.Column="0" Width="1" Background="{ThemeResource AppGlassBorderColorBrush}" HorizontalAlignment="Right" />
+
+                            <!-- Canvas for 4-Level Blocks & Guidelines -->
+                            <Canvas x:Name="SleepHypnogramCanvas" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" SizeChanged="SleepHypnogramCanvas_SizeChanged" />
+                        </Grid>
+
+                        <!-- X-Axis Hourly Ticks Canvas -->
+                        <Grid Height="24" Margin="65,4,0,0">
+                            <Canvas x:Name="SleepXAxisCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                        </Grid>
+
+                        <!-- 4 Stage Target Cards -->
+                        <Grid ColumnSpacing="12" Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="#3949AB" BorderThickness="1" CornerRadius="10" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="DEEP" FontSize="10" FontWeight="Bold" Foreground="#3949AB" />
+                                    <TextBlock Text="{x:Bind DeepDurationText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                                    <TextBlock Text="{x:Bind DeepPercentText, Mode=OneWay}" FontSize="11" Opacity="0.6" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="#26C6DA" BorderThickness="1" CornerRadius="10" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="REM" FontSize="10" FontWeight="Bold" Foreground="#26C6DA" />
+                                    <TextBlock Text="{x:Bind RemDurationText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                                    <TextBlock Text="{x:Bind RemPercentText, Mode=OneWay}" FontSize="11" Opacity="0.6" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="#42A5F5" BorderThickness="1" CornerRadius="10" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="CORE" FontSize="10" FontWeight="Bold" Foreground="#42A5F5" />
+                                    <TextBlock Text="{x:Bind LightDurationText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                                    <TextBlock Text="{x:Bind LightPercentText, Mode=OneWay}" FontSize="11" Opacity="0.6" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="3" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="#FF7043" BorderThickness="1" CornerRadius="10" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="AWAKE" FontSize="10" FontWeight="Bold" Foreground="#FF7043" />
+                                    <TextBlock Text="{x:Bind AwakeDurationText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                                    <TextBlock Text="{x:Bind AwakePercentText, Mode=OneWay}" FontSize="11" Opacity="0.6" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- HEART RATE CHART -->
                 <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="20">
                     <StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
-                            <FontIcon Glyph="&#xEB51;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#FF5252" />
-                            <TextBlock Text="Heart Rate Today" FontSize="16" FontWeight="SemiBold" />
-                        </StackPanel>
+                        <Grid Margin="0,0,0,12">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xEB51;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#FF5252" />
+                                <TextBlock Text="Continuous Heart Rate Today" FontSize="16" FontWeight="SemiBold" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind AvgHeartRateText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#FF5252" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
 
-                        <chart:SfCartesianChart Height="250">
+                        <chart:SfCartesianChart Height="220">
                             <chart:SfCartesianChart.XAxes>
                                 <chart:DateTimeAxis ShowMajorGridLines="False" />
                             </chart:SfCartesianChart.XAxes>
                             <chart:SfCartesianChart.YAxes>
-                                <chart:NumericalAxis ShowMajorGridLines="True" Minimum="40" Maximum="200" Interval="20" />
+                                <chart:NumericalAxis ShowMajorGridLines="True" Minimum="40" Maximum="180" Interval="20" />
                             </chart:SfCartesianChart.YAxes>
                             <chart:SplineSeries ItemsSource="{x:Bind HeartRateData, Mode=OneWay}" XBindingPath="LocalStartTime" YBindingPath="NumericValue" Fill="#FF5252" />
                         </chart:SfCartesianChart>
-                    </StackPanel>
-                </Border>
 
-                <!-- SLEEP STAGES TIMELINE -->
-                <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="20">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
-                            <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#7C4DFF" />
-                            <TextBlock Text="Sleep Timeline" FontSize="16" FontWeight="SemiBold" />
-                        </StackPanel>
+                        <!-- HR Zones -->
+                        <Grid Margin="0,16,0,0" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                        <!-- Legend -->
-                        <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,0,0,12" HorizontalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <Ellipse Width="8" Height="8" Fill="#3F51B5" />
-                                <TextBlock Text="Deep" FontSize="12" Opacity="0.7" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <Ellipse Width="8" Height="8" Fill="#7C4DFF" />
-                                <TextBlock Text="Light / Core" FontSize="12" Opacity="0.7" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <Ellipse Width="8" Height="8" Fill="#00BCD4" />
-                                <TextBlock Text="REM" FontSize="12" Opacity="0.7" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <Ellipse Width="8" Height="8" Fill="#FF9800" />
-                                <TextBlock Text="Awake" FontSize="12" Opacity="0.7" />
-                            </StackPanel>
-                        </StackPanel>
+                            <Border Grid.Column="0" Background="#104CAF50" CornerRadius="8" Padding="10">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="RESTING (&lt;100)" FontSize="10" Opacity="0.6" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{x:Bind HrRestingPctText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#4CAF50" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
 
-                        <Grid x:Name="SleepChartContainer" Height="40" HorizontalAlignment="Stretch" Margin="0,12,0,0" SizeChanged="SleepChartContainer_SizeChanged" />
+                            <Border Grid.Column="1" Background="#10FFB300" CornerRadius="8" Padding="10">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="FAT BURN (100-120)" FontSize="10" Opacity="0.6" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{x:Bind HrFatBurnPctText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#FFB300" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2" Background="#10FF7043" CornerRadius="8" Padding="10">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="CARDIO (120-150)" FontSize="10" Opacity="0.6" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{x:Bind HrCardioPctText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#FF7043" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="3" Background="#10F44336" CornerRadius="8" Padding="10">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="PEAK (&gt;150)" FontSize="10" Opacity="0.6" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{x:Bind HrPeakPctText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#F44336" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
                     </StackPanel>
                 </Border>
 
                 <!-- STEPS CHART -->
                 <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="20">
                     <StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
-                            <FontIcon Glyph="&#xE7EE;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#FF9800" />
-                            <TextBlock Text="Steps Today" FontSize="16" FontWeight="SemiBold" />
-                        </StackPanel>
+                        <Grid Margin="0,0,0,12">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE7EE;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#FF9800" />
+                                <TextBlock Text="Hourly Steps Cadence" FontSize="16" FontWeight="SemiBold" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind TotalStepsText, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="#FF9800" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
 
                         <chart:SfCartesianChart Height="200">
                             <chart:SfCartesianChart.XAxes>

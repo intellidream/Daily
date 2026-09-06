@@ -46,5 +46,20 @@ namespace Daily_WinUI.Services
         {
             return Task.FromResult(new List<HealthTelemetry>());
         }
+
+        private string _currentViewType = "Overview";
+        public string CurrentViewType
+        {
+            get => _currentViewType;
+            set
+            {
+                if (_currentViewType != value)
+                {
+                    _currentViewType = value;
+                    OnViewTypeChanged?.Invoke();
+                }
+            }
+        }
+        public event Action? OnViewTypeChanged;
     }
 }

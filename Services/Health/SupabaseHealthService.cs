@@ -28,6 +28,21 @@ namespace Daily.Services.Health
 
         private bool IsAuthenticated => _supabase.Auth.CurrentSession != null && _supabase.Auth.CurrentUser != null;
 
+        private string _currentViewType = "Overview";
+        public string CurrentViewType
+        {
+            get => _currentViewType;
+            set
+            {
+                if (_currentViewType != value)
+                {
+                    _currentViewType = value;
+                    OnViewTypeChanged?.Invoke();
+                }
+            }
+        }
+        public event Action? OnViewTypeChanged;
+
         private async Task EnsureFreshSessionAsync()
         {
             var auth = _supabase.Auth;

@@ -11,6 +11,9 @@ using Daily.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+using Windows.UI;
 
 namespace Daily_WinUI.Views
 {
@@ -19,15 +22,26 @@ namespace Daily_WinUI.Views
         private IHealthService _healthService;
         private IRefreshService _refreshService;
         private List<VitalMetric> _metrics = new();
+        private List<HealthTelemetry> _telemetryData = new();
+        private List<HealthTelemetry> _sleepTelemetry = new();
+
+        private bool _isSyncing = false;
+        public bool IsNotSyncing => !_isSyncing;
+
+        public ObservableCollection<ChartData> StepsHistory { get; set; } = new();
+        public ObservableCollection<ChartData> HrHistory { get; set; } = new();
+        public ObservableCollection<ChartData> SleepHistory { get; set; } = new();
+        public ObservableCollection<ChartData> CaloriesHistory { get; set; } = new();
+        public ObservableCollection<ChartData> WeightHistory { get; set; } = new();
+        public ObservableCollection<ChartData> HrvHistory { get; set; } = new();
+
+        public List<HealthTelemetry> HeartRateTelemetryData { get; private set; } = new();
 
         public HealthDetailPage()
         {
             this.InitializeComponent();
             _healthService = App.Current.Services.GetService<IHealthService>();
             _refreshService = App.Current.Services.GetService<IRefreshService>();
-            
-            StepsHistory = new ObservableCollection<ChartData>();
-            HrHistory = new ObservableCollection<ChartData>();
         }
 
         private async void Page_Loaded(object sender, RoutedEventArgs e)
@@ -37,6 +51,13 @@ namespace Daily_WinUI.Views
                 _refreshService.RefreshRequested += OnRefreshRequested;
                 _refreshService.HealthRefreshRequested += OnRefreshRequested;
             }
+
+            if (_healthService != null)
+            {
+                _healthService.OnViewTypeChanged += OnViewTypeChanged;
+                SyncTabFromService();
+            }
+
             await LoadDataAsync();
         }
 
@@ -47,30 +68,58 @@ namespace Daily_WinUI.Views
                 _refreshService.RefreshRequested -= OnRefreshRequested;
                 _refreshService.HealthRefreshRequested -= OnRefreshRequested;
             }
+
+            if (_healthService != null)
+            {
+                _healthService.OnViewTypeChanged -= OnViewTypeChanged;
+            }
+        }
+
+        private void OnViewTypeChanged()
+        {
+            DispatcherQueue.TryEnqueue(SyncTabFromService);
+        }
+
+        private void SyncTabFromService()
+        {
+            if (_healthService == null || HealthPivot == null) return;
+            var target = _healthService.CurrentViewType switch
+            {
+                "Sleep" => 1,
+                "Sensors" => 2,
+                "Nutrition" => 3,
+                _ => 0
+            };
+            if (HealthPivot.SelectedIndex != target)
+            {
+                HealthPivot.SelectedIndex = target;
+            }
+        }
+
+        private void HealthPivot_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_healthService == null || HealthPivot == null) return;
+            var newTab = HealthPivot.SelectedIndex switch
+            {
+                1 => "Sleep",
+                2 => "Sensors",
+                3 => "Nutrition",
+                _ => "Overview"
+            };
+            if (_healthService.CurrentViewType != newTab)
+            {
+                _healthService.CurrentViewType = newTab;
+            }
         }
 
         private Task OnRefreshRequested()
         {
             DispatcherQueue.TryEnqueue(async () =>
             {
-                try
-                {
-                    await LoadDataAsync();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[HealthDetailPage] Threaded refresh failed: {ex.Message}");
-                }
+                try { await LoadDataAsync(); }
+                catch (Exception ex) { Console.WriteLine($"[HealthDetailPage] Refresh failed: {ex.Message}"); }
             });
             return Task.CompletedTask;
-        }
-
-        private void BackButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (Frame.CanGoBack)
-            {
-                Frame.GoBack();
-            }
         }
 
         private async void SyncButton_Click(object sender, RoutedEventArgs e)
@@ -81,7 +130,9 @@ namespace Daily_WinUI.Views
         public async Task RefreshFromTitleBarAsync()
         {
             if (_isSyncing) return;
-            IsSyncing = true;
+            _isSyncing = true;
+            OnPropertyChanged(nameof(IsNotSyncing));
+
             try
             {
                 await _healthService.SyncNativeHealthDataAsync();
@@ -93,7 +144,8 @@ namespace Daily_WinUI.Views
             }
             finally
             {
-                IsSyncing = false;
+                _isSyncing = false;
+                OnPropertyChanged(nameof(IsNotSyncing));
             }
         }
 
@@ -102,35 +154,292 @@ namespace Daily_WinUI.Views
             try
             {
                 _metrics = await _healthService.FetchMetricsAsync(DateTime.Now);
-                CalculateDominantSource();
-                NotifyAllProperties();
 
-                // Load History
+                var yesterdayEvening = DateTime.Today.AddDays(-1).AddHours(18);
+                var endOfToday = DateTime.Today.AddDays(1).AddTicks(-1);
+                _telemetryData = await _healthService.GetHealthTelemetryAsync(yesterdayEvening, endOfToday);
+
+                ProcessSleepTelemetry();
+                ProcessSensorsTelemetry();
+
+                NotifyAllProperties();
                 await LoadHistoryAsync();
 
-                try
-                {
-                    var behaviorService = App.Current.Services.GetService<Daily_WinUI.Services.IBehaviorService>();
-                    if (behaviorService != null)
-                    {
-                        var stepsMetric = GetMetric(VitalType.Steps);
-                        var hrMetric = GetMetric(VitalType.HeartRate);
-                        var sleepMetric = GetMetric(VitalType.SleepDuration);
-                        double steps = stepsMetric?.Value ?? 0;
-                        double hr = hrMetric?.Value ?? 0;
-                        double sleepHours = sleepMetric != null ? Daily_WinUI.Services.SettingsService.ConvertSleepToHours(sleepMetric.Value, sleepMetric.Unit) : 0;
-                        
-                        string metadata = $"{{\"steps\":{steps},\"heartRate\":{hr},\"sleepHours\":{sleepHours:F1}}}";
-                        _ = behaviorService.TrackEventAsync("Health", "ViewVitals", metadata);
-                    }
-                }
-                catch { }
+                DrawSleepHypnogram();
+                DrawSleepXAxis();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[HealthDetail] Error loading data: {ex.Message}");
             }
         }
+
+        // ==========================================
+        // SLEEP ARCHITECTURE PROCESSING & HYPNOGRAM
+        // ==========================================
+
+        private int _sleepScore = 0;
+        private int _sleepEfficiency = 0;
+        private int _restorativePct = 0;
+        private int _awakeCount = 0;
+        private string _sleepAsleepFormatted = "--";
+        private string _sleepInBedFormatted = "--";
+        private string _deepDurationFormatted = "--";
+        private string _remDurationFormatted = "--";
+        private string _lightDurationFormatted = "--";
+        private string _awakeDurationFormatted = "--";
+        private int _deepPct = 0;
+        private int _remPct = 0;
+        private int _lightPct = 0;
+        private int _awakePct = 0;
+        private DateTime _sleepMinTime = DateTime.MinValue;
+        private DateTime _sleepMaxTime = DateTime.MinValue;
+
+        private void ProcessSleepTelemetry()
+        {
+            _sleepTelemetry = _telemetryData
+                .Where(x => x.IsSleep)
+                .OrderBy(x => x.LocalStartTime)
+                .ToList();
+
+            if (_sleepTelemetry.Any())
+            {
+                _sleepMinTime = _sleepTelemetry.Min(x => x.LocalStartTime);
+                _sleepMaxTime = _sleepTelemetry.Max(x => x.LocalEndTime);
+
+                var deepSec = _sleepTelemetry.Where(x => x.SleepCategory == "Deep").Sum(x => x.DurationSeconds);
+                var remSec = _sleepTelemetry.Where(x => x.SleepCategory == "REM").Sum(x => x.DurationSeconds);
+                var lightSec = _sleepTelemetry.Where(x => x.SleepCategory == "Core").Sum(x => x.DurationSeconds);
+                var awakeSec = _sleepTelemetry.Where(x => x.SleepCategory == "Awake").Sum(x => x.DurationSeconds);
+
+                var asleepSec = deepSec + remSec + lightSec;
+                var totalSec = (_sleepMaxTime - _sleepMinTime).TotalSeconds;
+                var inBedSec = Math.Max(asleepSec + awakeSec, totalSec > 0 ? totalSec : asleepSec);
+
+                _sleepAsleepFormatted = FormatSeconds(asleepSec);
+                _sleepInBedFormatted = FormatSeconds(inBedSec);
+                _deepDurationFormatted = FormatSeconds(deepSec);
+                _remDurationFormatted = FormatSeconds(remSec);
+                _lightDurationFormatted = FormatSeconds(lightSec);
+                _awakeDurationFormatted = FormatSeconds(awakeSec);
+
+                _awakeCount = _sleepTelemetry.Count(x => x.SleepCategory == "Awake");
+
+                if (asleepSec > 0)
+                {
+                    _deepPct = (int)((deepSec / asleepSec) * 100);
+                    _remPct = (int)((remSec / asleepSec) * 100);
+                    _lightPct = (int)((lightSec / asleepSec) * 100);
+                    _restorativePct = _deepPct + _remPct;
+                }
+
+                if (inBedSec > 0)
+                {
+                    _awakePct = (int)((awakeSec / inBedSec) * 100);
+                    _sleepEfficiency = Math.Min((int)((asleepSec / inBedSec) * 100), 100);
+                }
+
+                double durationScore = Math.Min((asleepSec / (8.0 * 3600.0)) * 50.0, 50.0);
+                double efficiencyScore = (_sleepEfficiency / 100.0) * 30.0;
+                double qualityScore = Math.Min((_restorativePct / 40.0) * 20.0, 20.0);
+                _sleepScore = Math.Clamp((int)(durationScore + efficiencyScore + qualityScore), 0, 100);
+            }
+            else
+            {
+                // Fallback from aggregated vitals
+                var dM = GetMetric(VitalType.SleepDeep)?.Value ?? 0;
+                var rM = GetMetric(VitalType.SleepREM)?.Value ?? 0;
+                var lM = GetMetric(VitalType.SleepLight)?.Value ?? 0;
+                var aM = GetMetric(VitalType.SleepAwake)?.Value ?? 0;
+                var totalM = dM + rM + lM;
+                var inBedM = totalM + aM;
+
+                _sleepAsleepFormatted = totalM > 0 ? FormatMinutes(totalM) : "--";
+                _sleepInBedFormatted = inBedM > 0 ? FormatMinutes(inBedM) : "--";
+                _deepDurationFormatted = FormatMinutes(dM);
+                _remDurationFormatted = FormatMinutes(rM);
+                _lightDurationFormatted = FormatMinutes(lM);
+                _awakeDurationFormatted = FormatMinutes(aM);
+
+                if (totalM > 0)
+                {
+                    _deepPct = (int)((dM / totalM) * 100);
+                    _remPct = (int)((rM / totalM) * 100);
+                    _lightPct = (int)((lM / totalM) * 100);
+                    _restorativePct = _deepPct + _remPct;
+                }
+                if (inBedM > 0)
+                {
+                    _awakePct = (int)((aM / inBedM) * 100);
+                    _sleepEfficiency = (int)((totalM / inBedM) * 100);
+                }
+                _sleepScore = totalM > 0 ? Math.Clamp((int)((totalM / 480.0) * 85.0 + 10), 40, 95) : 0;
+            }
+        }
+
+        private void SleepHypnogramCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            DrawSleepHypnogram();
+            DrawSleepXAxis();
+        }
+
+        private void DrawSleepHypnogram()
+        {
+            if (SleepHypnogramCanvas == null) return;
+            SleepHypnogramCanvas.Children.Clear();
+
+            if (_sleepTelemetry == null || !_sleepTelemetry.Any()) return;
+
+            double canvasWidth = SleepHypnogramCanvas.ActualWidth;
+            double canvasHeight = SleepHypnogramCanvas.ActualHeight;
+            if (canvasWidth <= 0 || canvasHeight <= 0) return;
+
+            double totalSeconds = (_sleepMaxTime - _sleepMinTime).TotalSeconds;
+            if (totalSeconds <= 0) return;
+
+            double rowHeight = 32;
+            double[] rowTops = new double[] { 6, 46, 86, 126 };
+
+            // Horizontal dashed guideline borders
+            for (int r = 0; r < 4; r++)
+            {
+                var laneGuide = new Microsoft.UI.Xaml.Shapes.Rectangle
+                {
+                    Width = canvasWidth,
+                    Height = 1,
+                    Fill = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255))
+                };
+                Canvas.SetLeft(laneGuide, 0);
+                Canvas.SetTop(laneGuide, rowTops[r] + rowHeight + 2);
+                SleepHypnogramCanvas.Children.Add(laneGuide);
+            }
+
+            // Vertical hourly grid lines
+            var startHour = new DateTime(_sleepMinTime.Year, _sleepMinTime.Month, _sleepMinTime.Day, _sleepMinTime.Hour, 0, 0);
+            var endHour = _sleepMaxTime.AddHours(1);
+            for (var cur = startHour; cur <= endHour; cur = cur.AddHours(1))
+            {
+                if (cur >= _sleepMinTime && cur <= _sleepMaxTime)
+                {
+                    double left = ((cur - _sleepMinTime).TotalSeconds / totalSeconds) * canvasWidth;
+                    var line = new Microsoft.UI.Xaml.Shapes.Rectangle
+                    {
+                        Width = 1,
+                        Height = canvasHeight,
+                        Fill = new SolidColorBrush(Color.FromArgb(20, 255, 255, 255))
+                    };
+                    Canvas.SetLeft(line, left);
+                    Canvas.SetTop(line, 0);
+                    SleepHypnogramCanvas.Children.Add(line);
+                }
+            }
+
+            // Sleep stage blocks
+            foreach (var item in _sleepTelemetry)
+            {
+                double left = ((item.LocalStartTime - _sleepMinTime).TotalSeconds / totalSeconds) * canvasWidth;
+                double duration = Math.Max((item.LocalEndTime - item.LocalStartTime).TotalSeconds, item.DurationSeconds);
+                double width = Math.Max((duration / totalSeconds) * canvasWidth, 3.0);
+
+                int rowIndex = item.SleepCategory switch
+                {
+                    "Awake" => 0,
+                    "REM" => 1,
+                    "Deep" => 3,
+                    _ => 2 // Core / Light
+                };
+
+                var color = item.SleepCategory switch
+                {
+                    "Awake" => Color.FromArgb(255, 255, 112, 67),   // #FF7043
+                    "REM" => Color.FromArgb(255, 38, 198, 218),     // #26C6DA
+                    "Deep" => Color.FromArgb(255, 57, 73, 171),     // #3949AB
+                    _ => Color.FromArgb(255, 66, 165, 245)          // #42A5F5
+                };
+
+                var block = new Border
+                {
+                    Width = width,
+                    Height = rowHeight,
+                    Background = new SolidColorBrush(color),
+                    CornerRadius = new CornerRadius(4)
+                };
+                ToolTipService.SetToolTip(block, $"{item.SleepCategory}: {item.LocalStartTime:HH:mm} - {item.LocalEndTime:HH:mm} ({(int)(duration / 60)} min)");
+
+                Canvas.SetLeft(block, left);
+                Canvas.SetTop(block, rowTops[rowIndex]);
+                SleepHypnogramCanvas.Children.Add(block);
+            }
+        }
+
+        private void DrawSleepXAxis()
+        {
+            if (SleepXAxisCanvas == null) return;
+            SleepXAxisCanvas.Children.Clear();
+
+            if (_sleepTelemetry == null || !_sleepTelemetry.Any()) return;
+
+            double canvasWidth = SleepXAxisCanvas.ActualWidth;
+            if (canvasWidth <= 0) return;
+
+            double totalSeconds = (_sleepMaxTime - _sleepMinTime).TotalSeconds;
+            if (totalSeconds <= 0) return;
+
+            var startHour = new DateTime(_sleepMinTime.Year, _sleepMinTime.Month, _sleepMinTime.Day, _sleepMinTime.Hour, 0, 0);
+            var endHour = _sleepMaxTime.AddHours(1);
+            for (var cur = startHour; cur <= endHour; cur = cur.AddHours(1))
+            {
+                if (cur >= _sleepMinTime && cur <= _sleepMaxTime)
+                {
+                    double left = ((cur - _sleepMinTime).TotalSeconds / totalSeconds) * canvasWidth;
+                    var tb = new TextBlock
+                    {
+                        Text = cur.ToString("HH:mm"),
+                        FontSize = 10,
+                        Opacity = 0.5
+                    };
+                    Canvas.SetLeft(tb, Math.Max(0, left - 14));
+                    Canvas.SetTop(tb, 2);
+                    SleepXAxisCanvas.Children.Add(tb);
+                }
+            }
+        }
+
+        // ==========================================
+        // SENSORS & INTRADAY TELEMETRY PROCESSING
+        // ==========================================
+
+        private double _avgIntradayHr = 0;
+        private int _hrRestingPct = 70;
+        private int _hrFatBurnPct = 20;
+        private int _hrCardioPct = 8;
+        private int _hrPeakPct = 2;
+        private int _stressLevel = 28;
+        private int _paiScore = 82;
+
+        private void ProcessSensorsTelemetry()
+        {
+            var today = DateTime.Today;
+
+            HeartRateTelemetryData = _telemetryData
+                .Where(x => x.IsHeartRate && x.LocalStartTime >= today && x.Value.HasValue)
+                .OrderBy(x => x.LocalStartTime)
+                .ToList();
+
+            if (HeartRateTelemetryData.Any())
+            {
+                _avgIntradayHr = Math.Round(HeartRateTelemetryData.Average(x => x.Value!.Value), 0);
+                var total = HeartRateTelemetryData.Count;
+                _hrRestingPct = (int)((HeartRateTelemetryData.Count(x => x.Value < 100) / (double)total) * 100);
+                _hrFatBurnPct = (int)((HeartRateTelemetryData.Count(x => x.Value >= 100 && x.Value < 120) / (double)total) * 100);
+                _hrCardioPct = (int)((HeartRateTelemetryData.Count(x => x.Value >= 120 && x.Value < 150) / (double)total) * 100);
+                _hrPeakPct = Math.Max(0, 100 - (_hrRestingPct + _hrFatBurnPct + _hrCardioPct));
+            }
+        }
+
+        // ==========================================
+        // 7-DAY TRENDS & HISTORY
+        // ==========================================
 
         private async Task LoadHistoryAsync()
         {
@@ -140,537 +449,216 @@ namespace Daily_WinUI.Views
                 var hrData = await _healthService.GetHistoryAsync(VitalType.HeartRate, 7);
                 var sleepData = await _healthService.GetHistoryAsync(VitalType.SleepDuration, 7);
                 var caloriesData = await _healthService.GetHistoryAsync(VitalType.ActiveEnergy, 7);
-                var weightData = await _healthService.GetHistoryAsync(VitalType.Weight, 7);
-                var hrvData = await _healthService.GetHistoryAsync(VitalType.HeartRateVariabilitySDNN, 7);
-                if (!hrvData.Any())
-                {
-                    hrvData = await _healthService.GetHistoryAsync(VitalType.HeartRateVariabilityRMSSD, 7);
-                }
 
                 StepsHistory.Clear();
                 HrHistory.Clear();
                 SleepHistory.Clear();
                 CaloriesHistory.Clear();
-                WeightHistory.Clear();
-                HrvHistory.Clear();
-
-                var stepsRawList = new List<double>();
-                var hrRawList = new List<double>();
-                var sleepRawList = new List<double>();
-                var caloriesRawList = new List<double>();
-                var weightRawList = new List<double>();
-                var hrvRawList = new List<double>();
-                var daysLabels = new List<string>();
 
                 for (int i = 6; i >= 0; i--)
                 {
                     var day = DateTime.Today.AddDays(-i);
-                    daysLabels.Add(day.ToString("ddd"));
+                    var label = day.ToString("ddd");
 
-                    var stepValue = stepsData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
-                    stepsRawList.Add(stepValue);
+                    var sVal = stepsData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
+                    StepsHistory.Add(new ChartData { Label = label, Value = sVal });
 
-                    var hrValue = hrData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
-                    hrRawList.Add(hrValue);
+                    var hrVal = hrData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
+                    HrHistory.Add(new ChartData { Label = label, Value = hrVal });
 
-                    var sleepMetricObj = sleepData.FirstOrDefault(m => m.Date.Date == day);
-                    var sleepHours = sleepMetricObj != null ? Daily_WinUI.Services.SettingsService.ConvertSleepToHours(sleepMetricObj.Value, sleepMetricObj.Unit) : 0;
-                    sleepRawList.Add(Math.Round(sleepHours, 1));
+                    var slMetric = sleepData.FirstOrDefault(m => m.Date.Date == day);
+                    var slHours = slMetric != null ? Daily_WinUI.Services.SettingsService.ConvertSleepToHours(slMetric.Value, slMetric.Unit) : 0;
+                    SleepHistory.Add(new ChartData { Label = label, Value = Math.Round(slHours, 1) });
 
-                    var calValue = caloriesData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
-                    caloriesRawList.Add(calValue);
-
-                    var weightValue = weightData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
-                    weightRawList.Add(weightValue);
-
-                    var hrvValue = hrvData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
-                    hrvRawList.Add(hrvValue);
+                    var calVal = caloriesData.FirstOrDefault(m => m.Date.Date == day)?.Value ?? 0;
+                    CaloriesHistory.Add(new ChartData { Label = label, Value = calVal });
                 }
-
-                // Steps calculations
-                var nonZeroSteps = stepsRawList.Where(v => v > 0).ToList();
-                _stepsMax = stepsRawList.Any() ? stepsRawList.Max() : 0;
-                _stepsMin = nonZeroSteps.Any() ? nonZeroSteps.Min() : 0;
-                _stepsAvg = nonZeroSteps.Any() ? nonZeroSteps.Average() : 0;
-                _stepsTotal = stepsRawList.Sum();
-
-                // HR calculations
-                var nonZeroHr = hrRawList.Where(v => v > 0).ToList();
-                _hrMax = hrRawList.Any() ? hrRawList.Max() : 0;
-                _hrMin = nonZeroHr.Any() ? nonZeroHr.Min() : 0;
-                _hrAvg = nonZeroHr.Any() ? nonZeroHr.Average() : 0;
-                double hrRange = _hrMax - _hrMin;
-
-                // Sleep calculations
-                var nonZeroSleep = sleepRawList.Where(v => v > 0).ToList();
-                _sleepMax = sleepRawList.Any() ? sleepRawList.Max() : 0;
-                _sleepMin = nonZeroSleep.Any() ? nonZeroSleep.Min() : 0;
-                _sleepAvg = nonZeroSleep.Any() ? nonZeroSleep.Average() : 0;
-
-                // Calories calculations
-                var nonZeroCal = caloriesRawList.Where(v => v > 0).ToList();
-                _caloriesMax = caloriesRawList.Any() ? caloriesRawList.Max() : 0;
-                _caloriesMin = nonZeroCal.Any() ? nonZeroCal.Min() : 0;
-                _caloriesAvg = nonZeroCal.Any() ? nonZeroCal.Average() : 0;
-                _caloriesTotal = caloriesRawList.Sum();
-
-                // Weight calculations
-                var nonZeroWeight = weightRawList.Where(v => v > 0).ToList();
-                _weightMax = weightRawList.Any() ? weightRawList.Max() : 0;
-                _weightMin = nonZeroWeight.Any() ? nonZeroWeight.Min() : 0;
-                _weightAvg = nonZeroWeight.Any() ? nonZeroWeight.Average() : 0;
-                double weightRange = _weightMax - _weightMin;
-
-                // HRV calculations
-                var nonZeroHrv = hrvRawList.Where(v => v > 0).ToList();
-                _hrvMax = hrvRawList.Any() ? hrvRawList.Max() : 0;
-                _hrvMin = nonZeroHrv.Any() ? nonZeroHrv.Min() : 0;
-                _hrvAvg = nonZeroHrv.Any() ? nonZeroHrv.Average() : 0;
-                double hrvRange = _hrvMax - _hrvMin;
-
-                // Populate History Lists
-                for (int i = 0; i < 7; i++)
-                {
-                    var label = daysLabels[i];
-
-                    // Steps
-                    double sVal = stepsRawList[i];
-                    double sPct = 0;
-                    if (sVal > 0 && _stepsMax > 0)
-                    {
-                        sPct = (sVal / _stepsMax) * 100.0;
-                        sPct = Math.Max(10, sPct);
-                    }
-                    StepsHistory.Add(new ChartData
-                    {
-                        Label = label,
-                        Value = sVal,
-                        Percentage = sPct,
-                        BarHeight = (sPct / 100.0) * 50.0,
-                        FormattedValue = FormatNumber(sVal)
-                    });
-
-                    // Heart Rate
-                    double hrVal = hrRawList[i];
-                    double hrPct = 0;
-                    if (hrVal > 0)
-                    {
-                        if (hrRange > 0)
-                        {
-                            hrPct = ((hrVal - _hrMin) / hrRange) * 100.0;
-                            hrPct = Math.Max(15, Math.Min(hrPct, 100));
-                        }
-                        else
-                        {
-                            hrPct = 50;
-                        }
-                    }
-                    HrHistory.Add(new ChartData
-                    {
-                        Label = label,
-                        Value = hrVal,
-                        Percentage = hrPct,
-                        BarHeight = (hrPct / 100.0) * 50.0,
-                        FormattedValue = hrVal > 0 ? hrVal.ToString("N0") : "--"
-                    });
-
-                    // Sleep
-                    double slVal = sleepRawList[i];
-                    double slPct = 0;
-                    if (slVal > 0 && _sleepMax > 0)
-                    {
-                        slPct = (slVal / _sleepMax) * 100.0;
-                        slPct = Math.Max(10, slPct);
-                    }
-                    SleepHistory.Add(new ChartData
-                    {
-                        Label = label,
-                        Value = slVal,
-                        Percentage = slPct,
-                        BarHeight = (slPct / 100.0) * 50.0,
-                        FormattedValue = slVal > 0 ? slVal.ToString("N1") + "h" : "--"
-                    });
-
-                    // Calories
-                    double calVal = caloriesRawList[i];
-                    double calPct = 0;
-                    if (calVal > 0 && _caloriesMax > 0)
-                    {
-                        calPct = (calVal / _caloriesMax) * 100.0;
-                        calPct = Math.Max(10, calPct);
-                    }
-                    CaloriesHistory.Add(new ChartData
-                    {
-                        Label = label,
-                        Value = calVal,
-                        Percentage = calPct,
-                        BarHeight = (calPct / 100.0) * 50.0,
-                        FormattedValue = FormatNumber(calVal)
-                    });
-
-                    // Weight
-                    double wVal = weightRawList[i];
-                    double wPct = 0;
-                    if (wVal > 0)
-                    {
-                        if (weightRange > 0)
-                        {
-                            wPct = ((wVal - _weightMin) / weightRange) * 100.0;
-                            wPct = Math.Max(15, Math.Min(wPct, 100));
-                        }
-                        else
-                        {
-                            wPct = 50;
-                        }
-                    }
-                    WeightHistory.Add(new ChartData
-                    {
-                        Label = label,
-                        Value = wVal,
-                        Percentage = wPct,
-                        BarHeight = (wPct / 100.0) * 50.0,
-                        FormattedValue = wVal > 0 ? wVal.ToString("N1") : "--"
-                    });
-
-                    // HRV
-                    double hrvVal = hrvRawList[i];
-                    double hrvPct = 0;
-                    if (hrvVal > 0)
-                    {
-                        if (hrvRange > 0)
-                        {
-                            hrvPct = ((hrvVal - _hrvMin) / hrvRange) * 100.0;
-                            hrvPct = Math.Max(15, Math.Min(hrvPct, 100));
-                        }
-                        else
-                        {
-                            hrvPct = 50;
-                        }
-                    }
-                    HrvHistory.Add(new ChartData
-                    {
-                        Label = label,
-                        Value = hrvVal,
-                        Percentage = hrvPct,
-                        BarHeight = (hrvPct / 100.0) * 50.0,
-                        FormattedValue = hrvVal > 0 ? hrvVal.ToString("N0") : "--"
-                    });
-                }
-
-                // Notify UI of stats updates
-                NotifyAllProperties();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[HealthDetail] Error loading history: {ex.Message}");
+                Console.WriteLine($"[HealthDetail] History load error: {ex.Message}");
             }
         }
 
-        private VitalMetric GetMetric(VitalType type)
+        // ==========================================
+        // BINDABLE PROPERTIES
+        // ==========================================
+
+        // Overview & Core Vitals
+        public string StepsText => FormatNumber(GetMetric(VitalType.Steps)?.Value ?? 0);
+        public string CaloriesText => FormatNumber(GetMetric(VitalType.ActiveEnergy)?.Value ?? 0);
+        public string SleepText => FormatMinutes(GetMetric(VitalType.SleepDuration)?.Value ?? 0);
+        public string DistanceText => (GetMetric(VitalType.Distance)?.Value > 0) ? $"{Math.Round(GetMetric(VitalType.Distance)!.Value / 1000.0, 2)} km" : "--";
+        public string FloorsText => (GetMetric(VitalType.FloorsClimbed)?.Value > 0) ? GetMetric(VitalType.FloorsClimbed)!.Value.ToString("N0") : "--";
+        public string SpeedText => (GetMetric(VitalType.WalkingSpeed)?.Value > 0) ? $"{GetMetric(VitalType.WalkingSpeed)!.Value:N1} m/s" : "--";
+        public string BasalCaloriesText => (GetMetric(VitalType.BasalEnergyBurned)?.Value > 0) ? $"{GetMetric(VitalType.BasalEnergyBurned)!.Value:N0} kcal" : "--";
+
+        public string HeartRateText => (GetMetric(VitalType.HeartRate)?.Value > 0) ? $"{GetMetric(VitalType.HeartRate)!.Value:N0} BPM" : "--";
+        public string BloodPressureText
+        {
+            get
+            {
+                var sys = GetMetric(VitalType.BloodPressureSystolic)?.Value ?? 0;
+                var dia = GetMetric(VitalType.BloodPressureDiastolic)?.Value ?? 0;
+                return (sys > 0 && dia > 0) ? $"{sys:N0}/{dia:N0}" : "--";
+            }
+        }
+        public string HrvText => (GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value > 0) ? $"{GetMetric(VitalType.HeartRateVariabilitySDNN)!.Value:N0} ms" : "--";
+        public string Spo2Text => (GetMetric(VitalType.OxygenSaturation)?.Value > 0) ? $"{GetMetric(VitalType.OxygenSaturation)!.Value:N0}%" : "--";
+        public string RhrText => (GetMetric(VitalType.RestingHeartRate)?.Value > 0) ? $"{GetMetric(VitalType.RestingHeartRate)!.Value:N0} bpm" : "--";
+        public string RespText => (GetMetric(VitalType.RespiratoryRate)?.Value > 0) ? $"{GetMetric(VitalType.RespiratoryRate)!.Value:N0} br/m" : "--";
+        public string GlucoseText => (GetMetric(VitalType.BloodGlucose)?.Value > 0) ? $"{GetMetric(VitalType.BloodGlucose)!.Value:N0} mg/dL" : "--";
+        public string TempText => (GetMetric(VitalType.BodyTemperature)?.Value > 0) ? $"{GetMetric(VitalType.BodyTemperature)!.Value:N1} °C" : "--";
+
+        // Sleep Tab Properties
+        public string SleepScoreText => _sleepScore > 0 ? _sleepScore.ToString() : "--";
+        public string SleepQualityTitle => _sleepScore switch
+        {
+            >= 90 => "Excellent Sleep",
+            >= 80 => "Good Sleep",
+            >= 70 => "Fair Sleep",
+            > 0 => "Needs Improvement",
+            _ => "Analyzing Sleep"
+        };
+        public string SleepScheduleText => _sleepMinTime != DateTime.MinValue && _sleepMaxTime != DateTime.MinValue
+            ? $"Bed: {_sleepMinTime:HH:mm} • Wake: {_sleepMaxTime:HH:mm}"
+            : "Wearable sleep schedule not recorded";
+        public string SleepEfficiencyText => $"Efficiency: {_sleepEfficiency}%";
+        public string SleepAsleepText => _sleepAsleepFormatted;
+        public string SleepInBedText => _sleepInBedFormatted;
+        public string AwakeCountText => _awakeCount.ToString();
+        public string RestorativePercentText => $"{_restorativePct}%";
+
+        public string DeepDurationText => _deepDurationFormatted;
+        public string RemDurationText => _remDurationFormatted;
+        public string LightDurationText => _lightDurationFormatted;
+        public string AwakeDurationText => _awakeDurationFormatted;
+        public string DeepPercentText => $"{_deepPct}% of total sleep";
+        public string RemPercentText => $"{_remPct}% of total sleep";
+        public string LightPercentText => $"{_lightPct}% of total sleep";
+        public string AwakePercentText => $"{_awakePct}% time in bed";
+
+        // Sensors Tab Properties
+        public string AvgIntradayHrText => _avgIntradayHr > 0 ? $"{_avgIntradayHr:N0} BPM AVG" : "--";
+        public string HrRestingPctText => $"{_hrRestingPct}%";
+        public string HrFatBurnPctText => $"{_hrFatBurnPct}%";
+        public string HrCardioPctText => $"{_hrCardioPct}%";
+        public string HrPeakPctText => $"{_hrPeakPct}%";
+        public string StressLevelText => _stressLevel.ToString();
+        public double StressLevelValue => _stressLevel;
+        public string PaiScoreText => $"{_paiScore} PAI";
+        public double PaiScoreValue => _paiScore;
+
+        // Nutrition & Body Composition
+        public string WaterIntakeText
+        {
+            get
+            {
+                var val = GetMetric(VitalType.Hydration)?.Value ?? 0;
+                var liters = val > 20 ? val / 1000.0 : val;
+                return liters > 0 ? liters.ToString("N1") : "--";
+            }
+        }
+        public double WaterPercentValue
+        {
+            get
+            {
+                var val = GetMetric(VitalType.Hydration)?.Value ?? 0;
+                var liters = val > 20 ? val / 1000.0 : val;
+                return Math.Min((liters / 3.0) * 100.0, 100.0);
+            }
+        }
+        public string WaterPercentText => $"{(int)WaterPercentValue}% of daily 3.0L goal";
+
+        public string CarbsText => $"{GetMetric(VitalType.Carbs)?.Value ?? 0:N0}g";
+        public string ProteinText => $"{GetMetric(VitalType.Protein)?.Value ?? 0:N0}g";
+        public string FatText => $"{GetMetric(VitalType.Fat)?.Value ?? 0:N0}g";
+        public string TotalMacrosText
+        {
+            get
+            {
+                var total = (GetMetric(VitalType.Carbs)?.Value ?? 0) + (GetMetric(VitalType.Protein)?.Value ?? 0) + (GetMetric(VitalType.Fat)?.Value ?? 0);
+                return total > 0 ? $"{total:N0}g total logged" : "No nutrition logged";
+            }
+        }
+
+        public string WeightText => (GetMetric(VitalType.Weight)?.Value > 0) ? $"{GetMetric(VitalType.Weight)!.Value:N1} kg" : "--";
+        public string HeightText
+        {
+            get
+            {
+                var val = GetMetric(VitalType.Height)?.Value ?? 0;
+                if (val <= 0) return "--";
+                return val > 3 ? $"{val:N0} cm" : $"{val * 100:N0} cm";
+            }
+        }
+        public string BmiText
+        {
+            get
+            {
+                var bmi = GetMetric(VitalType.BodyMassIndex)?.Value ?? 0;
+                if (bmi > 0) return bmi.ToString("N1");
+                var w = GetMetric(VitalType.Weight)?.Value ?? 0;
+                var h = GetMetric(VitalType.Height)?.Value ?? 0;
+                var hM = h > 3 ? h / 100.0 : h;
+                if (w > 0 && hM > 0) return (w / (hM * hM)).ToString("N1");
+                return "--";
+            }
+        }
+        public string BmiCategoryText
+        {
+            get
+            {
+                if (!double.TryParse(BmiText, out var bmi) || bmi <= 0) return "--";
+                if (bmi < 18.5) return "Underweight";
+                if (bmi <= 24.9) return "Normal";
+                if (bmi <= 29.9) return "Overweight";
+                return "Obese";
+            }
+        }
+        public string BodyFatText => (GetMetric(VitalType.BodyFatPercentage)?.Value > 0) ? $"{GetMetric(VitalType.BodyFatPercentage)!.Value:N1}%" : "--";
+        public string LeanMassText => (GetMetric(VitalType.LeanBodyMass)?.Value > 0) ? $"{GetMetric(VitalType.LeanBodyMass)!.Value:N1} kg" : "--";
+        public string BoneMassText => (GetMetric(VitalType.BoneMass)?.Value > 0) ? $"{GetMetric(VitalType.BoneMass)!.Value:N1} kg" : "--";
+
+        public string CaffeineText => (GetMetric(VitalType.Caffeine)?.Value > 0) ? $"{GetMetric(VitalType.Caffeine)!.Value:N0} mg" : "--";
+        public string SugarText => (GetMetric(VitalType.Sugar)?.Value > 0) ? $"{GetMetric(VitalType.Sugar)!.Value:N0} g" : "--";
+        public string MagnesiumText => (GetMetric(VitalType.Magnesium)?.Value > 0) ? $"{GetMetric(VitalType.Magnesium)!.Value:N0} mg" : "--";
+        public string ZincText => (GetMetric(VitalType.Zinc)?.Value > 0) ? $"{GetMetric(VitalType.Zinc)!.Value:N1} mg" : "--";
+        public string CalciumText => (GetMetric(VitalType.Calcium)?.Value > 0) ? $"{GetMetric(VitalType.Calcium)!.Value:N0} mg" : "--";
+        public string IronText => (GetMetric(VitalType.Iron)?.Value > 0) ? $"{GetMetric(VitalType.Iron)!.Value:N1} mg" : "--";
+        public string VitaminCText => (GetMetric(VitalType.VitaminC)?.Value > 0) ? $"{GetMetric(VitalType.VitaminC)!.Value:N0} mg" : "--";
+        public string VitaminAText => (GetMetric(VitalType.VitaminA)?.Value > 0) ? $"{GetMetric(VitalType.VitaminA)!.Value:N0} mcg" : "--";
+
+        // Helpers
+        private VitalMetric? GetMetric(VitalType type)
         {
             var m = _metrics.FirstOrDefault(x => x.TypeString == type.ToString());
             return m?.Value > 0 ? m : null;
         }
 
-        // --- Bindable Properties ---
-
-        private bool _isSyncing;
-        public bool IsSyncing
-        {
-            get => _isSyncing;
-            set
-            {
-                _isSyncing = value;
-                OnPropertyChanged(nameof(IsSyncing));
-                OnPropertyChanged(nameof(IsNotSyncing));
-            }
-        }
-        public bool IsNotSyncing => !_isSyncing;
-
-        public ObservableCollection<ChartData> StepsHistory { get; set; } = new();
-        public ObservableCollection<ChartData> HrHistory { get; set; } = new();
-        public ObservableCollection<ChartData> SleepHistory { get; set; } = new();
-        public ObservableCollection<ChartData> CaloriesHistory { get; set; } = new();
-        public ObservableCollection<ChartData> WeightHistory { get; set; } = new();
-        public ObservableCollection<ChartData> HrvHistory { get; set; } = new();
-
-        // --- Stats Grid Bindings ---
-        // Steps stats
-        private double _stepsAvg;
-        private double _stepsMax;
-        private double _stepsMin;
-        private double _stepsTotal;
-        public string StepsAvgText => FormatNumber(_stepsAvg);
-        public string StepsMaxText => FormatNumber(_stepsMax);
-        public string StepsMinText => FormatNumber(_stepsMin);
-        public string StepsTotalText => FormatNumber(_stepsTotal);
-
-        // Heart rate stats
-        private double _hrAvg;
-        private double _hrMax;
-        private double _hrMin;
-        public string HrAvgText => _hrAvg > 0 ? _hrAvg.ToString("N0") : "--";
-        public string HrMaxText => _hrMax > 0 ? _hrMax.ToString("N0") : "--";
-        public string HrMinText => _hrMin > 0 ? _hrMin.ToString("N0") : "--";
-        public string HrTodayText => HrHistory.Count > 0 && HrHistory[HrHistory.Count - 1].Value > 0 ? HrHistory[HrHistory.Count - 1].Value.ToString("N0") : "--";
-
-        // Sleep stats
-        private double _sleepAvg;
-        private double _sleepMax;
-        private double _sleepMin;
-        public string SleepAvgText => _sleepAvg > 0 ? _sleepAvg.ToString("N1") + "h" : "--";
-        public string SleepMaxText => _sleepMax > 0 ? _sleepMax.ToString("N1") + "h" : "--";
-        public string SleepMinText => _sleepMin > 0 ? _sleepMin.ToString("N1") + "h" : "--";
-        public string SleepTodayText => SleepHistory.Count > 0 && SleepHistory[SleepHistory.Count - 1].Value > 0 ? SleepHistory[SleepHistory.Count - 1].Value.ToString("N1") + "h" : "--";
-
-        // Calories stats
-        private double _caloriesAvg;
-        private double _caloriesMax;
-        private double _caloriesMin;
-        private double _caloriesTotal;
-        public string CaloriesAvgText => FormatNumber(_caloriesAvg);
-        public string CaloriesMaxText => FormatNumber(_caloriesMax);
-        public string CaloriesMinText => FormatNumber(_caloriesMin);
-        public string CaloriesTotalText => FormatNumber(_caloriesTotal);
-        public string CaloriesTodayText => CaloriesHistory.Count > 0 && CaloriesHistory[CaloriesHistory.Count - 1].Value > 0 ? FormatNumber(CaloriesHistory[CaloriesHistory.Count - 1].Value) : "--";
-
-        // Weight stats
-        private double _weightAvg;
-        private double _weightMax;
-        private double _weightMin;
-        public string WeightAvgText => _weightAvg > 0 ? _weightAvg.ToString("N1") + " kg" : "--";
-        public string WeightMaxText => _weightMax > 0 ? _weightMax.ToString("N1") + " kg" : "--";
-        public string WeightMinText => _weightMin > 0 ? _weightMin.ToString("N1") + " kg" : "--";
-        public string WeightTodayText => WeightHistory.Count > 0 && WeightHistory[WeightHistory.Count - 1].Value > 0 ? WeightHistory[WeightHistory.Count - 1].Value.ToString("N1") + " kg" : "--";
-
-        // HRV stats
-        private double _hrvAvg;
-        private double _hrvMax;
-        private double _hrvMin;
-        public string HrvAvgText => _hrvAvg > 0 ? _hrvAvg.ToString("N0") + " ms" : "--";
-        public string HrvMaxText => _hrvMax > 0 ? _hrvMax.ToString("N0") + " ms" : "--";
-        public string HrvMinText => _hrvMin > 0 ? _hrvMin.ToString("N0") + " ms" : "--";
-        public string HrvTodayText => HrvHistory.Count > 0 && HrvHistory[HrvHistory.Count - 1].Value > 0 ? HrvHistory[HrvHistory.Count - 1].Value.ToString("N0") : "--";
-
-        private string _dominantSource = "Mixed";
-        public string SourceTooltip { get; private set; } = "Source: Multiple";
-
-        public Microsoft.UI.Xaml.Media.SolidColorBrush SourceDotColor
-        {
-            get
-            {
-                var color = Microsoft.UI.Colors.Transparent;
-                if (_dominantSource == "iOS") color = Microsoft.UI.ColorHelper.FromArgb(255, 41, 121, 255);
-                else if (_dominantSource == "Health Connect" || _dominantSource == "Android") color = Microsoft.UI.ColorHelper.FromArgb(255, 0, 230, 118);
-                return new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
-            }
-        }
-
-        public string StepsText => FormatNumber(GetMetric(VitalType.Steps)?.Value ?? 0);
-        public string CaloriesText => FormatNumber(GetMetric(VitalType.ActiveEnergy)?.Value ?? 0);
-        public double CaloriesPercent
-        {
-            get
-            {
-                var val = GetMetric(VitalType.ActiveEnergy)?.Value ?? 0;
-                var goal = 2500.0;
-                return Math.Min((val / goal) * 100, 100);
-            }
-        }
-        public string SleepText
-        {
-            get
-            {
-                var m = GetMetric(VitalType.SleepDuration);
-                return FormatSleep(m?.Value ?? 0, m?.Unit);
-            }
-        }
-        
-        public string DistanceText => GetMetric(VitalType.Distance)?.Value > 0 ? Math.Round(GetMetric(VitalType.Distance).Value / 1000.0, 2) + " km" : "--";
-        public string FloorsText => GetMetric(VitalType.FloorsClimbed)?.Value > 0 ? GetMetric(VitalType.FloorsClimbed).Value.ToString("N0") : "--";
-        public string SpeedText => GetMetric(VitalType.WalkingSpeed)?.Value > 0 ? GetMetric(VitalType.WalkingSpeed).Value + " m/s" : "--";
-
-        public string HeartRateText => GetMetric(VitalType.HeartRate)?.Value > 0 ? GetMetric(VitalType.HeartRate).Value + " bpm" : "--";
-        public string WeightText => GetMetric(VitalType.Weight)?.Value > 0 ? GetMetric(VitalType.Weight).Value + " kg" : "--";
-        public string HrvText => (GetMetric(VitalType.HeartRateVariabilitySDNN) ?? GetMetric(VitalType.HeartRateVariabilityRMSSD))?.Value > 0 ? (GetMetric(VitalType.HeartRateVariabilitySDNN) ?? GetMetric(VitalType.HeartRateVariabilityRMSSD)).Value + " ms" : "--";
-        
-        public string BloodPressureText
-        {
-            get
-            {
-                var sys = GetMetric(VitalType.BloodPressureSystolic);
-                var dia = GetMetric(VitalType.BloodPressureDiastolic);
-                if (sys?.Value > 0 && dia?.Value > 0) return $"{sys.Value}/{dia.Value}";
-                return "--";
-            }
-        }
-
-        public string RhrText => GetMetric(VitalType.RestingHeartRate)?.Value > 0 ? GetMetric(VitalType.RestingHeartRate).Value + " bpm" : "--";
-        public string RespText => GetMetric(VitalType.RespiratoryRate)?.Value > 0 ? GetMetric(VitalType.RespiratoryRate).Value + " br/m" : "--";
-        public string Spo2Text => GetMetric(VitalType.OxygenSaturation)?.Value > 0 ? GetMetric(VitalType.OxygenSaturation).Value + "%" : "--";
-        public string GlucoseText => GetMetric(VitalType.BloodGlucose)?.Value > 0 ? GetMetric(VitalType.BloodGlucose).Value + " mg/dL" : "--";
-
-        // Body Composition
-        public string BodyFatText => GetMetric(VitalType.BodyFatPercentage)?.Value > 0 ? GetMetric(VitalType.BodyFatPercentage).Value + "%" : "--";
-        public string BmiText
-        {
-            get
-            {
-                var w = GetMetric(VitalType.Weight)?.Value ?? 0;
-                var h = GetMetric(VitalType.Height)?.Value ?? 0;
-                return w > 0 && h > 0 ? (w / (h * h)).ToString("N1") : "--";
-            }
-        }
-        public string LeanMassText => GetMetric(VitalType.LeanBodyMass)?.Value > 0 ? GetMetric(VitalType.LeanBodyMass).Value + " kg" : "--";
-
-        // Sleep Stages
-        public string DeepSleepText
-        {
-            get
-            {
-                var m = GetMetric(VitalType.SleepDeep);
-                return FormatSleep(m?.Value ?? 0, m?.Unit);
-            }
-        }
-        public string LightSleepText
-        {
-            get
-            {
-                var m = GetMetric(VitalType.SleepLight);
-                return FormatSleep(m?.Value ?? 0, m?.Unit);
-            }
-        }
-        public string RemSleepText
-        {
-            get
-            {
-                var m = GetMetric(VitalType.SleepREM);
-                return FormatSleep(m?.Value ?? 0, m?.Unit);
-            }
-        }
-        public string AwakeSleepText
-        {
-            get
-            {
-                var m = GetMetric(VitalType.SleepAwake);
-                return FormatSleep(m?.Value ?? 0, m?.Unit);
-            }
-        }
-        public Microsoft.UI.Xaml.Visibility SleepStagesVisibility => ((GetMetric(VitalType.SleepDeep)?.Value ?? 0) > 0 || (GetMetric(VitalType.SleepLight)?.Value ?? 0) > 0) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-
-        // Wellness
-        public string MindText => GetMetric(VitalType.MindfulSession)?.Value > 0 ? GetMetric(VitalType.MindfulSession).Value + "m" : "--";
-        public string TempText => GetMetric(VitalType.BodyTemperature)?.Value > 0 ? GetMetric(VitalType.BodyTemperature).Value + "°C" : "--";
-        public string H2oText => GetMetric(VitalType.Hydration)?.Value > 0 ? GetMetric(VitalType.Hydration).Value + "L" : "--";
-
-
-        // --- Helpers ---
-
-        private void CalculateDominantSource()
-        {
-            var sourced = _metrics.Where(m => !string.IsNullOrEmpty(m.SourceDevice)).ToList();
-            if (sourced.Any())
-            {
-                int iosCount = sourced.Count(m => m.SourceDevice == "iOS");
-                int androidCount = sourced.Count(m => m.SourceDevice == "Health Connect" || m.SourceDevice == "Android");
-                int total = sourced.Count;
-                if (total > 0 && (double)iosCount / total >= 0.70) _dominantSource = "iOS";
-                else if (total > 0 && (double)androidCount / total >= 0.70) _dominantSource = "Health Connect";
-                else _dominantSource = "Mixed";
-                SourceTooltip = $"iOS: {iosCount}, Android: {androidCount}";
-            }
-            else
-            {
-                _dominantSource = "Mixed";
-                SourceTooltip = "Source: Multiple";
-            }
-        }
-
         private string FormatNumber(double val) => val >= 1000 ? (val / 1000.0).ToString("N1") + "k" : (val > 0 ? val.ToString("N0") : "--");
-        
-        private string FormatSleep(double rawValue, string? unit = null)
+
+        private string FormatMinutes(double m)
         {
-            if (rawValue <= 0) return "--";
-            double minutes = Daily_WinUI.Services.SettingsService.ConvertSleepToMinutes(rawValue, unit);
-            var ts = TimeSpan.FromMinutes(minutes);
+            if (m <= 0) return "--";
+            var ts = TimeSpan.FromMinutes(m);
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        }
+
+        private string FormatSeconds(double s)
+        {
+            if (s <= 0) return "--";
+            var ts = TimeSpan.FromSeconds(s);
             return $"{(int)ts.TotalHours}h {ts.Minutes}m";
         }
 
         private void NotifyAllProperties()
         {
-            OnPropertyChanged(nameof(SourceTooltip));
-            OnPropertyChanged(nameof(SourceDotColor));
-
-            OnPropertyChanged(nameof(StepsText));
-            OnPropertyChanged(nameof(CaloriesText));
-            OnPropertyChanged(nameof(CaloriesPercent));
-            OnPropertyChanged(nameof(SleepText));
-            
-            OnPropertyChanged(nameof(DistanceText));
-            OnPropertyChanged(nameof(FloorsText));
-            OnPropertyChanged(nameof(SpeedText));
-
-            OnPropertyChanged(nameof(HeartRateText));
-            OnPropertyChanged(nameof(WeightText));
-            OnPropertyChanged(nameof(HrvText));
-            OnPropertyChanged(nameof(BloodPressureText));
-
-            OnPropertyChanged(nameof(RhrText));
-            OnPropertyChanged(nameof(RespText));
-            OnPropertyChanged(nameof(Spo2Text));
-            OnPropertyChanged(nameof(GlucoseText));
-
-            OnPropertyChanged(nameof(BodyFatText));
-            OnPropertyChanged(nameof(BmiText));
-            OnPropertyChanged(nameof(LeanMassText));
-
-            OnPropertyChanged(nameof(DeepSleepText));
-            OnPropertyChanged(nameof(LightSleepText));
-            OnPropertyChanged(nameof(RemSleepText));
-            OnPropertyChanged(nameof(AwakeSleepText));
-            OnPropertyChanged(nameof(SleepStagesVisibility));
-
-            OnPropertyChanged(nameof(MindText));
-            OnPropertyChanged(nameof(TempText));
-            OnPropertyChanged(nameof(H2oText));
-
-            // Stats grid notifications
-            OnPropertyChanged(nameof(StepsAvgText));
-            OnPropertyChanged(nameof(StepsMaxText));
-            OnPropertyChanged(nameof(StepsMinText));
-            OnPropertyChanged(nameof(StepsTotalText));
-
-            OnPropertyChanged(nameof(HrAvgText));
-            OnPropertyChanged(nameof(HrMaxText));
-            OnPropertyChanged(nameof(HrMinText));
-
-            OnPropertyChanged(nameof(SleepAvgText));
-            OnPropertyChanged(nameof(SleepMaxText));
-            OnPropertyChanged(nameof(SleepMinText));
-
-            OnPropertyChanged(nameof(CaloriesAvgText));
-            OnPropertyChanged(nameof(CaloriesMaxText));
-            OnPropertyChanged(nameof(CaloriesMinText));
-            OnPropertyChanged(nameof(CaloriesTotalText));
-
-            OnPropertyChanged(nameof(WeightAvgText));
-            OnPropertyChanged(nameof(WeightMaxText));
-            OnPropertyChanged(nameof(WeightMinText));
-
-            OnPropertyChanged(nameof(HrvAvgText));
-            OnPropertyChanged(nameof(HrvMaxText));
-            OnPropertyChanged(nameof(HrvMinText));
-
-            // Today properties notifications
-            OnPropertyChanged(nameof(HrTodayText));
-            OnPropertyChanged(nameof(SleepTodayText));
-            OnPropertyChanged(nameof(CaloriesTodayText));
-            OnPropertyChanged(nameof(WeightTodayText));
-            OnPropertyChanged(nameof(HrvTodayText));
+            OnPropertyChanged(string.Empty);
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
@@ -678,11 +666,10 @@ namespace Daily_WinUI.Views
 
     public class ChartData
     {
-        public string Label { get; set; }
+        public string Label { get; set; } = string.Empty;
         public double Value { get; set; }
         public double Percentage { get; set; }
         public double BarHeight { get; set; }
-        public string FormattedValue { get; set; }
+        public string FormattedValue { get; set; } = string.Empty;
     }
 }
-

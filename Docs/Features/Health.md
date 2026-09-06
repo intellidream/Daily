@@ -59,19 +59,20 @@ Aggregates and organizes 35+ metrics into structured categories:
   - Interactive header action allows users to open the full detail window.
   - Subscribes to `IRefreshService.HealthRefreshRequested` to reactively update on new data inserts.
 - **Detailed Telemetry View (`HealthTelemetryDetailPage` / `HealthTelemetryDetail.razor`)**:
-  - **Sleep Stages Timeline**: Horizontal Gantt-style timeline visualization partitioning sleep into Deep, REM, Core, and Awake blocks.
-  - **Heart Rate Chart**: Full-day or recent-interval heart rate curve with statistical annotations (latest BPM, min/max).
-  - **Steps Chart**: Step cadence and accumulation throughout the day.
-  - **Raw Telemetry Log**: Interactive data table displaying recent timestamped telemetry entries with device attribution.
+  - **Clinical 4-Level Sleep Hypnogram**: Multi-tier hypnogram graphing Awake, REM, Light/Core, and Deep stages with an hourly X-axis and duration tooltips.
+  - **Sleep Architecture Metrics**: Real-time display of Sleep Score (0-100), Sleep Efficiency %, Time Asleep vs. In Bed, Bedtime/Wake times, and Awake Count.
+  - **Heart Rate Zones Breakdown**: Rest, Fat Burn, Cardio, and Peak zone distribution with continuous intraday telemetry.
+  - **Hourly Step Cadence**: Hourly step cadence bar distribution and active hours count.
+  - **Raw Telemetry Log**: Interactive data table displaying timestamped telemetry entries with device attribution.
 
 ---
 
 ## 2. Technical Architecture & Data Model
 
 ### 2.1 Services & Device Bridges
-- `IHealthService` / `SupabaseHealthService`: Manages loading today's vitals, fetching historical trend logs, and writing manual logs.
+- `IHealthService` / `SupabaseHealthService`: Manages loading today's vitals, fetching historical trend logs, tracking view states (`CurrentViewType`), notifying subscribers via `OnViewTypeChanged`, and writing manual logs.
 - `INativeHealthStore`: Platform interface wrapping native OS health APIs.
-- `MockNativeHealthStore`: Desktop implementation that generates randomized placeholder metrics to enable offline desktop prototyping.
+- `MockNativeHealthStore` / `MockHealthService`: Desktop implementation for offline prototyping and UI development.
 - **iOS HealthKit (`HealthKitService.cs`)**: Coordinates read queries for 35+ `HKObjectType` types.
 - **Android Health Connect (`HealthConnectService.cs`)**: Reflection-based bridge fetching records from Android's Health Connect SDK.
 
@@ -127,20 +128,41 @@ CREATE INDEX idx_health_telemetry_user_time ON public.health_telemetry (user_id,
 
 ---
 
-## 3. UI/UX & Layout
+## 3. UI/UX & Layout Architecture
 
-### 3.1 Vitals Gauges & Interactive Breath Guides
-- **Vitals Hero Ring**: Displays circular progress rings for Steps, Calories, and Sleep.
-- **Breathing Guides (Lungs Control)**: In WinUI, the health section features an interactive breathing exercises panel (`LungsControl.cs`). It uses WinUI composition animations to dynamically expand and contract circles, guiding users through inhale/hold/exhale breathing exercises.
+### 3.1 4-Category Segmented Architecture
+Both the MAUI Blazor Hybrid app and WinUI native desktop feature a synchronized 4-category navigation model:
+1. **Overview**:
+   - **Hero Rings & Core Cards**: Steps (with active kcal, distance, floors, walking speed), Cardiovascular Biometrics (HR with min/max/RHR, Blood Pressure, SpO2, HRV, Glucose, Respiration, Body Temp), Sleep summary, and Hydration.
+   - **7-Day Historical Trend Sparklines**: Steps, HR, Sleep, Calories, Weight, HRV with Stats Grid and daily capsule bars.
+   - **Diagnostics & Sync Logs**: Collapsible diagnostic section displaying device platform origins, sync timestamps, and raw sync states.
+2. **Sleep (Clinical Hypnogram & Sleep Architecture)**:
+   - **4-Level Clinical Hypnogram**: Displays sleep stages vertically on 4 levels:
+     - **Awake** (`#FF7043` / Top Level)
+     - **REM** (`#26C6DA` / Level 2)
+     - **Core / Light** (`#42A5F5` / Level 3)
+     - **Deep** (`#3949AB` / Bottom Level)
+   - **Hourly Time Grid**: Full nocturnal X-axis with time ticks, vertical hourly grid lines, and segment durations.
+   - **Sleep Architecture Gauges**: Sleep Score (0-100 gauge), Sleep Efficiency %, Time Asleep vs. Time In Bed, Bedtime and Wake time badges, Awake Count.
+   - **Clinical Benchmarks**: Targets showing Deep (15-25%), REM (20-25%), Light (50-60%), and Awake (<10%) with progress indicators.
+3. **Sensors (Continuous Intraday Telemetry)**:
+   - **Continuous Intraday Heart Rate**: Intraday BPM curve across the day with min/avg/max annotations.
+   - **Heart Rate Intensity Zones**: Rest (<100 bpm), Fat Burn (100-130 bpm), Cardio (130-160 bpm), and Peak (>160 bpm) distribution bars and minutes.
+   - **Hourly Step Cadence**: Bar chart distribution of step accumulation per hour throughout the day, including active hours counter.
+   - **Biometric Stress & PAI**: Real-time stress index (0-100) and Personal Activity Intelligence (PAI) score.
+   - **Wearable Device Attribution**: Smartwatch model, connection state, and last sync timestamp.
+4. **Nutrition & Body Composition**:
+   - **Hydration Target Gauge**: Water consumed vs. daily goal (e.g. 2500 ml) with remaining intake and interactive Quick-Add (+250ml, +500ml).
+   - **Macronutrient Balance**: Grams and energy ratio bar for Carbohydrates, Protein, and Fat with energy breakdown.
+   - **Micronutrients Grid**: Intake tracking for Magnesium, Zinc, Calcium, Iron, Vitamin C, and Vitamin A.
+   - **Body Composition Analysis**: Weight, Height, Body Fat %, Lean Mass, Bone Mass, and calculated BMI with clinical status badge (Underweight, Normal, Overweight, Obese).
 
-### 3.2 Trend Charts & Breakdown
-- Employs light sparkline trend charts for Steps (orange), Heart Rate (red), Sleep (purple), Active Energy (orange), Weight (blue), and HRV (purple). If no data points exist in the 7-day completed window, it displays a placeholder.
-- Contains a compact Stats Grid and a custom 7-day capsule bar chart breakdown under each line chart.
-
-### 3.3 Adaptive Responsive Layout
-- **Visual State Transitions**: The details dashboard integrates a VisualStateManager layout controller targeting a trigger threshold of `850px`:
-  - **Wide Layout (Width >= 850px)**: Split-screen column setup (2* Hero / 3* Vitals Grid) and a 3-row, 2-column Grid arrangement for the 6 trend cards.
-  - **Narrow Layout (Width < 850px)**: Columns stack vertically into a single-column layout (spans 3 columns, spacers set to 0 width), and the 6 trend cards shift to separate rows (0 through 5) in a vertical stack to optimize vertical space on smaller screens or snapped windows.
+### 3.2 Two-Way Synchronization & Cross-Navigation
+- **Top Carousel / DetailPane Synchronization**: When opening Health in `DetailPane.razor`, the carousel presents `Overview`, `Sleep`, `Sensors`, and `Nutrition`. Sliding the carousel updates `HealthService.CurrentViewType`, dynamically rendering the corresponding subview in `HealthDetail.razor`. Conversely, switching segmented buttons in `HealthDetail.razor` updates the carousel index.
+- **Widget Cross-Navigation**:
+  - In both MAUI (`HealthWidget.razor`, `HealthTelemetryWidget.razor`) and WinUI (`HealthWidgetControl.xaml`, `HealthTelemetryWidgetControl.xaml`):
+    - Clicking/tapping the widget header opens `Health` in the `Overview` tab.
+    - Clicking/tapping the **Sleep** card or hypnogram directly opens `Health` pre-selected to the **Sleep** tab (`CurrentViewType = "Sleep"`), instantly presenting the clinical hypnogram.
 
 ---
 
@@ -148,11 +170,12 @@ CREATE INDEX idx_health_telemetry_user_time ON public.health_telemetry (user_id,
 
 | Characteristic | WinUI Implementation | MAUI / Blazor Hybrid Implementation |
 | :--- | :--- | :--- |
-| **Aggregated Vitals UI** | Native XAML Controls (`HealthWidgetControl.xaml` & `HealthDetailPage.xaml`) | Blazor Hybrid Razor components (`HealthWidget.razor` & `HealthDetail.razor`) |
-| **Telemetry Widget** | Native XAML (`HealthTelemetryWidgetControl.xaml` / `.xaml.cs`) | Blazor component (`HealthTelemetryWidget.razor` inside `WidgetContainer.razor`) |
-| **Telemetry Detail View** | Native XAML Page (`HealthTelemetryDetailPage.xaml` / `.xaml.cs`) | Dedicated Razor Page (`HealthTelemetryDetail.razor` hosted via `DetailPane.razor`) |
+| **Aggregated Vitals UI** | Native XAML Controls (`HealthWidgetControl.xaml` & `HealthDetailPage.xaml`) with 4-tab `Pivot` control | Blazor Hybrid Razor components (`HealthWidget.razor` & `HealthDetail.razor`) with segmented pill navigation and MudBlazor |
+| **Telemetry Widget** | Native XAML (`HealthTelemetryWidgetControl.xaml` / `.xaml.cs`) with Canvas hypnogram strip | Blazor component (`HealthTelemetryWidget.razor` inside `WidgetContainer.razor`) with SVG hypnogram strip |
+| **Telemetry Detail View** | Native XAML Page (`HealthTelemetryDetailPage.xaml` / `.xaml.cs`) with 4-level Canvas hypnogram | Dedicated Razor Page (`HealthTelemetryDetail.razor` hosted via `DetailPane.razor`) |
+| **Sleep Hypnogram Drawing** | Custom code-behind drawing on WinUI Canvas (`DrawSleepHypnogram`), rendering hourly vertical grid lines, stage rectangles, and text ticks | Responsive SVG with 4 stage bands, hourly vertical grid markers, dynamic time ticks, and hover tooltips |
 | **Realtime Dispatching** | `DispatcherQueue.TryEnqueue` invoking `LoadDataAsync()` | `InvokeAsync(StateHasChanged)` with `IDisposable` event unsubscription |
-| **Vitals Store** | Fallback to `MockHealthService.cs` (or queries Supabase database for synced data) | Hooks into iOS `HealthKitService` and Android `HealthConnectService` native libraries |
+| **Vitals Store** | `MockHealthService.cs` or queries Supabase database for synced data | Hooks into iOS `HealthKitService` and Android `HealthConnectService` native libraries |
 | **Breathing Control** | Native XAML custom shape rendering (`LungsControl.cs`) | Simplified static card grids (does not include the breathing animation) |
 | **Manual Logs** | Desktop manual logging modals using standard WinUI XAML dialogs | MudBlazor forms and dialog overlays |
-| **Charts & Visualizers** | Syncfusion line/spline charts + custom Canvas/Border Gantt sleep bar | MudBlazor chart visualizers (`MudChart` line/bar) + responsive CSS sleep timeline |
+| **Charts & Visualizers** | Canvas hypnograms, custom Gantt/bar visualizers, and XAML progress rings | MudBlazor chart visualizers (`MudChart` line/bar), SVG hypnograms, and CSS progress bars |

@@ -48,5 +48,15 @@ namespace Daily.Services.Health
         /// Retrieves granular health telemetry for a specific date range.
         /// </summary>
         Task<List<HealthTelemetry>> GetHealthTelemetryAsync(DateTime start, DateTime end);
+
+        /// <summary>
+        /// Current active tab / view category (Overview, Sleep, Sensors, Nutrition).
+        /// </summary>
+        string CurrentViewType { get; set; }
+
+        /// <summary>
+        /// Event fired when the active tab / view category changes.
+        /// </summary>
+        event Action? OnViewTypeChanged;
     }
 }

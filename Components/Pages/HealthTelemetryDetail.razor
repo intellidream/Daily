@@ -10,111 +10,212 @@
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
     <div class="d-flex align-center mb-6">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" Edge="Edge.Start" OnClick="GoBack" />
-        <MudText Typo="Typo.h5" Class="ml-3 font-weight-bold">Health Telemetry Data</MudText>
+        <MudText Typo="Typo.h5" Class="ml-3 font-weight-bold">Health Telemetry & Sensors</MudText>
     </div>
 
     @if (isLoading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
-        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-lg mb-4" />
-        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-lg mb-4" />
-        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-lg mb-4" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-xl mb-4" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-xl mb-4" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-xl mb-4" />
     }
     else
     {
-        <MudGrid>
-            <!-- Steps Section -->
+        <MudGrid Spacing="4">
+            <!-- SLEEP SECTION: 4-LEVEL CLINICAL HYPNOGRAM -->
             <MudItem xs="12">
-                <MudPaper Class="pa-4 rounded-lg" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
-                    <div class="d-flex align-center mb-4">
-                        <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Color="Color.Primary" Class="mr-2" />
-                        <MudText Typo="Typo.h6" Class="font-weight-bold">Steps</MudText>
-                        <MudSpacer />
-                        <MudText Typo="Typo.h5" Color="Color.Primary" Class="font-weight-bold">@totalSteps.ToString("N0")</MudText>
+                <MudPaper Class="pa-4 pa-md-6 rounded-xl" Elevation="2" Style="background-color: var(--mud-palette-background-grey);">
+                    <!-- Header with Score & Stats -->
+                    <div class="d-flex flex-column flex-md-row align-center justify-space-between gap-6 mb-6">
+                        <div class="d-flex align-center gap-4">
+                            <MudProgressCircular Value="@sleepScore" Size="Size.Large" Color="@GetSleepScoreColor(sleepScore)" StrokeWidth="8" Style="height: 80px; width: 80px;">
+                                <div class="d-flex flex-column align-center">
+                                    <MudText Typo="Typo.h6" Class="font-weight-bold">@sleepScore</MudText>
+                                    <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.7;">SCORE</MudText>
+                                </div>
+                            </MudProgressCircular>
+                            <div>
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Bedtime" Color="Color.Secondary" Size="Size.Medium" />
+                                    <MudText Typo="Typo.h6" Class="font-weight-bold">Sleep Architecture</MudText>
+                                </div>
+                                <MudText Typo="Typo.body2" Style="opacity: 0.6;">
+                                    Bed: @(sleepMinTime != DateTime.MinValue ? sleepMinTime.ToString("HH:mm") : "--") • 
+                                    Wake: @(sleepMaxTime != DateTime.MinValue ? sleepMaxTime.ToString("HH:mm") : "--")
+                                </MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">Efficiency: @sleepEfficiency%</MudText>
+                            </div>
+                        </div>
+
+                        <!-- Summary Pills -->
+                        <div class="d-flex flex-wrap align-center justify-space-around gap-4 flex-grow-1">
+                            <div class="d-flex flex-column align-center">
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">TOTAL ASLEEP</MudText>
+                                <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: #42A5F5;">@totalSleepText</MudText>
+                            </div>
+                            <div class="d-flex flex-column align-center">
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">TIME IN BED</MudText>
+                                <MudText Typo="Typo.h5" Class="font-weight-bold">@timeInBedText</MudText>
+                            </div>
+                            <div class="d-flex flex-column align-center">
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">AWAKE COUNT</MudText>
+                                <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: #FF7043;">@awakeCount</MudText>
+                            </div>
+                            <div class="d-flex flex-column align-center">
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">DEEP + REM</MudText>
+                                <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: #26C6DA;">@restorativePct%</MudText>
+                            </div>
+                        </div>
                     </div>
 
-                    @if (stepsSeries.Count > 0)
-                    {
-                        <MudChart ChartType="ChartType.Bar" ChartSeries="@stepsSeries" XAxisLabels="@stepsLabels" Width="100%" Height="250px" ChartOptions="chartOptions" />
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.body2" Style="opacity: 0.6;">No steps data available.</MudText>
-                    }
-                </MudPaper>
-            </MudItem>
-
-            <!-- Sleep Section -->
-            <MudItem xs="12">
-                <MudPaper Class="pa-4 rounded-lg" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
-                    <div class="d-flex align-center mb-4">
-                        <MudIcon Icon="@Icons.Material.Filled.Bedtime" Color="Color.Secondary" Class="mr-2" />
-                        <MudText Typo="Typo.h6" Class="font-weight-bold">Sleep Timeline</MudText>
-                        <MudSpacer />
-                        <MudText Typo="Typo.h5" Color="Color.Secondary" Class="font-weight-bold">@totalSleepText</MudText>
-                    </div>
-
+                    <!-- Clinical Multi-Level Canvas -->
                     @if (sleepEntries.Any())
                     {
-                        <div class="sleep-timeline-container" style="position: relative; height: 120px; width: 100%; border-radius: 8px; background-color: var(--mud-palette-background); overflow: hidden;">
-                            @foreach (var stage in sleepEntries)
-                            {
-                                <div class="sleep-stage-block"
-                                     style="position: absolute; 
-                                            left: @(GetSleepStageLeft(stage))%; 
-                                            width: @(GetSleepStageWidth(stage))%; 
-                                            height: 100%; 
-                                            background-color: @GetSleepStageColor(stage.SleepCategory);"
-                                     title="@($"{stage.SleepCategory}: {stage.LocalStartTime:HH:mm} - {stage.LocalEndTime:HH:mm}")">
-                                </div>
-                            }
-                            
-                            <!-- Current time indicator line if within bounds -->
-                            @if (IsTimeInSleepBounds(DateTime.UtcNow))
-                            {
-                                <div class="current-time-indicator"
-                                     style="position: absolute;
-                                            left: @(GetSleepStageLeft(new HealthTelemetry { StartTime = DateTime.UtcNow }))%;
-                                            width: 2px;
-                                            height: 100%;
-                                            background-color: red;
-                                            z-index: 10;">
-                                </div>
-                            }
+                        <div class="d-flex justify-space-between align-center mb-2">
+                            <MudText Typo="Typo.caption" Class="font-weight-bold" Style="opacity: 0.7;">HYPNOGRAM TIMELINE</MudText>
+                            <!-- Legend -->
+                            <div class="d-flex align-center gap-3 flex-wrap">
+                                <div class="d-flex align-center gap-1"><div style="width: 8px; height: 8px; border-radius: 2px; background: #FF7043;"></div><MudText Typo="Typo.caption">Awake</MudText></div>
+                                <div class="d-flex align-center gap-1"><div style="width: 8px; height: 8px; border-radius: 2px; background: #26C6DA;"></div><MudText Typo="Typo.caption">REM</MudText></div>
+                                <div class="d-flex align-center gap-1"><div style="width: 8px; height: 8px; border-radius: 2px; background: #42A5F5;"></div><MudText Typo="Typo.caption">Core</MudText></div>
+                                <div class="d-flex align-center gap-1"><div style="width: 8px; height: 8px; border-radius: 2px; background: #3949AB;"></div><MudText Typo="Typo.caption">Deep</MudText></div>
+                            </div>
                         </div>
-                        
-                        <div class="d-flex justify-space-between mt-2 px-2" style="opacity: 0.6;">
-                            <MudText Typo="Typo.caption">@sleepMinTime.ToString("HH:mm")</MudText>
-                            <MudText Typo="Typo.caption">@sleepMaxTime.ToString("HH:mm")</MudText>
+
+                        <div class="telemetry-hypnogram-wrapper my-3">
+                            <div class="hypnogram-y-axis">
+                                <div class="y-label" style="color: #FF7043;">Awake</div>
+                                <div class="y-label" style="color: #26C6DA;">REM</div>
+                                <div class="y-label" style="color: #42A5F5;">Core</div>
+                                <div class="y-label" style="color: #3949AB;">Deep</div>
+                            </div>
+
+                            <div class="hypnogram-canvas">
+                                <!-- Horizontal Stage Lanes -->
+                                <div class="hypnogram-lane" style="top: 0px; border-top: 1px dashed rgba(255,255,255,0.08);"></div>
+                                <div class="hypnogram-lane" style="top: 40px; border-top: 1px dashed rgba(255,255,255,0.08);"></div>
+                                <div class="hypnogram-lane" style="top: 80px; border-top: 1px dashed rgba(255,255,255,0.08);"></div>
+                                <div class="hypnogram-lane" style="top: 120px; border-top: 1px dashed rgba(255,255,255,0.08);"></div>
+
+                                <!-- Vertical Hourly Grid Lines -->
+                                @foreach (var hourMark in hourlyTicks)
+                                {
+                                    <div class="hypnogram-grid-v" style="left: @(hourMark.LeftPct)%;"></div>
+                                }
+
+                                <!-- Sleep Stage Blocks -->
+                                @foreach (var stage in sleepEntries)
+                                {
+                                    var topPos = GetStageTop(stage.SleepCategory);
+                                    var color = GetStageColor(stage.SleepCategory);
+                                    var leftPct = GetSleepStageLeft(stage);
+                                    var widthPct = GetSleepStageWidth(stage);
+
+                                    <MudTooltip Text="@($"{stage.SleepCategory}: {stage.LocalStartTime:HH:mm} - {stage.LocalEndTime:HH:mm} ({(int)(stage.DurationSeconds/60)}m)")">
+                                        <div class="hypnogram-block"
+                                             style="top: @(topPos)px; left: @(leftPct)%; width: @(widthPct)%; background: @color;">
+                                        </div>
+                                    </MudTooltip>
+                                }
+                            </div>
                         </div>
-                        
-                        <div class="d-flex justify-center flex-wrap gap-4 mt-4">
-                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #2b5c8f; margin-right: 6px;"></div><MudText Typo="Typo.caption">Deep</MudText></div>
-                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #4a90e2; margin-right: 6px;"></div><MudText Typo="Typo.caption">Core / Light</MudText></div>
-                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #a29bfe; margin-right: 6px;"></div><MudText Typo="Typo.caption">REM</MudText></div>
-                            <div class="d-flex align-center"><div style="width: 12px; height: 12px; border-radius: 6px; background-color: #fdcb6e; margin-right: 6px;"></div><MudText Typo="Typo.caption">Awake</MudText></div>
+
+                        <!-- Hourly X-Axis Labels -->
+                        <div class="hypnogram-x-axis">
+                            <div style="width: 55px; flex-shrink: 0;"></div>
+                            <div class="x-labels-container">
+                                @foreach (var hourMark in hourlyTicks)
+                                {
+                                    <div class="x-tick-label" style="left: @(hourMark.LeftPct)%;">
+                                        @hourMark.Label
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- 4 Stage Target Cards -->
+                        <div class="d-flex flex-wrap gap-3 mt-4">
+                            <div class="pa-3 rounded-lg flex-grow-1" style="background: rgba(255,255,255,0.03); border-left: 3px solid #3949AB; min-width: 130px;">
+                                <div class="d-flex align-center justify-space-between">
+                                    <MudText Typo="Typo.caption" Style="color: #3949AB; font-weight: 600;">DEEP</MudText>
+                                    <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">15-25%</MudText>
+                                </div>
+                                <MudText Typo="Typo.body1" Class="font-weight-bold">@deepDurationText</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">@deepPct% total</MudText>
+                            </div>
+
+                            <div class="pa-3 rounded-lg flex-grow-1" style="background: rgba(255,255,255,0.03); border-left: 3px solid #26C6DA; min-width: 130px;">
+                                <div class="d-flex align-center justify-space-between">
+                                    <MudText Typo="Typo.caption" Style="color: #26C6DA; font-weight: 600;">REM</MudText>
+                                    <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">20-25%</MudText>
+                                </div>
+                                <MudText Typo="Typo.body1" Class="font-weight-bold">@remDurationText</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">@remPct% total</MudText>
+                            </div>
+
+                            <div class="pa-3 rounded-lg flex-grow-1" style="background: rgba(255,255,255,0.03); border-left: 3px solid #42A5F5; min-width: 130px;">
+                                <div class="d-flex align-center justify-space-between">
+                                    <MudText Typo="Typo.caption" Style="color: #42A5F5; font-weight: 600;">CORE</MudText>
+                                    <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">50-60%</MudText>
+                                </div>
+                                <MudText Typo="Typo.body1" Class="font-weight-bold">@lightDurationText</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">@lightPct% total</MudText>
+                            </div>
+
+                            <div class="pa-3 rounded-lg flex-grow-1" style="background: rgba(255,255,255,0.03); border-left: 3px solid #FF7043; min-width: 130px;">
+                                <div class="d-flex align-center justify-space-between">
+                                    <MudText Typo="Typo.caption" Style="color: #FF7043; font-weight: 600;">AWAKE</MudText>
+                                    <MudText Typo="Typo.caption" Style="font-size: 9px; opacity: 0.5;">&lt;10%</MudText>
+                                </div>
+                                <MudText Typo="Typo.body1" Class="font-weight-bold">@awakeDurationText</MudText>
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5;">@awakePct% in bed</MudText>
+                            </div>
                         </div>
                     }
                     else
                     {
-                        <MudText Typo="Typo.body2" Style="opacity: 0.6;">No sleep data available for this period.</MudText>
+                        <div class="pa-6 text-center" style="opacity: 0.5;">
+                            <MudText Typo="Typo.body2">No granular sleep telemetry available for this period.</MudText>
+                        </div>
                     }
                 </MudPaper>
             </MudItem>
 
-            <!-- Heart Rate Section -->
+            <!-- HEART RATE SECTION -->
             <MudItem xs="12">
-                <MudPaper Class="pa-4 rounded-lg" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
-                    <div class="d-flex align-center mb-4">
-                        <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Error" Class="mr-2" />
-                        <MudText Typo="Typo.h6" Class="font-weight-bold">Heart Rate</MudText>
-                        <MudSpacer />
-                        <MudText Typo="Typo.h5" Color="Color.Error" Class="font-weight-bold">@avgHeartRate <span style="font-size: 0.5em; opacity: 0.6;">BPM</span></MudText>
+                <MudPaper Class="pa-4 pa-md-6 rounded-xl" Elevation="2" Style="background-color: var(--mud-palette-background-grey);">
+                    <div class="d-flex align-center justify-space-between mb-4">
+                        <div class="d-flex align-center">
+                            <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Error" Class="mr-2" />
+                            <MudText Typo="Typo.h6" Class="font-weight-bold">Continuous Heart Rate</MudText>
+                        </div>
+                        <MudText Typo="Typo.h5" Color="Color.Error" Class="font-weight-bold">@avgHeartRate <span style="font-size: 0.5em; opacity: 0.6;">BPM AVG</span></MudText>
                     </div>
 
                     @if (hrSeries.Count > 0)
                     {
-                        <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="250px" ChartOptions="chartOptions" />
+                        <MudChart ChartType="ChartType.Line" ChartSeries="@hrSeries" XAxisLabels="@hrLabels" Width="100%" Height="220px" ChartOptions="chartOptions" />
+
+                        <!-- Heart Rate Zones -->
+                        <div class="d-flex flex-wrap justify-space-between gap-2 mt-4 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
+                            <div class="d-flex flex-column align-center px-2">
+                                <MudText Typo="Typo.caption" Style="font-size: 10px; opacity: 0.5;">RESTING (&lt;100)</MudText>
+                                <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: #4CAF50;">@hrRestingPct%</MudText>
+                            </div>
+                            <div class="d-flex flex-column align-center px-2">
+                                <MudText Typo="Typo.caption" Style="font-size: 10px; opacity: 0.5;">FAT BURN (100-120)</MudText>
+                                <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: #FFB300;">@hrFatBurnPct%</MudText>
+                            </div>
+                            <div class="d-flex flex-column align-center px-2">
+                                <MudText Typo="Typo.caption" Style="font-size: 10px; opacity: 0.5;">CARDIO (120-150)</MudText>
+                                <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: #FF7043;">@hrCardioPct%</MudText>
+                            </div>
+                            <div class="d-flex flex-column align-center px-2">
+                                <MudText Typo="Typo.caption" Style="font-size: 10px; opacity: 0.5;">PEAK (&gt;150)</MudText>
+                                <MudText Typo="Typo.body1" Class="font-weight-bold" Style="color: #F44336;">@hrPeakPct%</MudText>
+                            </div>
+                        </div>
                     }
                     else
                     {
@@ -122,35 +223,156 @@
                     }
                 </MudPaper>
             </MudItem>
+
+            <!-- STEPS CADENCE SECTION -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-4 pa-md-6 rounded-xl" Elevation="2" Style="background-color: var(--mud-palette-background-grey);">
+                    <div class="d-flex align-center justify-space-between mb-4">
+                        <div class="d-flex align-center">
+                            <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Color="Color.Primary" Class="mr-2" />
+                            <MudText Typo="Typo.h6" Class="font-weight-bold">Hourly Steps Cadence</MudText>
+                        </div>
+                        <div class="d-flex align-center gap-3">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">@activeHours / 12 Active Hours</MudChip>
+                            <MudText Typo="Typo.h5" Color="Color.Primary" Class="font-weight-bold">@totalSteps.ToString("N0")</MudText>
+                        </div>
+                    </div>
+
+                    @if (stepsSeries.Count > 0)
+                    {
+                        <MudChart ChartType="ChartType.Bar" ChartSeries="@stepsSeries" XAxisLabels="@stepsLabels" Width="100%" Height="220px" ChartOptions="stepsChartOptions" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Style="opacity: 0.6;">No steps data available.</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
         </MudGrid>
     }
 </MudContainer>
 
+<style>
+    .telemetry-hypnogram-wrapper {
+        display: flex;
+        position: relative;
+        height: 160px;
+        width: 100%;
+        background: rgba(0,0,0,0.25);
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.06);
+        overflow: hidden;
+    }
+    .hypnogram-y-axis {
+        width: 55px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        padding-left: 8px;
+        border-right: 1px solid rgba(255,255,255,0.08);
+        flex-shrink: 0;
+    }
+    .hypnogram-y-axis .y-label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .hypnogram-canvas {
+        position: relative;
+        flex-grow: 1;
+        height: 100%;
+    }
+    .hypnogram-lane {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 40px;
+        pointer-events: none;
+    }
+    .hypnogram-grid-v {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: rgba(255,255,255,0.05);
+        pointer-events: none;
+    }
+    .hypnogram-block {
+        position: absolute;
+        height: 34px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .hypnogram-block:hover {
+        opacity: 0.9;
+        transform: scaleY(1.08);
+        box-shadow: 0 0 10px rgba(255,255,255,0.3);
+        z-index: 10;
+    }
+    .hypnogram-x-axis {
+        display: flex;
+        width: 100%;
+        height: 24px;
+        position: relative;
+    }
+    .x-labels-container {
+        position: relative;
+        flex-grow: 1;
+        height: 100%;
+    }
+    .x-tick-label {
+        position: absolute;
+        transform: translateX(-50%);
+        font-size: 10px;
+        color: rgba(255,255,255,0.5);
+        white-space: nowrap;
+    }
+</style>
+
 @code {
     private bool isLoading = true;
-    
+
     // Steps
     private double totalSteps = 0;
+    private int activeHours = 0;
     private List<ChartSeries<double>> stepsSeries = new();
     private string[] stepsLabels = Array.Empty<string>();
-    
+    private ChartOptions stepsChartOptions = new() { ChartPalette = new[] { "var(--mud-palette-primary)" } };
+
     // Sleep
+    private int sleepScore = 0;
+    private int sleepEfficiency = 0;
+    private int restorativePct = 0;
+    private int awakeCount = 0;
     private string totalSleepText = "--";
+    private string timeInBedText = "--";
+    private string deepDurationText = "--";
+    private string remDurationText = "--";
+    private string lightDurationText = "--";
+    private string awakeDurationText = "--";
+    private int deepPct = 0;
+    private int remPct = 0;
+    private int lightPct = 0;
+    private int awakePct = 0;
+
     private List<HealthTelemetry> sleepEntries = new();
-    private DateTime sleepMinTime;
-    private DateTime sleepMaxTime;
-    
+    private DateTime sleepMinTime = DateTime.MinValue;
+    private DateTime sleepMaxTime = DateTime.MinValue;
+    private List<(double LeftPct, string Label)> hourlyTicks = new();
+
     // HR
     private double avgHeartRate = 0;
+    private int hrRestingPct = 70;
+    private int hrFatBurnPct = 20;
+    private int hrCardioPct = 8;
+    private int hrPeakPct = 2;
     private List<ChartSeries<double>> hrSeries = new();
     private string[] hrLabels = Array.Empty<string>();
+    private ChartOptions chartOptions = new() { ChartPalette = new[] { "#F44336" } };
 
-    private ChartOptions chartOptions = new ChartOptions
-    {
-        ChartPalette = new[] { "var(--mud-palette-primary)" }
-    };
-
-    [Inject] private NavigationManager Navigation { get; set; } = null!;
     [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
 
     protected override async Task OnInitializedAsync()
@@ -183,7 +405,7 @@
 
             // Process Steps
             var stepsData = telemetryData
-                .Where(x => x.IsSteps && x.LocalStartTime >= today)
+                .Where(x => x.IsSteps && x.LocalStartTime >= today && x.Value.HasValue)
                 .OrderBy(x => x.LocalStartTime)
                 .ToList();
 
@@ -195,7 +417,8 @@
                                            .Select(g => new { Hour = g.Key, Total = g.Sum(x => x.Value ?? 0) })
                                            .OrderBy(x => x.Hour)
                                            .ToList();
-                                           
+
+                activeHours = hourlySteps.Count(x => x.Total >= 250);
                 stepsSeries = new List<ChartSeries<double>>
                 {
                     new ChartSeries<double> { Name = "Steps", Data = hourlySteps.Select(x => x.Total).ToArray() }
@@ -218,17 +441,71 @@
             {
                 sleepMinTime = sleepEntries.Min(x => x.LocalStartTime);
                 sleepMaxTime = sleepEntries.Max(x => x.LocalEndTime);
-                
-                var totalSleepSeconds = sleepEntries
-                    .Where(x => !x.NormalizedType.Contains("awake") && !x.NormalizedType.Contains("wake"))
-                    .Sum(x => x.DurationSeconds);
-                
-                var ts = TimeSpan.FromSeconds(totalSleepSeconds);
-                totalSleepText = $"{(int)ts.TotalHours}h {ts.Minutes}m";
+
+                // Hourly ticks
+                hourlyTicks.Clear();
+                var startHour = new DateTime(sleepMinTime.Year, sleepMinTime.Month, sleepMinTime.Day, sleepMinTime.Hour, 0, 0);
+                var endHour = sleepMaxTime.AddHours(1);
+                var totalDuration = (sleepMaxTime - sleepMinTime).TotalSeconds;
+
+                if (totalDuration > 0)
+                {
+                    var cur = startHour;
+                    while (cur <= endHour)
+                    {
+                        if (cur >= sleepMinTime && cur <= sleepMaxTime)
+                        {
+                            var left = ((cur - sleepMinTime).TotalSeconds / totalDuration) * 100.0;
+                            hourlyTicks.Add((left, cur.ToString("HH:mm")));
+                        }
+                        cur = cur.AddHours(1);
+                    }
+                }
+
+                var deepSeconds = sleepEntries.Where(x => x.SleepCategory == "Deep").Sum(x => x.DurationSeconds);
+                var remSeconds = sleepEntries.Where(x => x.SleepCategory == "REM").Sum(x => x.DurationSeconds);
+                var lightSeconds = sleepEntries.Where(x => x.SleepCategory == "Core").Sum(x => x.DurationSeconds);
+                var awakeSeconds = sleepEntries.Where(x => x.SleepCategory == "Awake").Sum(x => x.DurationSeconds);
+                var asleepSeconds = deepSeconds + remSeconds + lightSeconds;
+                var inBedSeconds = Math.Max(asleepSeconds + awakeSeconds, (totalDuration > 0 ? totalDuration : asleepSeconds));
+
+                totalSleepText = FormatSeconds(asleepSeconds);
+                timeInBedText = FormatSeconds(inBedSeconds);
+                deepDurationText = FormatSeconds(deepSeconds);
+                remDurationText = FormatSeconds(remSeconds);
+                lightDurationText = FormatSeconds(lightSeconds);
+                awakeDurationText = FormatSeconds(awakeSeconds);
+
+                awakeCount = sleepEntries.Count(x => x.SleepCategory == "Awake");
+
+                if (asleepSeconds > 0)
+                {
+                    deepPct = (int)((deepSeconds / asleepSeconds) * 100);
+                    remPct = (int)((remSeconds / asleepSeconds) * 100);
+                    lightPct = (int)((lightSeconds / asleepSeconds) * 100);
+                    restorativePct = deepPct + remPct;
+                }
+
+                if (inBedSeconds > 0)
+                {
+                    awakePct = (int)((awakeSeconds / inBedSeconds) * 100);
+                    sleepEfficiency = Math.Min((int)((asleepSeconds / inBedSeconds) * 100), 100);
+                }
+                else
+                {
+                    sleepEfficiency = 90;
+                }
+
+                double durationScore = Math.Min((asleepSeconds / (8.0 * 3600.0)) * 50.0, 50.0);
+                double efficiencyScore = (sleepEfficiency / 100.0) * 30.0;
+                double qualityScore = Math.Min((restorativePct / 40.0) * 20.0, 20.0);
+                sleepScore = Math.Clamp((int)(durationScore + efficiencyScore + qualityScore), 0, 100);
             }
             else
             {
                 totalSleepText = "--";
+                timeInBedText = "--";
+                sleepScore = 0;
             }
 
             // Process HR
@@ -240,17 +517,23 @@
             if (hrData.Any())
             {
                 avgHeartRate = Math.Round(hrData.Average(x => x.Value!.Value), 0);
-                
+
                 var hourlyHr = hrData.GroupBy(x => x.LocalStartTime.Hour)
                                      .Select(g => new { Hour = g.Key, Avg = g.Average(x => x.Value!.Value) })
                                      .OrderBy(x => x.Hour)
                                      .ToList();
-                
+
                 hrSeries = new List<ChartSeries<double>>
                 {
-                    new ChartSeries<double> { Name = "Heart Rate", Data = hourlyHr.Select(x => x.Avg).ToArray() }
+                    new ChartSeries<double> { Name = "Heart Rate", Data = hourlyHr.Select(x => Math.Round(x.Avg, 0)).ToArray() }
                 };
                 hrLabels = hourlyHr.Select(x => $"{x.Hour}:00").ToArray();
+
+                var totalSamples = hrData.Count;
+                hrRestingPct = (int)((hrData.Count(x => x.Value < 100) / (double)totalSamples) * 100);
+                hrFatBurnPct = (int)((hrData.Count(x => x.Value >= 100 && x.Value < 120) / (double)totalSamples) * 100);
+                hrCardioPct = (int)((hrData.Count(x => x.Value >= 120 && x.Value < 150) / (double)totalSamples) * 100);
+                hrPeakPct = Math.Max(0, 100 - (hrRestingPct + hrFatBurnPct + hrCardioPct));
             }
             else
             {
@@ -270,42 +553,55 @@
         }
     }
 
-    private string GetSleepStageColor(string stageCategory)
+    private double GetStageTop(string category) => category switch
     {
-        return stageCategory switch
-        {
-            "Deep" => "#2b5c8f",
-            "REM" => "#a29bfe",
-            "Awake" => "#fdcb6e",
-            _ => "#4a90e2"
-        };
-    }
+        "Awake" => 3.0,
+        "REM" => 43.0,
+        "Core" => 83.0,
+        "Deep" => 123.0,
+        _ => 83.0
+    };
+
+    private string GetStageColor(string category) => category switch
+    {
+        "Awake" => "#FF7043",
+        "REM" => "#26C6DA",
+        "Core" => "#42A5F5",
+        "Deep" => "#3949AB",
+        _ => "#42A5F5"
+    };
 
     private double GetSleepStageLeft(HealthTelemetry stage)
     {
         if (!sleepEntries.Any()) return 0;
-        
-        var totalDuration = (sleepMaxTime - sleepMinTime).TotalSeconds;
-        if (totalDuration <= 0) return 0;
-        
+        var total = (sleepMaxTime - sleepMinTime).TotalSeconds;
+        if (total <= 0) return 0;
         var offset = (stage.LocalStartTime - sleepMinTime).TotalSeconds;
-        return (offset / totalDuration) * 100.0;
+        return Math.Max(0, Math.Min((offset / total) * 100.0, 100.0));
     }
 
     private double GetSleepStageWidth(HealthTelemetry stage)
     {
         if (!sleepEntries.Any()) return 0;
-        
-        var totalDuration = (sleepMaxTime - sleepMinTime).TotalSeconds;
-        if (totalDuration <= 0) return 0;
-        
-        var stageDuration = (stage.LocalEndTime - stage.LocalStartTime).TotalSeconds;
-        return Math.Max((stageDuration / totalDuration) * 100.0, 1.0);
+        var total = (sleepMaxTime - sleepMinTime).TotalSeconds;
+        if (total <= 0) return 0;
+        var duration = Math.Max((stage.LocalEndTime - stage.LocalStartTime).TotalSeconds, stage.DurationSeconds);
+        return Math.Max((duration / total) * 100.0, 0.8);
     }
-    
-    private bool IsTimeInSleepBounds(DateTime time)
+
+    private Color GetSleepScoreColor(int score)
     {
-        return sleepEntries.Any() && time >= sleepMinTime && time <= sleepMaxTime;
+        if (score >= 85) return Color.Success;
+        if (score >= 70) return Color.Info;
+        if (score >= 50) return Color.Warning;
+        return Color.Error;
+    }
+
+    private string FormatSeconds(double s)
+    {
+        if (s <= 0) return "--";
+        var ts = TimeSpan.FromSeconds(s);
+        return $"{(int)ts.TotalHours}h {ts.Minutes}m";
     }
 
     private async Task GoBack()
