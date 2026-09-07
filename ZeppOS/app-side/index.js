@@ -57,12 +57,14 @@ AppSideService(
           })
           .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else if (req.method === 'GET_HABITS_TODAY') {
-          const { access_token, habit_type } = req.params
+          const { access_token, habit_type, day_offset } = req.params
+          const offset = parseInt(day_offset) || 0
           const now = new Date()
-          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+          const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, 0, 0, 0, 0).toISOString()
+          const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, 23, 59, 59, 999).toISOString()
 
           fetch({
-            url: `${SUPABASE_URL}/rest/v1/habits_logs?habit_type=eq.${habit_type}&is_deleted=eq.false&logged_at=gte.${startOfToday}&select=*`,
+            url: `${SUPABASE_URL}/rest/v1/habits_logs?habit_type=eq.${habit_type}&is_deleted=eq.false&logged_at=gte.${startOfDay}&logged_at=lte.${endOfDay}&select=*`,
             method: 'GET',
             headers: {
               'apikey': SUPABASE_ANON_KEY,
@@ -108,12 +110,16 @@ AppSideService(
           })
           .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else if (req.method === 'GET_HABITS_WEEK') {
-          const { access_token, habit_type } = req.params
+          const { access_token, habit_type, week_offset } = req.params
+          const offset = parseInt(week_offset) || 0
           const now = new Date()
-          const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).toISOString()
+          const endDayOffset = offset * 7
+          const startDayOffset = offset * 7 - 6
+          const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + startDayOffset, 0, 0, 0, 0).toISOString()
+          const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + endDayOffset, 23, 59, 59, 999).toISOString()
 
           fetch({
-            url: `${SUPABASE_URL}/rest/v1/habits_logs?habit_type=eq.${habit_type}&is_deleted=eq.false&logged_at=gte.${sevenDaysAgo}&select=*`,
+            url: `${SUPABASE_URL}/rest/v1/habits_logs?habit_type=eq.${habit_type}&is_deleted=eq.false&logged_at=gte.${startDate}&logged_at=lte.${endDate}&select=*`,
             method: 'GET',
             headers: {
               'apikey': SUPABASE_ANON_KEY,
@@ -128,15 +134,15 @@ AppSideService(
              let subTypeBuckets = [0, 0, 0, 0, 0, 0, 0]
              
              if (Array.isArray(resBody)) {
+               const windowEndMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + endDayOffset)
                resBody.forEach(row => { 
                  const val = parseFloat(row.value) || 0
                  const logDate = new Date(row.logged_at)
-                 // Calculate difference in days using midnight-to-midnight
+                 // Calculate difference in days using midnight-to-midnight relative to window end
                  const logDateMidnight = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate())
-                 const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-                 const diffTime = Math.abs(todayMidnight.getTime() - logDateMidnight.getTime())
+                 const diffTime = windowEndMidnight.getTime() - logDateMidnight.getTime()
                  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
-                 // Bucket 6 is today (diffDays == 0). Bucket 0 is 6 days ago (diffDays == 6).
+                 // Bucket 6 is the window end date (diffDays == 0). Bucket 0 is 6 days prior (diffDays == 6).
                  const bucketIndex = 6 - diffDays
                  
                  if (bucketIndex >= 0 && bucketIndex <= 6) {
@@ -166,13 +172,13 @@ AppSideService(
           })
           .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else if (req.method === 'LOG_HABIT') {
-          const { access_token, user_id, habit_type, value, unit, metadata } = req.params
+          const { access_token, user_id, habit_type, value, unit, metadata, logged_at } = req.params
           
           let bodyObj = {
             habit_type: habit_type,
             value: value,
             unit: unit,
-            logged_at: new Date().toISOString(),
+            logged_at: logged_at || new Date().toISOString(),
             updated_at: new Date().toISOString(),
             metadata: typeof metadata === 'string' ? metadata : JSON.stringify(metadata),
             is_deleted: false,

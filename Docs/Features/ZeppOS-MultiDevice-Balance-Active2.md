@@ -52,14 +52,15 @@ const cfg = isRound ? ROUND_CONFIG : SQUARE_CONFIG
 | Component / Screen | Amazfit Active 2 (Square 390x450) | Amazfit Balance (Round 480x480) | Design Rationale |
 | :--- | :--- | :--- | :--- |
 | **Viewport & Swiper** | `w: 390, h: 450, pageH: 450` | `w: 480, h: 480, pageH: 480` | Native screen resolution matching. |
-| **Page Titles (All 4)**| `y: 80, text_size: 24` | `y: 50, text_size: 26` | Retained at top positions with clean top margins. |
+| **Page Titles (All 4)**| `y: 80, text_size: 24` (`💧 Bubbles`, `💧 7 Days`, `🔥 Smokes`, `🔥 7 Days`) | `y: 50, text_size: 26` (`💧 Bubbles`, `💧 7 Days`, `🔥 Smokes`, `🔥 7 Days`) | Retained at top positions with clean top margins; chart titles simplified to '7 Days'. |
+| **Date/Week Nav Row** | `y: 114, left: 35, right: 313, text: 80 (w: 230), size: 16` | `y: 90, left: 75, right: 361, text: 120 (w: 240), size: 17` | Dedicated temporal navigation row flanking date/week labels (`◀ Today ▶` / `◀ This Week ▶`), with `▶` hidden on current date/week. |
 | **Progress Arc (P1 & P3)** | `x: 20, y: 150, w: 200, h: 200, line_width: 16` | `x: 30, y: 136, w: 216, h: 216, line_width: 18` | Centered vertically alongside action buttons; thicker stroke on Round. |
 | **Arc Center Text** | `text_size: 26` | `text_size: 28` | Better readability on 1.5" screen. |
 | **Action Buttons (P1 & P3)**| Dark gray (`0x222222`, press `0x111111`) | Dark gray (`0x222222`, press `0x111111`) | Unified dark aesthetic, letting emojis (💧, ☕, 🔥, ⚡) stand out. |
 | **P1 Button Sizes** | `x: 240, w: 130, h: 58, r: 29, y: [145, 217, 289]` | `x: 265, w: 165, h: 62, r: 31, y: [136, 210, 284]` | Centered vertically, ending before breakdown text. |
 | **P3 Button Sizes** | `x: 240, w: 130, h: 62, r: 31, y: [180, 258]` | `x: 265, w: 165, h: 68, r: 34, y: [168, 252]` | Vertically centered with arc midpoint. |
 | **Breakdown Details Text**| `x: 0, y: 358, w: 390, h: 26` (centered) | `x: 30, y: 366, w: 420, h: 26, text_size: 14` (centered) | Placed below rings & buttons; aligned across the bottom. |
-| **7-Day Histograms** | `x: 45, y: 145, w: 300, h: 195, bar: 30, space: 15` | `x: 80, y: 135, w: 320, h: 215, bar: 32, space: 16` | Mathematically centered horizontally on screen center axis (45px margins on Active 2, 80px margins on Balance). |
+| **7-Day Histograms** | `x: 41, y: 145, w: 340, h: 195, bar: 30, space: 14` | `x: 72, y: 135, w: 360, h: 215, bar: 32, space: 16` | Mathematically centered on screen axis (41px margins on Active 2; 72px margins on Balance). Container width $w$ expanded to prevent right-edge clipping. Solid, generous bar widths without cramped spacing. |
 | **Chart Color Legends** | `y: 358, h: 30, text_size: 15` (centered) | `y: 366, h: 30, text_size: 15` (centered) | Positioned below histogram, aligning with breakdown texts baseline. |
 | **Smokes Chart Color** | `item_color: 0xff3b30` (Apple watchOS Red) | `item_color: 0xff3b30` (Apple watchOS Red) | Restored vibrant red matching watchOS (`Color.red`). |
 | **About Page Icon** | `icon.png` (124x124) at `x: 133, y: 40` | `logo.png` (110x110) at `x: 185, y: 35` | Perfectly centered `(480-110)/2 = 185`, eliminating overlap with text. |
@@ -90,7 +91,55 @@ Both Amazfit Balance and Amazfit Active 2 support tactile feedback through their
 
 ---
 
-## 5. Verification & Build
+## 5. Temporal Navigation & Historical Habit Management
+
+To allow inspecting and recording habits for past dates, as well as browsing historical week trends, all 4 habit screens integrate a unified temporal navigation system:
+
+### 1. Navigation Controls & Balanced Vertical Layout (`navRow`)
+- **Visuals & Dimensions**:
+  - **Amazfit Active 2 (Square 390x450)**:
+    - Title: `y: 66, h: 30` (ends at $y=96$).
+    - `navRow`: `y: 112, h: 40`, `btnW: 46`, `btnH: 40, radius: 12`, `leftX: 28, rightX: 316`, `textX: 78, textW: 234, textH: 40`.
+    - Main Content (Arc/Buttons/Chart): starts at $y = 168$.
+    - Breakdown/Legend: $y = 376..404$.
+    - Syncing Indicator: $y = 416..440$.
+    - **Vertical Breathing Room**: 16px gap between Title and NavRow, 16px gap between NavRow and Content, completely eliminating the previous top crowding and centering the whole screen.
+  - **Amazfit Balance (Round 480x480)**:
+    - Title: `y: 52, h: 32` (ends at $y=84$).
+    - `navRow`: `y: 102, h: 42`, `btnW: 48`, `btnH: 42, radius: 12`, `leftX: 74, rightX: 358`, `textX: 126, textW: 228, textH: 42`.
+    - Main Content (Arc/Buttons/Chart): starts at $y = 160..162$.
+    - Breakdown/Legend: $y = 386..415$.
+    - Syncing Indicator: $y = 424..448$.
+    - **Vertical Breathing Room**: 18px gap between Title and NavRow, 16–18px gap between NavRow and Content, maintaining 30px+ clearance to circular bezel at all edges.
+- **Anti-Truncation & Vertical Clearance**:
+  - Full-height buttons (`40px` on Active 2, `42px` on Balance) with dedicated `arrow_size: 16-18` guarantee that `◀` and `▶` are never clipped.
+- **Color Accent**: Left/right buttons match the screen's theme accent (`0x00aaff` for Bubbles / 💧 7 Days, `0xff5555` for Smokes / 🔥 7 Days).
+- **Future Boundary Guard**: The `▶` forward button is automatically hidden when the user is on the current date (`dayOffset === 0`) or current week (`weekOffset === 0`), completely preventing navigation into future dates.
+
+### 2. Temporal Modes & Labels:
+- **Day Screens (💧 Bubbles & 🔥 Smokes)**:
+  - `offset = 0` $\rightarrow$ `Today`
+  - `offset = -1` $\rightarrow$ `Yesterday`
+  - `offset < -1` $\rightarrow$ `Sun, 6 Sep` (Day of week, Date, Month)
+  - Fetches habit totals for the exact 24-hour midnight window via `GET_HABITS_TODAY` with `day_offset`.
+- **7-Day Chart Screens (💧 7 Days & 🔥 7 Days)**:
+  - Titles simplified from previous verbose labels to `💧 7 Days` and `🔥 7 Days`.
+  - `offset = 0` $\rightarrow$ `This Week`
+  - `offset = -1` $\rightarrow$ `Last Week`
+  - `offset < -1` $\rightarrow$ `24 Aug - 30 Aug` (7-day date window range)
+  - Fetches the 7 daily buckets for that specific week via `GET_HABITS_WEEK` with `week_offset`.
+
+### 3. Historical Habit Logging:
+- When a user logs a habit (`💧 300`, `☕ 100`, `🔥 Cig`, `⚡ Heat`) while viewing a past day (`dayOffset < 0`), the companion app computes the target timestamp `logged_at` for that past date.
+- `app-side/index.js` receives `logged_at` and stores it into Supabase `habits_logs` with the historical timestamp rather than `now()`.
+- If the logged date falls within the current 7-day chart window, the corresponding histogram bar updates optimistically.
+
+### 4. Haptic Feedback on Navigation:
+- Every tap on `◀` or `▶` triggers `triggerHaptic('nav')`, invoking `VIBRATOR_SCENE_DURATION` (600ms solid pulse, mode 28) to provide instantaneous, satisfying physical confirmation across both ERM (Active 2) and LRA (Balance) motors.
+
+---
+
+## 6. Verification & Build
 The multi-target build is compiled using the Zeus CLI:
 ```bash
 npm run build

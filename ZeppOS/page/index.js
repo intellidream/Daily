@@ -104,25 +104,26 @@ const SQUARE_CONFIG = {
   screenW: 390,
   screenH: 450,
   pageH: 450,
-  syncIndicator: { iconX: 141, iconY: 406, iconW: 20, iconH: 20, textX: 169, textY: 404, textW: 100, textH: 24, text_size: 15 },
+  syncIndicator: { iconX: 141, iconY: 418, iconW: 20, iconH: 20, textX: 169, textY: 416, textW: 100, textH: 24, text_size: 15 },
   loading: {
     arc: { x: 145, y: 125, w: 100, h: 100, line_width: 8 },
     text: { x: 0, y: 240, w: 390, h: 50, text_size: 20 },
     btn: { x: 45, y: 300, w: 300, h: 60, radius: 30, text_size: 20 }
   },
-  pageTitleY: 80,
+  pageTitleY: 66,
+  pageTitleH: 30,
   pageTitleSize: 24,
-  arc: { x: 20, y: 150, w: 200, h: 200, line_width: 16, text_size: 26 },
-  breakdownText: { x: 0, y: 358, w: 390, h: 26, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
+  arc: { x: 20, y: 168, w: 200, h: 200, line_width: 16, text_size: 26 },
+  breakdownText: { x: 0, y: 378, w: 390, h: 26, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
   p1Buttons: {
     x: 240,
     w: 130,
     h: 58,
     radius: 29,
     text_size: 22,
-    y1: 145,
-    y2: 217,
-    y3: 289
+    y1: 165,
+    y2: 236,
+    y3: 307
   },
   p3Buttons: {
     x: 240,
@@ -130,20 +131,34 @@ const SQUARE_CONFIG = {
     h: 62,
     radius: 31,
     text_size: 22,
-    y1: 180,
-    y2: 258
+    y1: 197,
+    y2: 277
+  },
+  navRow: {
+    y: 112,
+    leftX: 28,
+    rightX: 316,
+    btnW: 46,
+    btnH: 40,
+    btnRadius: 12,
+    textX: 78,
+    textW: 234,
+    textH: 40,
+    text_size: 16,
+    arrow_size: 16
   },
   chart: {
-    titleY: 80,
+    titleY: 66,
+    titleH: 30,
     titleSize: 24,
-    x: 45,
-    y: 145,
-    w: 300,
+    x: 41,
+    y: 168,
+    w: 340,
     h: 195,
     item_width: 30,
-    item_space: 15,
+    item_space: 14,
     item_radius: 10,
-    legendY: 358,
+    legendY: 376,
     legendSize: 15
   },
   about: {
@@ -168,46 +183,61 @@ const ROUND_CONFIG = {
   screenW: 480,
   screenH: 480,
   pageH: 480,
-  syncIndicator: { iconX: 186, iconY: 418, iconW: 20, iconH: 20, textX: 214, textY: 416, textW: 100, textH: 24, text_size: 15 },
+  syncIndicator: { iconX: 186, iconY: 426, iconW: 20, iconH: 20, textX: 214, textY: 424, textW: 100, textH: 24, text_size: 15 },
   loading: {
     arc: { x: 180, y: 140, w: 120, h: 120, line_width: 10 },
     text: { x: 0, y: 280, w: 480, h: 50, text_size: 22 },
     btn: { x: 80, y: 320, w: 320, h: 64, radius: 32, text_size: 22 }
   },
-  pageTitleY: 50,
+  pageTitleY: 52,
+  pageTitleH: 32,
   pageTitleSize: 26,
-  arc: { x: 30, y: 136, w: 216, h: 216, line_width: 18, text_size: 28 },
-  breakdownText: { x: 30, y: 366, w: 420, h: 26, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
+  arc: { x: 30, y: 160, w: 216, h: 216, line_width: 18, text_size: 28 },
+  breakdownText: { x: 30, y: 386, w: 420, h: 26, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
   p1Buttons: {
-    x: 265,
-    w: 165,
+    x: 260,
+    w: 160,
     h: 62,
     radius: 31,
     text_size: 22,
-    y1: 136,
-    y2: 210,
-    y3: 284
+    y1: 158,
+    y2: 232,
+    y3: 306
   },
   p3Buttons: {
-    x: 265,
-    w: 165,
+    x: 260,
+    w: 160,
     h: 68,
     radius: 34,
     text_size: 24,
-    y1: 168,
-    y2: 252
+    y1: 195,
+    y2: 279
+  },
+  navRow: {
+    y: 102,
+    leftX: 74,
+    rightX: 358,
+    btnW: 48,
+    btnH: 42,
+    btnRadius: 12,
+    textX: 126,
+    textW: 228,
+    textH: 42,
+    text_size: 17,
+    arrow_size: 18
   },
   chart: {
-    titleY: 50,
+    titleY: 52,
+    titleH: 32,
     titleSize: 26,
-    x: 80,
-    y: 135,
-    w: 320,
+    x: 72,
+    y: 162,
+    w: 360,
     h: 215,
     item_width: 32,
     item_space: 16,
     item_radius: 10,
-    legendY: 366,
+    legendY: 389,
     legendSize: 15
   },
   about: {
@@ -282,6 +312,36 @@ Page(
           let syncIcon, syncText
           let isSyncingState = false
           let isDashboardBuilt = false
+
+          let bubblesDayOffset = 0
+          let smokesDayOffset = 0
+          let bubblesWeekOffset = 0
+          let smokesWeekOffset = 0
+
+          let waterDateText, waterNextDayBtn
+          let waterWeekText, waterNextWeekBtn
+          let smokeDateText, smokeNextDayBtn
+          let smokeWeekText, smokeNextWeekBtn
+
+          const formatDayLabel = (offset) => {
+             if (offset === 0) return 'Today'
+             if (offset === -1) return 'Yesterday'
+             const d = new Date()
+             d.setDate(d.getDate() + offset)
+             const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+             return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`
+          }
+
+          const formatWeekLabel = (offset) => {
+             if (offset === 0) return 'This Week'
+             if (offset === -1) return 'Last Week'
+             const now = new Date()
+             const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset * 7 - 6)
+             const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset * 7)
+             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+             return `${start.getDate()} ${months[start.getMonth()]} - ${end.getDate()} ${months[end.getMonth()]}`
+          }
 
           const setSyncing = (isSyncing) => {
              const wasSyncing = isSyncingState
@@ -361,7 +421,7 @@ Page(
                  smokeBaseline = res.data.smokes_baseline || 20
                }
                
-               return doRequest('GET_HABITS_TODAY', { access_token: accessToken, user_id: userId, habit_type: 'water' })
+               return doRequest('GET_HABITS_TODAY', { access_token: accessToken, user_id: userId, habit_type: 'water', day_offset: bubblesDayOffset })
              }).then(res => {
                if (res && res.success && res.data) {
                  waterTotal = res.data.total || 0
@@ -369,7 +429,7 @@ Page(
                  coffeeVal = res.data.coffeeTotal || 0
                }
                
-               return doRequest('GET_HABITS_TODAY', { access_token: accessToken, user_id: userId, habit_type: 'smokes' })
+               return doRequest('GET_HABITS_TODAY', { access_token: accessToken, user_id: userId, habit_type: 'smokes', day_offset: smokesDayOffset })
              }).then(res => {
                if (res && res.success && res.data) {
                  smokeTotal = res.data.total || 0
@@ -377,14 +437,14 @@ Page(
                  heatVal = res.data.heatTotal || 0
                }
                
-               return doRequest('GET_HABITS_WEEK', { access_token: accessToken, habit_type: 'water' })
+               return doRequest('GET_HABITS_WEEK', { access_token: accessToken, habit_type: 'water', week_offset: bubblesWeekOffset })
              }).then(res => {
                if (res && res.success && res.data) {
                  waterWeek = res.data.total || [0,0,0,0,0,0,0]
                  coffeeWeek = res.data.sub || [0,0,0,0,0,0,0]
                }
                
-               return doRequest('GET_HABITS_WEEK', { access_token: accessToken, habit_type: 'smokes' })
+               return doRequest('GET_HABITS_WEEK', { access_token: accessToken, habit_type: 'smokes', week_offset: smokesWeekOffset })
              }).then(res => {
                if (res && res.success && res.data) {
                  smokeWeek = res.data.total || [0,0,0,0,0,0,0]
@@ -509,39 +569,141 @@ Page(
              else smokeCenterText.setProperty(prop.COLOR, 0xffffff)
           }
 
+          const fetchDayData = (habitType, dayOffset) => {
+             setSyncing(true)
+             return doRequest('GET_HABITS_TODAY', { access_token: accessToken, user_id: userId, habit_type: habitType, day_offset: dayOffset })
+             .then(res => {
+                setSyncing(false)
+                if (res && res.success && res.data) {
+                   if (habitType === 'water') {
+                      waterTotal = res.data.total || 0
+                      waterVal = res.data.waterTotal || 0
+                      coffeeVal = res.data.coffeeTotal || 0
+                      updateWaterUI()
+                   } else if (habitType === 'smokes') {
+                      smokeTotal = res.data.total || 0
+                      cigVal = res.data.cigTotal || 0
+                      heatVal = res.data.heatTotal || 0
+                      updateSmokeUI()
+                   }
+                }
+             }).catch(err => {
+                setSyncing(false)
+                logger.error(`fetchDayData ${habitType} error`, err)
+             })
+          }
+
+          const fetchWeekData = (habitType, weekOffset) => {
+             setSyncing(true)
+             return doRequest('GET_HABITS_WEEK', { access_token: accessToken, habit_type: habitType, week_offset: weekOffset })
+             .then(res => {
+                setSyncing(false)
+                if (res && res.success && res.data) {
+                   if (habitType === 'water') {
+                      waterWeek = res.data.total || [0, 0, 0, 0, 0, 0, 0]
+                      coffeeWeek = res.data.sub || [0, 0, 0, 0, 0, 0, 0]
+                      updateWaterUI()
+                   } else if (habitType === 'smokes') {
+                      smokeWeek = res.data.total || [0, 0, 0, 0, 0, 0, 0]
+                      heatWeek = res.data.sub || [0, 0, 0, 0, 0, 0, 0]
+                      updateSmokeUI()
+                   }
+                }
+             }).catch(err => {
+                setSyncing(false)
+                logger.error(`fetchWeekData ${habitType} error`, err)
+             })
+          }
+
+          const onNavigateWaterDay = (delta) => {
+             const newOffset = bubblesDayOffset + delta
+             if (newOffset > 0) return
+             bubblesDayOffset = newOffset
+             triggerHaptic('nav')
+             if (waterDateText) waterDateText.setProperty(prop.TEXT, formatDayLabel(bubblesDayOffset))
+             if (waterNextDayBtn) waterNextDayBtn.setProperty(prop.VISIBLE, bubblesDayOffset < 0)
+             fetchDayData('water', bubblesDayOffset)
+          }
+
+          const onNavigateWaterWeek = (delta) => {
+             const newOffset = bubblesWeekOffset + delta
+             if (newOffset > 0) return
+             bubblesWeekOffset = newOffset
+             triggerHaptic('nav')
+             if (waterWeekText) waterWeekText.setProperty(prop.TEXT, formatWeekLabel(bubblesWeekOffset))
+             if (waterNextWeekBtn) waterNextWeekBtn.setProperty(prop.VISIBLE, bubblesWeekOffset < 0)
+             fetchWeekData('water', bubblesWeekOffset)
+          }
+
+          const onNavigateSmokeDay = (delta) => {
+             const newOffset = smokesDayOffset + delta
+             if (newOffset > 0) return
+             smokesDayOffset = newOffset
+             triggerHaptic('nav')
+             if (smokeDateText) smokeDateText.setProperty(prop.TEXT, formatDayLabel(smokesDayOffset))
+             if (smokeNextDayBtn) smokeNextDayBtn.setProperty(prop.VISIBLE, smokesDayOffset < 0)
+             fetchDayData('smokes', smokesDayOffset)
+          }
+
+          const onNavigateSmokeWeek = (delta) => {
+             const newOffset = smokesWeekOffset + delta
+             if (newOffset > 0) return
+             smokesWeekOffset = newOffset
+             triggerHaptic('nav')
+             if (smokeWeekText) smokeWeekText.setProperty(prop.TEXT, formatWeekLabel(smokesWeekOffset))
+             if (smokeNextWeekBtn) smokeNextWeekBtn.setProperty(prop.VISIBLE, smokesWeekOffset < 0)
+             fetchWeekData('smokes', smokesWeekOffset)
+          }
+
           const logWater = (amount, type) => {
              triggerHaptic('habit')
              waterTotal += amount
-             waterWeek[6] += amount
+             if (bubblesWeekOffset === 0 && bubblesDayOffset >= -6 && bubblesDayOffset <= 0) {
+                 const bIdx = 6 + bubblesDayOffset
+                 waterWeek[bIdx] += amount
+                 if (type.includes('Coffee')) coffeeWeek[bIdx] += amount
+             }
              if (type.includes('Coffee')) {
                  coffeeVal += amount
-                 coffeeWeek[6] += amount
              } else waterVal += amount
              updateWaterUI()
              
              if (debugText) debugText.setProperty(prop.TEXT, '')
              
+             let loggedAtIso = null
+             if (bubblesDayOffset !== 0) {
+                 const targetD = new Date()
+                 targetD.setDate(targetD.getDate() + bubblesDayOffset)
+                 loggedAtIso = targetD.toISOString()
+             }
+             
              self.request({
                method: 'LOG_HABIT',
-               params: { access_token: accessToken, user_id: userId, habit_type: 'water', value: amount, unit: 'ml', metadata: { drink: type } }
+               params: { access_token: accessToken, user_id: userId, habit_type: 'water', value: amount, unit: 'ml', metadata: { drink: type }, logged_at: loggedAtIso }
              }).then(res => {
                if (!res || !res.success) {
                   if (debugText) debugText.setProperty(prop.TEXT, (res && res.error) ? res.error : 'Log Failed')
                   waterTotal -= amount
-                  waterWeek[6] -= amount
+                  if (bubblesWeekOffset === 0 && bubblesDayOffset >= -6 && bubblesDayOffset <= 0) {
+                      const bIdx = 6 + bubblesDayOffset
+                      waterWeek[bIdx] -= amount
+                      if (type.includes('Coffee')) coffeeWeek[bIdx] -= amount
+                  }
                   if (type.includes('Coffee')) {
                       coffeeVal -= amount
-                      coffeeWeek[6] -= amount
                   } else waterVal -= amount
                   updateWaterUI()
                }
              }).catch(err => {
                   if (debugText) debugText.setProperty(prop.TEXT, err ? err.toString() : 'Net Err')
                   waterTotal -= amount
-                  waterWeek[6] -= amount
+                  if (bubblesWeekOffset === 0 && bubblesDayOffset >= -6 && bubblesDayOffset <= 0) {
+                      const bIdx = 6 + bubblesDayOffset
+                      waterWeek[bIdx] -= amount
+                      if (type.includes('Coffee')) coffeeWeek[bIdx] -= amount
+                  }
                   if (type.includes('Coffee')) {
                       coffeeVal -= amount
-                      coffeeWeek[6] -= amount
                   } else waterVal -= amount
                   updateWaterUI()
              })
@@ -550,36 +712,52 @@ Page(
           const logSmoke = (amount, type) => {
              triggerHaptic('habit')
              smokeTotal += amount
-             smokeWeek[6] += amount
+             if (smokesWeekOffset === 0 && smokesDayOffset >= -6 && smokesDayOffset <= 0) {
+                 const bIdx = 6 + smokesDayOffset
+                 smokeWeek[bIdx] += amount
+                 if (type.includes('Heat') || type.includes('Vape')) heatWeek[bIdx] += amount
+             }
              if (type.includes('Heat') || type.includes('Vape')) {
                  heatVal += amount
-                 heatWeek[6] += amount
              } else cigVal += amount
              updateSmokeUI()
              
              if (debugText) debugText.setProperty(prop.TEXT, '')
              
+             let loggedAtIso = null
+             if (smokesDayOffset !== 0) {
+                 const targetD = new Date()
+                 targetD.setDate(targetD.getDate() + smokesDayOffset)
+                 loggedAtIso = targetD.toISOString()
+             }
+             
              self.request({
                method: 'LOG_HABIT',
-               params: { access_token: accessToken, user_id: userId, habit_type: 'smokes', value: amount, unit: 'count', metadata: { type: type } }
+               params: { access_token: accessToken, user_id: userId, habit_type: 'smokes', value: amount, unit: 'count', metadata: { type: type }, logged_at: loggedAtIso }
              }).then(res => {
                if (!res || !res.success) {
                   if (debugText) debugText.setProperty(prop.TEXT, (res && res.error) ? res.error : 'Log Failed')
                   smokeTotal -= amount
-                  smokeWeek[6] -= amount
+                  if (smokesWeekOffset === 0 && smokesDayOffset >= -6 && smokesDayOffset <= 0) {
+                      const bIdx = 6 + smokesDayOffset
+                      smokeWeek[bIdx] -= amount
+                      if (type.includes('Heat') || type.includes('Vape')) heatWeek[bIdx] -= amount
+                  }
                   if (type.includes('Heat') || type.includes('Vape')) {
                       heatVal -= amount
-                      heatWeek[6] -= amount
                   } else cigVal -= amount
                   updateSmokeUI()
                }
              }).catch(err => {
                   if (debugText) debugText.setProperty(prop.TEXT, err ? err.toString() : 'Net Err')
                   smokeTotal -= amount
-                  smokeWeek[6] -= amount
+                  if (smokesWeekOffset === 0 && smokesDayOffset >= -6 && smokesDayOffset <= 0) {
+                      const bIdx = 6 + smokesDayOffset
+                      smokeWeek[bIdx] -= amount
+                      if (type.includes('Heat') || type.includes('Vape')) heatWeek[bIdx] -= amount
+                  }
                   if (type.includes('Heat') || type.includes('Vape')) {
                       heatVal -= amount
-                      heatWeek[6] -= amount
                   } else cigVal -= amount
                   updateSmokeUI()
              })
@@ -609,10 +787,26 @@ Page(
              syncText.setProperty(prop.VISIBLE, isSyncingState)
              
              createWidget(widget.TEXT, {
-                x: 0, y: cfg.pageTitleY, w: cfg.screenW, h: 40,
+                x: 0, y: cfg.pageTitleY, w: cfg.screenW, h: cfg.pageTitleH || 30,
                 color: 0x00aaff, text_size: cfg.pageTitleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles'
              })
              
+             createWidget(widget.BUTTON, {
+                x: cfg.navRow.leftX, y: cfg.navRow.y, w: cfg.navRow.btnW, h: cfg.navRow.btnH, radius: cfg.navRow.btnRadius,
+                normal_color: 0x222222, press_color: 0x111111, text: '◀', color: 0x00aaff, text_size: cfg.navRow.arrow_size || cfg.navRow.text_size,
+                click_func: () => onNavigateWaterDay(-1)
+             })
+             waterDateText = createWidget(widget.TEXT, {
+                x: cfg.navRow.textX, y: cfg.navRow.y, w: cfg.navRow.textW, h: cfg.navRow.textH,
+                color: 0xffffff, text_size: cfg.navRow.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text: formatDayLabel(bubblesDayOffset)
+             })
+             waterNextDayBtn = createWidget(widget.BUTTON, {
+                x: cfg.navRow.rightX, y: cfg.navRow.y, w: cfg.navRow.btnW, h: cfg.navRow.btnH, radius: cfg.navRow.btnRadius,
+                normal_color: 0x222222, press_color: 0x111111, text: '▶', color: 0x00aaff, text_size: cfg.navRow.arrow_size || cfg.navRow.text_size,
+                click_func: () => onNavigateWaterDay(1)
+             })
+             waterNextDayBtn.setProperty(prop.VISIBLE, bubblesDayOffset < 0)
+
              createWidget(widget.ARC, {
                 x: cfg.arc.x, y: cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
                 start_angle: -90, end_angle: 270, color: 0x333333, line_width: cfg.arc.line_width
@@ -653,9 +847,25 @@ Page(
 
              // ================== PAGE 2: BUBBLES STATS ==================
              createWidget(widget.TEXT, {
-                x: 0, y: h + cfg.chart.titleY, w: cfg.screenW, h: 40,
-                color: 0x00aaff, text_size: cfg.chart.titleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 Bubbles 7 Days'
+                x: 0, y: h + cfg.chart.titleY, w: cfg.screenW, h: cfg.chart.titleH || 30,
+                color: 0x00aaff, text_size: cfg.chart.titleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '💧 7 Days'
              })
+
+             createWidget(widget.BUTTON, {
+                x: cfg.navRow.leftX, y: h + cfg.navRow.y, w: cfg.navRow.btnW, h: cfg.navRow.btnH, radius: cfg.navRow.btnRadius,
+                normal_color: 0x222222, press_color: 0x111111, text: '◀', color: 0x00aaff, text_size: cfg.navRow.arrow_size || cfg.navRow.text_size,
+                click_func: () => onNavigateWaterWeek(-1)
+             })
+             waterWeekText = createWidget(widget.TEXT, {
+                x: cfg.navRow.textX, y: h + cfg.navRow.y, w: cfg.navRow.textW, h: cfg.navRow.textH,
+                color: 0xffffff, text_size: cfg.navRow.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text: formatWeekLabel(bubblesWeekOffset)
+             })
+             waterNextWeekBtn = createWidget(widget.BUTTON, {
+                x: cfg.navRow.rightX, y: h + cfg.navRow.y, w: cfg.navRow.btnW, h: cfg.navRow.btnH, radius: cfg.navRow.btnRadius,
+                normal_color: 0x222222, press_color: 0x111111, text: '▶', color: 0x00aaff, text_size: cfg.navRow.arrow_size || cfg.navRow.text_size,
+                click_func: () => onNavigateWaterWeek(1)
+             })
+             waterNextWeekBtn.setProperty(prop.VISIBLE, bubblesWeekOffset < 0)
              
              waterHistogram = createWidget(widget.HISTOGRAM, {
                x: cfg.chart.x, y: h + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
@@ -690,9 +900,25 @@ Page(
 
              // ================== PAGE 3: SMOKES ==================
              createWidget(widget.TEXT, {
-                x: 0, y: h*2 + cfg.pageTitleY, w: cfg.screenW, h: 40,
+                x: 0, y: h*2 + cfg.pageTitleY, w: cfg.screenW, h: cfg.pageTitleH || 30,
                 color: 0xff5555, text_size: cfg.pageTitleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 Smokes'
              })
+
+             createWidget(widget.BUTTON, {
+                x: cfg.navRow.leftX, y: h*2 + cfg.navRow.y, w: cfg.navRow.btnW, h: cfg.navRow.btnH, radius: cfg.navRow.btnRadius,
+                normal_color: 0x222222, press_color: 0x111111, text: '◀', color: 0xff5555, text_size: cfg.navRow.arrow_size || cfg.navRow.text_size,
+                click_func: () => onNavigateSmokeDay(-1)
+             })
+             smokeDateText = createWidget(widget.TEXT, {
+                x: cfg.navRow.textX, y: h*2 + cfg.navRow.y, w: cfg.navRow.textW, h: cfg.navRow.textH,
+                color: 0xffffff, text_size: cfg.navRow.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text: formatDayLabel(smokesDayOffset)
+             })
+             smokeNextDayBtn = createWidget(widget.BUTTON, {
+                x: cfg.navRow.rightX, y: h*2 + cfg.navRow.y, w: cfg.navRow.btnW, h: cfg.navRow.btnH, radius: cfg.navRow.btnRadius,
+                normal_color: 0x222222, press_color: 0x111111, text: '▶', color: 0xff5555, text_size: cfg.navRow.arrow_size || cfg.navRow.text_size,
+                click_func: () => onNavigateSmokeDay(1)
+             })
+             smokeNextDayBtn.setProperty(prop.VISIBLE, smokesDayOffset < 0)
              
              createWidget(widget.ARC, {
                 x: cfg.arc.x, y: h*2 + cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
@@ -725,9 +951,25 @@ Page(
 
              // ================== PAGE 4: SMOKES STATS ==================
              createWidget(widget.TEXT, {
-                x: 0, y: h*3 + cfg.chart.titleY, w: cfg.screenW, h: 40,
-                color: 0xff5555, text_size: cfg.chart.titleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 Smokes 7 Days'
+                x: 0, y: h*3 + cfg.chart.titleY, w: cfg.screenW, h: cfg.chart.titleH || 30,
+                color: 0xff5555, text_size: cfg.chart.titleSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '🔥 7 Days'
              })
+
+             createWidget(widget.BUTTON, {
+                x: cfg.navRow.leftX, y: h*3 + cfg.navRow.y, w: cfg.navRow.btnW, h: cfg.navRow.btnH, radius: cfg.navRow.btnRadius,
+                normal_color: 0x222222, press_color: 0x111111, text: '◀', color: 0xff5555, text_size: cfg.navRow.arrow_size || cfg.navRow.text_size,
+                click_func: () => onNavigateSmokeWeek(-1)
+             })
+             smokeWeekText = createWidget(widget.TEXT, {
+                x: cfg.navRow.textX, y: h*3 + cfg.navRow.y, w: cfg.navRow.textW, h: cfg.navRow.textH,
+                color: 0xffffff, text_size: cfg.navRow.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text: formatWeekLabel(smokesWeekOffset)
+             })
+             smokeNextWeekBtn = createWidget(widget.BUTTON, {
+                x: cfg.navRow.rightX, y: h*3 + cfg.navRow.y, w: cfg.navRow.btnW, h: cfg.navRow.btnH, radius: cfg.navRow.btnRadius,
+                normal_color: 0x222222, press_color: 0x111111, text: '▶', color: 0xff5555, text_size: cfg.navRow.arrow_size || cfg.navRow.text_size,
+                click_func: () => onNavigateSmokeWeek(1)
+             })
+             smokeNextWeekBtn.setProperty(prop.VISIBLE, smokesWeekOffset < 0)
              
              smokeHistogram = createWidget(widget.HISTOGRAM, {
                x: cfg.chart.x, y: h*3 + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
