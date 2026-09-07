@@ -1,15 +1,16 @@
 import SwiftUI
 import WatchKit
 import Supabase
-import Charts
 import WidgetKit
 
 struct SmokesView: View {
-    @State private var todayTotal: Int = 0
+    @State private var dayOffset: Int = 0
+    @State private var dayTotal: Int = 0
+    @State private var dayCig: Int = 0
+    @State private var dayHeat: Int = 0
     @State private var dailyGoal: Int = 20
-    @State private var isLogging: Bool = false
+    @State private var isSyncing: Bool = false
     @State private var historyLogs: [HabitLog] = []
-    @State private var weeklyTotals: [DailyTotal] = []
     @State private var selectedLog: HabitLog?
     @State private var showDeleteConfirm: Bool = false
     
@@ -23,72 +24,16 @@ struct SmokesView: View {
         }
     }
     
-    private func parseMetadata(_ metadata: String?) -> [String: String]? {
-        guard let data = metadata?.data(using: .utf8) else { return nil }
-        return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: String]
-    }
-    
-    private func parseDate(_ dateString: String) -> Date? {
-        var norm = dateString.replacingOccurrences(of: " ", with: "T")
-        // If the date string from C# lacks a timezone, append 'Z' to treat it as UTC
-        if !norm.contains("Z") && !norm.hasSuffix("+00") && !norm.contains("+0") && !norm.contains("-0") {
-            if norm.count > 10 { // Ensure it's not just a short string
-                let lastChar = norm.last!
-                if lastChar.isNumber {
-                    norm += "Z"
-                }
-            }
-        }
-        
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = isoFormatter.date(from: norm) { return d }
-        
-        let fallbackFormatter = ISO8601DateFormatter()
-        return fallbackFormatter.date(from: norm)
-    }
-    
-    struct DailyTotal: Identifiable, Codable {
-        var id = UUID()
-        let date: Date
-        let total: Double
-    }
-    
-    struct DeleteUpdate: Encodable {
-        let is_deleted = true
-    }
-    
-    struct SmokesCache: Codable {
-        let todayTotal: Int
-        let dailyGoal: Int
-        let historyLogs: [HabitLog]
-        let weeklyTotals: [DailyTotal]
-    }
-    
-    private func saveCache() {
-        let cache = SmokesCache(
-            todayTotal: todayTotal,
-            dailyGoal: dailyGoal,
-            historyLogs: historyLogs,
-            weeklyTotals: weeklyTotals
-        )
-        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
-            if let data = try? JSONEncoder().encode(cache) {
-                groupPrefs.set(data, forKey: "smokes_cache")
-            }
-            // Simple integer total for widget/complication fallback
-            groupPrefs.set(todayTotal, forKey: "cached_smokes_total")
-        }
-    }
-    
-    private func loadCache() {
-        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
-           let data = groupPrefs.data(forKey: "smokes_cache"),
-           let cache = try? JSONDecoder().decode(SmokesCache.self, from: data) {
-            self.todayTotal = cache.todayTotal
-            self.dailyGoal = cache.dailyGoal
-            self.historyLogs = cache.historyLogs
-            self.weeklyTotals = cache.weeklyTotals
+    private var formattedDateTitle: String {
+        if dayOffset == 0 {
+            return "Today"
+        } else if dayOffset == -1 {
+            return "Yesterday"
+        } else {
+            let targetDate = Calendar.current.date(byAdding: .day, value: dayOffset, to: Date()) ?? Date()
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEE, d MMM"
+            return formatter.string(from: targetDate)
         }
     }
     
@@ -100,115 +45,131 @@ struct SmokesView: View {
         return .yellow
     }
     
+    private func parseMetadata(_ metadata: String?) -> [String: String]? {
+        guard let data = metadata?.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: String]
+    }
+    
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
-                // Header
-                HStack {
+            VStack(spacing: 8) {
+                // Header Title - button icon (flame.fill) & color (.red)
+                HStack(spacing: 6) {
                     Image(systemName: "flame.fill")
-                        .foregroundColor(getSmokesColor(total: todayTotal, baseline: dailyGoal))
+                        .foregroundColor(.red)
+                        .font(.system(size: 15))
                     Text("Smokes")
-                        .font(.headline)
-                        .fontWeight(.bold)
+                        .font(.system(size: 17, weight: .bold))
                 }
-                .padding(.top, 4)
+                .padding(.top, 2)
                 
-                // Ring & Buttons layout
+                // Temporal Navigation (Days)
+                TemporalNavHeader(
+                    title: formattedDateTitle,
+                    canGoForward: dayOffset < 0,
+                    accentColor: .red,
+                    onPrevious: {
+                        dayOffset -= 1
+                        fetchData()
+                    },
+                    onNext: {
+                        if dayOffset < 0 {
+                            dayOffset += 1
+                            fetchData()
+                        }
+                    }
+                )
+                
+                // Ring & Quick-Add Buttons
                 HStack(spacing: 12) {
-                    // Circular Progress
+                    // Circular Progress Ring
                     ZStack {
                         Circle()
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 8)
+                            .stroke(Color.gray.opacity(0.25), lineWidth: 9)
                         
-                        let remaining = max(0, dailyGoal - todayTotal)
+                        let remaining = max(0, dailyGoal - dayTotal)
                         let progress = CGFloat(remaining) / CGFloat(max(dailyGoal, 1))
-                        let ringColor = getSmokesColor(total: todayTotal, baseline: dailyGoal) // Use dynamic color
+                        let ringColor = getSmokesColor(total: dayTotal, baseline: dailyGoal)
                         
                         Circle()
                             .trim(from: 0.0, to: progress)
-                            .stroke(ringColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                            .stroke(ringColor, style: StrokeStyle(lineWidth: 9, lineCap: .round))
                             .rotationEffect(.degrees(-90))
-                            .animation(.easeOut(duration: 0.8), value: progress)
+                            .animation(.easeOut(duration: 0.5), value: progress)
                         
                         VStack(spacing: 0) {
-                            Text("\(todayTotal)")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundColor(todayTotal > dailyGoal ? .red : .primary)
+                            Text("\(dayTotal)")
+                                .font(.system(size: 19, weight: .bold, design: .rounded))
+                                .foregroundColor(dayTotal > dailyGoal ? .red : .primary)
                             Text("/ \(dailyGoal)")
                                 .font(.system(size: 10))
                                 .foregroundColor(.secondary)
                         }
                     }
-                    .frame(width: 90, height: 90)
+                    .frame(width: 86, height: 86)
                     
-                    // Buttons
+                    // 2 Quick Add Buttons (Cig & Heat)
                     VStack(spacing: 6) {
-                        SmokesMiniButton(icon: "flame.fill", color: .red, title: "Cig") {
+                        SmokesMiniButton(icon: "flame.fill", color: .red, title: "+1 Cig") {
                             logSmoke(type: "Cigarette")
                         }
-                        SmokesMiniButton(icon: "bolt.fill", color: .blue, title: "Heat") {
+                        SmokesMiniButton(icon: "bolt.fill", color: .blue, title: "+1 Heat") {
                             logSmoke(type: "Heated Tobacco")
                         }
                     }
-                    .frame(width: 70)
+                    .frame(width: 72)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 2)
                 
-                if !weeklyTotals.isEmpty {
-                    VStack(alignment: .leading) {
-                        Text("LAST 7 DAYS")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.secondary)
-                            .padding(.bottom, 2)
-                        
-                        Chart {
-                            ForEach(weeklyTotals) { item in
-                                BarMark(
-                                    x: .value("Day", item.date, unit: .day),
-                                    y: .value("Total", item.total)
-                                )
-                                .foregroundStyle(Color.red.gradient)
-                                .cornerRadius(2)
-                            }
-                            RuleMark(y: .value("Baseline", dailyGoal))
-                                .foregroundStyle(Color.red.opacity(0.5))
-                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2]))
-                        }
-                        .frame(height: 70)
-                        .chartXAxis {
-                            AxisMarks(values: .stride(by: .day, count: 1)) { _ in
-                                AxisValueLabel(format: .dateTime.weekday(.narrow))
-                            }
-                        }
+                // Breakdown summary text using button icons and exact colors
+                HStack(spacing: 6) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "flame.fill")
+                            .foregroundColor(.red)
+                            .font(.system(size: 11))
+                        Text("\(dayCig) cig")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(.primary)
                     }
-                    .padding(.top, 8)
+                    Text("·")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.secondary)
+                    HStack(spacing: 3) {
+                        Image(systemName: "bolt.fill")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 11))
+                        Text("\(dayHeat) heat")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(.primary)
+                    }
                 }
                 
+                // Logs for this specific day
                 if !historyLogs.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("TODAY'S LOGS")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(dayOffset == 0 ? "TODAY'S LOGS" : "LOGS")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(.secondary)
-                            .padding(.bottom, 2)
+                            .padding(.top, 4)
                         
                         ForEach(historyLogs) { log in
                             HStack {
                                 let type = parseMetadata(log.metadata)?["type"] ?? "Cigarette"
-                                let isHeated = type.contains("Heated") || type.contains("Heat")
+                                let isHeat = type.contains("Heat") || type.contains("Vape")
                                 
-                                Image(systemName: isHeated ? "bolt.fill" : "flame.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(getSmokesColor(total: todayTotal, baseline: dailyGoal))
-                                    
-                                Text("1 " + (isHeated ? "Heat" : "Cig"))
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                Image(systemName: isHeat ? "bolt.fill" : "flame.fill")
+                                    .foregroundColor(isHeat ? .blue : .red)
+                                    .font(.system(size: 11))
+                                
+                                Text(isHeat ? "Heated Tobacco" : "Cigarette")
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
                                 Spacer()
                                 Text(formatTime(dateString: log.logged_at))
-                                    .font(.system(size: 10))
+                                    .font(.system(size: 9))
                                     .foregroundColor(.secondary)
                             }
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 7)
                             .background(Color.white.opacity(0.1))
                             .cornerRadius(6)
                             .onLongPressGesture {
@@ -217,11 +178,14 @@ struct SmokesView: View {
                             }
                         }
                     }
-                    .padding(.top, 8)
                 }
+                
+                // Syncing indicator
+                SyncFooterView(isSyncing: isSyncing)
+                    .padding(.top, 2)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 16)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 10)
         }
         .alert("Delete Log?", isPresented: $showDeleteConfirm, presenting: selectedLog) { log in
             Button("Delete", role: .destructive) {
@@ -235,207 +199,213 @@ struct SmokesView: View {
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .active {
-                // Backgrounded->Active refresh
                 fetchData()
             }
         }
     }
     
+    // MARK: - Data Fetching
+    
     private func fetchData() {
+        guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
+        
+        isSyncing = true
+        let calendar = Calendar.current
+        let baseDate = calendar.date(byAdding: .day, value: dayOffset, to: Date()) ?? Date()
+        let startOfDay = calendar.startOfDay(for: baseDate)
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            isSyncing = false
+            return
+        }
+        
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let startStr = formatter.string(from: startOfDay)
+        let endStr = formatter.string(from: endOfDay)
+        
         Task {
             do {
-                guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
-                
-                // Best-effort session refresh — don't abort data loading if auth is stale.
-                // watchOS aggressively suspends apps overnight; tokens may be expired but
-                // the refresh token is usually still valid for Supabase queries.
-                do {
-                    _ = try await pClient.auth.session
-                } catch {
-                    try? await pClient.auth.refreshSession()
+                if dayOffset == 0 {
+                    struct PrefRow: Codable {
+                        let smokes_baseline: Int?
+                    }
+                    if let prefs: [PrefRow] = try? await pClient.from("user_preferences").select("smokes_baseline").execute().value,
+                       let first = prefs.first, let baseline = first.smokes_baseline, baseline > 0 {
+                        DispatchQueue.main.async {
+                            self.dailyGoal = baseline
+                            if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                                groupPrefs.set(String(baseline), forKey: "smokes_baseline")
+                            }
+                        }
+                    }
                 }
-                
-                let calendar = Calendar.current
-                let todayStart = calendar.startOfDay(for: Date())
-                let todayEnd = calendar.date(byAdding: .day, value: 1, to: todayStart)!
-                
-                let sevenDaysAgo = calendar.date(byAdding: .day, value: -6, to: todayStart)!
-                
-                let formatter = ISO8601DateFormatter()
-                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                let startString = formatter.string(from: sevenDaysAgo)
-                let endString = formatter.string(from: todayEnd)
                 
                 let logs: [HabitLog] = try await pClient
                     .from("habits_logs")
-                    .select()
+                    .select("id,user_id,habit_type,value,unit,logged_at,metadata")
                     .eq("habit_type", value: "smokes")
                     .eq("is_deleted", value: false)
-                    .gte("logged_at", value: startString)
-                    .lt("logged_at", value: endString)
+                    .gte("logged_at", value: startStr)
+                    .lt("logged_at", value: endStr)
                     .order("logged_at", ascending: false)
                     .execute()
                     .value
                 
-                let todayString = formatter.string(from: todayStart)
-                let todayLogs = logs.filter { $0.logged_at.replacingOccurrences(of: " ", with: "T") >= todayString }
-                let sum = todayLogs.reduce(0.0) { $0 + $1.value }
-                
-                var totalsByDay: [Date: Double] = [:]
-                for i in 0..<7 {
-                    let d = calendar.date(byAdding: .day, value: -i, to: todayStart)!
-                    totalsByDay[d] = 0.0
-                }
+                var total = 0.0
+                var cig = 0.0
+                var heat = 0.0
                 
                 for log in logs {
-                    if let date = self.parseDate(log.logged_at) {
-                        let day = calendar.startOfDay(for: date)
-                        if totalsByDay[day] != nil {
-                            totalsByDay[day]! += log.value
-                        }
-                    }
-                }
-                
-                let chartData = totalsByDay.map { DailyTotal(date: $0.key, total: $0.value) }
-                    .sorted { $0.date < $1.date }
-                    
-                // Fetch dynamic goal
-                struct UserPreference: Decodable { let smokes_baseline: Int? }
-                var finalGoalStr = "20"
-                var finalGoalInt = 20
-                if let userId = WatchSessionManager.shared.currentUserId {
-                    do {
-                        let prefs: UserPreference = try await pClient
-                            .from("user_preferences")
-                            .select()
-                            .eq("id", value: userId.uuidString)
-                            .single()
-                            .execute()
-                            .value
-                        
-                        if let fetchedGoal = prefs.smokes_baseline {
-                            finalGoalInt = fetchedGoal
-                            finalGoalStr = String(finalGoalInt)
-                            
-                            // Save to App Group for Widget
-                            if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
-                                groupPrefs.set(finalGoalStr, forKey: "smokes_baseline")
-                            }
-                        }
-                    } catch {
-                        print("Error fetching dynamic smokes baseline: \(error)")
+                    total += log.value
+                    let type = parseMetadata(log.metadata)?["type"] ?? "Cigarette"
+                    if type.contains("Heat") || type.contains("Vape") {
+                        heat += log.value
+                    } else {
+                        cig += log.value
                     }
                 }
                 
                 DispatchQueue.main.async {
-                    self.historyLogs = todayLogs
-                    self.weeklyTotals = chartData
-                    self.todayTotal = Int(sum)
-                    self.dailyGoal = finalGoalInt
-                    self.saveCache()
-                    WidgetCenter.shared.reloadAllTimelines() // Force complication update on load
-                }
-            } catch {
-                print("Error fetching smokes: \(error)")
-            }
-        }
-    }
-    
-    private func deleteLog(_ log: HabitLog) {
-        let idStr = log.id.uuidString
-        
-        withAnimation {
-            self.historyLogs.removeAll { $0.id == log.id }
-            self.todayTotal -= Int(log.value)
-            
-            if let today = self.weeklyTotals.last {
-                let newTotal = max(0, today.total - log.value)
-                self.weeklyTotals[self.weeklyTotals.count - 1] = DailyTotal(date: today.date, total: newTotal)
-            }
-            self.saveCache()
-        }
-        
-        Task {
-            do {
-                guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
-                try await pClient
-                    .from("habits_logs")
-                    .update(DeleteUpdate())
-                    .eq("id", value: idStr)
-                    .execute()
+                    self.dayTotal = Int(total)
+                    self.dayCig = Int(cig)
+                    self.dayHeat = Int(heat)
+                    self.historyLogs = logs
+                    self.isSyncing = false
                     
-                DispatchQueue.main.async {
-                    WidgetCenter.shared.reloadAllTimelines()
+                    if self.dayOffset == 0 {
+                        self.saveCache()
+                    }
                 }
             } catch {
-                print("Error deleting log: \(error)")
-                fetchData() // revert UI
+                DispatchQueue.main.async {
+                    self.isSyncing = false
+                }
             }
         }
     }
     
-    private func formatTime(dateString: String) -> String {
-        guard let date = self.parseDate(dateString) else { return "" }
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
-    }
+    // MARK: - Logging Habit
     
     private func logSmoke(type: String) {
-        guard !isLogging else { return }
-        isLogging = true
         WKInterfaceDevice.current().play(.success)
         
-        withAnimation {
-            todayTotal += 1
-            if let today = self.weeklyTotals.last {
-                self.weeklyTotals[self.weeklyTotals.count - 1] = DailyTotal(date: today.date, total: today.total + 1.0)
-            }
-            self.saveCache()
+        let now = Date()
+        let targetDate: Date
+        if dayOffset == 0 {
+            targetDate = now
+        } else {
+            let calendar = Calendar.current
+            var components = calendar.dateComponents([.year, .month, .day], from: calendar.date(byAdding: .day, value: dayOffset, to: now) ?? now)
+            let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: now)
+            components.hour = timeComponents.hour
+            components.minute = timeComponents.minute
+            components.second = timeComponents.second
+            targetDate = calendar.date(from: components) ?? now
         }
         
-        // Release the tap-guard quickly so the user can log again without
-        // waiting for the network round-trip (which can stall on watchOS).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.isLogging = false
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let loggedAt = formatter.string(from: targetDate)
+        
+        let isHeat = type.contains("Heat") || type.contains("Vape")
+        let metadataString = "{\"type\":\"\(type)\"}"
+        
+        let newLog = HabitLog(
+            id: UUID(),
+            user_id: WatchSessionManager.shared.currentUserId,
+            habit_type: "smokes",
+            value: 1.0,
+            unit: "items",
+            logged_at: loggedAt,
+            metadata: metadataString
+        )
+        
+        dayTotal += 1
+        if isHeat {
+            dayHeat += 1
+        } else {
+            dayCig += 1
+        }
+        historyLogs.insert(newLog, at: 0)
+        
+        if dayOffset == 0 {
+            saveCache()
         }
         
         Task {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            let nowString = formatter.string(from: Date())
-            
-            let newLog = HabitLog(
-                id: UUID(),
-                user_id: WatchSessionManager.shared.currentUserId,
-                habit_type: "smokes",
-                value: 1.0,
-                unit: "cig",
-                logged_at: nowString,
-                metadata: "{ \"type\": \"\(type)\" }"
-            )
-            
+            isSyncing = true
             do {
-                guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
-                
-                DispatchQueue.main.async {
-                    self.historyLogs.insert(newLog, at: 0)
+                guard let pClient = WatchSessionManager.shared.supabaseClient else {
+                    OfflineSyncManager.shared.enqueue(log: newLog)
+                    DispatchQueue.main.async { self.isSyncing = false }
+                    return
                 }
                 
                 try await pClient.from("habits_logs").insert(newLog).execute()
                 
                 DispatchQueue.main.async {
+                    self.isSyncing = false
                     WidgetCenter.shared.reloadAllTimelines()
                 }
             } catch {
-                print("Error logging smoke: \(error)")
-                
-                // OFFLINE FALLBACK
                 OfflineSyncManager.shared.enqueue(log: newLog)
-                
                 DispatchQueue.main.async {
+                    self.isSyncing = false
                     WidgetCenter.shared.reloadAllTimelines()
                 }
+            }
+        }
+    }
+    
+    private func deleteLog(_ log: HabitLog) {
+        guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
+        
+        let isHeat = (parseMetadata(log.metadata)?["type"] ?? "").contains("Heat")
+        dayTotal = max(0, dayTotal - 1)
+        if isHeat {
+            dayHeat = max(0, dayHeat - 1)
+        } else {
+            dayCig = max(0, dayCig - 1)
+        }
+        historyLogs.removeAll { $0.id == log.id }
+        
+        Task {
+            struct DeleteUpdate: Encodable { let is_deleted = true }
+            _ = try? await pClient.from("habits_logs")
+                .update(DeleteUpdate())
+                .eq("id", value: log.id.uuidString.lowercased())
+                .execute()
+            
+            DispatchQueue.main.async {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
+    }
+    
+    private func formatTime(dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = formatter.date(from: dateString) {
+            let outFormatter = DateFormatter()
+            outFormatter.timeStyle = .short
+            return outFormatter.string(from: d)
+        }
+        return ""
+    }
+    
+    // MARK: - Local Cache
+    
+    private func saveCache() {
+        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+            groupPrefs.set(dayTotal, forKey: "cached_smokes_total")
+        }
+    }
+    
+    private func loadCache() {
+        if dayOffset == 0, let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+            let cached = groupPrefs.integer(forKey: "cached_smokes_total")
+            if cached > 0 && dayTotal == 0 {
+                dayTotal = cached
             }
         }
     }
@@ -449,18 +419,18 @@ struct SmokesMiniButton: View {
     
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: 3) {
                 Image(systemName: icon)
-                    .font(.system(size: 14))
+                    .font(.system(size: 11))
                     .foregroundColor(color)
                 
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
             }
-            .frame(maxWidth: .infinity, minHeight: 36)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(6)
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .background(Color.white.opacity(0.12))
+            .cornerRadius(7)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
     }
 }

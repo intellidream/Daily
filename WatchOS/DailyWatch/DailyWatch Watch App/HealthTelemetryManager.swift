@@ -17,18 +17,23 @@ class HealthTelemetryManager {
     static let shared = HealthTelemetryManager()
     private let healthStore = HKHealthStore()
     
-    // Tier 1: High Priority / Fast Sync
+    // Tier 1: Fast Sync (Real-time active metrics)
     private let tier1QuantityTypes: [HKQuantityTypeIdentifier] = [
         .heartRate,
         .stepCount,
         .activeEnergyBurned
     ]
     
-    // Tier 2: Deep Analytics / Slow Sync
+    // Tier 2: Deep Analytics & Vitals (Sleep, HRV, Resting HR, SpO2)
+    private let tier2QuantityTypes: [HKQuantityTypeIdentifier] = [
+        .heartRateVariabilitySDNN,
+        .restingHeartRate,
+        .oxygenSaturation
+    ]
+    
     private let tier2CategoryTypes: [HKCategoryTypeIdentifier] = [
         .sleepAnalysis
     ]
-    // Add HRV, Respiratory Rate, etc., to Tier 2 quantity types later
     
     private let dateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -42,13 +47,26 @@ class HealthTelemetryManager {
         }
         
         var typesToRead = Set<HKSampleType>()
-        for t in tier1QuantityTypes { typesToRead.insert(HKObjectType.quantityType(forIdentifier: t)!) }
-        for t in tier2CategoryTypes { typesToRead.insert(HKObjectType.categoryType(forIdentifier: t)!) }
+        for t in tier1QuantityTypes {
+            if let type = HKObjectType.quantityType(forIdentifier: t) {
+                typesToRead.insert(type)
+            }
+        }
+        for t in tier2QuantityTypes {
+            if let type = HKObjectType.quantityType(forIdentifier: t) {
+                typesToRead.insert(type)
+            }
+        }
+        for t in tier2CategoryTypes {
+            if let type = HKObjectType.categoryType(forIdentifier: t) {
+                typesToRead.insert(type)
+            }
+        }
         
         try await healthStore.requestAuthorization(toShare: [], read: typesToRead)
     }
     
-    // Called by the background task
+    // Called by background tasks and on app activation
     func syncTelemetry(isDeepSync: Bool = false) async {
         os_log("Starting HealthTelemetryManager sync (isDeepSync: %d)...", type: .info, isDeepSync)
         guard let pClient = WatchSessionManager.shared.supabaseClient,
@@ -57,41 +75,40 @@ class HealthTelemetryManager {
             return
         }
         
-        do {
-            try await pClient.auth.session
-        } catch {
-            os_log("Auth session invalid. Skipping telemetry sync.", type: .error)
-            return
-        }
-        
         var allPayloads: [TelemetryPayload] = []
+        var pendingAnchors: [String: HKQueryAnchor] = [:]
         
-        // --- TIER 1 ---
+        // --- TIER 1: Real-time active vitals ---
+        
         // Heart Rate
-        let hrSamples = await fetchQuantitySamples(typeIdentifier: .heartRate)
+        let (hrSamples, hrAnchor) = await fetchQuantitySamplesWithAnchor(typeIdentifier: .heartRate)
+        if let anchor = hrAnchor { pendingAnchors[HKQuantityTypeIdentifier.heartRate.rawValue] = anchor }
         for sample in hrSamples {
             let val = sample.quantity.doubleValue(for: HKUnit(from: "count/min"))
             allPayloads.append(createPayload(userId: userId, type: "heart_rate", value: val, unit: "bpm", sample: sample))
         }
         
         // Steps
-        let stepSamples = await fetchQuantitySamples(typeIdentifier: .stepCount)
+        let (stepSamples, stepAnchor) = await fetchQuantitySamplesWithAnchor(typeIdentifier: .stepCount)
+        if let anchor = stepAnchor { pendingAnchors[HKQuantityTypeIdentifier.stepCount.rawValue] = anchor }
         for sample in stepSamples {
             let val = sample.quantity.doubleValue(for: HKUnit.count())
             allPayloads.append(createPayload(userId: userId, type: "steps", value: val, unit: "count", sample: sample))
         }
         
         // Active Energy
-        let energySamples = await fetchQuantitySamples(typeIdentifier: .activeEnergyBurned)
+        let (energySamples, energyAnchor) = await fetchQuantitySamplesWithAnchor(typeIdentifier: .activeEnergyBurned)
+        if let anchor = energyAnchor { pendingAnchors[HKQuantityTypeIdentifier.activeEnergyBurned.rawValue] = anchor }
         for sample in energySamples {
             let val = sample.quantity.doubleValue(for: HKUnit.kilocalorie())
             allPayloads.append(createPayload(userId: userId, type: "active_energy", value: val, unit: "kcal", sample: sample))
         }
         
-        // --- TIER 2 ---
+        // --- TIER 2: Deep Analytics (Sleep, HRV, Resting HR, SpO2) ---
         if isDeepSync {
             // Sleep
-            let sleepSamples = await fetchCategorySamples(typeIdentifier: .sleepAnalysis)
+            let (sleepSamples, sleepAnchor) = await fetchCategorySamplesWithAnchor(typeIdentifier: .sleepAnalysis)
+            if let anchor = sleepAnchor { pendingAnchors[HKCategoryTypeIdentifier.sleepAnalysis.rawValue] = anchor }
             for sample in sleepSamples {
                 if sample.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue ||
                    sample.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue ||
@@ -101,6 +118,31 @@ class HealthTelemetryManager {
                     let durationHours = sample.endDate.timeIntervalSince(sample.startDate) / 3600.0
                     allPayloads.append(createPayload(userId: userId, type: "sleep", value: durationHours, unit: "hours", sample: sample))
                 }
+            }
+            
+            // HRV (Heart Rate Variability SDNN in milliseconds)
+            let (hrvSamples, hrvAnchor) = await fetchQuantitySamplesWithAnchor(typeIdentifier: .heartRateVariabilitySDNN)
+            if let anchor = hrvAnchor { pendingAnchors[HKQuantityTypeIdentifier.heartRateVariabilitySDNN.rawValue] = anchor }
+            for sample in hrvSamples {
+                let val = sample.quantity.doubleValue(for: HKUnit.secondUnit(with: .milli))
+                allPayloads.append(createPayload(userId: userId, type: "hrv", value: val, unit: "ms", sample: sample))
+            }
+            
+            // Resting Heart Rate (bpm)
+            let (restingSamples, restingAnchor) = await fetchQuantitySamplesWithAnchor(typeIdentifier: .restingHeartRate)
+            if let anchor = restingAnchor { pendingAnchors[HKQuantityTypeIdentifier.restingHeartRate.rawValue] = anchor }
+            for sample in restingSamples {
+                let val = sample.quantity.doubleValue(for: HKUnit(from: "count/min"))
+                allPayloads.append(createPayload(userId: userId, type: "resting_heart_rate", value: val, unit: "bpm", sample: sample))
+            }
+            
+            // Blood Oxygen / SpO2 (%)
+            let (spo2Samples, spo2Anchor) = await fetchQuantitySamplesWithAnchor(typeIdentifier: .oxygenSaturation)
+            if let anchor = spo2Anchor { pendingAnchors[HKQuantityTypeIdentifier.oxygenSaturation.rawValue] = anchor }
+            for sample in spo2Samples {
+                let rawFraction = sample.quantity.doubleValue(for: HKUnit.percent())
+                let percentage = rawFraction <= 1.0 ? (rawFraction * 100.0) : rawFraction
+                allPayloads.append(createPayload(userId: userId, type: "spo2", value: percentage, unit: "%", sample: sample))
             }
         }
         
@@ -113,17 +155,20 @@ class HealthTelemetryManager {
         
         do {
             try await pClient.from("health_telemetry").insert(allPayloads).execute()
-            os_log("Successfully pushed telemetry data.", type: .info)
+            os_log("Successfully pushed telemetry data. Committing delta anchors.", type: .info)
+            
+            // Only advance anchors AFTER successful upload to ensure zero data loss
+            for (key, anchor) in pendingAnchors {
+                self.saveAnchor(anchor, for: key)
+            }
         } catch {
-            os_log("Failed to push telemetry data: %@", type: .error, error.localizedDescription)
-            // Note: In a robust implementation we might want to revert the anchors if this fails,
-            // but for simplicity we let it pass. A real app would only save the anchor after success.
+            os_log("Failed to push telemetry data: %@. Retaining previous anchors for retry.", type: .error, error.localizedDescription)
         }
     }
     
     private func createPayload(userId: UUID, type: String, value: Double, unit: String, sample: HKSample) -> TelemetryPayload {
         let deviceName = sample.device?.name ?? "Apple Watch"
-        let model = sample.device?.model ?? "Unknown Model"
+        let model = sample.device?.model ?? "watchOS"
         
         return TelemetryPayload(
             user_id: userId.uuidString,
@@ -136,7 +181,7 @@ class HealthTelemetryManager {
         )
     }
     
-    // MARK: - Anchored Queries (Delta Sync)
+    // MARK: - Anchored Queries (Zero-Loss Delta Sync)
     
     private func getAnchor(for key: String) -> HKQueryAnchor? {
         guard let data = UserDefaults.standard.data(forKey: "anchor_\(key)") else { return nil }
@@ -149,31 +194,25 @@ class HealthTelemetryManager {
         }
     }
     
-    private func fetchQuantitySamples(typeIdentifier: HKQuantityTypeIdentifier) async -> [HKQuantitySample] {
-        guard let type = HKQuantityType.quantityType(forIdentifier: typeIdentifier) else { return [] }
+    private func fetchQuantitySamplesWithAnchor(typeIdentifier: HKQuantityTypeIdentifier) async -> ([HKQuantitySample], HKQueryAnchor?) {
+        guard let type = HKQuantityType.quantityType(forIdentifier: typeIdentifier) else { return ([], nil) }
         let anchor = getAnchor(for: typeIdentifier.rawValue)
         
         return await withCheckedContinuation { continuation in
             let query = HKAnchoredObjectQuery(type: type, predicate: nil, anchor: anchor, limit: HKObjectQueryNoLimit) { _, samples, _, newAnchor, _ in
-                if let newAnchor = newAnchor {
-                    self.saveAnchor(newAnchor, for: typeIdentifier.rawValue)
-                }
-                continuation.resume(returning: (samples as? [HKQuantitySample]) ?? [])
+                continuation.resume(returning: ((samples as? [HKQuantitySample]) ?? [], newAnchor))
             }
             healthStore.execute(query)
         }
     }
     
-    private func fetchCategorySamples(typeIdentifier: HKCategoryTypeIdentifier) async -> [HKCategorySample] {
-        guard let type = HKCategoryType.categoryType(forIdentifier: typeIdentifier) else { return [] }
+    private func fetchCategorySamplesWithAnchor(typeIdentifier: HKCategoryTypeIdentifier) async -> ([HKCategorySample], HKQueryAnchor?) {
+        guard let type = HKCategoryType.categoryType(forIdentifier: typeIdentifier) else { return ([], nil) }
         let anchor = getAnchor(for: typeIdentifier.rawValue)
         
         return await withCheckedContinuation { continuation in
             let query = HKAnchoredObjectQuery(type: type, predicate: nil, anchor: anchor, limit: HKObjectQueryNoLimit) { _, samples, _, newAnchor, _ in
-                if let newAnchor = newAnchor {
-                    self.saveAnchor(newAnchor, for: typeIdentifier.rawValue)
-                }
-                continuation.resume(returning: (samples as? [HKCategorySample]) ?? [])
+                continuation.resume(returning: ((samples as? [HKCategorySample]) ?? [], newAnchor))
             }
             healthStore.execute(query)
         }

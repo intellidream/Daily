@@ -1,119 +1,101 @@
 import SwiftUI
-import WatchConnectivity
-import HealthKit
+import WatchKit
 import Supabase
 
 struct ContentView: View {
     @StateObject private var sessionManager = WatchSessionManager.shared
-    @State private var inputPin: String = ""
+    @State private var selectedTab: Int = 0
     
     var body: some View {
-        if sessionManager.isCheckingSession {
-            VStack {
-                ProgressView("Orbiting DayOne...")
-                    .padding()
-            }
-        } else if sessionManager.isAuthenticated {
-            TabView {
-                BubblesView()
-                    .tabItem {
-                        Label("Bubbles", systemImage: "drop.fill")
-                    }
-                
-                SmokesView()
-                    .tabItem {
-                        Label("Smokes", systemImage: "flame.fill")
-                    }
-                
-                #if targetEnvironment(simulator)
-                VStack {
-                    Button("Inject Mock HR") {
-                        Task {
-                            guard let pClient = WatchSessionManager.shared.supabaseClient,
-                                  let userId = WatchSessionManager.shared.currentUserId else { return }
-                            
-                            let dateFormatter = ISO8601DateFormatter()
-                            dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                            
-                            // Create a direct mock payload
-                            let payload = TelemetryPayload(
-                                user_id: userId.uuidString,
-                                type: "heart_rate",
-                                value: 75.0,
-                                unit: "bpm",
-                                start_time: dateFormatter.string(from: Date()),
-                                end_time: dateFormatter.string(from: Date()),
-                                source_device: "Apple Watch (Mock Injection)"
-                            )
-                            
-                            do {
-                                try await pClient.from("health_telemetry").insert([payload]).execute()
-                                print("Successfully injected mock HR directly to Supabase")
-                            } catch {
-                                print("Failed to inject to Supabase: \(error)")
-                            }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
+        Group {
+            if sessionManager.isCheckingSession {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("Connecting to Orbit...")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+            } else if sessionManager.isAuthenticated {
+                // 5-Page Horizontal Swiper (Zepp OS Parity)
+                TabView(selection: $selectedTab) {
+                    BubblesView()
+                        .tag(0)
                     
-                    Text("Forces a sync to Supabase")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray)
+                    Bubbles7DaysView()
+                        .tag(1)
+                    
+                    SmokesView()
+                        .tag(2)
+                    
+                    Smokes7DaysView()
+                        .tag(3)
+                    
+                    AboutView()
+                        .tag(4)
                 }
-                .tabItem {
-                    Label("Debug", systemImage: "ladybug.fill")
-                }
-                #endif
-            }
-        } else {
-            NavigationStack {
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
+            } else {
+                // Watch-Driven PIN Pairing Screen (Zepp OS Parity)
                 ScrollView {
                     VStack(spacing: 8) {
+                        Text("DayOne Orbit")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.cyan)
+                        
+                        Text("Pairing PIN")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        
+                        if !sessionManager.pairingPin.isEmpty {
+                            Text(sessionManager.pairingPin)
+                                .font(.system(size: 32, weight: .bold, design: .monospaced))
+                                .foregroundColor(.green)
+                                .tracking(3)
+                                .padding(.vertical, 4)
+                        } else {
+                            ProgressView()
+                                .padding(.vertical, 8)
+                        }
+                        
+                        Text("Enter this PIN in Daily on your PC to link.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 4)
+                        
+                        HStack(spacing: 5) {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                            Text(sessionManager.pairingStatus)
+                                .font(.system(size: 10))
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.top, 4)
+                        
                         if !sessionManager.errorMessage.isEmpty {
                             Text(sessionManager.errorMessage)
-                                .font(.caption)
+                                .font(.system(size: 10))
                                 .foregroundColor(.red)
                                 .multilineTextAlignment(.center)
                         }
                         
-                        if sessionManager.isPairing {
-                            ProgressView("Pairing...")
-                                .padding()
-                        } else {
-                            Text("DayOne Orbit")
-                                .font(.headline)
-                                .foregroundColor(.accentColor)
-                                
-                            Text("Link your watch using the 6-digit PIN from the Desktop App.")
-                                .font(.system(size: 11))
-                                .multilineTextAlignment(.center)
-                                .padding(.bottom, 6)
-                            
-                            NavigationLink(destination: OrbitPinEntryView(pin: $inputPin) {
-                                sessionManager.claimOrbitPin(pin: inputPin)
-                            }) {
-                                Text(inputPin.isEmpty ? "Enter PIN" : inputPin)
-                                    .font(.system(size: 18, weight: .bold, design: .monospaced))
-                                    .foregroundColor(inputPin.isEmpty ? .primary : .accentColor)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(inputPin.isEmpty ? .gray.opacity(0.3) : .accentColor)
-                            
-                            Divider().padding(.vertical, 8)
-                            
-                            Button("Pair via iPhone") {
-                                sessionManager.generatePairingCode()
-                            }
-                            .font(.system(size: 12))
-                            
-                            if !sessionManager.pairingCode.isEmpty {
-                                Text(sessionManager.pairingCode)
-                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                            }
+                        Button(action: {
+                            WKInterfaceDevice.current().play(.click)
+                            sessionManager.startWatchPinPairing()
+                        }) {
+                            Text("New PIN")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.cyan)
+                                .frame(maxWidth: .infinity, minHeight: 28)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(6)
                         }
+                        .buttonStyle(.plain)
+                        .padding(.top, 6)
+                        .padding(.horizontal, 16)
                     }
-                    .padding()
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
                 }
             }
         }
