@@ -65,11 +65,11 @@ The vertical scrolling list was replaced with a native horizontal pager (`TabVie
 
 | Page | Name | Component | Key Features |
 | :--- | :--- | :--- | :--- |
-| **1** | `💧 Bubbles` | [`BubblesView.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/BubblesView.swift) | Dual-color circular ring (Cyan for Water, Orange for Coffee), center `Total / Goal`, quick add `+300`, `+150`, `+100`, temporal navigation `◀ [Today] ▶`, breakdown with exact button icons/colors, historical logging, sync footer. |
+| **1** | `💧 Bubbles` | [`BubblesView.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/BubblesView.swift) | Dual-color circular ring (Cyan for Water, Orange for Coffee), center `Total / Goal`, quick add `300`, `150`, `100` (no plus sign), temporal navigation `◀ [Today] ▶`, breakdown with exact button icons/colors, historical logging, sync footer. |
 | **2** | `💧 7 Days` | [`Bubbles7DaysView.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/Bubbles7DaysView.swift) | 7-day BarChart (Monday to Sunday calendar week), instant cache loading (0ms), stacked Water (.cyan) / Coffee (.orange) bars, dashed goal line, week navigation `◀ [This Week] ▶`, weekly average summary, sync footer. |
-| **3** | `🔥 Smokes` | [`SmokesView.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/SmokesView.swift) | Status-colored ring, header `flame.fill` in `.red`, center `Count / Baseline`, quick add `+1 Cig` (Red), `+1 Heat` (Blue), temporal navigation `◀ [Today] ▶`, breakdown with button icons/colors, historical logging, sync footer. |
+| **3** | `🔥 Smokes` | [`SmokesView.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/SmokesView.swift) | Status-colored ring, header `flame.fill` in `.red`, center `Count / Baseline`, quick add `Cig` (Red), `Heat` (Blue), temporal navigation `◀ [Today] ▶`, breakdown with button icons/colors, historical logging, sync footer. |
 | **4** | `🔥 7 Days` | [`Smokes7DaysView.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/Smokes7DaysView.swift) | 7-day BarChart (Monday to Sunday calendar week), instant cache loading (0ms), Cigarette (.red) and Heated tobacco (.blue) bars, baseline rule mark, week navigation `◀ [This Week] ▶`, daily average, sync footer. |
-| **5** | `⚙️ About` | [`AboutView.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/AboutView.swift) | "DayOne Orbit", clean "v1.0" label under app name, connection status, user ID, and destructive "Unpair Watch" button with confirmation alert. |
+| **5** | `⚙️ About` | [`AboutView.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/AboutView.swift) | DayOne Orbit glowing app logo, app name, clean "v1.0" label, Status: Connected, Health sync telemetry status (`synced at HH:mm, d MMM` in yellow or `not synced` in red), and destructive "Unpair Watch" button with confirmation alert. |
 
 ---
 
@@ -89,14 +89,26 @@ let nextMonday = calendar.date(byAdding: .day, value: 7, to: targetMonday)!
 - X-Axis marks use `AxisValueLabel(format: .dateTime.weekday(.narrow))` displaying M, T, W, T, F, S, S unambiguously mapped to dates.
 - Headers show `This Week` (`weekOffset == 0`), `Last Week` (`weekOffset == -1`), or the exact Monday–Sunday date range (e.g. `24 Aug - 30 Aug`).
 
-### Instant 0ms Load Time via Caching:
-- To eliminate sluggish loading and blank spinners, both 7 Days views cache the current week's computed buckets in App Group `UserDefaults` (`bubbles_week_cache` and `smokes_week_cache`).
-- Upon swiping to either chart, `loadCache()` renders the full chart **instantly on frame 0**.
-- `fetchWeekData()` queries only `.select("value,metadata,logged_at")`, reducing data transfer by >70% and updating the chart smoothly with background sync.
+### Instant 0ms Load Time via Caching & Target Week Responsiveness:
+- Both 7 Days views cache computed buckets per-week in App Group `UserDefaults` (`bubbles_week_cache` / `bubbles_week_cache_<offset>` and `smokes_week_cache` / `smokes_week_cache_<offset>`).
+- When navigating weeks with `◀` or `▶`, `applyWeekSkeletonOrCache(for:)` switches the view immediately on frame 0 to the target week's skeleton or cached bars, eliminating blank frames and preventing stale data bleed between weeks.
+- `fetchWeekData(for:)` queries Supabase using clean UTC ISO8601 boundary timestamps (`startStr` and `endStr`).
+
+### Resilient Data Decoding & Bulletproof Date Parsing:
+- **Flexible Deserialization**: `HabitWeekLogItem` utilizes `FlexibleDouble` and `HabitLogMetadataHelper` to safely ingest mixed scalar types (Int, Double, String) and diverse `metadata` formats (raw JSON string, JSON object dictionary, null) without triggering `Decodable` `typeMismatch` exceptions.
+- **Robust Multi-Format Date Parser (`HabitDateParser`)**: Supports PostgreSQL microsecond timestamps (`.SSSSSS`), standard ISO8601, fractional seconds, space/`T` separators, and proper timezone preservation—resolving the bug where timestamps ending in `+00:00` were corrupted by extraneous `Z` suffixes.
+- **Exact Calendar Day Matching**: Buckets are mapped by evaluating `calendar.isDate($0, inSameDayAs: logDate)` directly against the week's Monday-to-Sunday date array, eliminating daylight saving time (DST) shifts and component calculation edge cases.
+- **Accurate Daily Average**: Computes the daily average by dividing by elapsed days for the current week or 7 for completed past weeks.
 
 ---
 
-## 5. Strict Iconography & Color Consistency
+## 5. App Name & Identity ("DayOne Orbit")
+
+The watchOS application target and complication extension are officially branded as **DayOne Orbit** via `INFOPLIST_KEY_CFBundleDisplayName = "DayOne Orbit"` across Debug and Release configurations. This unifies the app label across the Apple Watch home screen grid/list, system launcher, watch face complication gallery, and in-app About view (`v1.0`).
+
+---
+
+## 6. Strict Iconography & Color Consistency
 
 All icons and colors across headers, quick-add buttons, descriptions, breakdowns, charts, and log list items strictly match the designated habit types:
 - **Water**:
@@ -114,7 +126,7 @@ All icons and colors across headers, quick-add buttons, descriptions, breakdowns
 
 ---
 
-## 6. Temporal Navigation & Historical Habit Logging
+## 7. Temporal Navigation & Historical Habit Logging
 
 All 4 habit screens feature [`TemporalNavHeader.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/TemporalNavHeader.swift):
 - **Navigation Controls**:
@@ -131,7 +143,7 @@ All 4 habit screens feature [`TemporalNavHeader.swift`](file:///Users/mihai/Sour
 
 ---
 
-## 7. Direct Wi-Fi / Cellular Cloud Communication
+## 8. Direct Wi-Fi / Cellular Cloud Communication
 
 Unlike platforms requiring a mobile companion proxy, Apple Watch operates as a **fully independent cloud node**:
 - All PostgREST API requests run directly via `URLSession` over the watch's native Wi-Fi or Cellular LTE connection.
@@ -140,7 +152,7 @@ Unlike platforms requiring a mobile companion proxy, Apple Watch operates as a *
 
 ---
 
-## 8. Expanded HealthKit Telemetry & Zero-Loss Delta Sync
+## 9. Expanded HealthKit Telemetry & Zero-Loss Delta Sync
 
 [`HealthTelemetryManager.swift`](file:///Users/mihai/Source/Daily/WatchOS/DailyWatch/DailyWatch%20Watch%20App/HealthTelemetryManager.swift) collects high-fidelity biometrics into `public.health_telemetry`:
 

@@ -427,7 +427,7 @@ struct QuickAddMiniButton: View {
                     .font(.system(size: 12))
                     .foregroundColor(color)
                 
-                Text("+\(amount)")
+                Text("\(amount)")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
             }
             .frame(maxWidth: .infinity, minHeight: 25)

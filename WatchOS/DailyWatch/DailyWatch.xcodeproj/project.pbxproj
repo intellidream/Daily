@@ -385,7 +385,7 @@
 				DEVELOPMENT_TEAM = 7LZ9ZT2Z5B;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = DailyWatch;
+				INFOPLIST_KEY_CFBundleDisplayName = "DayOne Orbit";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Daily needs access to read your vitals.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Daily needs access to record your vitals.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -423,7 +423,7 @@
 				DEVELOPMENT_TEAM = 7LZ9ZT2Z5B;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = DailyWatch;
+				INFOPLIST_KEY_CFBundleDisplayName = "DayOne Orbit";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Daily needs access to read your vitals.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Daily needs access to record your vitals.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -462,7 +462,7 @@
 				DEVELOPMENT_TEAM = 7LZ9ZT2Z5B;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DailyWatchWidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = DailyWatchWidgetExtension;
+				INFOPLIST_KEY_CFBundleDisplayName = "DayOne Orbit";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -497,7 +497,7 @@
 				DEVELOPMENT_TEAM = 7LZ9ZT2Z5B;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DailyWatchWidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = DailyWatchWidgetExtension;
+				INFOPLIST_KEY_CFBundleDisplayName = "DayOne Orbit";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -110,10 +110,10 @@ struct SmokesView: View {
                     
                     // 2 Quick Add Buttons (Cig & Heat)
                     VStack(spacing: 6) {
-                        SmokesMiniButton(icon: "flame.fill", color: .red, title: "+1 Cig") {
+                        SmokesMiniButton(icon: "flame.fill", color: .red, title: "Cig") {
                             logSmoke(type: "Cigarette")
                         }
-                        SmokesMiniButton(icon: "bolt.fill", color: .blue, title: "+1 Heat") {
+                        SmokesMiniButton(icon: "bolt.fill", color: .blue, title: "Heat") {
                             logSmoke(type: "Heated Tobacco")
                         }
                     }

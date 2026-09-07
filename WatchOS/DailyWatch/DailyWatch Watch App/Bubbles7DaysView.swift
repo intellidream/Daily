@@ -13,8 +13,8 @@ struct WaterDayBucket: Identifiable, Codable {
 }
 
 private struct HabitWeekLogItem: Decodable {
-    let value: Double
-    let metadata: String?
+    let value: FlexibleDouble
+    let metadata: HabitLogMetadataHelper?
     let logged_at: String
 }
 
@@ -25,17 +25,6 @@ struct Bubbles7DaysView: View {
     @State private var buckets: [WaterDayBucket] = []
     
     @Environment(\.scenePhase) private var scenePhase
-    
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-    
-    private static let fallbackFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        return formatter
-    }()
     
     init() {
         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
@@ -82,7 +71,14 @@ struct Bubbles7DaysView: View {
     private var weeklyAverage: Int {
         guard !buckets.isEmpty else { return 0 }
         let sum = buckets.reduce(0.0) { $0 + $1.total }
-        return Int(sum / Double(buckets.count))
+        if weekOffset == 0 {
+            let calendar = Calendar.current
+            let weekday = calendar.component(.weekday, from: Date()) // 1=Sun, 2=Mon, ...
+            let daysElapsed = (weekday == 1) ? 7 : max(1, weekday - 1)
+            return Int(sum / Double(daysElapsed))
+        } else {
+            return Int(sum / Double(buckets.count))
+        }
     }
     
     var body: some View {
@@ -104,13 +100,11 @@ struct Bubbles7DaysView: View {
                     canGoForward: weekOffset < 0,
                     accentColor: .cyan,
                     onPrevious: {
-                        weekOffset -= 1
-                        fetchWeekData()
+                        navigateWeek(by: -1)
                     },
                     onNext: {
                         if weekOffset < 0 {
-                            weekOffset += 1
-                            fetchWeekData()
+                            navigateWeek(by: 1)
                         }
                     }
                 )
@@ -190,59 +184,67 @@ struct Bubbles7DaysView: View {
             .padding(.bottom, 8)
         }
         .onAppear {
-            loadCache()
-            fetchWeekData()
+            applyWeekSkeletonOrCache(for: weekOffset)
+            fetchWeekData(for: weekOffset)
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .active {
-                fetchWeekData()
+                fetchWeekData(for: weekOffset)
             }
         }
     }
     
-    // MARK: - Local Cache for Instant 0ms Load
+    // MARK: - Navigation & Local Cache
     
-    private func loadCache() {
-        guard weekOffset == 0, buckets.isEmpty else { return }
+    private func navigateWeek(by delta: Int) {
+        let newOffset = weekOffset + delta
+        if newOffset > 0 { return }
+        weekOffset = newOffset
+        applyWeekSkeletonOrCache(for: newOffset)
+        fetchWeekData(for: newOffset)
+    }
+    
+    private func applyWeekSkeletonOrCache(for offset: Int) {
+        let window = getWeekWindow(offset: offset)
+        let key = (offset == 0) ? "bubbles_week_cache" : "bubbles_week_cache_\(offset)"
         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
-           let data = groupPrefs.data(forKey: "bubbles_week_cache"),
+           let data = groupPrefs.data(forKey: key),
            let cached = try? JSONDecoder().decode([WaterDayBucket].self, from: data),
            !cached.isEmpty {
             self.buckets = cached
         } else {
-            // Build empty placeholder skeleton Mon-Sun so layout doesn't jump
-            let window = getWeekWindow(offset: 0)
             self.buckets = window.days.map { WaterDayBucket(date: $0, dayLabel: "", water: 0, coffee: 0) }
         }
     }
     
-    private func saveCache() {
-        guard weekOffset == 0, !buckets.isEmpty else { return }
+    private func saveCache(for offset: Int, buckets: [WaterDayBucket]) {
         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
            let data = try? JSONEncoder().encode(buckets) {
-            groupPrefs.set(data, forKey: "bubbles_week_cache")
+            let key = (offset == 0) ? "bubbles_week_cache" : "bubbles_week_cache_\(offset)"
+            groupPrefs.set(data, forKey: key)
         }
     }
     
     // MARK: - Data Fetching
     
-    private func fetchWeekData() {
+    private func fetchWeekData(for offset: Int) {
         guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
         
         isSyncing = true
-        let window = getWeekWindow(offset: weekOffset)
+        let window = getWeekWindow(offset: offset)
         
-        let startStr = Self.isoFormatter.string(from: window.monday)
-        let endStr = Self.isoFormatter.string(from: window.nextMonday)
+        let isoUtcFormatter = ISO8601DateFormatter()
+        isoUtcFormatter.formatOptions = [.withInternetDateTime]
+        isoUtcFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        let startStr = isoUtcFormatter.string(from: window.monday)
+        let endStr = isoUtcFormatter.string(from: window.nextMonday)
         
         Task {
             do {
-                // Initialize clean Monday-to-Sunday buckets
                 var initialBuckets: [WaterDayBucket] = window.days.map {
                     WaterDayBucket(date: $0, dayLabel: "", water: 0, coffee: 0)
                 }
                 
-                // Fast, lightweight query selecting only necessary columns
                 let logs: [HabitWeekLogItem] = try await pClient
                     .from("habits_logs")
                     .select("value,metadata,logged_at")
@@ -255,36 +257,29 @@ struct Bubbles7DaysView: View {
                 
                 let calendar = Calendar.current
                 for log in logs {
-                    var norm = log.logged_at.replacingOccurrences(of: " ", with: "T")
-                    if !norm.contains("Z") && !norm.hasSuffix("+00") && norm.count > 10 {
-                        norm += "Z"
-                    }
-                    guard let logDate = Self.isoFormatter.date(from: norm) ?? Self.fallbackFormatter.date(from: norm) else { continue }
+                    guard let logDate = HabitDateParser.parse(log.logged_at) else { continue }
                     
-                    let logDayStart = calendar.startOfDay(for: logDate)
-                    let diffDays = calendar.dateComponents([.day], from: window.monday, to: logDayStart).day ?? -1
-                    
-                    if diffDays >= 0 && diffDays < 7 {
-                        let isCoffee = (log.metadata ?? "").contains("Coffee")
+                    if let dayIndex = window.days.firstIndex(where: { calendar.isDate($0, inSameDayAs: logDate) }) {
+                        let isCoffee = log.metadata?.contains("Coffee") ?? false
                         if isCoffee {
-                            initialBuckets[diffDays].coffee += log.value
+                            initialBuckets[dayIndex].coffee += log.value.value
                         } else {
-                            initialBuckets[diffDays].water += log.value
+                            initialBuckets[dayIndex].water += log.value.value
                         }
                     }
                 }
                 
                 DispatchQueue.main.async {
+                    guard self.weekOffset == offset else { return }
                     withAnimation(.easeInOut(duration: 0.3)) {
                         self.buckets = initialBuckets
                     }
                     self.isSyncing = false
-                    if self.weekOffset == 0 {
-                        self.saveCache()
-                    }
+                    self.saveCache(for: offset, buckets: initialBuckets)
                 }
             } catch {
                 DispatchQueue.main.async {
+                    guard self.weekOffset == offset else { return }
                     self.isSyncing = false
                 }
             }

@@ -157,6 +157,12 @@ class HealthTelemetryManager {
             try await pClient.from("health_telemetry").insert(allPayloads).execute()
             os_log("Successfully pushed telemetry data. Committing delta anchors.", type: .info)
             
+            let syncTimestamp = Date().timeIntervalSince1970
+            UserDefaults.standard.set(syncTimestamp, forKey: "last_health_sync_time")
+            if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                groupPrefs.set(syncTimestamp, forKey: "last_health_sync_time")
+            }
+            
             // Only advance anchors AFTER successful upload to ensure zero data loss
             for (key, anchor) in pendingAnchors {
                 self.saveAnchor(anchor, for: key)
