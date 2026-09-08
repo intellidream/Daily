@@ -145,3 +145,37 @@ The multi-target build is compiled using the Zeus CLI:
 npm run build
 ```
 Outputs: `dist/20001-DayOne_Orbit-1.0.0-<timestamp>.zab` containing binaries for all defined platforms (`platforms.common.r` 480 and `platforms.common.s` 390).
+
+---
+
+## 7. Dynamic Histogram Re-rendering & WatchOS Parity Polish
+
+### 1. Instant Histogram Re-rendering on Week Navigation
+- **Root Cause Identified**: In `@zos/ui`, the `prop.UPDATE_DATA` property is only supported by `widget.SCROLL_LIST`. When applied to `widget.HISTOGRAM`, `.setProperty(prop.UPDATE_DATA, ...)` was a silent no-op. The histogram would only update if the user swiped to another screen and returned (triggering a redraw in the swiper buffer).
+- **Architecture Solution**:
+  - Implemented `renderWaterHistogram()` and `renderSmokeHistogram()` using `deleteWidget()` from `@zos/ui` to destroy the previous histogram instances followed by immediate `createWidget(widget.HISTOGRAM, ...)` instantiation with updated week bucket data.
+  - Layer ordering is preserved: primary bar histogram created first (with background track `0x333333`), followed by secondary stacked histogram (transparent background `0x00000000`).
+  - **Flicker-Free Cache Invalidation**: Used `renderedWaterKey` and `renderedSmokeKey` (`${offset}_${maxVal}_${weekArray}_${subArray}`). Histograms are only re-created when the week data or offset actually changes. This prevents unnecessary widget destruction/creation during the background 2-second stale texture workaround timer.
+
+### 2. Target & Average Summary Row Under Charts (Pages 2 & 4)
+- Replaced the static color description text with watchOS-style metric summaries:
+  - **Page 2 (💧 7 Days)**: `💧 Avg: ${waterAvg} ml/d  •  Goal: ${waterGoal} ml`
+  - **Page 4 (🔥 7 Days)**: `🔥 Avg: ${smokeAvg}/d  •  Base: ${smokeBaseline}`
+- **Centered Layout & Vertical Clearance**:
+  - Rendered using full-screen width `widget.TEXT` (`x: 0, w: cfg.screenW`) with `align_h: align.CENTER_H` and `align_v: align.CENTER_V`.
+  - Scaled typography: `text_size: 15` (`h: 36`) at `y: 384` on Active 2, and `text_size: 16` (`h: 38`) at `y: 396` on Balance.
+  - Leaves ample vertical clearance below the histogram bars and generous bottom margin without clipping.
+
+### 3. Dynamic Centering & Proportional Typography for Habit Breakdowns (Pages 1 & 3)
+- **Elimination of Multi-Widget Layout Asymmetry**:
+  - In Zepp OS `@zos/ui`, there is no automatic flexbox/flow layout or string measurement. Splitting an inline line (`💧 0 ml • ☕ 0 ml`) across 5 separate fixed-coordinate widgets created visible horizontal off-centering and uneven gaps whenever numbers changed in length (e.g. `0 ml` vs `1500 ml`).
+  - Replaced with a unified, centered `widget.TEXT` across the full display width (`x: 0, w: cfg.screenW`, `align.CENTER_H`, `align.CENTER_V`), guaranteeing flawless symmetry regardless of character count:
+    - **Page 1 (💧 Bubbles)**: `💧 ${waterVal} ml  •  ☕ ${coffeeVal} ml`
+    - **Page 3 (🔥 Smokes)**: `🔥 ${cigVal} cig  •  ⚡ ${heatVal} heat`
+- **Typography & Proportions**:
+  - Scaled up text to `text_size: 15` (Amazfit Active 2) and `text_size: 16` (Amazfit Balance).
+  - Increased widget height to `h: 36` (Active 2) and `h: 38` (Balance) positioned at `y: 384` / `y: 396`, providing ample line-height so emoji glyphs and text render crisply with generous clearance below the progress rings.
+
+### 4. About Screen Logo Parity
+- Updated `SQUARE_CONFIG` (Amazfit Active 2) from `icon.png` to `logo.png` (110x110) with centered `iconX: 140` (`(390 - 110) / 2 = 140`), creating complete visual unity with Amazfit Balance (`iconX: 185`) and Apple watchOS.
+

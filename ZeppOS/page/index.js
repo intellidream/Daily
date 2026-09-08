@@ -1,4 +1,4 @@
-import { createWidget, widget, prop, align, text_style } from '@zos/ui'
+import { createWidget, deleteWidget, widget, prop, align, text_style } from '@zos/ui'
 import { log } from '@zos/utils'
 import { setTimeout, setInterval, clearInterval } from '@zos/timer'
 import { BasePage } from '@zeppos/zml/base-page'
@@ -104,7 +104,7 @@ const SQUARE_CONFIG = {
   screenW: 390,
   screenH: 450,
   pageH: 450,
-  syncIndicator: { iconX: 141, iconY: 418, iconW: 20, iconH: 20, textX: 169, textY: 416, textW: 100, textH: 24, text_size: 15 },
+  syncIndicator: { iconX: 141, iconY: 424, iconW: 20, iconH: 20, textX: 169, textY: 422, textW: 100, textH: 24, text_size: 14 },
   loading: {
     arc: { x: 145, y: 125, w: 100, h: 100, line_width: 8 },
     text: { x: 0, y: 240, w: 390, h: 50, text_size: 20 },
@@ -114,7 +114,7 @@ const SQUARE_CONFIG = {
   pageTitleH: 30,
   pageTitleSize: 24,
   arc: { x: 20, y: 168, w: 200, h: 200, line_width: 16, text_size: 26 },
-  breakdownText: { x: 0, y: 378, w: 390, h: 26, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
+  breakdownText: { x: 0, y: 384, w: 390, h: 36, text_size: 15, align_h: align.CENTER_H, align_v: align.CENTER_V },
   p1Buttons: {
     x: 240,
     w: 130,
@@ -158,12 +158,13 @@ const SQUARE_CONFIG = {
     item_width: 30,
     item_space: 14,
     item_radius: 10,
-    legendY: 376,
+    legendY: 384,
+    legendH: 36,
     legendSize: 15
   },
   about: {
-    iconSrc: 'icon.png',
-    iconX: 133,
+    iconSrc: 'logo.png',
+    iconX: 140,
     iconY: 40,
     nameY: 180,
     nameSize: 24,
@@ -183,7 +184,7 @@ const ROUND_CONFIG = {
   screenW: 480,
   screenH: 480,
   pageH: 480,
-  syncIndicator: { iconX: 186, iconY: 426, iconW: 20, iconH: 20, textX: 214, textY: 424, textW: 100, textH: 24, text_size: 15 },
+  syncIndicator: { iconX: 186, iconY: 440, iconW: 20, iconH: 20, textX: 214, textY: 438, textW: 100, textH: 24, text_size: 14 },
   loading: {
     arc: { x: 180, y: 140, w: 120, h: 120, line_width: 10 },
     text: { x: 0, y: 280, w: 480, h: 50, text_size: 22 },
@@ -193,7 +194,7 @@ const ROUND_CONFIG = {
   pageTitleH: 32,
   pageTitleSize: 26,
   arc: { x: 30, y: 160, w: 216, h: 216, line_width: 18, text_size: 28 },
-  breakdownText: { x: 30, y: 386, w: 420, h: 26, text_size: 14, align_h: align.CENTER_H, align_v: align.CENTER_V },
+  breakdownText: { x: 0, y: 396, w: 480, h: 38, text_size: 16, align_h: align.CENTER_H, align_v: align.CENTER_V },
   p1Buttons: {
     x: 260,
     w: 160,
@@ -237,8 +238,9 @@ const ROUND_CONFIG = {
     item_width: 32,
     item_space: 16,
     item_radius: 10,
-    legendY: 389,
-    legendSize: 15
+    legendY: 396,
+    legendH: 38,
+    legendSize: 16
   },
   about: {
     iconSrc: 'logo.png',
@@ -309,6 +311,8 @@ Page(
           
           let waterHistogram, coffeeHistogram, smokeHistogram, heatHistogram
           let debugText, waterBreakdownText, smokeBreakdownText
+          let waterStatsSummaryText, smokeStatsSummaryText
+          let renderedWaterKey = '', renderedSmokeKey = ''
           let syncIcon, syncText
           let isSyncingState = false
           let isDashboardBuilt = false
@@ -499,39 +503,122 @@ Page(
           let waterArc, coffeeArc, waterCenterText
           let smokeArc, smokeCenterText
 
+          const renderWaterHistogram = () => {
+             try {
+                const h = cfg.pageH
+                if (waterHistogram) {
+                   try { deleteWidget(waterHistogram) } catch(e) {}
+                   waterHistogram = null
+                }
+                if (coffeeHistogram) {
+                   try { deleteWidget(coffeeHistogram) } catch(e) {}
+                   coffeeHistogram = null
+                }
+                const maxVal = Math.max(waterGoal, ...waterWeek, 1000)
+
+                waterHistogram = createWidget(widget.HISTOGRAM, {
+                   x: cfg.chart.x, y: h + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
+                   item_color: 0x00aaff,
+                   item_bg_color: 0x333333,
+                   item_width: cfg.chart.item_width,
+                   item_space: cfg.chart.item_space,
+                   item_radius: cfg.chart.item_radius,
+                   data_array: waterWeek,
+                   data_count: 7,
+                   data_min_value: 0,
+                   data_max_value: maxVal
+                })
+                coffeeHistogram = createWidget(widget.HISTOGRAM, {
+                   x: cfg.chart.x, y: h + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
+                   item_color: 0xffa500,
+                   item_bg_color: 0x00000000,
+                   item_width: cfg.chart.item_width,
+                   item_space: cfg.chart.item_space,
+                   item_radius: cfg.chart.item_radius,
+                   data_array: coffeeWeek,
+                   data_count: 7,
+                   data_min_value: 0,
+                   data_max_value: maxVal
+                })
+                renderedWaterKey = `${bubblesWeekOffset}_${maxVal}_${waterWeek.join(',')}_${coffeeWeek.join(',')}`
+             } catch(err) {
+                logger.error('renderWaterHistogram error', err)
+             }
+          }
+
+          const renderSmokeHistogram = () => {
+             try {
+                const h = cfg.pageH
+                if (smokeHistogram) {
+                   try { deleteWidget(smokeHistogram) } catch(e) {}
+                   smokeHistogram = null
+                }
+                if (heatHistogram) {
+                   try { deleteWidget(heatHistogram) } catch(e) {}
+                   heatHistogram = null
+                }
+                const maxVal = Math.max(smokeBaseline, ...smokeWeek, 10)
+                smokeHistogram = createWidget(widget.HISTOGRAM, {
+                   x: cfg.chart.x, y: h*3 + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
+                   item_color: 0xff3b30,
+                   item_bg_color: 0x333333,
+                   item_width: cfg.chart.item_width,
+                   item_space: cfg.chart.item_space,
+                   item_radius: cfg.chart.item_radius,
+                   data_array: smokeWeek,
+                   data_count: 7,
+                   data_min_value: 0,
+                   data_max_value: maxVal
+                })
+                heatHistogram = createWidget(widget.HISTOGRAM, {
+                   x: cfg.chart.x, y: h*3 + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
+                   item_color: 0x007aff,
+                   item_bg_color: 0x00000000,
+                   item_width: cfg.chart.item_width,
+                   item_space: cfg.chart.item_space,
+                   item_radius: cfg.chart.item_radius,
+                   data_array: heatWeek,
+                   data_count: 7,
+                   data_min_value: 0,
+                   data_max_value: maxVal
+                })
+                renderedSmokeKey = `${smokesWeekOffset}_${maxVal}_${smokeWeek.join(',')}_${heatWeek.join(',')}`
+             } catch(err) {
+                logger.error('renderSmokeHistogram error', err)
+             }
+          }
+
           const updateWaterUI = () => {
+             if (!isDashboardBuilt) return
              const goal = Math.max(1, waterGoal)
              let wDegrees = (waterVal / goal) * 360
              if (wDegrees > 360) wDegrees = 360
              let cDegrees = (coffeeVal / goal) * 360
              if (wDegrees + cDegrees > 360) cDegrees = 360 - wDegrees
              
-             waterArc.setProperty(prop.MORE, { start_angle: -90, end_angle: -90 + wDegrees })
-             coffeeArc.setProperty(prop.MORE, { start_angle: -90 + wDegrees, end_angle: -90 + wDegrees + cDegrees })
-             waterCenterText.setProperty(prop.TEXT, `${waterTotal}\n/ ${waterGoal}`)
+             if (waterArc) waterArc.setProperty(prop.MORE, { start_angle: -90, end_angle: -90 + wDegrees })
+             if (coffeeArc) coffeeArc.setProperty(prop.MORE, { start_angle: -90 + wDegrees, end_angle: -90 + wDegrees + cDegrees })
+             if (waterCenterText) waterCenterText.setProperty(prop.TEXT, `${waterTotal}\n/ ${waterGoal}`)
              
              if (waterBreakdownText) {
-                waterBreakdownText.setProperty(prop.TEXT, `Water: ${waterVal} ml | Coffee: ${coffeeVal} ml`)
+                waterBreakdownText.setProperty(prop.TEXT, `💧 ${waterVal} ml  •  ☕ ${coffeeVal} ml`)
+             }
+
+             if (waterStatsSummaryText) {
+                const totalWeek = waterWeek.reduce((a, b) => a + b, 0)
+                const avg = Math.round(totalWeek / 7)
+                waterStatsSummaryText.setProperty(prop.TEXT, `💧 Avg: ${avg} ml/d  •  Goal: ${waterGoal} ml`)
              }
              
-             if (waterHistogram && coffeeHistogram) {
-                const maxVal = Math.max(waterGoal, ...waterWeek, 1000)
-                waterHistogram.setProperty(prop.UPDATE_DATA, {
-                   data_array: waterWeek,
-                   data_count: 7,
-                   data_min_value: 0,
-                   data_max_value: maxVal
-                })
-                coffeeHistogram.setProperty(prop.UPDATE_DATA, {
-                   data_array: coffeeWeek,
-                   data_count: 7,
-                   data_min_value: 0,
-                   data_max_value: maxVal
-                })
+             const maxVal = Math.max(waterGoal, ...waterWeek, 1000)
+             const currentKey = `${bubblesWeekOffset}_${maxVal}_${waterWeek.join(',')}_${coffeeWeek.join(',')}`
+             if (waterHistogram && currentKey !== renderedWaterKey) {
+                renderWaterHistogram()
              }
           }
           
           const updateSmokeUI = () => {
+             if (!isDashboardBuilt) return
              const goal = Math.max(1, smokeBaseline)
              const remaining = Math.max(0, goal - smokeTotal)
              
@@ -543,30 +630,28 @@ Page(
              let sDegrees = (smokeTotal / goal) * 360
              if (sDegrees > 360) sDegrees = 360
              
-             smokeArc.setProperty(prop.MORE, { start_angle: -90, end_angle: -90 + sDegrees, color: color })
-             smokeCenterText.setProperty(prop.TEXT, `${smokeTotal}\n/ ${goal}`)
+             if (smokeArc) smokeArc.setProperty(prop.MORE, { start_angle: -90, end_angle: -90 + sDegrees, color: color })
+             if (smokeCenterText) {
+                smokeCenterText.setProperty(prop.TEXT, `${smokeTotal}\n/ ${goal}`)
+                if (ratio >= 1.0) smokeCenterText.setProperty(prop.COLOR, 0xff0000)
+                else smokeCenterText.setProperty(prop.COLOR, 0xffffff)
+             }
              
              if (smokeBreakdownText) {
-                smokeBreakdownText.setProperty(prop.TEXT, `Cigarettes: ${cigVal} | Heated: ${heatVal}`)
+                smokeBreakdownText.setProperty(prop.TEXT, `🔥 ${cigVal} cig  •  ⚡ ${heatVal} heat`)
+             }
+
+             if (smokeStatsSummaryText) {
+                const totalWeek = smokeWeek.reduce((a, b) => a + b, 0)
+                const avg = (totalWeek / 7).toFixed(1)
+                smokeStatsSummaryText.setProperty(prop.TEXT, `🔥 Avg: ${avg}/d  •  Base: ${smokeBaseline}`)
              }
              
-             if (smokeHistogram && heatHistogram) {
-                const maxVal = Math.max(smokeBaseline, ...smokeWeek, 10)
-                smokeHistogram.setProperty(prop.UPDATE_DATA, {
-                   data_array: smokeWeek,
-                   data_count: 7,
-                   data_min_value: 0,
-                   data_max_value: maxVal
-                })
-                heatHistogram.setProperty(prop.UPDATE_DATA, {
-                   data_array: heatWeek,
-                   data_count: 7,
-                   data_min_value: 0,
-                   data_max_value: maxVal
-                })
+             const maxVal = Math.max(smokeBaseline, ...smokeWeek, 10)
+             const currentKey = `${smokesWeekOffset}_${maxVal}_${smokeWeek.join(',')}_${heatWeek.join(',')}`
+             if (smokeHistogram && currentKey !== renderedSmokeKey) {
+                renderSmokeHistogram()
              }
-             if (ratio >= 1.0) smokeCenterText.setProperty(prop.COLOR, 0xff0000)
-             else smokeCenterText.setProperty(prop.COLOR, 0xffffff)
           }
 
           const fetchDayData = (habitType, dayOffset) => {
@@ -826,7 +911,7 @@ Page(
              
              waterBreakdownText = createWidget(widget.TEXT, {
                 x: cfg.breakdownText.x, y: cfg.breakdownText.y, w: cfg.breakdownText.w, h: cfg.breakdownText.h,
-                color: 0xaaaaaa, text_size: cfg.breakdownText.text_size, align_h: cfg.breakdownText.align_h, align_v: cfg.breakdownText.align_v, text: 'Loading...'
+                color: 0xffffff, text_size: cfg.breakdownText.text_size, align_h: cfg.breakdownText.align_h, align_v: cfg.breakdownText.align_v, text: 'Loading...'
              })
              
              createWidget(widget.BUTTON, {
@@ -867,35 +952,11 @@ Page(
              })
              waterNextWeekBtn.setProperty(prop.VISIBLE, bubblesWeekOffset < 0)
              
-             waterHistogram = createWidget(widget.HISTOGRAM, {
-               x: cfg.chart.x, y: h + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
-               item_color: 0x00aaff,
-               item_bg_color: 0x333333,
-               item_width: cfg.chart.item_width,
-               item_space: cfg.chart.item_space,
-               item_radius: cfg.chart.item_radius,
-               data_array: waterWeek,
-               data_count: 7,
-               data_min_value: 0,
-               data_max_value: Math.max(waterGoal, ...waterWeek, 1000)
-             })
-             
-             coffeeHistogram = createWidget(widget.HISTOGRAM, {
-               x: cfg.chart.x, y: h + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
-               item_color: 0xffa500,
-               item_bg_color: 0x00000000,
-               item_width: cfg.chart.item_width,
-               item_space: cfg.chart.item_space,
-               item_radius: cfg.chart.item_radius,
-               data_array: coffeeWeek,
-               data_count: 7,
-               data_min_value: 0,
-               data_max_value: Math.max(waterGoal, ...waterWeek, 1000)
-             })
+             renderWaterHistogram()
 
-             createWidget(widget.TEXT, {
-                x: 0, y: h + cfg.chart.legendY, w: cfg.screenW, h: 30,
-                color: 0xffa500, text_size: cfg.chart.legendSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Blue: Water | Orange: Coffee'
+             waterStatsSummaryText = createWidget(widget.TEXT, {
+                 x: 0, y: h + cfg.chart.legendY, w: cfg.screenW, h: cfg.chart.legendH,
+                 color: 0xffffff, text_size: cfg.chart.legendSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '...'
              })
 
              // ================== PAGE 3: SMOKES ==================
@@ -934,8 +995,8 @@ Page(
              })
              
              smokeBreakdownText = createWidget(widget.TEXT, {
-                x: cfg.breakdownText.x, y: h*2 + cfg.breakdownText.y, w: cfg.breakdownText.w, h: cfg.breakdownText.h,
-                color: 0xaaaaaa, text_size: cfg.breakdownText.text_size, align_h: cfg.breakdownText.align_h, align_v: cfg.breakdownText.align_v, text: 'Loading...'
+                 x: cfg.breakdownText.x, y: h*2 + cfg.breakdownText.y, w: cfg.breakdownText.w, h: cfg.breakdownText.h,
+                 color: 0xffffff, text_size: cfg.breakdownText.text_size, align_h: cfg.breakdownText.align_h, align_v: cfg.breakdownText.align_v, text: 'Loading...'
              })
 
              createWidget(widget.BUTTON, {
@@ -971,35 +1032,11 @@ Page(
              })
              smokeNextWeekBtn.setProperty(prop.VISIBLE, smokesWeekOffset < 0)
              
-             smokeHistogram = createWidget(widget.HISTOGRAM, {
-               x: cfg.chart.x, y: h*3 + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
-               item_color: 0xff3b30,
-               item_bg_color: 0x333333,
-               item_width: cfg.chart.item_width,
-               item_space: cfg.chart.item_space,
-               item_radius: cfg.chart.item_radius,
-               data_array: smokeWeek,
-               data_count: 7,
-               data_min_value: 0,
-               data_max_value: Math.max(smokeBaseline, ...smokeWeek, 10)
-             })
-             
-             heatHistogram = createWidget(widget.HISTOGRAM, {
-               x: cfg.chart.x, y: h*3 + cfg.chart.y, w: cfg.chart.w, h: cfg.chart.h,
-               item_color: 0x007aff,
-               item_bg_color: 0x00000000,
-               item_width: cfg.chart.item_width,
-               item_space: cfg.chart.item_space,
-               item_radius: cfg.chart.item_radius,
-               data_array: heatWeek,
-               data_count: 7,
-               data_min_value: 0,
-               data_max_value: Math.max(smokeBaseline, ...smokeWeek, 10)
-             })
+             renderSmokeHistogram()
 
-             createWidget(widget.TEXT, {
-                x: 0, y: h*3 + cfg.chart.legendY, w: cfg.screenW, h: 30,
-                color: 0x007aff, text_size: cfg.chart.legendSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'Red: Cigs | Blue: Heat'
+             smokeStatsSummaryText = createWidget(widget.TEXT, {
+                 x: 0, y: h*3 + cfg.chart.legendY, w: cfg.screenW, h: cfg.chart.legendH,
+                 color: 0xffffff, text_size: cfg.chart.legendSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: '...'
              })
 
              // ================== PAGE 5: ABOUT / SETTINGS ==================
@@ -1024,7 +1061,7 @@ Page(
                 click_func: () => { saveFileStr('token.txt', ''); saveFileStr('refresh_token.txt', ''); saveFileStr('userid.txt', ''); exit() }
              })
 
-             
+             isDashboardBuilt = true
              updateWaterUI()
              updateSmokeUI()
              
