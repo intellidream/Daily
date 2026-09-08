@@ -1,5 +1,6 @@
 package com.intellidream.daily.wearos.presentation.bubbles
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -19,15 +20,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.filled.LocalCafe
-import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.wear.compose.foundation.lazy.items
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,191 +35,204 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.wear.compose.material.CircularProgressIndicator
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Icon
-import androidx.wear.compose.material.ListHeader
 import androidx.wear.compose.material.Text
-import com.google.android.horologist.compose.layout.ScalingLazyColumn
-import com.google.android.horologist.compose.layout.rememberResponsiveColumnState
 import com.intellidream.daily.wearos.data.OfflineSyncManager
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
+import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
-import kotlinx.coroutines.flow.first
-import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import com.google.android.horologist.annotations.ExperimentalHorologistApi
-import androidx.compose.foundation.layout.fillMaxHeight
 
-data class DailyTotal(val date: String, val total: Double, val label: String)
-
-@OptIn(ExperimentalHorologistApi::class)
 @Composable
-fun BubblesScreen(sessionManager: WatchSessionManager) {
+fun BubblesScreen(
+    sessionManager: WatchSessionManager,
+    onOpenLogs: (habitType: String, dateTitle: String, logs: List<HabitLog>, onDelete: (HabitLog) -> Unit) -> Unit
+) {
+    var dayOffset by remember { mutableIntStateOf(0) }
     var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedBubblesGoal ?: 2000) }
     var isLogging by remember { mutableStateOf(false) }
-    var historyLogs by remember { mutableStateOf<List<HabitLog>>(sessionManager.cachedBubblesLogs ?: emptyList()) }
-    var todayWater by remember { mutableIntStateOf(historyLogs.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }) }
-    var todayCoffee by remember { mutableIntStateOf(historyLogs.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }) }
+    var dayLogs by remember { mutableStateOf<List<HabitLog>>(sessionManager.cachedBubblesLogs ?: emptyList()) }
+    var todayWater by remember { mutableIntStateOf(dayLogs.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }) }
+    var todayCoffee by remember { mutableIntStateOf(dayLogs.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }) }
     var todayTotal by remember { mutableIntStateOf(todayWater + todayCoffee) }
-    var weeklyTotals by remember { mutableStateOf<List<DailyTotal>>(emptyList()) }
 
     val scope = rememberCoroutineScope()
-    val columnState = rememberResponsiveColumnState()
+    val listState = rememberScalingLazyListState()
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
+    val view = LocalView.current
 
-    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val localFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
-    val dayFormat = remember { SimpleDateFormat("EEE", Locale.getDefault()) }
-    val parseFormat = remember {
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+    val dayTitleFormat = remember { SimpleDateFormat("EEE, d MMM", Locale.getDefault()) }
+    val isoFormat = remember {
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
+        }
+    }
+
+    val formattedDateTitle = remember(dayOffset) {
+        when (dayOffset) {
+            0 -> "Today"
+            -1 -> "Yesterday"
+            else -> {
+                val cal = Calendar.getInstance()
+                cal.add(Calendar.DAY_OF_YEAR, dayOffset)
+                dayTitleFormat.format(cal.time)
+            }
         }
     }
 
     val fetchLogs = {
         scope.launch {
             try {
-                // Fetch dynamic goal
-                val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
-                    .select {
-                        filter {
-                            eq("habit_type", "water")
-                            eq("is_deleted", false)
-                        }
-                    }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
+                // Fetch dynamic goal if viewing today
+                if (dayOffset == 0) {
+                    val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
+                        .select {
+                            filter {
+                                eq("habit_type", "water")
+                                eq("is_deleted", false)
+                            }
+                        }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
 
-                if (goals.isNotEmpty()) {
-                    dailyGoal = goals.first().target_value?.toInt() ?: 2000
-                    sessionManager.cachedBubblesGoal = dailyGoal
+                    if (goals.isNotEmpty()) {
+                        dailyGoal = goals.first().target_value?.toInt() ?: 2000
+                        sessionManager.cachedBubblesGoal = dailyGoal
+                    }
                 }
-            } catch (ignored: Exception) {
-                // Ignore goal fetch errors (e.g. offline) and proceed with default dailyGoal
-            }
+            } catch (_: Exception) {}
 
             try {
-                // Fetch last 7 days of logs
-                val calendar = java.util.Calendar.getInstance()
-                calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                calendar.set(java.util.Calendar.MINUTE, 0)
-                calendar.set(java.util.Calendar.SECOND, 0)
-                
-                val todayStart = calendar.time
-                val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-                format.timeZone = TimeZone.getTimeZone("UTC")
-                
-                calendar.add(java.util.Calendar.DAY_OF_YEAR, -6)
-                val sevenDaysAgoStr = format.format(calendar.time)
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.DAY_OF_YEAR, dayOffset)
+                val startOfDay = cal.time
+                val startStr = isoFormat.format(startOfDay)
+
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+                val endOfDay = cal.time
+                val endStr = isoFormat.format(endOfDay)
 
                 val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
                     .select {
                         filter {
                             eq("habit_type", "water")
                             eq("is_deleted", false)
-                            gte("logged_at", sevenDaysAgoStr)
+                            gte("logged_at", startStr)
+                            lt("logged_at", endStr)
                         }
                     }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
 
-                val totalsMap = mutableMapOf<String, Double>()
-                val daysList = mutableListOf<DailyTotal>()
-                
-                // Initialize last 7 days with 0
-                for (i in 6 downTo 0) {
-                    val c = java.util.Calendar.getInstance()
-                    c.add(java.util.Calendar.DAY_OF_YEAR, -i)
-                    val dStr = localFormat.format(c.time)
-                    val lbl = dayFormat.format(c.time).take(3)
-                    totalsMap[dStr] = 0.0
-                    daysList.add(DailyTotal(dStr, 0.0, lbl))
-                }
-
-                val todayStr = localFormat.format(todayStart)
-                val todayLogsList = mutableListOf<HabitLog>()
-                
                 var tWater = 0
                 var tCoffee = 0
-                
                 for (log in logs) {
-                    try {
-                        val pureUTC = log.logged_at.replace("Z", "") + "Z"
-                        val date = parseFormat.parse(pureUTC)
-                        if (date != null) {
-                            val dStr = localFormat.format(date)
-                            if (totalsMap.containsKey(dStr)) {
-                                totalsMap[dStr] = (totalsMap[dStr] ?: 0.0) + log.value
-                            }
-                            if (dStr == todayStr) {
-                                todayLogsList.add(log)
-                                val isCoffee = log.metadata?.contains("Coffee") == true
-                                if (isCoffee) tCoffee += log.value.toInt() else tWater += log.value.toInt()
-                            }
-                        }
-                    } catch (e: Exception) {}
+                    val isCoffee = log.metadata?.contains("Coffee") == true
+                    if (isCoffee) tCoffee += log.value.toInt() else tWater += log.value.toInt()
                 }
-                
-                weeklyTotals = daysList.map { it.copy(total = totalsMap[it.date] ?: 0.0) }
-                historyLogs = todayLogsList
-                sessionManager.cachedBubblesLogs = todayLogsList
+
+                dayLogs = logs
                 todayWater = tWater
                 todayCoffee = tCoffee
                 todayTotal = tWater + tCoffee
-                sessionManager.persistWaterTotal(todayTotal)
-                
+
+                if (dayOffset == 0) {
+                    sessionManager.cachedBubblesLogs = logs
+                    sessionManager.persistWaterTotal(todayTotal)
+                }
             } catch (e: Exception) {
-                // Token expired — attempt silent session refresh. The refreshed
-                // session will trigger dataRefreshTrigger via onAppResumed, which
-                // LaunchedEffect listens to and will re-invoke fetchLogs.
-                try {
-                    sessionManager.supabaseClient.auth.refreshCurrentSession()
-                } catch (_: Exception) { }
+                try { sessionManager.supabaseClient.auth.refreshCurrentSession() } catch (_: Exception) {}
             }
         }
     }
 
-    LaunchedEffect(refreshTrigger) {
+    LaunchedEffect(dayOffset, refreshTrigger) {
         fetchLogs()
+    }
+
+    val deleteLog: (HabitLog) -> Unit = { log ->
+        val isCoffee = log.metadata?.contains("Coffee") == true
+        if (isCoffee) {
+            todayCoffee = maxOf(0, todayCoffee - log.value.toInt())
+        } else {
+            todayWater = maxOf(0, todayWater - log.value.toInt())
+        }
+        todayTotal = todayWater + todayCoffee
+        val newLogs = dayLogs.filter { it.id != log.id }
+        dayLogs = newLogs
+
+        if (dayOffset == 0) {
+            sessionManager.cachedBubblesLogs = newLogs
+            sessionManager.persistWaterTotal(todayTotal)
+        }
+
+        scope.launch {
+            try {
+                sessionManager.supabaseClient.postgrest["habits_logs"]
+                    .update({
+                        set("is_deleted", true)
+                    }) {
+                        filter { eq("id", log.id) }
+                    }
+            } catch (_: Exception) {}
+        }
     }
 
     val logWater: (Int, String) -> Unit = { amount, type ->
         if (!isLogging) {
             isLogging = true
+            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+
             todayTotal += amount
-            sessionManager.persistWaterTotal(todayTotal)
             if (type.contains("Coffee")) todayCoffee += amount else todayWater += amount
-            
+            if (dayOffset == 0) {
+                sessionManager.persistWaterTotal(todayTotal)
+            }
+
             val metadata = buildJsonObject { put("drink", type) }.toString()
-            val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-            format.timeZone = TimeZone.getTimeZone("UTC")
-            val nowStr = format.format(Date())
+
+            // Calculate timestamp for the viewed date
+            val targetCal = Calendar.getInstance()
+            if (dayOffset != 0) {
+                targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
+            }
+            val loggedAtStr = isoFormat.format(targetCal.time)
 
             val newLog = HabitLog(
                 user_id = sessionManager.currentUserId.value,
                 habit_type = "water",
                 value = amount.toDouble(),
                 unit = "ml",
-                logged_at = nowStr,
+                logged_at = loggedAtStr,
                 metadata = metadata
             )
-            
-            val newHistory = listOf(newLog) + historyLogs
-            historyLogs = newHistory
-            sessionManager.cachedBubblesLogs = newHistory
+
+            val newHistory = listOf(newLog) + dayLogs
+            dayLogs = newHistory
+            if (dayOffset == 0) {
+                sessionManager.cachedBubblesLogs = newHistory
+            }
 
             scope.launch {
                 try {
                     sessionManager.supabaseClient.postgrest["habits_logs"].insert(newLog)
-                } catch (ignored: Exception) {
+                } catch (_: Exception) {
                     OfflineSyncManager.shared.enqueue(newLog)
                 } finally {
                     isLogging = false
@@ -229,214 +241,214 @@ fun BubblesScreen(sessionManager: WatchSessionManager) {
         }
     }
 
-    ScalingLazyColumn(
-        columnState = columnState,
-        modifier = Modifier.fillMaxSize()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
     ) {
-        item {
+        ScalingLazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             // Header
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                Icon(imageVector = Icons.Filled.WaterDrop, contentDescription = null, tint = Color.Cyan, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Bubbles", fontWeight = FontWeight.Bold, color = Color.White)
-            }
-        }
-        
-        item {
-            // Main Ring
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(120.dp)) {
-                val totalG = maxOf(dailyGoal, 1).toFloat()
-                val wProg = (todayWater.toFloat() / totalG).coerceIn(0f, 1f)
-                val cProg = (todayCoffee.toFloat() / totalG).coerceIn(0f, 1f)
-                
-                val wProgAnim by animateFloatAsState(targetValue = wProg, animationSpec = tween(800))
-                val cProgAnim by animateFloatAsState(targetValue = cProg, animationSpec = tween(800))
-
-                androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                    val strokeWidth = 10.dp.toPx()
-                    
-                    // Background Ring
-                    drawArc(
-                        color = Color.DarkGray.copy(alpha=0.3f),
-                        startAngle = -90f,
-                        sweepAngle = 360f,
-                        useCenter = false,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.WaterDrop,
+                        contentDescription = null,
+                        tint = Color.Cyan,
+                        modifier = Modifier.size(15.dp)
                     )
-                    
-                    val wSweep = (wProgAnim * 360f).coerceIn(0f, 360f)
-                    val cSweep = (cProgAnim * 360f).coerceIn(0f, 360f)
-                    
-                    // Water (Cyan)
-                    if (wSweep > 0) {
-                        drawArc(
-                            color = Color.Cyan,
-                            startAngle = -90f,
-                            sweepAngle = wSweep,
-                            useCenter = false,
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                        )
-                    }
-                    
-                    // Coffee (Orange) draws immediately after Water
-                    if (cSweep > 0) {
-                        drawArc(
-                            color = Color(0xFFFFA500),
-                            startAngle = -90f + wSweep,
-                            sweepAngle = cSweep,
-                            useCenter = false,
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                        )
-                    }
-                }
-
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("$todayTotal", fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                    Text("/ $dailyGoal", fontSize = 12.sp, color = Color.Gray)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Bubbles", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
                 }
             }
-        }
-        
-        item {
-            Spacer(Modifier.height(8.dp))
-        }
 
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                QuickAddMiniButton(Icons.Filled.WaterDrop, 300, Color.Cyan) { logWater(300, "Water") }
-                QuickAddMiniButton(Icons.Filled.LocalDrink, 150, Color.Cyan) { logWater(150, "Small Water") }
-                QuickAddMiniButton(Icons.Filled.LocalCafe, 100, Color(0xFFFFA500)) { logWater(100, "Coffee") }
-            }
-        }
-        
-        if (weeklyTotals.isNotEmpty()) {
+            // Temporal Navigation Header
             item {
-                Spacer(Modifier.height(8.dp))
-                ListHeader { Text("THIS WEEK", color = Color.Gray, fontSize = 10.sp) }
+                TemporalNavHeader(
+                    title = formattedDateTitle,
+                    canGoForward = dayOffset < 0,
+                    accentColor = Color.Cyan,
+                    onPrevious = { dayOffset -= 1 },
+                    onNext = { if (dayOffset < 0) dayOffset += 1 },
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
             }
-            item {
-                Box(modifier = Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 24.dp)) {
-                    val maxVal = maxOf(dailyGoal.toDouble(), weeklyTotals.maxOfOrNull { it.total } ?: 1.0)
-                    
-                    // Goal Line
-                    val goalY = 1f - (dailyGoal / maxVal).toFloat().coerceIn(0f, 1f)
-                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawLine(
-                            color = Color.Cyan.copy(alpha = 0.5f),
-                            start = androidx.compose.ui.geometry.Offset(0f, size.height * goalY),
-                            end = androidx.compose.ui.geometry.Offset(size.width, size.height * goalY),
-                            strokeWidth = 2f
-                        )
-                    }
-                    
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        val todayStr = localFormat.format(Date())
-                        weeklyTotals.forEach { day ->
-                            val heightFrac = (day.total / maxVal).toFloat().coerceIn(0f, 1f)
-                            val isToday = day.date == todayStr
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Bottom,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier.weight(1f),
-                                    contentAlignment = Alignment.BottomCenter
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(12.dp)
-                                            .fillMaxHeight(heightFrac)
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(if (isToday) Color.Cyan else Color(0xFF0277BD))
-                                    )
-                                }
-                                Spacer(Modifier.height(2.dp))
-                                Text(day.label, fontSize = 8.sp, color = Color.Gray)
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
-        if (historyLogs.isNotEmpty()) {
+            // Main Progress Arc & Action Buttons Row
             item {
-                ListHeader { Text("TODAY'S LOGS", color = Color.Gray, fontSize = 10.sp) }
-            }
-            
-            items(historyLogs.size) { index ->
-                val log = historyLogs[index]
-                val isCoffee = log.metadata?.contains("Coffee") == true
-                val isSmallWater = log.metadata?.contains("Small Water") == true
-                val type = if (isCoffee) "Coffee" else if (isSmallWater) "Small" else "Large"
-                
-                // Parse the UTC date properly into the Local Device Timezone
-                val timeStr = remember(log.logged_at) {
-                    try {
-                        val pureUTC = log.logged_at.replace("Z", "") + "Z" // ensure Z bounds
-                        val date = parseFormat.parse(pureUTC)
-                        if (date != null) timeFormat.format(date) else ""
-                    } catch (ignored: Exception) { "" }
-                }
-
-                Box(
+                Spacer(Modifier.height(4.dp))
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 2.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.1f))
-                        .padding(12.dp)
+                        .padding(horizontal = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val rowIcon = when {
-                            isCoffee -> Icons.Filled.LocalCafe
-                            isSmallWater -> Icons.Filled.LocalDrink
-                            else -> Icons.Filled.WaterDrop
+                    // Circular Progress Ring
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(86.dp)
+                            .clickable {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                onOpenLogs("water", formattedDateTitle, dayLogs, deleteLog)
+                            }
+                    ) {
+                        val totalG = maxOf(dailyGoal, 1).toFloat()
+                        val wProg = (todayWater.toFloat() / totalG).coerceIn(0f, 1f)
+                        val cProg = (todayCoffee.toFloat() / totalG).coerceIn(0f, 1f)
+
+                        val wProgAnim by animateFloatAsState(targetValue = wProg, animationSpec = tween(600))
+                        val cProgAnim by animateFloatAsState(targetValue = cProg, animationSpec = tween(600))
+
+                        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                            val strokeWidth = 9.dp.toPx()
+
+                            // Background Track
+                            drawArc(
+                                color = Color.DarkGray.copy(alpha = 0.35f),
+                                startAngle = -90f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+
+                            val wSweep = (wProgAnim * 360f).coerceIn(0f, 360f)
+                            val cSweep = (cProgAnim * 360f).coerceIn(0f, 360f)
+
+                            // Water (Cyan)
+                            if (wSweep > 0) {
+                                drawArc(
+                                    color = Color.Cyan,
+                                    startAngle = -90f,
+                                    sweepAngle = wSweep,
+                                    useCenter = false,
+                                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                                )
+                            }
+
+                            // Coffee (Orange)
+                            if (cSweep > 0) {
+                                drawArc(
+                                    color = Color(0xFFFFA500),
+                                    startAngle = -90f + wSweep,
+                                    sweepAngle = cSweep,
+                                    useCenter = false,
+                                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                                )
+                            }
                         }
-                        Icon(
-                            imageVector = rowIcon,
-                            contentDescription = type,
-                            tint = if (isCoffee) Color(0xFFFFA500) else Color.Cyan,
-                            modifier = Modifier.size(16.dp)
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "$todayTotal",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "/ $dailyGoal",
+                                fontSize = 10.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+
+                    // 3 Quick Add Action Buttons (💧 300, 💧 150, ☕ 100)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        ActionPillButton(
+                            text = "💧 300",
+                            color = Color.Cyan,
+                            onClick = { logWater(300, "Large Water") }
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "${log.value.toInt()} ${log.unit} $type",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White
+                        ActionPillButton(
+                            text = "💧 150",
+                            color = Color.Cyan,
+                            onClick = { logWater(150, "Small Water") }
                         )
-                        Spacer(Modifier.weight(1f))
-                        Text(timeStr, color = Color.Gray, fontSize = 10.sp)
+                        ActionPillButton(
+                            text = "☕ 100",
+                            color = Color(0xFFFFA500),
+                            onClick = { logWater(100, "Coffee") }
+                        )
                     }
                 }
+            }
+
+            // Centered Breakdown Row with chevron (Tapping opens Logs)
+            item {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            onOpenLogs("water", formattedDateTitle, dayLogs, deleteLog)
+                        }
+                        .padding(vertical = 4.dp, horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("💧", fontSize = 11.sp)
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        text = "$todayWater ml",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
+                    Text("  •  ", fontSize = 11.sp, color = Color.Gray)
+                    Text("☕", fontSize = 11.sp)
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        text = "$todayCoffee ml",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "›",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Cyan
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
             }
         }
     }
 }
 
 @Composable
-fun QuickAddMiniButton(icon: ImageVector, amount: Int, color: Color, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(color.copy(alpha = 0.2f))
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
-        }
-        Spacer(Modifier.height(4.dp))
-        Text("$amount", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = color)
+fun ActionPillButton(
+    text: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(width = 68.dp, height = 26.dp)
+            .clip(RoundedCornerShape(13.dp))
+            .background(Color(0xFF222222))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
+        )
     }
 }

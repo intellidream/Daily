@@ -1,6 +1,6 @@
 import http from '@ohos.net.http';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { SupabaseHabitLog, DailyTotal } from '../models/HabitLog';
+import { SupabaseHabitLog, DailyTotal, WeekBucket } from '../models/HabitLog';
 
 const TAG = 'SupabaseClient';
 const DOMAIN = 0x0000;
@@ -114,9 +114,15 @@ export class SupabaseClient {
 
   // Fetch all today's logs with full details for a habit type
   public async fetchTodayLogs(habitType: string): Promise<SupabaseHabitLog[]> {
+    return this.fetchDayLogs(habitType, 0);
+  }
+
+  // Fetch logs for a specific day by day offset (0 = today, -1 = yesterday, etc.)
+  public async fetchDayLogs(habitType: string, dayOffset: number): Promise<SupabaseHabitLog[]> {
     const httpRequest = http.createHttp();
-    const startOfDay = this.getStartOfDay();
-    const endOfDay = this.getEndOfDay();
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, 0, 0, 0, 0).toISOString();
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset + 1, 0, 0, 0, 0).toISOString();
 
     let url = `${SupabaseClient.SUPABASE_URL}/rest/v1/habits_logs?select=id,user_id,habit_type,value,unit,logged_at,metadata,is_deleted&habit_type=eq.${habitType}&is_deleted=eq.false&logged_at=gte.${startOfDay}&logged_at=lt.${endOfDay}&order=logged_at.desc`;
 
@@ -137,8 +143,103 @@ export class SupabaseClient {
       }
       return [];
     } catch (err) {
-      hilog.error(DOMAIN, TAG, `fetchTodayLogs error: ${JSON.stringify(err)}`);
+      hilog.error(DOMAIN, TAG, `fetchDayLogs error: ${JSON.stringify(err)}`);
       return [];
+    } finally {
+      httpRequest.destroy();
+    }
+  }
+
+  // Fetch Monday-to-Sunday week buckets for 7-day stacked charts
+  public async fetchWeekBuckets(habitType: string, weekOffset: number): Promise<WeekBucket[]> {
+    const httpRequest = http.createHttp();
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    
+    // Calculate Monday of current week (where Monday is start)
+    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, 2=Tue...
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysFromMonday + weekOffset * 7, 0, 0, 0, 0);
+    const nextMonday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7, 0, 0, 0, 0);
+
+    const startDate = monday.toISOString();
+    const endDate = nextMonday.toISOString();
+
+    let url = `${SupabaseClient.SUPABASE_URL}/rest/v1/habits_logs?select=value,logged_at,metadata&habit_type=eq.${habitType}&is_deleted=eq.false&logged_at=gte.${startDate}&logged_at=lt.${endDate}`;
+
+    if (this.userId) {
+      url += `&user_id=eq.${this.userId}`;
+    }
+
+    const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const buckets: WeekBucket[] = [];
+    const dateMap = new Map<string, WeekBucket>();
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const bucket: WeekBucket = {
+        date: key,
+        dayLabel: dayLetters[i],
+        isToday: key === todayStr,
+        water: 0,
+        coffee: 0,
+        cig: 0,
+        heat: 0,
+        total: 0
+      };
+      buckets.push(bucket);
+      dateMap.set(key, bucket);
+    }
+
+    try {
+      const response = await httpRequest.request(url, {
+        method: http.RequestMethod.GET,
+        header: this.getHeaders(),
+        expectDataType: http.HttpDataType.STRING,
+      });
+
+      if (response.responseCode === 200) {
+        const rows: Record<string, Object>[] = JSON.parse(response.result as string);
+        for (const row of rows) {
+          const loggedAt = row['logged_at'] as string;
+          const value = Number(row['value']) || 0;
+          const d = new Date(loggedAt);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const bucket = dateMap.get(key);
+          if (bucket) {
+            let meta: Record<string, string> = {};
+            if (row['metadata']) {
+              try {
+                meta = typeof row['metadata'] === 'string'
+                  ? JSON.parse(row['metadata'] as string)
+                  : row['metadata'] as Record<string, string>;
+              } catch (e) {}
+            }
+
+            if (habitType === 'water') {
+              const drink = meta['drink'] || 'Water';
+              if (drink.includes('Coffee')) {
+                bucket.coffee += value;
+              } else {
+                bucket.water += value;
+              }
+            } else {
+              const type = meta['type'] || 'Cigarette';
+              if (type.includes('Heated')) {
+                bucket.heat += value;
+              } else {
+                bucket.cig += value;
+              }
+            }
+            bucket.total += value;
+          }
+        }
+      }
+      return buckets;
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `fetchWeekBuckets error: ${JSON.stringify(err)}`);
+      return buckets;
     } finally {
       httpRequest.destroy();
     }

@@ -14,7 +14,7 @@ class SmokesComplicationService : SuspendingComplicationDataSourceService() {
     override fun getPreviewData(type: ComplicationType): ComplicationData? {
         if (type == ComplicationType.SHORT_TEXT) {
             return ShortTextComplicationData.Builder(
-                text = PlainComplicationText.Builder("🚬0").build(),
+                text = PlainComplicationText.Builder("🔥0").build(),
                 contentDescription = PlainComplicationText.Builder("Smokes Total").build()
             ).build()
         }
@@ -31,7 +31,7 @@ class SmokesComplicationService : SuspendingComplicationDataSourceService() {
         } catch (ignored: Exception) {}
 
         return ShortTextComplicationData.Builder(
-            text = PlainComplicationText.Builder("🚬$smokes").build(),
+            text = PlainComplicationText.Builder("🔥$smokes").build(),
             contentDescription = PlainComplicationText.Builder("Smokes Total").build()
         ).build()
     }

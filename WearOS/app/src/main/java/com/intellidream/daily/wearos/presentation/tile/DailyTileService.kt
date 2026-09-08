@@ -46,7 +46,7 @@ class DailyTileService : GlanceTileService() {
             )
             Spacer(modifier = GlanceModifier.height(12.dp))
             Text(
-                text = "🚬 $smokesStr",
+                text = "🔥 $smokesStr",
                 style = TextStyle(color = ColorProvider(Color(0xFFFFA500)), fontSize = 24.sp)
             )
         }

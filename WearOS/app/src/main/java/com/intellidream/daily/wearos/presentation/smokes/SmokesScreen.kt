@@ -1,5 +1,6 @@
 package com.intellidream.daily.wearos.presentation.smokes
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -15,208 +16,232 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.wear.compose.foundation.lazy.items
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.wear.compose.material.CircularProgressIndicator
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Icon
-import androidx.wear.compose.material.ListHeader
 import androidx.wear.compose.material.Text
-import com.google.android.horologist.compose.layout.ScalingLazyColumn
-import com.google.android.horologist.compose.layout.rememberResponsiveColumnState
 import com.intellidream.daily.wearos.data.OfflineSyncManager
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
+import com.intellidream.daily.wearos.presentation.bubbles.ActionPillButton
+import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
-import kotlinx.coroutines.flow.first
-import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import com.google.android.horologist.annotations.ExperimentalHorologistApi
-import androidx.compose.foundation.layout.fillMaxHeight
-import com.intellidream.daily.wearos.presentation.bubbles.DailyTotal
 
-@OptIn(ExperimentalHorologistApi::class)
 @Composable
-fun SmokesScreen(sessionManager: WatchSessionManager) {
+fun SmokesScreen(
+    sessionManager: WatchSessionManager,
+    onOpenLogs: (habitType: String, dateTitle: String, logs: List<HabitLog>, onDelete: (HabitLog) -> Unit) -> Unit
+) {
+    var dayOffset by remember { mutableIntStateOf(0) }
     var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedSmokesGoal ?: 20) }
     var isLogging by remember { mutableStateOf(false) }
-    var historyLogs by remember { mutableStateOf<List<HabitLog>>(sessionManager.cachedSmokesLogs ?: emptyList()) }
-    var todayTotal by remember { mutableIntStateOf(historyLogs.size) }
-    var weeklyTotals by remember { mutableStateOf<List<DailyTotal>>(emptyList()) }
+    var dayLogs by remember { mutableStateOf<List<HabitLog>>(sessionManager.cachedSmokesLogs ?: emptyList()) }
+    var todayCig by remember { mutableIntStateOf(dayLogs.count { it.metadata?.contains("Heated") != true }) }
+    var todayHeat by remember { mutableIntStateOf(dayLogs.count { it.metadata?.contains("Heated") == true }) }
+    var todayTotal by remember { mutableIntStateOf(todayCig + todayHeat) }
 
     val scope = rememberCoroutineScope()
-    val columnState = rememberResponsiveColumnState()
+    val listState = rememberScalingLazyListState()
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
+    val view = LocalView.current
 
-    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val localFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
-    val dayFormat = remember { SimpleDateFormat("EEE", Locale.getDefault()) }
-    val parseFormat = remember {
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+    val dayTitleFormat = remember { SimpleDateFormat("EEE, d MMM", Locale.getDefault()) }
+    val isoFormat = remember {
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
+        }
+    }
+
+    val formattedDateTitle = remember(dayOffset) {
+        when (dayOffset) {
+            0 -> "Today"
+            -1 -> "Yesterday"
+            else -> {
+                val cal = Calendar.getInstance()
+                cal.add(Calendar.DAY_OF_YEAR, dayOffset)
+                dayTitleFormat.format(cal.time)
+            }
+        }
+    }
+
+    val getSmokesColor: (Int, Int) -> Color = { total, goal ->
+        when {
+            total >= goal -> Color(0xFFFF3B30) // Red
+            total >= goal * 0.75 -> Color(0xFFFF9500) // Orange
+            else -> Color(0xFF4CD964) // Green
         }
     }
 
     val fetchLogs = {
         scope.launch {
             try {
-                // Fetch dynamic goal
-                val userId = sessionManager.currentUserId.value
-                if (userId != null) {
-                    val prefs = sessionManager.supabaseClient.postgrest["user_preferences"]
-                        .select {
-                            filter {
-                                eq("id", userId)
-                            }
-                        }.decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
+                // Fetch dynamic baseline if viewing today
+                if (dayOffset == 0) {
+                    val userId = sessionManager.currentUserId.value
+                    if (userId != null) {
+                        val prefs = sessionManager.supabaseClient.postgrest["user_preferences"]
+                            .select {
+                                filter { eq("id", userId) }
+                            }.decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
 
-                    if (prefs.isNotEmpty()) {
-                        dailyGoal = prefs.first().smokes_baseline ?: 20
-                        sessionManager.cachedSmokesGoal = dailyGoal
+                        if (prefs.isNotEmpty()) {
+                            dailyGoal = prefs.first().smokes_baseline ?: 20
+                            sessionManager.cachedSmokesGoal = dailyGoal
+                        }
                     }
                 }
-            } catch (ignored: Exception) {
-                // Ignore goal fetch errors (e.g. offline) and proceed with default dailyGoal
-            }
-                
+            } catch (_: Exception) {}
+
             try {
-                // Fetch last 7 days of logs
-                val calendar = java.util.Calendar.getInstance()
-                calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                calendar.set(java.util.Calendar.MINUTE, 0)
-                calendar.set(java.util.Calendar.SECOND, 0)
-                
-                val todayStart = calendar.time
-                val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-                format.timeZone = TimeZone.getTimeZone("UTC")
-                
-                calendar.add(java.util.Calendar.DAY_OF_YEAR, -6)
-                val sevenDaysAgoStr = format.format(calendar.time)
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.DAY_OF_YEAR, dayOffset)
+                val startOfDay = cal.time
+                val startStr = isoFormat.format(startOfDay)
+
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+                val endOfDay = cal.time
+                val endStr = isoFormat.format(endOfDay)
 
                 val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
                     .select {
                         filter {
                             eq("habit_type", "smokes")
                             eq("is_deleted", false)
-                            gte("logged_at", sevenDaysAgoStr)
+                            gte("logged_at", startStr)
+                            lt("logged_at", endStr)
                         }
                     }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
 
-                val totalsMap = mutableMapOf<String, Double>()
-                val daysList = mutableListOf<DailyTotal>()
-                
-                // Initialize last 7 days with 0
-                for (i in 6 downTo 0) {
-                    val c = java.util.Calendar.getInstance()
-                    c.add(java.util.Calendar.DAY_OF_YEAR, -i)
-                    val dStr = localFormat.format(c.time)
-                    val lbl = dayFormat.format(c.time).take(3)
-                    totalsMap[dStr] = 0.0
-                    daysList.add(DailyTotal(dStr, 0.0, lbl))
-                }
-
-                val todayStr = localFormat.format(todayStart)
-                val todayLogsList = mutableListOf<HabitLog>()
-                
+                var tCig = 0
+                var tHeat = 0
                 for (log in logs) {
-                    try {
-                        val pureUTC = log.logged_at.replace("Z", "") + "Z"
-                        val date = parseFormat.parse(pureUTC)
-                        if (date != null) {
-                            val dStr = localFormat.format(date)
-                            if (totalsMap.containsKey(dStr)) {
-                                totalsMap[dStr] = (totalsMap[dStr] ?: 0.0) + log.value
-                            }
-                            if (dStr == todayStr) {
-                                todayLogsList.add(log)
-                            }
-                        }
-                    } catch (e: Exception) {}
+                    val isHeat = log.metadata?.contains("Heated") == true
+                    if (isHeat) tHeat += 1 else tCig += 1
                 }
 
-                weeklyTotals = daysList.map { it.copy(total = totalsMap[it.date] ?: 0.0) }
-                historyLogs = todayLogsList
-                sessionManager.cachedSmokesLogs = todayLogsList
-                todayTotal = todayLogsList.size
-                sessionManager.persistSmokesTotal(todayTotal)
+                dayLogs = logs
+                todayCig = tCig
+                todayHeat = tHeat
+                todayTotal = tCig + tHeat
 
+                if (dayOffset == 0) {
+                    sessionManager.cachedSmokesLogs = logs
+                    sessionManager.persistSmokesTotal(todayTotal)
+                }
             } catch (e: Exception) {
-                // Token expired — attempt silent session refresh. The refreshed
-                // session will trigger dataRefreshTrigger via onAppResumed, which
-                // LaunchedEffect listens to and will re-invoke fetchLogs.
-                try {
-                    sessionManager.supabaseClient.auth.refreshCurrentSession()
-                } catch (_: Exception) { }
+                try { sessionManager.supabaseClient.auth.refreshCurrentSession() } catch (_: Exception) {}
             }
         }
     }
 
-    LaunchedEffect(refreshTrigger) {
+    LaunchedEffect(dayOffset, refreshTrigger) {
         fetchLogs()
     }
 
-    val getSmokesColor: (Int, Int) -> Color = { total, goal ->
-        when {
-            total >= goal -> Color(0xFFE53935) // Muted Red
-            total >= goal * 0.8 -> Color(0xFFFB8C00) // Muted Orange
-            else -> Color(0xFFFFD54F) // Muted Yellow
+    val deleteLog: (HabitLog) -> Unit = { log ->
+        val isHeat = log.metadata?.contains("Heated") == true
+        if (isHeat) {
+            todayHeat = maxOf(0, todayHeat - 1)
+        } else {
+            todayCig = maxOf(0, todayCig - 1)
+        }
+        todayTotal = todayCig + todayHeat
+        val newLogs = dayLogs.filter { it.id != log.id }
+        dayLogs = newLogs
+
+        if (dayOffset == 0) {
+            sessionManager.cachedSmokesLogs = newLogs
+            sessionManager.persistSmokesTotal(todayTotal)
+        }
+
+        scope.launch {
+            try {
+                sessionManager.supabaseClient.postgrest["habits_logs"]
+                    .update({
+                        set("is_deleted", true)
+                    }) {
+                        filter { eq("id", log.id) }
+                    }
+            } catch (_: Exception) {}
         }
     }
 
     val logSmoke: (String) -> Unit = { type ->
         if (!isLogging) {
             isLogging = true
+            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+
+            val isHeat = type.contains("Heated")
+            if (isHeat) todayHeat += 1 else todayCig += 1
             todayTotal += 1
-            sessionManager.persistSmokesTotal(todayTotal)
-            
+
+            if (dayOffset == 0) {
+                sessionManager.persistSmokesTotal(todayTotal)
+            }
+
             val metadata = buildJsonObject { put("type", type) }.toString()
-            val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-            format.timeZone = TimeZone.getTimeZone("UTC")
-            val nowStr = format.format(Date())
+
+            // Calculate timestamp for the viewed date
+            val targetCal = Calendar.getInstance()
+            if (dayOffset != 0) {
+                targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
+            }
+            val loggedAtStr = isoFormat.format(targetCal.time)
 
             val newLog = HabitLog(
                 user_id = sessionManager.currentUserId.value,
                 habit_type = "smokes",
                 value = 1.0,
                 unit = "cig",
-                logged_at = nowStr,
+                logged_at = loggedAtStr,
                 metadata = metadata
             )
 
-            val newHistory = listOf(newLog) + historyLogs
-            historyLogs = newHistory
-            sessionManager.cachedSmokesLogs = newHistory
+            val newHistory = listOf(newLog) + dayLogs
+            dayLogs = newHistory
+            if (dayOffset == 0) {
+                sessionManager.cachedSmokesLogs = newHistory
+            }
 
             scope.launch {
                 try {
                     sessionManager.supabaseClient.postgrest["habits_logs"].insert(newLog)
-                } catch (ignored: Exception) {
+                } catch (_: Exception) {
                     OfflineSyncManager.shared.enqueue(newLog)
                 } finally {
                     isLogging = false
@@ -225,184 +250,169 @@ fun SmokesScreen(sessionManager: WatchSessionManager) {
         }
     }
 
-    ScalingLazyColumn(
-        columnState = columnState,
-        modifier = Modifier.fillMaxSize()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
     ) {
-        item {
+        ScalingLazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             // Header
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                Icon(imageVector = Icons.Filled.LocalFireDepartment, contentDescription = null, tint = getSmokesColor(todayTotal, dailyGoal), modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Smokes", fontWeight = FontWeight.Bold, color = Color.White)
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.LocalFireDepartment,
+                        contentDescription = null,
+                        tint = getSmokesColor(todayTotal, dailyGoal),
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Smokes", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                }
             }
-        }
 
-        item {
-            // Main Ring
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(120.dp)) {
-                val remaining = maxOf(0, dailyGoal - todayTotal)
-                val progress = remaining.toFloat() / maxOf(dailyGoal, 1).toFloat()
-                val ringColor = getSmokesColor(todayTotal, dailyGoal)
-                
-                CircularProgressIndicator(
-                    progress = 1f,
-                    modifier = Modifier.fillMaxSize(),
-                    strokeWidth = 10.dp,
-                    indicatorColor = Color.DarkGray.copy(alpha=0.3f),
-                    trackColor = Color.Transparent
+            // Temporal Navigation Header
+            item {
+                TemporalNavHeader(
+                    title = formattedDateTitle,
+                    canGoForward = dayOffset < 0,
+                    accentColor = Color(0xFFFF5555),
+                    onPrevious = { dayOffset -= 1 },
+                    onNext = { if (dayOffset < 0) dayOffset += 1 },
+                    modifier = Modifier.padding(horizontal = 8.dp)
                 )
-
-                CircularProgressIndicator(
-                    progress = animateFloatAsState(targetValue = progress, animationSpec = tween(800)).value,
-                    modifier = Modifier.fillMaxSize(),
-                    strokeWidth = 10.dp,
-                    indicatorColor = ringColor,
-                    trackColor = Color.Transparent
-                )
-
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("$todayTotal", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = if(todayTotal>dailyGoal) Color.Red else Color.White)
-                    Text("/ $dailyGoal", fontSize = 12.sp, color = Color.Gray)
-                }
             }
-        }
-        
-        item {
-            Spacer(Modifier.height(8.dp))
-        }
 
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                SmokesMiniButton(Icons.Filled.LocalFireDepartment, "Cig", Color(0xFFE53935)) { logSmoke("Cigarette") }
-                SmokesMiniButton(Icons.Filled.FlashOn, "Heat", Color(0xFF1E90FF)) { logSmoke("Heated Tobacco") }
-            }
-        }
-        
-        if (weeklyTotals.isNotEmpty()) {
+            // Main Progress Arc & Action Buttons Row
             item {
-                Spacer(Modifier.height(8.dp))
-                ListHeader { Text("THIS WEEK", color = Color.Gray, fontSize = 10.sp) }
-            }
-            item {
-                Box(modifier = Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 24.dp)) {
-                    val maxVal = maxOf(dailyGoal.toDouble(), weeklyTotals.maxOfOrNull { it.total } ?: 1.0)
-                    
-                    // Goal Line
-                    val goalY = 1f - (dailyGoal / maxVal).toFloat().coerceIn(0f, 1f)
-                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawLine(
-                            color = Color(0xFFE53935).copy(alpha = 0.5f),
-                            start = androidx.compose.ui.geometry.Offset(0f, size.height * goalY),
-                            end = androidx.compose.ui.geometry.Offset(size.width, size.height * goalY),
-                            strokeWidth = 2f
-                        )
-                    }
-                    
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        val todayStr = localFormat.format(Date())
-                        weeklyTotals.forEach { day ->
-                            val heightFrac = (day.total / maxVal).toFloat().coerceIn(0f, 1f)
-                            val isToday = day.date == todayStr
-                            val barColor = if (isToday) getSmokesColor(todayTotal, dailyGoal) else Color(0xFFD84315)
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Bottom,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier.weight(1f),
-                                    contentAlignment = Alignment.BottomCenter
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(12.dp)
-                                            .fillMaxHeight(heightFrac)
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(barColor)
-                                    )
-                                }
-                                Spacer(Modifier.height(2.dp))
-                                Text(day.label, fontSize = 8.sp, color = Color.Gray)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (historyLogs.isNotEmpty()) {
-            item {
-                ListHeader { Text("TODAY'S LOGS", color = Color.Gray, fontSize = 10.sp) }
-            }
-            
-            items(historyLogs.size) { index ->
-                val log = historyLogs[index]
-                val type = if (log.metadata?.contains("Heated") == true) "Heated Tobacco" else "Cigarette"
-                val isHeated = type == "Heated Tobacco"
-                
-                // Parse the UTC date properly into the Local Device Timezone
-                val timeStr = remember(log.logged_at) {
-                    try {
-                        val pureUTC = log.logged_at.replace("Z", "") + "Z" // ensure Z bounds
-                        val date = parseFormat.parse(pureUTC)
-                        if (date != null) timeFormat.format(date) else ""
-                    } catch (ignored: Exception) { "" }
-                }
-
-                Box(
+                Spacer(Modifier.height(4.dp))
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 2.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.1f))
-                        .padding(12.dp)
+                        .padding(horizontal = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (isHeated) Icons.Filled.FlashOn else Icons.Filled.LocalFireDepartment,
-                            contentDescription = type,
-                            tint = if (isHeated) Color(0xFF1E90FF) else Color(0xFFE53935),
-                            modifier = Modifier.size(16.dp)
+                    // Circular Progress Ring
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(86.dp)
+                            .clickable {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                onOpenLogs("smokes", formattedDateTitle, dayLogs, deleteLog)
+                            }
+                    ) {
+                        val progress = (todayTotal.toFloat() / maxOf(dailyGoal, 1).toFloat()).coerceIn(0f, 1f)
+                        val progAnim by animateFloatAsState(targetValue = progress, animationSpec = tween(600))
+                        val ringColor = getSmokesColor(todayTotal, dailyGoal)
+
+                        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                            val strokeWidth = 9.dp.toPx()
+
+                            // Background Track
+                            drawArc(
+                                color = Color.DarkGray.copy(alpha = 0.35f),
+                                startAngle = -90f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+
+                            val sweep = (progAnim * 360f).coerceIn(0f, 360f)
+                            if (sweep > 0) {
+                                drawArc(
+                                    color = ringColor,
+                                    startAngle = -90f,
+                                    sweepAngle = sweep,
+                                    useCenter = false,
+                                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                                )
+                            }
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "$todayTotal",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = if (todayTotal > dailyGoal) Color(0xFFFF3B30) else Color.White
+                            )
+                            Text(
+                                text = "/ $dailyGoal",
+                                fontSize = 10.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+
+                    // 2 Quick Add Action Buttons (🔥 Cig, ⚡ Heat)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        ActionPillButton(
+                            text = "🔥 Cig",
+                            color = Color(0xFFFF3B30),
+                            onClick = { logSmoke("Cigarette") }
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (isHeated) "1 Heat" else "1 Cig",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White
+                        ActionPillButton(
+                            text = "⚡ Heat",
+                            color = Color(0xFF1E90FF),
+                            onClick = { logSmoke("Heated Tobacco") }
                         )
-                        Spacer(Modifier.weight(1f))
-                        Text(timeStr, color = Color.Gray, fontSize = 10.sp)
                     }
                 }
             }
-        }
-    }
-}
 
-@Composable
-fun SmokesMiniButton(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .width(60.dp)
-                .height(44.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(color.copy(alpha = 0.2f))
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
+            // Centered Breakdown Row with chevron (Tapping opens Logs)
+            item {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            onOpenLogs("smokes", formattedDateTitle, dayLogs, deleteLog)
+                        }
+                        .padding(vertical = 4.dp, horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🔥", fontSize = 11.sp)
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        text = "$todayCig cig",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
+                    Text("  •  ", fontSize = 11.sp, color = Color.Gray)
+                    Text("⚡", fontSize = 11.sp)
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        text = "$todayHeat heat",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "›",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFF5555)
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+            }
         }
-        Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = color)
     }
 }

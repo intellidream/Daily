@@ -1,17 +1,21 @@
 import { SupabaseClient } from '../utils/SupabaseClient';
 import { OfflineSyncManager } from '../utils/OfflineSyncManager';
-import { LogType, SupabaseHabitLog, DailyTotal } from '../models/HabitLog';
+import { LogType, SupabaseHabitLog } from '../models/HabitLog';
+import { TemporalNavHeader } from './TemporalNavHeader';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { vibrator } from '@kit.SensorServiceKit';
 
 @Component
 export struct SmokesView {
   @Prop @Watch('onRefresh') refreshTrigger: number = 0;
+  @State dayOffset: number = 0;
+  @State cigTotal: number = 0;
+  @State heatTotal: number = 0;
   @State smokesTotal: number = 0;
   @State baseline: number = 20;
-  @State todayLogs: SupabaseHabitLog[] = [];
-  @State weeklyTotals: DailyTotal[] = [];
+  @State dayLogs: SupabaseHabitLog[] = [];
   @State isLoading: boolean = true;
+  onOpenLogs: (habitType: string, dateTitle: string, logs: SupabaseHabitLog[]) => void = () => {};
 
   async aboutToAppear() {
     await this.fetchData();
@@ -21,26 +25,54 @@ export struct SmokesView {
     this.fetchData();
   }
 
+  private triggerHaptic(): void {
+    try {
+      vibrator.startVibration({ type: 'time', duration: 40 }, { id: 0, usage: 'touch' });
+    } catch (_e) {}
+  }
+
+  private getFormattedDateTitle(): string {
+    if (this.dayOffset === 0) return 'Today';
+    if (this.dayOffset === -1) return 'Yesterday';
+
+    const d = new Date();
+    d.setDate(d.getDate() + this.dayOffset);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;
+  }
+
   private async fetchData() {
     this.isLoading = true;
     const client = SupabaseClient.getInstance();
 
     try {
-      const logs = await client.fetchTodayLogs('smokes');
-      const bl = await client.fetchSmokesBaseline();
-      const weekly = await client.fetchWeeklyTotals('smokes');
-
-      this.baseline = bl;
-      this.todayLogs = logs;
-      this.weeklyTotals = weekly;
-      this.smokesTotal = 0;
-      for (const log of this.todayLogs) {
-        this.smokesTotal += log.value;
+      if (this.dayOffset === 0) {
+        this.baseline = await client.fetchSmokesBaseline();
       }
+      const logs = await client.fetchDayLogs('smokes', this.dayOffset);
+      this.dayLogs = logs;
+      this.computeTotals();
     } catch (e) {
       hilog.error(0x0000, 'SmokesView', `fetchData error: ${JSON.stringify(e)}`);
     }
     this.isLoading = false;
+  }
+
+  private computeTotals() {
+    let cig = 0;
+    let heat = 0;
+    for (const log of this.dayLogs) {
+      const type = this.getSmokeType(log);
+      if (type === 'Heated Tobacco') {
+        heat += 1;
+      } else {
+        cig += 1;
+      }
+    }
+    this.cigTotal = cig;
+    this.heatTotal = heat;
+    this.smokesTotal = cig + heat;
   }
 
   private getSmokeType(log: SupabaseHabitLog): string {
@@ -50,41 +82,40 @@ export struct SmokesView {
           typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata)
         );
         return meta['type'] || 'Cigarette';
-      } catch (e) {}
+      } catch (_e) {}
     }
     return 'Cigarette';
   }
 
   private getSmokesColor(): string {
-    if (this.smokesTotal === 0) return '#4CAF50'; // Green
-    const ratio = this.smokesTotal / Math.max(this.baseline, 1);
-    if (ratio >= 1.0) return '#F44336'; // Red
-    if (ratio >= 0.5) return '#FF9800'; // Orange
-    return '#FFEB3B'; // Yellow
-  }
-
-  private getRemainingText(): string {
-    const remaining = Math.max(0, this.baseline - this.smokesTotal);
-    return `${remaining}`;
+    if (this.smokesTotal >= this.baseline) return '#FF3B30'; // Red
+    if (this.smokesTotal >= this.baseline * 0.75) return '#FF9500'; // Orange
+    return '#4CD964'; // Green
   }
 
   private async logSmoke(smokeType: string) {
+    this.triggerHaptic();
+
+    if (smokeType.includes('Heated')) {
+      this.heatTotal += 1;
+    } else {
+      this.cigTotal += 1;
+    }
     this.smokesTotal += 1;
 
-    // Haptic feedback
-    try {
-      vibrator.startVibration({ type: 'time', duration: 50 }, { id: 0, usage: 'touch' });
-    } catch (e) {
-      // Vibrator optional, continue if unavailable
+    // Target date calculation based on dayOffset
+    const targetDate = new Date();
+    if (this.dayOffset !== 0) {
+      targetDate.setDate(targetDate.getDate() + this.dayOffset);
     }
+    const loggedAt = targetDate.toISOString();
 
-    const now = new Date().toISOString();
     let payload: Record<string, Object | null> = {};
     payload['user_id'] = SupabaseClient.getInstance().getUserId();
     payload['habit_type'] = 'smokes';
     payload['value'] = 1;
     payload['unit'] = 'cig';
-    payload['logged_at'] = now;
+    payload['logged_at'] = loggedAt;
     payload['metadata'] = JSON.stringify({ type: smokeType });
 
     const success = await SupabaseClient.getInstance().insertLog('habits_logs', payload);
@@ -93,43 +124,17 @@ export struct SmokesView {
       await this.fetchData();
     } else {
       hilog.warn(0x0000, 'SmokesView', 'Offline mode - queuing log');
-      await OfflineSyncManager.getInstance().enqueueLog(LogType.Smokes, now);
+      await OfflineSyncManager.getInstance().enqueueLog(LogType.Smokes, loggedAt);
     }
-  }
-
-  private async deleteLog(logId: string) {
-    this.todayLogs = this.todayLogs.filter(l => l.id !== logId);
-    this.smokesTotal = 0;
-    for (const log of this.todayLogs) {
-      this.smokesTotal += log.value;
-    }
-
-    const success = await SupabaseClient.getInstance().softDeleteLog(logId);
-    if (success) {
-      await this.fetchData();
-    }
-  }
-
-  private formatTime(isoString: string): string {
-    const d = new Date(isoString);
-    const h = d.getHours().toString().padStart(2, '0');
-    const m = d.getMinutes().toString().padStart(2, '0');
-    return `${h}:${m}`;
-  }
-
-  private getDayLabel(dateStr: string): string {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const d = new Date(dateStr + 'T12:00:00');
-    return days[d.getDay()];
   }
 
   build() {
     Scroll() {
       Column() {
-        // --- Header ---
+        // Header
         Row() {
           Text('🔥')
-            .fontSize(16)
+            .fontSize(15)
           Text('Smokes')
             .fontSize(16)
             .fontWeight(FontWeight.Bold)
@@ -137,220 +142,156 @@ export struct SmokesView {
             .margin({ left: 4 })
         }
         .justifyContent(FlexAlign.Center)
-        .margin({ top: 8 })
+        .margin({ top: 4, bottom: 2 })
 
-        // --- Progress Ring ---
-        Stack({ alignContent: Alignment.Center }) {
-          // Background track
-          Circle()
-            .width(90)
-            .height(90)
-            .fill(Color.Transparent)
-            .stroke('#4D4D4D')
-            .strokeWidth(8)
-
-          // Smokes progress arc — drains from full to empty as smokes increase
-          Circle()
-            .width(90)
-            .height(90)
-            .fill(Color.Transparent)
-            .stroke(this.getSmokesColor())
-            .strokeWidth(8)
-            .strokeDashArray([
-              Math.max(0, 1.0 - this.smokesTotal / Math.max(this.baseline, 1)) * 283,
-              283
-            ])
-            .strokeLineCap(LineCapStyle.Round)
-            .rotate({ angle: -90 })
-
-          // Center text: total / goal
-          Column() {
-            Text(`${this.smokesTotal}`)
-              .fontSize(22)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.smokesTotal > this.baseline ? '#F44336' : '#FFFFFF')
-            Text(`/ ${this.baseline}`)
-              .fontSize(10)
-              .fontColor('#888888')
-          }
-        }
-        .width(100)
-        .height(100)
-        .margin({ top: 8 })
-
-        // --- Two Action Buttons ---
-        Row() {
-          // Cigarette button
-          Column() {
-            Text('🔥')
-              .fontSize(18)
-            Text('Cig')
-              .fontSize(11)
-              .fontColor('#F44336')
-              .fontWeight(FontWeight.Medium)
-          }
-          .width(64)
-          .height(52)
-          .borderRadius(12)
-          .backgroundColor('rgba(255, 68, 54, 0.15)')
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-          .onClick(() => { this.logSmoke('Cigarette'); })
-
-          // Heated Tobacco button
-          Column() {
-            Text('⚡')
-              .fontSize(18)
-            Text('Heat')
-              .fontSize(11)
-              .fontColor('#1E90FF')
-              .fontWeight(FontWeight.Medium)
-          }
-          .width(64)
-          .height(52)
-          .borderRadius(12)
-          .backgroundColor('rgba(30, 144, 255, 0.15)')
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-          .onClick(() => { this.logSmoke('Heated Tobacco'); })
-        }
-        .width('80%')
-        .justifyContent(FlexAlign.SpaceEvenly)
-        .margin({ top: 10 })
-
-        // --- Weekly Chart ---
-        if (this.weeklyTotals.length > 0) {
-          Column() {
-            Text('This Week')
-              .fontSize(12)
-              .fontColor('#888888')
-              .margin({ bottom: 6 })
-
-            Stack({ alignContent: Alignment.Bottom }) {
-              // Baseline line
-              Row()
-                .width('100%')
-                .height(1)
-                .backgroundColor('#FF5252')
-                .opacity(0.5)
-                .position({
-                  y: `${Math.max(0, 100 - (this.baseline / this.getMaxWeeklyValue()) * 100)}%`
-                })
-
-              Row() {
-                ForEach(this.weeklyTotals, (item: DailyTotal) => {
-                  Column() {
-                    Column()
-                      .width(14)
-                      .height(`${Math.min((item.total / Math.max(this.getMaxWeeklyValue(), 1)) * 100, 100)}%`)
-                      .borderRadius(3)
-                      .backgroundColor(item.date === this.getTodayDateStr() ? this.getSmokesColor() : '#D84315')
-
-                    Text(this.getDayLabel(item.date))
-                      .fontSize(8)
-                      .fontColor('#666666')
-                      .margin({ top: 2 })
-                  }
-                  .justifyContent(FlexAlign.End)
-                  .alignItems(HorizontalAlign.Center)
-                  .layoutWeight(1)
-                }, (item: DailyTotal) => item.date)
-              }
-              .width('100%')
-              .height('100%')
-              .alignItems(VerticalAlign.Bottom)
+        // Temporal Navigation Header (Days)
+        TemporalNavHeader({
+          title: this.getFormattedDateTitle(),
+          canGoForward: this.dayOffset < 0,
+          accentColor: '#FF5555',
+          onPrevious: () => {
+            this.dayOffset -= 1;
+            this.fetchData();
+          },
+          onNext: () => {
+            if (this.dayOffset < 0) {
+              this.dayOffset += 1;
+              this.fetchData();
             }
-            .width('90%')
-            .height(60)
           }
-          .margin({ top: 12 })
-          .alignItems(HorizontalAlign.Center)
-        }
+        })
 
-        // --- Today's Logs ---
-        if (this.todayLogs.length > 0) {
+        // Progress Ring & Action Buttons Row
+        Row() {
+          // Circular Progress Ring (clickable to open Logs)
+          Stack({ alignContent: Alignment.Center }) {
+            // Background track
+            Circle()
+              .width(86)
+              .height(86)
+              .fill(Color.Transparent)
+              .stroke('#222222')
+              .strokeWidth(9)
+
+            // Progress Arc
+            Circle()
+              .width(86)
+              .height(86)
+              .fill(Color.Transparent)
+              .stroke(this.getSmokesColor())
+              .strokeWidth(9)
+              .strokeDashArray([
+                Math.min(this.smokesTotal / Math.max(this.baseline, 1), 1.0) * 270,
+                270
+              ])
+              .strokeLineCap(LineCapStyle.Round)
+              .rotate({ angle: -90 })
+
+            // Center text
+            Column() {
+              Text(`${this.smokesTotal}`)
+                .fontSize(18)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.smokesTotal > this.baseline ? '#FF3B30' : '#FFFFFF')
+              Text(`/ ${this.baseline}`)
+                .fontSize(10)
+                .fontColor('#888888')
+            }
+          }
+          .width(86)
+          .height(86)
+          .onClick(() => {
+            this.triggerHaptic();
+            this.onOpenLogs('smokes', this.getFormattedDateTitle(), this.dayLogs);
+          })
+
+          // 2 Quick Add Action Buttons (🔥 Cig, ⚡ Heat)
           Column() {
-            Text("Today's Logs")
-              .fontSize(12)
-              .fontColor('#888888')
-              .margin({ bottom: 4 })
+            // 🔥 Cig
+            Row() {
+              Text('🔥 Cig')
+                .fontSize(11)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#FFFFFF')
+            }
+            .width(68)
+            .height(28)
+            .borderRadius(14)
+            .backgroundColor('#222222')
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => { this.logSmoke('Cigarette'); })
 
-            ForEach(this.todayLogs, (log: SupabaseHabitLog) => {
-              Row() {
-                Text(this.getSmokeType(log) === 'Heated Tobacco' ? '⚡' : '🔥')
-                  .fontSize(14)
-                  .margin({ right: 6 })
-
-                Text(`1 ${this.getSmokeType(log) === 'Heated Tobacco' ? 'Heat' : 'Cig'}`)
-                  .fontSize(12)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor('#CCCCCC')
-                  .layoutWeight(1)
-
-                Text(this.formatTime(log.logged_at))
-                  .fontSize(10)
-                  .fontColor('#666666')
-              }
-              .width('90%')
-              .padding({ top: 6, bottom: 6, left: 8, right: 8 })
-              .borderRadius(8)
-              .backgroundColor('rgba(255, 255, 255, 0.1)')
-              .margin({ bottom: 3 })
-              .gesture(
-                LongPressGesture({ repeat: false, duration: 600 })
-                  .onAction(() => {
-                    this.showDeleteConfirm(log.id);
-                  })
-              )
-            }, (log: SupabaseHabitLog) => log.id)
+            // ⚡ Heat
+            Row() {
+              Text('⚡ Heat')
+                .fontSize(11)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#FFFFFF')
+            }
+            .width(68)
+            .height(28)
+            .borderRadius(14)
+            .backgroundColor('#222222')
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+            .margin({ top: 6 })
+            .onClick(() => { this.logSmoke('Heated Tobacco'); })
           }
-          .margin({ top: 10, bottom: 20 })
           .alignItems(HorizontalAlign.Center)
-          .width('100%')
         }
+        .width('92%')
+        .justifyContent(FlexAlign.SpaceEvenly)
+        .alignItems(VerticalAlign.Center)
+        .margin({ top: 4, bottom: 6 })
+
+        // Breakdown Summary Row with chevron (Tapping opens Logs)
+        Row() {
+          Text('🔥')
+            .fontSize(11)
+          Text(`${this.cigTotal} cig`)
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#FFFFFF')
+            .margin({ left: 2 })
+
+          Text('  •  ')
+            .fontSize(11)
+            .fontColor('#888888')
+
+          Text('⚡')
+            .fontSize(11)
+          Text(`${this.heatTotal} heat`)
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#FFFFFF')
+            .margin({ left: 2 })
+
+          Text('›')
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FF5555')
+            .margin({ left: 4 })
+        }
+        .width('90%')
+        .height(32)
+        .borderRadius(8)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
+        .margin({ top: 4, bottom: 12 })
+        .onClick(() => {
+          this.triggerHaptic();
+          this.onOpenLogs('smokes', this.getFormattedDateTitle(), this.dayLogs);
+        })
       }
       .width('100%')
       .alignItems(HorizontalAlign.Center)
-      .padding({ bottom: 20 })
     }
     .scrollable(ScrollDirection.Vertical)
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
     .width('100%')
     .height('100%')
-    .linearGradient({
-      direction: GradientDirection.Bottom,
-      colors: [['#260D05', 0.0], ['#000000', 1.0]]
-    })
-  }
-
-  private showDeleteConfirm(logId: string) {
-    this.getUIContext().showAlertDialog({
-      message: 'Delete this log?',
-      primaryButton: {
-        value: 'Cancel',
-        action: () => {}
-      },
-      secondaryButton: {
-        value: 'Delete',
-        fontColor: '#F44336',
-        action: () => {
-          this.deleteLog(logId);
-        }
-      }
-    });
-  }
-
-  private getMaxWeeklyValue(): number {
-    let max = this.baseline;
-    for (const t of this.weeklyTotals) {
-      if (t.total > max) max = t.total;
-    }
-    return max;
-  }
-
-  private getTodayDateStr(): string {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    .backgroundColor('#000000')
   }
 }

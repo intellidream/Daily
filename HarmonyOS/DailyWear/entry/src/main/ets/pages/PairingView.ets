@@ -1,4 +1,5 @@
 import { WatchSessionManager } from '../utils/WatchSessionManager';
+import { vibrator } from '@kit.SensorServiceKit';
 
 @Component
 export struct PairingView {
@@ -14,6 +15,12 @@ export struct PairingView {
     WatchSessionManager.getInstance().stopPolling();
   }
 
+  private triggerHaptic(): void {
+    try {
+      vibrator.startVibration({ type: 'time', duration: 40 }, { id: 0, usage: 'touch' });
+    } catch (_e) {}
+  }
+
   private async generateCode() {
     this.isGenerating = true;
     this.errorMessage = '';
@@ -22,81 +29,113 @@ export struct PairingView {
       if (this.code === '' || this.code === '------') {
         this.errorMessage = 'Failed to generate pairing code. Check your connection.';
       }
-    } catch (e) {
+    } catch (_e) {
       this.errorMessage = 'Network error. Please try again.';
     }
     this.isGenerating = false;
   }
 
   build() {
-    Column() {
-      if (this.errorMessage) {
-        // Error state
-        Text('Error')
-          .fontSize(18)
+    Scroll() {
+      Column() {
+        Text('DayOne Orbit')
+          .fontSize(16)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#F44336')
-          .margin({ top: 30 })
+          .fontColor('#00FFFF')
+          .margin({ top: 12 })
 
-        Text(this.errorMessage)
-          .fontSize(12)
-          .fontColor('#AAAAAA')
-          .textAlign(TextAlign.Center)
-          .margin({ top: 10, left: 20, right: 20 })
+        Text('Pairing PIN')
+          .fontSize(11)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#888888')
+          .margin({ top: 2 })
 
-        Button('Retry')
-          .fontSize(14)
-          .backgroundColor('#0277BD')
-          .fontColor('#FFFFFF')
-          .borderRadius(20)
-          .margin({ top: 16 })
+        if (this.errorMessage) {
+          Text(this.errorMessage)
+            .fontSize(10)
+            .fontColor('#FF3B30')
+            .textAlign(TextAlign.Center)
+            .margin({ top: 10, left: 16, right: 16 })
+
+          Row() {
+            Text('Retry')
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#00FFFF')
+          }
+          .width(80)
+          .height(30)
+          .borderRadius(15)
+          .backgroundColor('rgba(0, 255, 255, 0.2)')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .margin({ top: 10 })
           .onClick(() => {
+            this.triggerHaptic();
             this.generateCode();
           })
-      } else if (this.isGenerating) {
-        // Loading state
-        LoadingProgress()
-          .width(50)
-          .height(50)
-          .color('#0277BD')
-          .margin({ top: 60 })
-      } else {
-        // Pairing code display
-        Text('Pair Watch')
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .margin({ top: 30 })
+        } else if (this.isGenerating) {
+          LoadingProgress()
+            .width(40)
+            .height(40)
+            .color('#00FFFF')
+            .margin({ top: 24 })
+        } else {
+          // Large Green OTP PIN
+          Text(this.code)
+            .fontSize(36)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#4CAF50')
+            .letterSpacing(4)
+            .fontFamily('monospace')
+            .margin({ top: 8 })
 
-        Text('Enter this code in the Daily app on your phone:')
-          .fontSize(13)
-          .fontColor('#AAAAAA')
-          .textAlign(TextAlign.Center)
-          .margin({ top: 10, bottom: 16, left: 16, right: 16 })
+          Text('Enter this PIN in DayOne to link.')
+            .fontSize(10)
+            .fontColor('#AAAAAA')
+            .textAlign(TextAlign.Center)
+            .margin({ top: 4, left: 16, right: 16 })
 
-        Text(this.code)
-          .fontSize(44)
-          .fontWeight(FontWeight.Bolder)
-          .fontColor('#0277BD')
-          .letterSpacing(5)
-          .fontFamily('monospace')
+          Row() {
+            LoadingProgress()
+              .width(14)
+              .height(14)
+              .color('#888888')
 
-        Text('Settings \u2192 Pair Watch')
-          .fontSize(11)
-          .fontColor('#666666')
+            Text('Waiting for authorization...')
+              .fontSize(9)
+              .fontColor('#888888')
+              .margin({ left: 4 })
+          }
           .margin({ top: 8 })
 
-        LoadingProgress()
-          .width(36)
-          .height(36)
-          .color('#0277BD')
-          .margin({ top: 16 })
+          Row() {
+            Text('New PIN')
+              .fontSize(11)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#00FFFF')
+          }
+          .width(80)
+          .height(28)
+          .borderRadius(8)
+          .backgroundColor('rgba(255, 255, 255, 0.1)')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .margin({ top: 8, bottom: 16 })
+          .onClick(() => {
+            this.triggerHaptic();
+            this.generateCode();
+          })
+        }
       }
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
     }
+    .scrollable(ScrollDirection.Vertical)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
     .width('100%')
     .height('100%')
-    .justifyContent(FlexAlign.Start)
-    .alignItems(HorizontalAlign.Center)
     .backgroundColor('#000000')
   }
 }

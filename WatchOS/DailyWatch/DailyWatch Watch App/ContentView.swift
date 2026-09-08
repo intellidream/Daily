@@ -57,7 +57,7 @@ struct ContentView: View {
                                 .padding(.vertical, 8)
                         }
                         
-                        Text("Enter this PIN in Daily on your PC to link.")
+                        Text("Enter this PIN in DayOne to link.")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)

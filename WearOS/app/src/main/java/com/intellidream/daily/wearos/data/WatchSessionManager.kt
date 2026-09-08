@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.intellidream.daily.wearos.domain.model.PairedWatch
 import com.intellidream.daily.wearos.domain.model.WatchPairing
+import com.intellidream.daily.wearos.domain.model.WatchPairingInsert
 import com.intellidream.daily.wearos.domain.model.HabitLog
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
@@ -249,11 +250,13 @@ class WatchSessionManager private constructor(private val context: Context) {
 
         scope.launch {
             try {
-                val pairing = WatchPairing(code = code)
-                supabaseClient.postgrest["watch_pairings"].insert(pairing)
+                val pairing = WatchPairingInsert(pin_code = code)
+                supabaseClient.postgrest["watch_pairing_codes"].insert(pairing)
                 startPolling()
             } catch (e: Exception) {
-                _errorMessage.value = "Insert Err: ${e.message}"
+                android.util.Log.e("WatchSessionManager", "Pairing insert failed", e)
+                val msg = e.localizedMessage ?: e.cause?.localizedMessage ?: e::class.java.simpleName
+                _errorMessage.value = "Insert Err: $msg"
             }
         }
     }
@@ -262,7 +265,7 @@ class WatchSessionManager private constructor(private val context: Context) {
         pollJob?.cancel()
         pollJob = scope.launch {
             while (isActive) {
-                delay(3000)
+                delay(2500)
                 checkPairingStatus()
             }
         }
@@ -270,8 +273,8 @@ class WatchSessionManager private constructor(private val context: Context) {
 
     private suspend fun checkPairingStatus() {
         try {
-            val pairings = supabaseClient.postgrest["watch_pairings"]
-                .select { filter { eq("code", _pairingCode.value) } }
+            val pairings = supabaseClient.postgrest["watch_pairing_codes"]
+                .select { filter { eq("pin_code", _pairingCode.value) } }
                 .decodeList<WatchPairing>()
 
             val pairing = pairings.firstOrNull()
@@ -288,8 +291,8 @@ class WatchSessionManager private constructor(private val context: Context) {
                     if (uid != null) {
                         // Session listener handles DataStore persistence and state updates.
                         // Just clean up the pairing row and stop polling.
-                        supabaseClient.postgrest["watch_pairings"]
-                            .delete { filter { eq("code", _pairingCode.value) } }
+                        supabaseClient.postgrest["watch_pairing_codes"]
+                            .delete { filter { eq("pin_code", _pairingCode.value) } }
 
                         // Register this device in the persistent paired_watches table
                         registerPairing(token, uid)
@@ -298,13 +301,6 @@ class WatchSessionManager private constructor(private val context: Context) {
                         _dataRefreshTrigger.value++
                     }
                 }
-            } else {
-               // The row disappears when the Phone app claims it OR if we explicitly delete it after success.
-               // We only consider it an error if we are still actively "Pairing".
-               if (_isPairing.value) {
-                   _errorMessage.value = "Row deleted/missing"
-                   pollJob?.cancel()
-               }
             }
         } catch (e: Exception) {
             if (e !is kotlinx.coroutines.CancellationException) {

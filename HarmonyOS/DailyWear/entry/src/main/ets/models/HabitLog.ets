@@ -31,3 +31,14 @@ export interface DailyTotal {
 // Drink type extracted from metadata
 export type DrinkType = 'Large Water' | 'Small Water' | 'Coffee';
 export type SmokeType = 'Cigarette' | 'Heated Tobacco';
+
+export interface WeekBucket {
+  date: string;
+  dayLabel: string;
+  isToday: boolean;
+  water: number;
+  coffee: number;
+  cig: number;
+  heat: number;
+  total: number;
+}

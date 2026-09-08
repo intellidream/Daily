@@ -6,23 +6,23 @@
     },
     {
       "name": "EntryAbility_desc",
-      "value": "description"
+      "value": "DayOne Orbit companion app"
     },
     {
       "name": "EntryAbility_label",
-      "value": "label"
+      "value": "DayOne Orbit"
     },
     {
       "name": "DailyCardAbility_desc",
-      "value": "Daily habits stats card"
+      "value": "DayOne Orbit habits stats card"
     },
     {
       "name": "DailyCardAbility_label",
-      "value": "Daily Stats"
+      "value": "DayOne Orbit Stats"
     },
     {
       "name": "daily_card_name",
-      "value": "Daily Stats"
+      "value": "DayOne Orbit Stats"
     },
     {
       "name": "daily_card_desc",
@@ -30,7 +30,7 @@
     },
     {
       "name": "water_complication_name",
-      "value": "Water"
+      "value": "DayOne Orbit Water"
     },
     {
       "name": "water_complication_desc",
@@ -38,7 +38,7 @@
     },
     {
       "name": "smokes_complication_name",
-      "value": "Smokes"
+      "value": "DayOne Orbit Smokes"
     },
     {
       "name": "smokes_complication_desc",

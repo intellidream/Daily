@@ -122,31 +122,56 @@ export class WatchSessionManager {
 
   public async generatePairingCode(): Promise<string> {
     // Generate random 6 digit code
-    this.pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+    this.pairingCode = pin;
     
-    // Insert into watch_pairings
-    const pairingData: Record<string, Object | null> = {
-      'code': this.pairingCode,
-      'access_token': null,
-      'refresh_token': null
-    };
-    
-    const success = await SupabaseClient.getInstance().insertLog('watch_pairings', pairingData);
+    // Insert into watch_pairing_codes
+    const httpRequest = http.createHttp();
+    const url = `${SupabaseClient.SUPABASE_URL}/rest/v1/watch_pairing_codes`;
 
-    if (success) {
-      this.startPolling();
-    } else {
-      hilog.error(DOMAIN, TAG, 'Failed to insert pairing code into Supabase.');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'apikey': SupabaseClient.SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SupabaseClient.SUPABASE_ANON_KEY}`,
+      'Prefer': 'return=representation'
+    };
+
+    try {
+      const response = await httpRequest.request(url, {
+        method: http.RequestMethod.POST,
+        header: headers,
+        extraData: JSON.stringify({ 'pin_code': pin }),
+        expectDataType: http.HttpDataType.STRING,
+      });
+
+      hilog.info(DOMAIN, TAG, `Insert watch_pairing_codes response code: ${response.responseCode}, result: ${response.result}`);
+
+      if (response.responseCode >= 200 && response.responseCode < 300) {
+        this.startPolling();
+        return this.pairingCode;
+      } else if (response.responseCode === 409) {
+        // PIN collision, retry once with a new PIN
+        hilog.warn(DOMAIN, TAG, 'PIN collision, regenerating...');
+        return await this.generatePairingCode();
+      } else {
+        hilog.error(DOMAIN, TAG, `Failed to insert pairing code: HTTP ${response.responseCode} - ${response.result}`);
+        this.pairingCode = '';
+        return '';
+      }
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `Network error inserting pairing code: ${JSON.stringify(err)}`);
+      this.pairingCode = '';
+      return '';
+    } finally {
+      httpRequest.destroy();
     }
-    
-    return this.pairingCode;
   }
 
   private startPolling(): void {
     this.stopPolling();
     this.pollIntervalId = setInterval(() => {
       this.checkPairingStatus();
-    }, 3000);
+    }, 2500);
   }
 
   public stopPolling(): void {
@@ -157,7 +182,9 @@ export class WatchSessionManager {
   }
 
   private async checkPairingStatus(): Promise<void> {
-    const url = `${SupabaseClient.SUPABASE_URL}/rest/v1/watch_pairings?code=eq.${this.pairingCode}&select=*`;
+    if (!this.pairingCode) return;
+
+    const url = `${SupabaseClient.SUPABASE_URL}/rest/v1/watch_pairing_codes?pin_code=eq.${this.pairingCode}&select=*`;
     const httpRequest = http.createHttp();
 
     const headers: Record<string, string> = {
@@ -181,16 +208,18 @@ export class WatchSessionManager {
           const pairing = result[0];
           const token = pairing['access_token'] as string | null;
           const refresh = pairing['refresh_token'] as string | null;
+          const claimed = Boolean(pairing['claimed']);
           
-          if (token) {
+          if ((claimed || (token !== null && token.length > 0)) && token && token.length > 0) {
             hilog.info(DOMAIN, TAG, 'Tokens received! Pairing successful.');
+            const pinToClean = this.pairingCode;
             this.stopPolling();
             
             const userId = this.extractUserId(token);
             await this.saveSession(token, refresh || '', userId || '');
             
-            // Clean up the row
-            await SupabaseClient.getInstance().deleteRow('watch_pairings', 'code', this.pairingCode);
+            // Clean up the row from watch_pairing_codes
+            await SupabaseClient.getInstance().deleteRow('watch_pairing_codes', 'pin_code', pinToClean);
 
             // Set the authenticated session on the client BEFORE registering
             // so insertAndReturn uses the user's JWT, not the anon key
@@ -204,7 +233,7 @@ export class WatchSessionManager {
             AppStorage.setOrCreate('PairingSuccess', true);
           }
         } else {
-            hilog.warn(DOMAIN, TAG, 'Pairing row missing/deleted.');
+          hilog.warn(DOMAIN, TAG, 'Pairing row missing/deleted.');
         }
       }
     } catch (err) {

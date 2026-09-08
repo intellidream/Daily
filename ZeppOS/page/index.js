@@ -1309,7 +1309,7 @@ Page(
                 return
               }
 
-              statusText.setProperty(prop.TEXT, 'Waiting for PC...')
+              statusText.setProperty(prop.TEXT, 'Enter PIN in DayOne to link')
               let attempts = 0;
               const pollTimer = setInterval(() => {
                 this.request({ method: 'POLL_WATCH', params: { pin } }).then(pollRes => {
