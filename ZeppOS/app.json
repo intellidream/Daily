@@ -30,7 +30,8 @@
       "module": {
         "page": {
           "pages": [
-            "page/index"
+            "page/index",
+            "page/logs"
           ]
         },
         "app-side": {

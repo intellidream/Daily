@@ -1,8 +1,8 @@
-import { createWidget, deleteWidget, widget, prop, align, text_style } from '@zos/ui'
+import { createWidget, deleteWidget, widget, prop, align, text_style, event } from '@zos/ui'
 import { log } from '@zos/utils'
 import { setTimeout, setInterval, clearInterval } from '@zos/timer'
 import { BasePage } from '@zeppos/zml/base-page'
-import { exit } from '@zos/router'
+import { push, exit } from '@zos/router'
 import { statSync, writeFileSync, readFileSync } from '@zos/fs'
 import { setScrollMode, SCROLL_MODE_SWIPER } from '@zos/page'
 import {
@@ -272,6 +272,8 @@ function loadFileStr(filename) {
   return ''
 }
 
+let refreshDashboard = null
+
 Page(
   BasePage({
     build() {
@@ -312,6 +314,7 @@ Page(
           let waterHistogram, coffeeHistogram, smokeHistogram, heatHistogram
           let debugText, waterBreakdownText, smokeBreakdownText
           let waterStatsSummaryText, smokeStatsSummaryText
+          let currentWaterLogs = [], currentSmokeLogs = []
           let renderedWaterKey = '', renderedSmokeKey = ''
           let syncIcon, syncText
           let isSyncingState = false
@@ -431,15 +434,17 @@ Page(
                  waterTotal = res.data.total || 0
                  waterVal = res.data.waterTotal || 0
                  coffeeVal = res.data.coffeeTotal || 0
+                 if (res.data.logs) currentWaterLogs = res.data.logs
                }
                
                return doRequest('GET_HABITS_TODAY', { access_token: accessToken, user_id: userId, habit_type: 'smokes', day_offset: smokesDayOffset })
              }).then(res => {
                if (res && res.success && res.data) {
-                 smokeTotal = res.data.total || 0
-                 cigVal = res.data.cigTotal || 0
-                 heatVal = res.data.heatTotal || 0
-               }
+                  smokeTotal = res.data.total || 0
+                  cigVal = res.data.cigTotal || 0
+                  heatVal = res.data.heatTotal || 0
+                  if (res.data.logs) currentSmokeLogs = res.data.logs
+                }
                
                return doRequest('GET_HABITS_WEEK', { access_token: accessToken, habit_type: 'water', week_offset: bubblesWeekOffset })
              }).then(res => {
@@ -601,7 +606,7 @@ Page(
              if (waterCenterText) waterCenterText.setProperty(prop.TEXT, `${waterTotal}\n/ ${waterGoal}`)
              
              if (waterBreakdownText) {
-                waterBreakdownText.setProperty(prop.TEXT, `💧 ${waterVal} ml  •  ☕ ${coffeeVal} ml`)
+                waterBreakdownText.setProperty(prop.TEXT, `💧 ${waterVal} ml  •  ☕ ${coffeeVal} ml  ›`)
              }
 
              if (waterStatsSummaryText) {
@@ -638,7 +643,7 @@ Page(
              }
              
              if (smokeBreakdownText) {
-                smokeBreakdownText.setProperty(prop.TEXT, `🔥 ${cigVal} cig  •  ⚡ ${heatVal} heat`)
+                smokeBreakdownText.setProperty(prop.TEXT, `🔥 ${cigVal} cig  •  ⚡ ${heatVal} heat  ›`)
              }
 
              if (smokeStatsSummaryText) {
@@ -659,24 +664,57 @@ Page(
              return doRequest('GET_HABITS_TODAY', { access_token: accessToken, user_id: userId, habit_type: habitType, day_offset: dayOffset })
              .then(res => {
                 setSyncing(false)
-                if (res && res.success && res.data) {
-                   if (habitType === 'water') {
-                      waterTotal = res.data.total || 0
-                      waterVal = res.data.waterTotal || 0
-                      coffeeVal = res.data.coffeeTotal || 0
-                      updateWaterUI()
-                   } else if (habitType === 'smokes') {
-                      smokeTotal = res.data.total || 0
-                      cigVal = res.data.cigTotal || 0
-                      heatVal = res.data.heatTotal || 0
-                      updateSmokeUI()
-                   }
-                }
-             }).catch(err => {
-                setSyncing(false)
-                logger.error(`fetchDayData ${habitType} error`, err)
-             })
-          }
+                 if (res && res.success && res.data) {
+                    if (habitType === 'water') {
+                       waterTotal = res.data.total || 0
+                       waterVal = res.data.waterTotal || 0
+                       coffeeVal = res.data.coffeeTotal || 0
+                       if (res.data.logs) currentWaterLogs = res.data.logs
+                       updateWaterUI()
+                    } else if (habitType === 'smokes') {
+                       smokeTotal = res.data.total || 0
+                       cigVal = res.data.cigTotal || 0
+                       heatVal = res.data.heatTotal || 0
+                       if (res.data.logs) currentSmokeLogs = res.data.logs
+                       updateSmokeUI()
+                    }
+                 }
+              }).catch(err => {
+                 setSyncing(false)
+                 logger.error(`fetchDayData ${habitType} error`, err)
+              })
+           }
+
+           const openLogs = (habitType) => {
+              triggerHaptic('nav')
+              const isWater = habitType === 'water'
+              const offset = isWater ? bubblesDayOffset : smokesDayOffset
+              const dateLabel = formatDayLabel(offset)
+              const logsList = isWater ? currentWaterLogs : currentSmokeLogs
+              const payload = {
+                 habitType,
+                 dayOffset: offset,
+                 dateLabel,
+                 logs: logsList,
+                 goal: isWater ? waterGoal : smokeBaseline,
+                 accessToken,
+                 userId
+              }
+              saveFileStr('logs_context.json', JSON.stringify(payload))
+              try {
+                 push({
+                    url: 'page/logs',
+                    params: payload
+                 })
+              } catch(err) {
+                 logger.error('push logs page error', err)
+              }
+           }
+
+           refreshDashboard = () => {
+              fetchDayData('water', bubblesDayOffset)
+              fetchDayData('smokes', smokesDayOffset)
+           }
 
           const fetchWeekData = (habitType, weekOffset) => {
              setSyncing(true)
@@ -908,11 +946,13 @@ Page(
                 x: cfg.arc.x, y: cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
                 color: 0xffffff, text_size: cfg.arc.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...'
              })
+             waterCenterText.addEventListener(event.CLICK_UP, () => openLogs('water'))
              
              waterBreakdownText = createWidget(widget.TEXT, {
                 x: cfg.breakdownText.x, y: cfg.breakdownText.y, w: cfg.breakdownText.w, h: cfg.breakdownText.h,
                 color: 0xffffff, text_size: cfg.breakdownText.text_size, align_h: cfg.breakdownText.align_h, align_v: cfg.breakdownText.align_v, text: 'Loading...'
              })
+             waterBreakdownText.addEventListener(event.CLICK_UP, () => openLogs('water'))
              
              createWidget(widget.BUTTON, {
                 x: cfg.p1Buttons.x, y: cfg.p1Buttons.y1, w: cfg.p1Buttons.w, h: cfg.p1Buttons.h, radius: cfg.p1Buttons.radius,
@@ -990,14 +1030,16 @@ Page(
                 start_angle: -90, end_angle: -90, color: 0x00ff00, line_width: cfg.arc.line_width
              })
              smokeCenterText = createWidget(widget.TEXT, {
-                x: cfg.arc.x, y: h*2 + cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
-                color: 0xffffff, text_size: cfg.arc.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...'
+                 x: cfg.arc.x, y: h*2 + cfg.arc.y, w: cfg.arc.w, h: cfg.arc.h,
+                 color: 0xffffff, text_size: cfg.arc.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: '...'
              })
+             smokeCenterText.addEventListener(event.CLICK_UP, () => openLogs('smokes'))
              
              smokeBreakdownText = createWidget(widget.TEXT, {
                  x: cfg.breakdownText.x, y: h*2 + cfg.breakdownText.y, w: cfg.breakdownText.w, h: cfg.breakdownText.h,
                  color: 0xffffff, text_size: cfg.breakdownText.text_size, align_h: cfg.breakdownText.align_h, align_v: cfg.breakdownText.align_v, text: 'Loading...'
              })
+             smokeBreakdownText.addEventListener(event.CLICK_UP, () => openLogs('smokes'))
 
              createWidget(widget.BUTTON, {
                 x: cfg.p3Buttons.x, y: h*2 + cfg.p3Buttons.y1, w: cfg.p3Buttons.w, h: cfg.p3Buttons.h, radius: cfg.p3Buttons.radius,
@@ -1311,6 +1353,13 @@ Page(
     onInit() {
       try {
         ensureVibrator()
+      } catch (e) {}
+    },
+    onResume() {
+      try {
+        if (typeof refreshDashboard === 'function') {
+          refreshDashboard()
+        }
       } catch (e) {}
     },
     onDestroy() {

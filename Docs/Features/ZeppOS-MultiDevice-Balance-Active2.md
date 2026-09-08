@@ -179,3 +179,30 @@ Outputs: `dist/20001-DayOne_Orbit-1.0.0-<timestamp>.zab` containing binaries for
 ### 4. About Screen Logo Parity
 - Updated `SQUARE_CONFIG` (Amazfit Active 2) from `icon.png` to `logo.png` (110x110) with centered `iconX: 140` (`(390 - 110) / 2 = 140`), creating complete visual unity with Amazfit Balance (`iconX: 185`) and Apple watchOS.
 
+---
+
+## 8. Dedicated Habit Logs Screen & Deletion (watchOS Parity)
+
+### 1. Architectural Design & Zero-Regression Navigation
+- **The Challenge**: Zepp OS relies on a 5-page vertical swiper (`SCROLL_MODE_SWIPER`) for main screen navigation (Bubbles $\rightarrow$ 7 Days $\rightarrow$ Smokes $\rightarrow$ 7 Days $\rightarrow$ About). Embedded vertical scroll lists inside a swiper conflict with page snapping gestures.
+- **The Solution**: Implemented a dedicated sub-page (`page/logs.js`) accessed via `@zos/router.push`. This preserves the existing 5-page swiper layout with **zero regressions**.
+- **Touch Target & Visual Indicator**:
+  - The habit breakdown row displays a subtle navigation chevron: `💧 ${waterVal} ml  •  ☕ ${coffeeVal} ml  ›` and `🔥 ${cigVal} cig  •  ⚡ ${heatVal} heat  ›`.
+  - Registered direct event listeners (`addEventListener(event.CLICK_UP, ...)`) on both the center ring text (`waterCenterText`, `smokeCenterText`) and the breakdown rows (`waterBreakdownText`, `smokeBreakdownText`).
+  - **Zero Overlay / Full Visibility**: Avoids overlaying dummy button widgets (which in Zepp OS render solid opaque black rectangles). All progress arcs and texts remain 100% visible and natively interactive.
+
+### 2. Full-Screen Free Scrolling (`SCROLL_MODE_FREE`)
+- `page/logs.js` sets `setScrollMode({ mode: SCROLL_MODE_FREE })`, allowing unlimited log entries to be browsed smoothly with touch or digital crown.
+- Responsive layout for both Amazfit Active 2 (Square 390x450) and Amazfit Balance (Round 480x480):
+  - **Header**: Back button (`◀`), habit title (`💧 Water Logs` or `🔥 Smoke Logs`), and date/count subtitle (`X entries • Today`).
+  - **Cards**: Dark gray cards (`0x1c1c1e`, `radius: 14`) displaying habit icon (`💧`, `☕`, `🔥`, `⚡`), amount & type (`300 ml Large`, `100 ml Coffee`, `1 Cig`, `1 Heat`), and formatted timestamp (`HH:mm`).
+  - **Empty State**: Friendly `No logs recorded for this day.` message when no logs exist.
+
+### 3. Log Deletion & Multi-Device Soft-Delete
+- Each card includes a dedicated delete button (`🗑️` in red `0xff3b30`).
+- Tapping triggers a confirmation modal (`Delete Log?` with details) to prevent accidental deletions.
+- Confirmation sends a `DELETE_HABIT_LOG` request via `app-side/index.js` which executes a `PATCH` request setting `{ is_deleted: true }` on Supabase, adhering strictly to the Daily ecosystem's multi-device soft-delete architecture.
+- Tactile feedback: `VIBRATOR_SCENE_SHORT_STRONG` on navigation/cancellation, and `VIBRATOR_SCENE_DURATION` on deletion confirmation.
+- **Instant Dashboard Synchronization**: `page/index.js` registers `onResume()`. When returning to the dashboard via back gesture or button, the day's totals, progress arcs, and breakdown strings immediately re-fetch and refresh.
+
+

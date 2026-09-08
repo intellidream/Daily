@@ -79,6 +79,7 @@ AppSideService(
              let coffeeTotal = 0
              let cigTotal = 0
              let heatTotal = 0
+             let logs = []
 
              if (Array.isArray(resBody)) {
                resBody.forEach(row => { 
@@ -95,18 +96,31 @@ AppSideService(
                     meta = row.metadata
                  }
                  
+                 let itemType = ''
                  if (habit_type === 'water') {
-                   const drinkType = meta.drink || ''
+                   const drinkType = meta.drink || 'Water'
+                   itemType = drinkType
                    if (drinkType.includes('Coffee')) coffeeTotal += val
                    else waterTotal += val
                  } else if (habit_type === 'smokes') {
-                   const sType = meta.type || ''
+                   const sType = meta.type || 'Cigarette'
+                   itemType = sType
                    if (sType.includes('Heat') || sType.includes('Vape')) heatTotal += val
                    else cigTotal += val
                  }
+
+                 logs.push({
+                   id: row.id,
+                   habit_type: row.habit_type || habit_type,
+                   value: val,
+                   unit: row.unit || '',
+                   type: itemType,
+                   logged_at: row.logged_at
+                 })
                })
+               logs.sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at))
              }
-             res(null, { success: true, data: { total, waterTotal, coffeeTotal, cigTotal, heatTotal } })
+             res(null, { success: true, data: { total, waterTotal, coffeeTotal, cigTotal, heatTotal, logs } })
           })
           .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
         } else if (req.method === 'GET_HABITS_WEEK') {
@@ -200,6 +214,25 @@ AppSideService(
             if (response.status >= 400) {
                 const bStr = typeof response.body === 'string' ? response.body : JSON.stringify(response.body)
                 return res(`API Error ${response.status}: ${bStr.substring(0, 30)}`, { success: false })
+            }
+            res(null, { success: true })
+          })
+          .catch(err => { res(err ? err.toString() : 'Network err', { success: false }) })
+        } else if (req.method === 'DELETE_HABIT_LOG') {
+          const { access_token, log_id } = req.params
+          fetch({
+            url: `${SUPABASE_URL}/rest/v1/habits_logs?id=eq.${log_id}`,
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${access_token}`
+            },
+            body: JSON.stringify({ is_deleted: true })
+          })
+          .then(response => {
+            if (response.status >= 400) {
+              return res(`Delete Error ${response.status}`, { success: false })
             }
             res(null, { success: true })
           })
