@@ -170,9 +170,11 @@
     {
         try 
         {
-            await InvokeAsync(async () => 
+            var metrics = await Task.Run(async () => await HealthService.FetchMetricsAsync(DateTime.Now));
+
+            await InvokeAsync(() => 
             {
-                _metrics = await HealthService.FetchMetricsAsync(DateTime.Now);
+                _metrics = metrics;
 
                 var sourced = _metrics.Where(m => !string.IsNullOrEmpty(m.SourceDevice)).ToList();
                 if (sourced.Any())

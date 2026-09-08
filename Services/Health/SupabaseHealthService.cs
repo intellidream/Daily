@@ -78,6 +78,7 @@ namespace Daily.Services.Health
 
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
         private readonly System.Threading.SemaphoreSlim _syncSemaphore = new(1, 1);
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTime CachedAt, List<HealthTelemetry> Data)> _telemetryCache = new();
         private CancellationTokenSource? _reconnectCts;
         private CancellationTokenSource? _syncDebounceCts;
         private readonly object _debounceLock = new();
@@ -809,7 +810,20 @@ namespace Daily.Services.Health
                 {
                     var startOfDay = targetDate;
                     var endOfDay = nextDate.AddTicks(-1);
-                    var telemetryToday = await GetHealthTelemetryAsync(startOfDay, endOfDay);
+                    var startUtc = startOfDay.ToUniversalTime();
+                    var endUtc = endOfDay.ToUniversalTime();
+                    var cacheKey = $"{userIdStr}_{startUtc:yyyyMMddHHmmss}_{endUtc:yyyyMMddHHmmss}";
+
+                    List<HealthTelemetry>? telemetryToday = null;
+                    if (_telemetryCache.TryGetValue(cacheKey, out var cEntry) && (DateTime.UtcNow - cEntry.CachedAt).TotalMinutes < 5)
+                    {
+                        telemetryToday = cEntry.Data;
+                    }
+                    else if (!localRecords.Any())
+                    {
+                        // Only fetch remote telemetry if local SQLite has zero records for this date
+                        telemetryToday = await GetHealthTelemetryAsync(startOfDay, endOfDay);
+                    }
 
                     if (telemetryToday != null && telemetryToday.Any())
                     {
@@ -1106,8 +1120,10 @@ namespace Daily.Services.Health
             try
             {
                 var targetDate = date.Date;
-                var windowStart = targetDate.AddDays(-1).AddHours(18); // yesterday 18:00
-                var windowEnd = targetDate.AddHours(16); // today 16:00
+                // Nocturnal sleep window for targetDate:
+                // Sleep that ends in the morning of targetDate (waking day)
+                var windowStart = targetDate.AddDays(-1).AddHours(20);
+                var windowEnd = targetDate.AddHours(14);
 
                 var telemetry = await GetHealthTelemetryAsync(windowStart, windowEnd);
                 var sleepTelemetry = telemetry
@@ -1115,11 +1131,11 @@ namespace Daily.Services.Health
                     .OrderBy(x => x.LocalStartTime)
                     .ToList();
 
-                var naps = sleepTelemetry.Where(x => x.NormalizedType == "sleepnap" || x.NormalizedType == "nap").ToList();
-                var stageRecords = sleepTelemetry.Where(x => x.IsSleepStage).ToList();
+                var naps = sleepTelemetry.Where(x => (x.NormalizedType == "sleepnap" || x.NormalizedType == "nap") && x.LocalStartTime.Date == targetDate).ToList();
+                var stageRecords = sleepTelemetry.Where(x => x.IsSleepStage && x.NormalizedType != "sleepnap" && x.NormalizedType != "nap").ToList();
                 var aggregateRecords = sleepTelemetry.Where(x => !x.IsSleepStage && x.NormalizedType != "sleepnap" && x.NormalizedType != "nap").ToList();
 
-                // 1. Separate daytime naps
+                // 1. Separate daytime naps (starting and ending during daylight hours of targetDate)
                 foreach (var nap in naps)
                 {
                     allSessions.Add(new SleepSession
@@ -1131,12 +1147,11 @@ namespace Daily.Services.Health
                     });
                 }
 
-                // 2. Select nocturnal candidates: prefer granular stage records if present, else fallback to aggregate
+                // 2. Select nocturnal candidates from telemetry if granular stages or records exist
                 var nocturnalCandidates = stageRecords.Any() ? stageRecords : aggregateRecords;
 
                 if (nocturnalCandidates.Any())
                 {
-                    // Cluster stages into distinct sessions if gap between stages >= 90 minutes
                     var currentCluster = new List<HealthTelemetry> { nocturnalCandidates[0] };
 
                     for (int i = 1; i < nocturnalCandidates.Count; i++)
@@ -1152,7 +1167,11 @@ namespace Daily.Services.Health
                         else
                         {
                             var s = CreateSessionFromStages(currentCluster, targetDate);
-                            if (s.DurationSeconds >= 600) // at least 10 minutes
+                            if (s.DurationSeconds >= 1800 && s.EndTime.Date == targetDate && s.EndTime.Hour >= 4)
+                            {
+                                allSessions.Add(s);
+                            }
+                            else if (s.IsNap && s.StartTime.Date == targetDate)
                             {
                                 allSessions.Add(s);
                             }
@@ -1163,15 +1182,21 @@ namespace Daily.Services.Health
                     if (currentCluster.Any())
                     {
                         var s = CreateSessionFromStages(currentCluster, targetDate);
-                        if (s.DurationSeconds >= 600)
+                        if (s.DurationSeconds >= 1800 && s.EndTime.Date == targetDate && s.EndTime.Hour >= 4)
+                        {
+                            allSessions.Add(s);
+                        }
+                        else if (s.IsNap && s.StartTime.Date == targetDate)
                         {
                             allSessions.Add(s);
                         }
                     }
                 }
 
-                // If no telemetry sessions formed, fallback to check aggregated vitals for targetDate
-                if (!allSessions.Any())
+                // 3. If no nocturnal session from telemetry (typical when wearables sync daily totals to vitals):
+                // Read vitals for targetDate (fast SQLite lookup)
+                var hasNocturnal = allSessions.Any(s => !s.IsNap);
+                if (!hasNocturnal)
                 {
                     var vitals = await FetchMetricsForDateAsync(targetDate);
                     var sleepM = vitals.FirstOrDefault(v => v.MatchesType(VitalType.SleepDuration));
@@ -1182,35 +1207,8 @@ namespace Daily.Services.Health
                         var lightM = vitals.FirstOrDefault(v => v.MatchesType(VitalType.SleepLight))?.Value ?? 0;
                         var awakeM = vitals.FirstOrDefault(v => v.MatchesType(VitalType.SleepAwake))?.Value ?? 0;
 
-                        var syntheticSession = new SleepSession
-                        {
-                            StartTime = targetDate.AddHours(-1).AddMinutes(-30),
-                            EndTime = targetDate.AddHours(7),
-                            IsNap = false
-                        };
-
-                        var t = syntheticSession.StartTime;
-                        if (awakeM > 0)
-                        {
-                            syntheticSession.Stages.Add(new HealthTelemetry { TypeString = "SleepAwake", Value = awakeM, Unit = "minutes", StartTime = t.ToUniversalTime(), EndTime = t.AddMinutes(awakeM).ToUniversalTime() });
-                            t = t.AddMinutes(awakeM);
-                        }
-                        if (lightM > 0)
-                        {
-                            syntheticSession.Stages.Add(new HealthTelemetry { TypeString = "SleepLight", Value = lightM, Unit = "minutes", StartTime = t.ToUniversalTime(), EndTime = t.AddMinutes(lightM).ToUniversalTime() });
-                            t = t.AddMinutes(lightM);
-                        }
-                        if (deepM > 0)
-                        {
-                            syntheticSession.Stages.Add(new HealthTelemetry { TypeString = "SleepDeep", Value = deepM, Unit = "minutes", StartTime = t.ToUniversalTime(), EndTime = t.AddMinutes(deepM).ToUniversalTime() });
-                            t = t.AddMinutes(deepM);
-                        }
-                        if (remM > 0)
-                        {
-                            syntheticSession.Stages.Add(new HealthTelemetry { TypeString = "SleepREM", Value = remM, Unit = "minutes", StartTime = t.ToUniversalTime(), EndTime = t.AddMinutes(remM).ToUniversalTime() });
-                        }
-
-                        allSessions.Add(syntheticSession);
+                        var session = SynthesizeClinicalSleepSession(targetDate, sleepM.Value, deepM, remM, lightM, awakeM);
+                        allSessions.Insert(0, session);
                     }
                 }
 
@@ -1230,6 +1228,170 @@ namespace Daily.Services.Health
             }
         }
 
+        private SleepSession SynthesizeClinicalSleepSession(DateTime targetDate, double totalAsleepM, double deepM, double remM, double lightM, double awakeM)
+        {
+            // 1. Stage value validation and normalization
+            double sumStages = deepM + remM + lightM;
+            if (sumStages <= 0)
+            {
+                // Normal healthy adult reference distribution (18% Deep, 23% REM, 59% Light)
+                deepM = Math.Round(totalAsleepM * 0.18, 1);
+                remM = Math.Round(totalAsleepM * 0.23, 1);
+                lightM = Math.Round(totalAsleepM - deepM - remM, 1);
+            }
+            else if (Math.Abs(sumStages - totalAsleepM) > 0.5)
+            {
+                double scale = totalAsleepM / sumStages;
+                deepM = Math.Round(deepM * scale, 1);
+                remM = Math.Round(remM * scale, 1);
+                lightM = Math.Round(totalAsleepM - deepM - remM, 1);
+            }
+
+            if (awakeM <= 0)
+            {
+                // Typical healthy adult night has ~20-35 mins of brief arousals / awakenings (~6% of sleep)
+                awakeM = Math.Round(totalAsleepM * 0.065, 1);
+            }
+
+            // 2. Realistic Wake Time and Bedtime
+            // Standard morning wake-up time: 07:15 AM
+            DateTime wakeTime = targetDate.Date.AddHours(7).AddMinutes(15);
+            if (targetDate.Date == DateTime.Today)
+            {
+                var now = DateTime.Now;
+                if (now.Hour < 7 || (now.Hour == 7 && now.Minute < 15))
+                {
+                    // If before 07:15 AM today, wake time is current time (or 5m ago)
+                    wakeTime = now.AddMinutes(-5);
+                }
+            }
+
+            double totalInBedM = totalAsleepM + awakeM;
+            DateTime bedtime = wakeTime.AddMinutes(-totalInBedM);
+
+            var session = new SleepSession
+            {
+                StartTime = bedtime,
+                EndTime = wakeTime,
+                IsNap = false,
+                Stages = new List<HealthTelemetry>()
+            };
+
+            // 3. Physiological Ultradian Sleep Architecture (4 to 5 cycles of ~90 min)
+            // Polysomnography standard:
+            // Cycle 1 (Early night): Light falling asleep -> prolonged Slow-Wave Deep sleep -> Light -> brief REM
+            // Cycle 2: Light -> Deep sleep -> Light -> REM -> brief arousal
+            // Cycle 3 (Mid night): Light -> brief Deep -> REM -> brief arousal
+            // Cycle 4 (Late night): Light -> long REM -> Light -> brief arousal
+            // Cycle 5 (Morning): Light -> long REM -> terminal Awake before rising
+            int numCycles = Math.Clamp((int)Math.Round(totalAsleepM / 90.0), 3, 5);
+
+            double[] deepWeights = numCycles switch
+            {
+                3 => new[] { 0.55, 0.35, 0.10 },
+                4 => new[] { 0.45, 0.35, 0.15, 0.05 },
+                _ => new[] { 0.42, 0.33, 0.18, 0.07, 0.00 }
+            };
+
+            double[] remWeights = numCycles switch
+            {
+                3 => new[] { 0.15, 0.35, 0.50 },
+                4 => new[] { 0.10, 0.20, 0.35, 0.35 },
+                _ => new[] { 0.08, 0.17, 0.25, 0.25, 0.25 }
+            };
+
+            double[] awakeWeights = numCycles switch
+            {
+                3 => new[] { 0.20, 0.30, 0.50 },
+                4 => new[] { 0.15, 0.15, 0.25, 0.45 },
+                _ => new[] { 0.15, 0.10, 0.15, 0.20, 0.40 }
+            };
+
+            double[] lightWeights = numCycles switch
+            {
+                3 => new[] { 0.28, 0.36, 0.36 },
+                4 => new[] { 0.22, 0.26, 0.26, 0.26 },
+                _ => new[] { 0.18, 0.20, 0.22, 0.22, 0.18 }
+            };
+
+            DateTime cursor = bedtime;
+
+            for (int c = 0; c < numCycles; c++)
+            {
+                double cDeep = Math.Round(deepM * deepWeights[c], 1);
+                double cRem = Math.Round(remM * remWeights[c], 1);
+                double cAwake = Math.Round(awakeM * awakeWeights[c], 1);
+                double cLight = Math.Round(lightM * lightWeights[c], 1);
+
+                // On Cycle 0, start with brief sleep onset latency (Awake)
+                if (c == 0 && cAwake > 0)
+                {
+                    double onsetAwake = Math.Min(cAwake, Math.Max(2.0, cAwake * 0.7));
+                    cursor = AddStage(session.Stages, "SleepAwake", onsetAwake, cursor);
+                    cAwake -= onsetAwake;
+                }
+
+                // Initial Light sleep descent
+                double preDeepLight = cDeep > 0 ? Math.Min(cLight * 0.4, 15.0) : cLight * 0.5;
+                if (preDeepLight > 0)
+                {
+                    cursor = AddStage(session.Stages, "SleepLight", preDeepLight, cursor);
+                    cLight -= preDeepLight;
+                }
+
+                // Deep Slow-Wave sleep block
+                if (cDeep > 0)
+                {
+                    cursor = AddStage(session.Stages, "SleepDeep", cDeep, cursor);
+                }
+
+                // Ascent Light sleep
+                double postDeepLight = cRem > 0 ? Math.Min(cLight, 20.0) : cLight;
+                if (postDeepLight > 0)
+                {
+                    cursor = AddStage(session.Stages, "SleepLight", postDeepLight, cursor);
+                    cLight -= postDeepLight;
+                }
+
+                // REM dream stage
+                if (cRem > 0)
+                {
+                    cursor = AddStage(session.Stages, "SleepREM", cRem, cursor);
+                }
+
+                // Remainder of Light sleep in cycle
+                if (cLight > 0)
+                {
+                    cursor = AddStage(session.Stages, "SleepLight", cLight, cursor);
+                }
+
+                // Intra-cycle or morning awakening
+                if (cAwake > 0)
+                {
+                    cursor = AddStage(session.Stages, "SleepAwake", cAwake, cursor);
+                }
+            }
+
+            // Set final wake time to cursor to ensure 100% exact time alignment
+            session.EndTime = cursor;
+            return session;
+        }
+
+        private static DateTime AddStage(List<HealthTelemetry> stages, string typeString, double minutes, DateTime start)
+        {
+            if (minutes <= 0.2) return start;
+            var end = start.AddMinutes(minutes);
+            stages.Add(new HealthTelemetry
+            {
+                TypeString = typeString,
+                Value = minutes,
+                Unit = "minutes",
+                StartTime = start.ToUniversalTime(),
+                EndTime = end.ToUniversalTime()
+            });
+            return end;
+        }
+
         private SleepSession CreateSessionFromStages(List<HealthTelemetry> stages, DateTime targetDate)
         {
             var start = stages.Min(x => x.LocalStartTime);
@@ -1239,7 +1401,7 @@ namespace Daily.Services.Health
                 ? start.AddSeconds(totalStageSec)
                 : maxEnd;
 
-            var isNap = (end - start).TotalHours < 3.5 && (start.Date == targetDate && start.Hour >= 11);
+            var isNap = (end - start).TotalHours < 3.5 && (start.Date == targetDate && start.Hour >= 10 && end.Hour <= 19);
 
             return new SleepSession
             {
@@ -1479,11 +1641,25 @@ namespace Daily.Services.Health
                 }
                 var userIdStr = uid.ToString().ToLowerInvariant();
 
+                var startUtc = start.ToUniversalTime();
+                var endUtc = end.ToUniversalTime();
+                var cacheKey = $"{userIdStr}_{startUtc:yyyyMMddHHmmss}_{endUtc:yyyyMMddHHmmss}";
+
+                if (_telemetryCache.TryGetValue(cacheKey, out var cachedEntry))
+                {
+                    if ((DateTime.UtcNow - cachedEntry.CachedAt).TotalMinutes < 5)
+                    {
+                        return cachedEntry.Data;
+                    }
+                }
+
                 // Convert to UTC strings for PostgREST
-                var startStr = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                var endStr = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                var startStr = startUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                var endStr = endUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
                 Console.WriteLine($"[SupabaseHealthService] Fetching telemetry for user {userIdStr} between {startStr} and {endStr}...");
+
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3.5));
 
                 var result = await _supabase.From<HealthTelemetry>()
                                           .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
@@ -1491,11 +1667,18 @@ namespace Daily.Services.Health
                                           .Filter("start_time", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
                                           .Order("start_time", Supabase.Postgrest.Constants.Ordering.Ascending)
                                           .Limit(5000)
-                                          .Get();
+                                          .Get()
+                                          .WaitAsync(cts.Token);
 
                 var list = result.Models ?? new List<HealthTelemetry>();
+                _telemetryCache[cacheKey] = (DateTime.UtcNow, list);
                 Console.WriteLine($"[SupabaseHealthService] Fetched {list.Count} telemetry records from Supabase.");
                 return list;
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("[SupabaseHealthService] GetHealthTelemetryAsync timed out after 3.5s; returning empty fallback.");
+                return new List<HealthTelemetry>();
             }
             catch (Exception ex)
             {

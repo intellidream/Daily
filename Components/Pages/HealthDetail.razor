@@ -612,11 +612,13 @@
 
     private async Task LoadData()
     {
-         try 
+        try 
         {
-            await InvokeAsync(async () => 
+            var metrics = await Task.Run(async () => await HealthService.FetchMetricsAsync(DateTime.Now));
+
+            await InvokeAsync(() => 
             {
-                _metrics = await HealthService.FetchMetricsAsync(DateTime.Now);
+                _metrics = metrics;
 
                 // Dominant Source Calculation (>70% threshold)
                 CalculateDominantSource(_metrics);

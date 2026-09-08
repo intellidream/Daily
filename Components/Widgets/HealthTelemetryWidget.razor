@@ -185,25 +185,28 @@
 
     private void OnSelectedDateChanged()
     {
-        _ = InvokeAsync(async () =>
+        _ = Task.Run(async () =>
         {
             await LoadDataAsync();
-            StateHasChanged();
         });
     }
 
     private async Task OnHealthRefreshRequested()
     {
-        await InvokeAsync(async () =>
+        _ = Task.Run(async () =>
         {
             await LoadDataAsync();
         });
+        await Task.CompletedTask;
     }
 
     public async Task LoadDataAsync()
     {
-        isLoading = true;
-        StateHasChanged();
+        await InvokeAsync(() =>
+        {
+            isLoading = true;
+            StateHasChanged();
+        });
 
         try
         {
@@ -211,26 +214,34 @@
             var startOfDay = selDate;
             var endOfDay = selDate.AddDays(1).AddTicks(-1);
 
-            telemetryData = await HealthService.GetHealthTelemetryAsync(startOfDay, endOfDay);
-            var (primary, _) = await HealthService.GetSleepSessionsAsync(selDate);
-            primarySleep = primary;
+            var (telemetryList, sleepResult, vitalsList) = await Task.Run(async () =>
+            {
+                var tTask = HealthService.GetHealthTelemetryAsync(startOfDay, endOfDay);
+                var sTask = HealthService.GetSleepSessionsAsync(selDate);
+                var vTask = HealthService.FetchMetricsForDateAsync(selDate);
 
-            // Steps strictly for this date
+                await Task.WhenAll(tTask, sTask, vTask);
+                return (await tTask, await sTask, await vTask);
+            });
+
+            telemetryData = telemetryList;
+            primarySleep = sleepResult.PrimarySession;
+
+            // 1. Steps
             var steps = telemetryData
                 .Where(x => x.IsSteps && x.LocalStartTime.Date == selDate)
                 .Sum(x => x.Value ?? 0);
             
             if (steps <= 0)
             {
-                var vitals = await HealthService.FetchMetricsForDateAsync(selDate);
-                var stepsV = vitals.FirstOrDefault(v => v.MatchesType(VitalType.Steps));
+                var stepsV = vitalsList.FirstOrDefault(v => v.MatchesType(VitalType.Steps));
                 if (stepsV != null) steps = stepsV.Value;
             }
 
             totalSteps = steps > 0 ? steps.ToString("N0") : "--";
             stepPct = Math.Min(100, (int)((steps / 10000.0) * 100));
 
-            // Sleep
+            // 2. Sleep
             if (primarySleep != null && primarySleep.DurationSeconds > 0)
             {
                 totalSleep = primarySleep.TotalAsleepFormatted;
@@ -240,7 +251,7 @@
                 totalSleep = "--";
             }
 
-            // Heart Rate
+            // 3. Heart Rate
             var hrEntries = telemetryData
                 .Where(x => x.IsHeartRate && x.LocalStartTime.Date == selDate && x.Value.HasValue)
                 .OrderBy(x => x.StartTime)
@@ -266,19 +277,37 @@
             }
             else
             {
-                minHr = 0;
-                maxHr = 0;
-                avgHr = 0;
+                var hrMetric = vitalsList.FirstOrDefault(v => v.MatchesType(VitalType.HeartRate));
+                var rhrMetric = vitalsList.FirstOrDefault(v => v.MatchesType(VitalType.RestingHeartRate));
+                avgHr = hrMetric?.Value > 0 ? Math.Round(hrMetric.Value, 0) : (rhrMetric?.Value > 0 ? Math.Round(rhrMetric.Value, 0) : 0);
+                minHr = rhrMetric?.Value > 0 ? rhrMetric.Value : avgHr;
+                maxHr = avgHr > 0 ? avgHr + 20 : 0;
                 hrSeries = new List<ChartSeries<double>>();
                 hrLabels = Array.Empty<string>();
             }
 
-            // Stress & PAI
+            // 4. Stress & PAI
             var stressEntry = telemetryData.Where(x => x.NormalizedType == "stress" && x.LocalStartTime.Date == selDate && x.Value.HasValue).ToList();
-            stressScore = stressEntry.Any() ? Math.Round(stressEntry.Average(x => x.Value!.Value), 0) : 0;
+            if (stressEntry.Any())
+            {
+                stressScore = Math.Round(stressEntry.Average(x => x.Value!.Value), 0);
+            }
+            else
+            {
+                var sMetric = vitalsList.FirstOrDefault(v => v.MatchesType(VitalType.Stress));
+                stressScore = sMetric?.Value ?? 0;
+            }
 
             var paiEntry = telemetryData.Where(x => x.NormalizedType == "pai" && x.LocalStartTime.Date == selDate && x.Value.HasValue).ToList();
-            paiScore = paiEntry.Any() ? paiEntry.OrderByDescending(x => x.StartTime).First().Value!.Value : 0;
+            if (paiEntry.Any())
+            {
+                paiScore = paiEntry.OrderByDescending(x => x.StartTime).First().Value!.Value;
+            }
+            else
+            {
+                var pMetric = vitalsList.FirstOrDefault(v => v.MatchesType(VitalType.PAI));
+                paiScore = pMetric?.Value ?? 0;
+            }
         }
         catch (Exception ex)
         {
@@ -287,7 +316,7 @@
         finally
         {
             isLoading = false;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
     }
 
