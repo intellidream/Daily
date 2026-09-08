@@ -1,6 +1,20 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/mihai/.ohos/config/default_DailyWear_L67YwyxvgNafWyCiXA2zjjQlTopRsYaz02A8XyL3wBA=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B99FC2B6B48DFF7A0AD3330A39D061030EDB65D0F8A1FAE7BB6F7755D9CA5C676E68B80C91F9A4D",
+          "profile": "/Users/mihai/.ohos/config/default_DailyWear_L67YwyxvgNafWyCiXA2zjjQlTopRsYaz02A8XyL3wBA=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/mihai/.ohos/config/default_DailyWear_L67YwyxvgNafWyCiXA2zjjQlTopRsYaz02A8XyL3wBA=.p12",
+          "storePassword": "0000001B6E62F4142CC8549F105B48C3A0FC57930C552EB8ED3C03F126984B7950AA475586AE22DE061319"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",
