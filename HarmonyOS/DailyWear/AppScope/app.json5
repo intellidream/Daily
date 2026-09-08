@@ -1,7 +1,7 @@
 {
   "app": {
-    "bundleName": "com.intellidream.daily",
-    "vendor": "example",
+    "bundleName": "com.intellidream.daily.orbit",
+    "vendor": "intellidream",
     "versionCode": 1000000,
     "versionName": "1.0.0",
     "icon": "$media:layered_image",
