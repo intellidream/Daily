@@ -222,4 +222,39 @@ When pairing the WearOS watch application with DayOne Desktop/Mobile, the pairin
   - Formatted timestamps using ISO-8601 UTC strings via `Instant.ofEpochMilli(time).toString()`.
   - Added strict in-memory local date filtering via `HabitDateParser.parseToLocalDate(log.logged_at)?.toString() == targetDateStr`, guaranteeing 100% mathematical day isolation even in edge cases of network or timezone boundary mismatches.
 
+---
 
+## 11. WearOS Smokes Multi-Record Quantities & Pairing Duplicate Elimination
+
+### 1. Smokes Multi-Record Value Interpretation & UI Multipliers
+- **Problem**: When a user logged multiple cigarettes or heated units in a single record (e.g. `value = 13.0` logged via DayOne desktop or mobile), WearOS `SmokesScreen` calculated it as only 1 unit (`tCig += 1` / `tHeat += 1`). The progress ring displayed `28 / 40` instead of `40 / 40`, and the log history list rendered only `Heated Tobacco` without any quantity count.
+- **Root Cause**:
+  - In `SmokesScreen.kt`, the summation loop hardcoded `if (isHeat) tHeat += 1 else tCig += 1` instead of extracting `val count = maxOf(1, log.value.toInt())`.
+  - The `deleteLog` callback also subtracted only 1 unit (`maxOf(0, todayHeat - 1)`).
+  - The LazyColumn items rendered only `displayType` without checking if `log.value > 1`.
+- **Solution**:
+  - In `SmokesScreen.kt`, updated `fetchLogs()` to accumulate `val count = maxOf(1, log.value.toInt())` for both `tHeat` and `tCig`.
+  - In `deleteLog`, updated decrements to subtract `count` rather than 1.
+  - In `SmokesScreen.kt` list items, added quantity multiplier formatting: if `count > 1`, item displays `"${count}× $baseType"` (e.g. `13× Heated Tobacco`), else `$baseType`.
+  - In `SmokesScreen.kt` delete confirmation alert, updated dialog text to show `"${count}× $typeName"`.
+  - In `Smokes7DaysScreen.kt`, updated bucket accumulation to ensure `val count = if (log.value > 0) log.value else 1.0` is added to `bucket.cig` or `bucket.heat`.
+
+### 2. Elimination of Duplicate `paired_watches` Entries & Remote Unpair Parity
+- **Problem**: During WearOS pairing, two rows were being inserted into `public.paired_watches`:
+  1. One row created by DayOne Desktop/MAUI (`FeaturesPage.xaml.cs` / `Settings.razor`) with `device_name: "Wear OS"`, `last_token_push: null`, `is_active: true`.
+  2. A second row created 2 seconds later by `WatchSessionManager.kt` via `POST /rest/v1/paired_watches` with `device_name: Build.MODEL` (`"OPWWE251"` or `"sdk_gwear_arm64"`).
+  Because the watch generated its own row and stored that ID in `SharedPreferences`, the desktop-created row remained an untracked orphan duplicate in the database.
+- **Root Cause**:
+  - DayOne Desktop creates a `PairedWatch` placeholder row immediately upon claiming the PIN so the desktop UI can show the paired watch immediately without waiting for watch polling.
+  - `WatchSessionManager.kt` executed a blind `POST` without checking if an active pairing placeholder was already created for that `user_id` and `platform = "wearos"`.
+- **Solution**:
+  - In `WatchSessionManager.kt` (`registerPairing`):
+    1. **Adoption Pattern**: Before inserting, queries `/rest/v1/paired_watches?user_id=eq.$userId&platform=eq.wearos&is_active=eq.true&order=paired_at.desc&limit=5`. If an active placeholder exists (e.g. `device_name in ("Wear OS", "Watch", deviceName)`), WearOS adopts its `id` instead of inserting a duplicate.
+    2. **Hardware Metadata Upgrade**: Sends a `PATCH` to `/rest/v1/paired_watches?id=eq.$adoptedId` with `{ "device_name": "$deviceName", "last_token_push": "$now" }`, upgrading the generic `"Wear OS"` label to the hardware device model (`"OPWWE251"` / `"sdk_gwear_arm64"`) and recording the pairing timestamp.
+    3. **Cleanup of Stale Duplicates**: Sends a `PATCH` to deactivate (`is_active = false`) any other active rows matching `platform = "wearos"` and `id != adoptedId` for this user, eliminating legacy orphaned duplicates from previous pairing attempts.
+    4. **Fallback Creation**: If no existing record is found, cleanly inserts a new record with `last_token_push = now()`.
+  - In `WatchSessionManager.kt` (`checkForRepairTokens`):
+    - Added remote unpair detection: if the watch record is deleted (`records.isEmpty()`) or marked `is_active == false`, WearOS immediately logs out, clears local credentials, and returns to the PIN pairing screen.
+    - Allowed repair token recovery when `pending_access_token` is present even if `pending_refresh_token` is empty string (matching DayOne Desktop's long-lived token architecture).
+  - In `FeaturesPage.xaml.cs` (WinUI) and `Settings.razor` (Blazor):
+    - Initialized `LastTokenPush = DateTime.UtcNow` upon creating `PairedWatch` rows.

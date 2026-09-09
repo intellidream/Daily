@@ -829,6 +829,7 @@ public sealed partial class FeaturesPage : Page
                             Platform = selectedPlatform,
                             DeviceName = deviceName,
                             PairedAt = DateTime.UtcNow,
+                            LastTokenPush = DateTime.UtcNow,
                             IsActive = true
                         };
 

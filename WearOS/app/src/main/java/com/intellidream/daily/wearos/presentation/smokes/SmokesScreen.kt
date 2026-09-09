@@ -182,8 +182,9 @@ fun SmokesScreen(
                 var tCig = 0
                 var tHeat = 0
                 for (log in dayOnlyLogs) {
+                    val count = maxOf(1, log.value.toInt())
                     val isHeat = log.metadata?.contains("Heated") == true
-                    if (isHeat) tHeat += 1 else tCig += 1
+                    if (isHeat) tHeat += count else tCig += count
                 }
 
                 dayLogs = dayOnlyLogs
@@ -207,11 +208,12 @@ fun SmokesScreen(
     }
 
     val deleteLog: (HabitLog) -> Unit = { log ->
+        val count = maxOf(1, log.value.toInt())
         val isHeat = log.metadata?.contains("Heated") == true
         if (isHeat) {
-            todayHeat = maxOf(0, todayHeat - 1)
+            todayHeat = maxOf(0, todayHeat - count)
         } else {
-            todayCig = maxOf(0, todayCig - 1)
+            todayCig = maxOf(0, todayCig - count)
         }
         todayTotal = todayCig + todayHeat
         val newLogs = dayLogs.filter { it.id != log.id }
@@ -470,8 +472,10 @@ fun SmokesScreen(
                 }
                 items(dayLogs.size) { index ->
                     val log = dayLogs[index]
+                    val count = maxOf(1, log.value.toInt())
                     val isHeat = log.metadata?.contains("Heated") == true
-                    val displayType = if (isHeat) "Heated Tobacco" else "Cigarette"
+                    val baseType = if (isHeat) "Heated Tobacco" else "Cigarette"
+                    val displayType = if (count > 1) "${count}× $baseType" else baseType
 
                     Row(
                         modifier = Modifier
@@ -538,10 +542,12 @@ fun SmokesScreen(
                     },
                     content = {
                         item {
+                            val count = maxOf(1, logToDelete?.value?.toInt() ?: 1)
                             val isHeat = logToDelete?.metadata?.contains("Heated") == true
                             val typeName = if (isHeat) "Heated Tobacco" else "Cigarette"
+                            val displayText = if (count > 1) "${count}× $typeName" else typeName
                             Text(
-                                text = typeName,
+                                text = displayText,
                                 fontSize = 11.sp,
                                 color = Color.Gray,
                                 textAlign = TextAlign.Center

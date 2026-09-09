@@ -172,11 +172,12 @@ fun Smokes7DaysScreen(
                             val logDateStr = localDate.toString()
                             val bucket = tempBuckets.find { it.dateStr == logDateStr }
                             if (bucket != null) {
+                                val count = if (log.value > 0) log.value else 1.0
                                 val isHeat = log.metadata?.contains("Heated", ignoreCase = true) == true
                                 if (isHeat) {
-                                    bucket.heat += log.value
+                                    bucket.heat += count
                                 } else {
-                                    bucket.cig += log.value
+                                    bucket.cig += count
                                 }
                             }
                         }
