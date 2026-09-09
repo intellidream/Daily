@@ -1,6 +1,6 @@
 # Huawei Developers & AppGallery Connect Distribution Guide (DayOne Orbit)
 
-Acest document descrie fluxul complet de configurare, semnare, compilare și distribuție a aplicației **DayOne Orbit** pentru ceasurile Huawei (inclusiv Huawei Watch GT 5 Pro) prin intermediul **AppGallery Connect** și **DevEco Studio**.
+Acest document descrie fluxul complet de configurare, verificare cont dezvoltator, semnare, compilare și distribuție a aplicației **DayOne Orbit** pentru ceasurile Huawei (inclusiv Huawei Watch GT 5 Pro) prin intermediul **AppGallery Connect** și **DevEco Studio**.
 
 ---
 
@@ -16,15 +16,44 @@ Acest document descrie fluxul complet de configurare, semnare, compilare și dis
 
 ---
 
-## 2. Navigarea în AppGallery Connect
+## 2. Verificarea Identității Contului Huawei Developer (Identity Verification)
 
-După crearea unui App ID, AppGallery Connect te poate plasa în ecranul de **My Projects** (destinat serviciilor cloud proprietare Huawei HMS Core):
+Pentru a putea genera certificate de semnare (inclusiv semnături automate de debug) sau a încărca pachete în AppGallery Connect, Huawei impune verificarea identității reale (**Real-Name Authentication**).
+
+### Tipul de cont recomandat:
+* Alege **Individual Developer** (Persoană Fizică). *Nu alege Enterprise*, care solicită certificat fiscal (CUI), extras de cont comercial etc.
+
+### Probleme cunoscute pe portalul Huawei și deblocarea lor:
+Portalul de verificare Huawei Developer prezintă frecvent bug-uri de randare și funcționare a formularelor:
+1. **Ad-Blockere și Extensii de Privacy:**
+   * Scripturile dinamice și formularele de încărcare sunt servite prin CDN-uri Huawei (`hwcdn.net`, `dbankcdn.com`, `vmall.com`).
+   * Extensii precum *uBlock Origin*, *AdGuard*, *Brave Shields* sau filtrele native de tracking blochează aceste apeluri, făcând ca dropdown-urile (țară, tip document) să fie goale sau butoanele să nu reacționeze.
+2. **Traducerea automată a browserului (Auto-Translate):**
+   * Dacă browserul (Chrome/Safari) încearcă să traducă automat pagina în română, framework-ul frontend (Vue/React) crapă, corupând valorile trimise sau blocând formularul.
+3. **Incompatibilitate Safari pe macOS:**
+   * Safari blochează din oficiu cookie-urile third-party și apelurile cross-domain între `developer.huawei.com` și `id5.cloud.huawei.com`.
+4. **Diacritice românești:**
+   * Validarea backend a Huawei respinge sau corupe caracterele cu diacritice (`ă, î, ș, ț, â`).
+
+### Soluția pas cu pas pentru completarea formularului:
+* **Browser:** Deschide **Google Chrome** sau **Microsoft Edge** (evită Safari).
+* **Mod Incognito:** Deschide o fereastră Incognito (`Cmd + Shift + N`) pentru a suspenda toate extensiile și ad-blockerele.
+* **Limbă:** Asigură-te că limba din colțul dreapta-sus al paginii este **English** și dezactivează traducerea automată.
+* **Date text:** Completează numele, prenumele și adresa **strict fără diacritice** (ex: `Strada Timisoara`, `Bucuresti`).
+* **Document:** Selectează **ID Card** (Buletin) sau **Passport** (Pașaport) și încarcă o fotografie clară (format `.jpg` sau `.png`, sub 5 MB, fără reflexii de lumină).
+* **Aprobare:** Validarea pentru dezvoltatori individuali se realizează de obicei în 1 – 24 de ore lucrătoare.
+
+---
+
+## 3. Navigarea în AppGallery Connect
+
+După crearea App ID-ului, AppGallery Connect te poate plasa în ecranul de **My Projects** (destinat serviciilor cloud proprietare Huawei HMS Core):
 * **Important:** DayOne Orbit folosește direct backend-ul Supabase prin conexiuni REST/HTTPS (`http.createHttp()`). Prin urmare, **nu sunt necesare servicii HMS Core suplimentare** (Push Kit, Cloud DB, Auth etc.) în secțiunea de proiecte.
 * Pentru încărcarea și distribuția pachetului, zona corectă este **My Apps (Aplicațiile mele)**.
 
 ---
 
-## 3. Semnarea Pachetului în DevEco Studio (Signing Configs)
+## 4. Semnarea Pachetului în DevEco Studio (Signing Configs)
 
 Ceasurile fizice și platforma AppGallery acceptă doar pachete semnate cu certificatul de dezvoltator Huawei asociat contului tău.
 
@@ -39,7 +68,7 @@ Ceasurile fizice și platforma AppGallery acceptă doar pachete semnate cu certi
 
 ---
 
-## 4. Compilarea Pachetului (.hap / .app)
+## 5. Compilarea Pachetului (.hap / .app)
 
 1. În **DevEco Studio**, mergi în meniul de sus la:
    * **Build** $\rightarrow$ **Build Hap(s)/APP(s)** $\rightarrow$ **Build Hap(s)** (sau **Build App(s)**).
@@ -50,7 +79,7 @@ Ceasurile fizice și platforma AppGallery acceptă doar pachete semnate cu certi
 
 ---
 
-## 5. Încărcarea în AppGallery Connect (Open Testing)
+## 6. Încărcarea în AppGallery Connect (Open Testing)
 
 1. Deschide [AppGallery Connect](https://developer.huawei.com/consumer/en/service/josp/agc/index.html).
 2. Mergi la **My Apps (Aplicațiile mele)** $\rightarrow$ selectează **DayOne Orbit**.
@@ -65,7 +94,7 @@ Ceasurile fizice și platforma AppGallery acceptă doar pachete semnate cu certi
 
 ---
 
-## 6. Instalarea pe Huawei Watch GT 5 Pro
+## 7. Instalarea pe Huawei Watch GT 5 Pro
 
 1. Pe telefonul tău mobil (asociat cu ceasul), deschide aplicația **Huawei Health** (asigură-te că ești autentificat cu contul invitat la testare).
 2. Mergi la tab-ul **Dispozitive (Devices)** $\rightarrow$ selectează **Huawei Watch GT 5 Pro**.
