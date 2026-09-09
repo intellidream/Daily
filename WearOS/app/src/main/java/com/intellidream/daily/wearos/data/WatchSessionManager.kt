@@ -444,9 +444,9 @@ class WatchSessionManager private constructor(private val context: Context) {
 
     /**
      * Registers this device in the persistent paired_watches table after a successful
-     * pairing. Checks for an existing desktop-created placeholder (e.g. device_name == "Wear OS")
-     * and adopts/updates it instead of blindly inserting a duplicate. Also deactivates any other
-     * stale WearOS records for this user.
+     * pairing. Checks for an existing desktop-created placeholder (device_name == "Wear OS" or "Watch")
+     * and adopts/updates it instead of blindly inserting a duplicate.
+     * Never deactivates or modifies other paired devices, allowing multiple simultaneous watches.
      */
     private suspend fun registerPairing(accessToken: String, userId: String) {
         try {
@@ -468,9 +468,9 @@ class WatchSessionManager private constructor(private val context: Context) {
 
             var adoptedId: String? = null
 
-            // Step 1: Check if desktop (or previous session) already created an active row for this user/platform
+            // Step 1: Check if desktop created an active placeholder row ("Wear OS" or "Watch")
             try {
-                val queryUrl = "$supabaseUrl/rest/v1/paired_watches?user_id=eq.$userId&platform=eq.wearos&is_active=eq.true&order=paired_at.desc&limit=5"
+                val queryUrl = "$supabaseUrl/rest/v1/paired_watches?user_id=eq.$userId&platform=eq.wearos&or=(device_name.eq.Wear%20OS,device_name.eq.Watch)&is_active=eq.true&order=paired_at.desc&limit=1"
                 val checkResp = client.request(queryUrl) {
                     method = io.ktor.http.HttpMethod.Get
                     header("Authorization", "Bearer $accessToken")
@@ -481,47 +481,37 @@ class WatchSessionManager private constructor(private val context: Context) {
                 if (checkResp.status.value in 200..299) {
                     val respText = checkResp.bodyAsText()
                     val jsonArray = kotlinx.serialization.json.Json.parseToJsonElement(respText) as? kotlinx.serialization.json.JsonArray
-                    if (jsonArray != null && jsonArray.isNotEmpty()) {
-                        // Look for a desktop-created placeholder (e.g. device_name == "Wear OS" or "Watch")
-                        // or any active wearos record created recently
-                        val candidate = jsonArray.firstOrNull { elem ->
-                            val obj = elem as? kotlinx.serialization.json.JsonObject
-                            val name = obj?.get("device_name")?.jsonPrimitive?.content ?: ""
-                            name == "Wear OS" || name == "Watch" || name == deviceName
-                        } ?: jsonArray.firstOrNull() as? kotlinx.serialization.json.JsonObject
+                    val placeholderObj = jsonArray?.firstOrNull() as? kotlinx.serialization.json.JsonObject
+                    val id = placeholderObj?.get("id")?.jsonPrimitive?.content
+                    if (!id.isNullOrEmpty()) {
+                        adoptedId = id
+                        android.util.Log.i("WatchSessionManager", "Adopting desktop placeholder paired_watch: $id")
 
-                        val candidateObj = candidate as? kotlinx.serialization.json.JsonObject
-                        val id = candidateObj?.get("id")?.jsonPrimitive?.content
-                        if (id != null) {
-                            adoptedId = id
-                            android.util.Log.i("WatchSessionManager", "Adopting existing paired_watch record: $id")
-
-                            // Update this existing record with actual device name and current timestamp
-                            val patchUrl = "$supabaseUrl/rest/v1/paired_watches?id=eq.$id"
-                            val patchBody = """
-                                {
-                                    "device_name": "$deviceName",
-                                    "last_token_push": "$nowStr"
-                                }
-                            """.trimIndent()
-
-                            client.request(patchUrl) {
-                                method = io.ktor.http.HttpMethod.Patch
-                                header("Authorization", "Bearer $accessToken")
-                                header("apikey", supabaseAnonKey)
-                                contentType(io.ktor.http.ContentType.Application.Json)
-                                setBody(patchBody)
+                        // Update this placeholder with actual device model name and timestamp
+                        val patchUrl = "$supabaseUrl/rest/v1/paired_watches?id=eq.$id"
+                        val patchBody = """
+                            {
+                                "device_name": "$deviceName",
+                                "last_token_push": "$nowStr"
                             }
+                        """.trimIndent()
 
-                            prefs.edit().putString(KEY_PAIRED_WATCH_ID, id).apply()
+                        client.request(patchUrl) {
+                            method = io.ktor.http.HttpMethod.Patch
+                            header("Authorization", "Bearer $accessToken")
+                            header("apikey", supabaseAnonKey)
+                            contentType(io.ktor.http.ContentType.Application.Json)
+                            setBody(patchBody)
                         }
+
+                        prefs.edit().putString(KEY_PAIRED_WATCH_ID, id).apply()
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.w("WatchSessionManager", "Error checking for existing paired_watch: ${e.message}")
+                android.util.Log.w("WatchSessionManager", "Error checking for existing paired_watch placeholder: ${e.message}")
             }
 
-            // Step 2: If no existing record was found to adopt, insert a new record
+            // Step 2: If no desktop placeholder was found, insert a new record for this device
             if (adoptedId == null) {
                 val jsonBody = """
                     {
@@ -548,29 +538,14 @@ class WatchSessionManager private constructor(private val context: Context) {
                     val firstObj = jsonArray?.firstOrNull() as? kotlinx.serialization.json.JsonObject
                     val id = firstObj?.get("id")?.jsonPrimitive?.content
 
-                    if (id != null) {
-                        adoptedId = id
+                    if (!id.isNullOrEmpty()) {
                         prefs.edit().putString(KEY_PAIRED_WATCH_ID, id).apply()
                         android.util.Log.i("WatchSessionManager", "Inserted new paired_watch record: $id")
                     }
                 }
             }
 
-            // Step 3: Deactivate any other active wearos records for this user to eliminate duplicate orphans
-            if (adoptedId != null) {
-                try {
-                    val cleanupUrl = "$supabaseUrl/rest/v1/paired_watches?user_id=eq.$userId&platform=eq.wearos&id=neq.$adoptedId&is_active=eq.true"
-                    client.request(cleanupUrl) {
-                        method = io.ktor.http.HttpMethod.Patch
-                        header("Authorization", "Bearer $accessToken")
-                        header("apikey", supabaseAnonKey)
-                        contentType(io.ktor.http.ContentType.Application.Json)
-                        setBody("""{"is_active": false}""")
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.w("WatchSessionManager", "Error deactivating duplicate paired_watches: ${e.message}")
-                }
-            }
+            // Note: Never deactivate other devices. Multiple watches can be paired simultaneously.
 
             client.close()
         } catch (e: Exception) {
@@ -591,8 +566,8 @@ class WatchSessionManager private constructor(private val context: Context) {
                 .select { filter { eq("id", pairedWatchId) } }
                 .decodeList<PairedWatch>()
 
-            val record = records.firstOrNull()
-            if (record == null || record.is_active == false) {
+            val record = records.firstOrNull() ?: return
+            if (record.is_active == false) {
                 android.util.Log.i("WatchSessionManager", "Remote unpair detected from paired_watches. Logging out.")
                 logout()
                 return

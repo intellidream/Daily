@@ -249,12 +249,12 @@ When pairing the WearOS watch application with DayOne Desktop/Mobile, the pairin
   - `WatchSessionManager.kt` executed a blind `POST` without checking if an active pairing placeholder was already created for that `user_id` and `platform = "wearos"`.
 - **Solution**:
   - In `WatchSessionManager.kt` (`registerPairing`):
-    1. **Adoption Pattern**: Before inserting, queries `/rest/v1/paired_watches?user_id=eq.$userId&platform=eq.wearos&is_active=eq.true&order=paired_at.desc&limit=5`. If an active placeholder exists (e.g. `device_name in ("Wear OS", "Watch", deviceName)`), WearOS adopts its `id` instead of inserting a duplicate.
-    2. **Hardware Metadata Upgrade**: Sends a `PATCH` to `/rest/v1/paired_watches?id=eq.$adoptedId` with `{ "device_name": "$deviceName", "last_token_push": "$now" }`, upgrading the generic `"Wear OS"` label to the hardware device model (`"OPWWE251"` / `"sdk_gwear_arm64"`) and recording the pairing timestamp.
-    3. **Cleanup of Stale Duplicates**: Sends a `PATCH` to deactivate (`is_active = false`) any other active rows matching `platform = "wearos"` and `id != adoptedId` for this user, eliminating legacy orphaned duplicates from previous pairing attempts.
-    4. **Fallback Creation**: If no existing record is found, cleanly inserts a new record with `last_token_push = now()`.
+    1. **Safe Adoption Pattern**: Before inserting, queries `/rest/v1/paired_watches?user_id=eq.$userId&platform=eq.wearos&or=(device_name.eq.Wear%20OS,device_name.eq.Watch)&is_active=eq.true&order=paired_at.desc&limit=1`. It strictly targets generic desktop-created placeholders (`"Wear OS"` or `"Watch"`).
+    2. **Hardware Metadata Upgrade**: Sends a `PATCH` to `/rest/v1/paired_watches?id=eq.$adoptedId` with `{ "device_name": "$deviceName", "last_token_push": "$now" }`, upgrading the generic placeholder label to the actual hardware model (`"OPWWE251"` / `"sdk_gwear_arm64"`) and recording the pairing timestamp.
+    3. **Preservation of Other Active Watches (Simultaneous Multi-Device Support)**: Removed destructive deactivations of other watches. Since existing active watches already have their `device_name` changed to their model name, they are never matched or modified during new pairings. Multiple WearOS devices (e.g., OnePlus Watch 2 and the emulator) can coexist simultaneously.
+    4. **Fallback Creation**: If no desktop placeholder was created, cleanly inserts a new record with `device_name = Build.MODEL`, `is_active = true`, and `last_token_push = now()`.
   - In `WatchSessionManager.kt` (`checkForRepairTokens`):
-    - Added remote unpair detection: if the watch record is deleted (`records.isEmpty()`) or marked `is_active == false`, WearOS immediately logs out, clears local credentials, and returns to the PIN pairing screen.
+    - Remote unpair parity: only triggers logout if the device's record explicitly exists with `is_active == false` (`record != null && record.is_active == false`), matching watchOS behavior and avoiding unintended logouts.
     - Allowed repair token recovery when `pending_access_token` is present even if `pending_refresh_token` is empty string (matching DayOne Desktop's long-lived token architecture).
   - In `FeaturesPage.xaml.cs` (WinUI) and `Settings.razor` (Blazor):
     - Initialized `LastTokenPush = DateTime.UtcNow` upon creating `PairedWatch` rows.
