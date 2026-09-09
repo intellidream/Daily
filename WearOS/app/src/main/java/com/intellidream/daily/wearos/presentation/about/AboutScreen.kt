@@ -71,25 +71,18 @@ fun AboutScreen(
         try {
             val prefs = context.getSharedPreferences(WatchSessionManager.PREFS_NAME, Context.MODE_PRIVATE)
             val lastSyncStr = prefs.getString(WatchSessionManager.KEY_LAST_HEALTH_SYNC, null)
+            val lastSyncStatus = prefs.getString(WatchSessionManager.KEY_LAST_HEALTH_SYNC_STATUS, null)
             val lastSyncTime = lastSyncStr?.toLongOrNull() ?: 0L
-            if (lastSyncTime > 0) {
-                val cal = Calendar.getInstance()
-                val syncCal = Calendar.getInstance().apply { timeInMillis = lastSyncTime }
-                val isToday = cal.get(Calendar.YEAR) == syncCal.get(Calendar.YEAR) &&
-                        cal.get(Calendar.DAY_OF_YEAR) == syncCal.get(Calendar.DAY_OF_YEAR)
-                val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-                val timeStr = timeFmt.format(Date(lastSyncTime))
-                if (isToday) {
-                    syncText = "synced at $timeStr"
-                    syncColor = Color(0xFFFFCC00)
-                } else {
-                    val dateFmt = SimpleDateFormat("d MMM", Locale.getDefault())
-                    val dateStr = dateFmt.format(Date(lastSyncTime))
-                    syncText = "synced at $timeStr, $dateStr"
-                    syncColor = Color(0xFFFFCC00)
-                }
+            if (lastSyncStatus == "no_new_data") {
+                syncText = "No New Data"
+                syncColor = Color(0xFFFFCC00)
+            } else if (lastSyncTime > 0) {
+                val fmt = SimpleDateFormat("d MMM, HH:mm:ss", Locale.getDefault())
+                val dtStr = fmt.format(Date(lastSyncTime))
+                syncText = "Synced at $dtStr"
+                syncColor = Color(0xFFFFCC00)
             } else {
-                syncText = "not synced"
+                syncText = "Not Synced"
                 syncColor = Color(0xFFFF3B30)
             }
         } catch (_: Exception) {}

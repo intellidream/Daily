@@ -305,8 +305,7 @@ Page(
           const y = startY + index * (cardH + cardSpacing)
           
           let icon = '💧'
-          let displayType = 'Water'
-          let val = Math.round(item.value) || 0
+          let val = Math.max(1, Math.round(item.value || 1))
 
           if (isWater) {
             const isCoffee = (item.type || '').includes('Coffee')
@@ -316,10 +315,11 @@ Page(
           } else {
             const isHeat = (item.type || '').includes('Heat') || (item.type || '').includes('Vape')
             icon = isHeat ? '⚡' : '🔥'
-            displayType = isHeat ? 'Heat' : 'Cig'
+            const baseType = isHeat ? 'Heated Tobacco' : 'Cigarette'
+            displayType = val > 1 ? `${val}× ${baseType}` : baseType
           }
 
-          const titleStr = isWater ? `${val} ml ${displayType}` : `${val} ${displayType}`
+          const titleStr = isWater ? `${val} ml ${displayType}` : displayType
           const timeStr = formatTime(item.logged_at)
 
           // Card Background

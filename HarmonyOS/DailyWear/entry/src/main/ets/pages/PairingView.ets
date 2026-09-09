@@ -102,7 +102,7 @@ export struct PairingView {
               .height(14)
               .color('#888888')
 
-            Text('Waiting for authorization...')
+            Text('Waiting for authorization…')
               .fontSize(9)
               .fontColor('#888888')
               .margin({ left: 4 })

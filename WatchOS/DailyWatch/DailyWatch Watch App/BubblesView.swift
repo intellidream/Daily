@@ -279,6 +279,7 @@ struct BubblesView: View {
                     if self.dayOffset == 0 {
                         self.saveCache()
                     }
+                    WKInterfaceDevice.current().play(.success)
                 }
             } catch {
                 DispatchQueue.main.async {

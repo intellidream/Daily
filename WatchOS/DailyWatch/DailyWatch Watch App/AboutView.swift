@@ -1,30 +1,23 @@
 import SwiftUI
 import WatchKit
-
 struct AboutView: View {
     @StateObject private var sessionManager = WatchSessionManager.shared
     @State private var showUnpairConfirmation: Bool = false
     @State private var lastHealthSyncTime: Double = UserDefaults.standard.double(forKey: "last_health_sync_time")
+    @State private var lastHealthSyncStatus: String = UserDefaults.standard.string(forKey: "last_health_sync_status") ?? ""
     
     private var healthSyncStatusText: (text: String, color: Color) {
+        if lastHealthSyncStatus == "no_new_data" {
+            return ("No New Data", .yellow)
+        }
         guard lastHealthSyncTime > 0 else {
-            return ("not synced", .red)
+            return ("Not Synced", .red)
         }
         
         let date = Date(timeIntervalSince1970: lastHealthSyncTime)
-        let calendar = Calendar.current
-        
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "HH:mm"
-        let timeStr = timeFormatter.string(from: date)
-        
-        if calendar.isDateInToday(date) {
-            return ("synced at \(timeStr)", .yellow)
-        } else {
-            let dayFormatter = DateFormatter()
-            dayFormatter.dateFormat = "d MMM"
-            return ("synced at \(timeStr), \(dayFormatter.string(from: date))", .yellow)
-        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM, HH:mm:ss"
+        return ("Synced at \(formatter.string(from: date))", .yellow)
     }
     
     var body: some View {
@@ -106,6 +99,7 @@ struct AboutView: View {
         }
         .onAppear {
             lastHealthSyncTime = UserDefaults.standard.double(forKey: "last_health_sync_time")
+            lastHealthSyncStatus = UserDefaults.standard.string(forKey: "last_health_sync_status") ?? ""
         }
         .confirmationDialog(
             "Are you sure you want to unpair this Apple Watch? You will need to pair it again with a PIN.",

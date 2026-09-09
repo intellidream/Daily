@@ -16,25 +16,23 @@ export struct AboutView {
   }
 
   private async updateSyncStatus(): Promise<void> {
+    const status = await WatchSessionManager.getInstance().getLastHealthSyncStatus();
     const timeMs = await WatchSessionManager.getInstance().getLastHealthSyncTime();
-    if (timeMs > 0) {
+    if (status === 'no_new_data') {
+      this.syncText = 'No New Data';
+      this.syncColor = '#FFCC00';
+    } else if (timeMs > 0) {
       const d = new Date(timeMs);
-      const today = new Date();
-      const isToday = d.getFullYear() === today.getFullYear() &&
-        d.getMonth() === today.getMonth() &&
-        d.getDate() === today.getDate();
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const dateStr = `${d.getDate()} ${months[d.getMonth()]}`;
       const h = d.getHours().toString().padStart(2, '0');
       const m = d.getMinutes().toString().padStart(2, '0');
-      const timeStr = `${h}:${m}`;
-      if (isToday) {
-        this.syncText = `synced at ${timeStr}`;
-      } else {
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        this.syncText = `synced at ${timeStr}, ${d.getDate()} ${months[d.getMonth()]}`;
-      }
+      const s = d.getSeconds().toString().padStart(2, '0');
+      const timeStr = `${h}:${m}:${s}`;
+      this.syncText = `Synced at ${dateStr}, ${timeStr}`;
       this.syncColor = '#FFCC00';
     } else {
-      this.syncText = 'not synced';
+      this.syncText = 'Not Synced';
       this.syncColor = '#FF3B30';
     }
   }

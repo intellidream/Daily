@@ -104,7 +104,7 @@ fun PairingScreen(sessionManager: WatchSessionManager) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
                 Spacer(modifier = Modifier.size(4.dp))
-                Text("Waiting for authorization...", fontSize = 9.sp, color = Color.Gray)
+                Text("Waiting for authorization…", fontSize = 9.sp, color = Color.Gray)
             }
             Spacer(modifier = Modifier.height(6.dp))
             Button(

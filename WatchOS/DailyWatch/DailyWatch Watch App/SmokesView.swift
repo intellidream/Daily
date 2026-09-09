@@ -154,14 +154,17 @@ struct SmokesView: View {
                         
                         ForEach(historyLogs) { log in
                             HStack {
+                                let count = max(1, Int(log.value))
                                 let type = parseMetadata(log.metadata)?["type"] ?? "Cigarette"
                                 let isHeat = type.contains("Heat") || type.contains("Vape")
+                                let baseType = isHeat ? "Heated Tobacco" : "Cigarette"
+                                let displayType = count > 1 ? "\(count)× \(baseType)" : baseType
                                 
                                 Image(systemName: isHeat ? "bolt.fill" : "flame.fill")
                                     .foregroundColor(isHeat ? .blue : .red)
                                     .font(.system(size: 11))
                                 
-                                Text(isHeat ? "Heated Tobacco" : "Cigarette")
+                                Text(displayType)
                                     .font(.system(size: 11, weight: .medium, design: .rounded))
                                 Spacer()
                                 Text(formatTime(dateString: log.logged_at))
@@ -193,6 +196,13 @@ struct SmokesView: View {
                 deleteLog(log)
             }
             Button("Cancel", role: .cancel) {}
+        } message: { log in
+            let count = max(1, Int(log.value))
+            let type = parseMetadata(log.metadata)?["type"] ?? "Cigarette"
+            let isHeat = type.contains("Heat") || type.contains("Vape")
+            let baseType = isHeat ? "Heated Tobacco" : "Cigarette"
+            let displayType = count > 1 ? "\(count)× \(baseType)" : baseType
+            Text("Delete \(displayType) entry?")
         }
         .onAppear {
             loadCache()
@@ -276,6 +286,7 @@ struct SmokesView: View {
                     if self.dayOffset == 0 {
                         self.saveCache()
                     }
+                    WKInterfaceDevice.current().play(.success)
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -362,12 +373,13 @@ struct SmokesView: View {
     private func deleteLog(_ log: HabitLog) {
         guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
         
+        let count = max(1, Int(log.value))
         let isHeat = (parseMetadata(log.metadata)?["type"] ?? "").contains("Heat")
-        dayTotal = max(0, dayTotal - 1)
+        dayTotal = max(0, dayTotal - count)
         if isHeat {
-            dayHeat = max(0, dayHeat - 1)
+            dayHeat = max(0, dayHeat - count)
         } else {
-            dayCig = max(0, dayCig - 1)
+            dayCig = max(0, dayCig - count)
         }
         historyLogs.removeAll { $0.id == log.id }
         

@@ -1092,10 +1092,23 @@ Page(
                 color: 0xaaaaaa, text_size: cfg.about.verSize, align_h: align.CENTER_H, align_v: align.CENTER_V, text: 'v1.0'
              })
              
-             debugText = createWidget(widget.TEXT, {
-                x: cfg.about.debug.x, y: h*4 + cfg.about.debug.y, w: cfg.about.debug.w, h: cfg.about.debug.h,
-                color: 0xffa500, text_size: cfg.about.debug.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: 'Waiting for health sync...'
-             })
+              let initialHealthText = 'Health: Not Synced'
+              try {
+                const tStr = loadFileStr('telemetry_cache.json')
+                if (tStr) {
+                  const tc = JSON.parse(tStr)
+                  if (tc.last_sync_status === 'no_new_data') {
+                    initialHealthText = 'Health: No New Data'
+                  } else if (tc.last_sync_time) {
+                    initialHealthText = `Health: Synced at ${tc.last_sync_time}`
+                  }
+                }
+              } catch(e) {}
+
+              debugText = createWidget(widget.TEXT, {
+                 x: cfg.about.debug.x, y: h*4 + cfg.about.debug.y, w: cfg.about.debug.w, h: cfg.about.debug.h,
+                 color: 0xffa500, text_size: cfg.about.debug.text_size, align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.WRAP, text: initialHealthText
+              })
              
              createWidget(widget.BUTTON, {
                 x: cfg.about.unpairBtn.x, y: h*4 + cfg.about.unpairBtn.y, w: cfg.about.unpairBtn.w, h: cfg.about.unpairBtn.h, radius: cfg.about.unpairBtn.radius,
@@ -1239,35 +1252,44 @@ Page(
                         method: 'SYNC_TELEMETRY',
                         params: { access_token: accessToken, user_id: userId, telemetry: payload }
                     }).then(res => {
-                        const d = new Date()
-                        const timeStr = d.getHours() + ':' + (d.getMinutes()<10?'0':'') + d.getMinutes()
-                        if (res && res.success) {
-                            if (hrLast > 0) tCache.heart_rate = hrLast
-                            if (stepCount > 0) tCache.steps = stepCount
-                            if (calCount > 0) tCache.active_energy = calCount
-                            if (boLast > 0) tCache.blood_oxygen = boLast
-                            if (stressVal > 0) tCache.stress = stressVal
-                            if (paiVal > 0) tCache.pai = paiVal
-                            payload.forEach(p => {
-                               if (p.type.startsWith('sleep_')) tCache.sleep_keys.push(`${p.start_time}-${p.end_time}-${p.type}`)
-                            })
-                            if (tCache.sleep_keys.length > 100) tCache.sleep_keys = tCache.sleep_keys.slice(-100)
-                            try { saveFileStr('telemetry_cache.json', JSON.stringify(tCache)) } catch(e) {}
-                            
-                            if (debugText) debugText.setProperty(prop.TEXT, `Health: synced at ${timeStr}`)
-                        } else {
-                            if (debugText) debugText.setProperty(prop.TEXT, `Sync Failed: ${(res && res.error) ? res.error : 'Unknown'}`)
-                        }
-                        setSyncing(false)
-                    }).catch(e => {
-                        logger.error('Telemetry push failed', e)
-                        if (debugText) debugText.setProperty(prop.TEXT, `Sync err: ${e}`)
-                        setSyncing(false)
-                    })
-                } else {
-                    if (debugText) debugText.setProperty(prop.TEXT, 'No new sensor data')
-                    setSyncing(false)
-                }
+                         const d = new Date()
+                         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                         const dateStr = `${d.getDate()} ${months[d.getMonth()]}`
+                         const h = String(d.getHours()).padStart(2, '0')
+                         const m = String(d.getMinutes()).padStart(2, '0')
+                         const s = String(d.getSeconds()).padStart(2, '0')
+                         const dtStr = `${dateStr}, ${h}:${m}:${s}`
+                         if (res && res.success) {
+                             if (hrLast > 0) tCache.heart_rate = hrLast
+                             if (stepCount > 0) tCache.steps = stepCount
+                             if (calCount > 0) tCache.active_energy = calCount
+                             if (boLast > 0) tCache.blood_oxygen = boLast
+                             if (stressVal > 0) tCache.stress = stressVal
+                             if (paiVal > 0) tCache.pai = paiVal
+                             payload.forEach(p => {
+                                if (p.type.startsWith('sleep_')) tCache.sleep_keys.push(`${p.start_time}-${p.end_time}-${p.type}`)
+                             })
+                             if (tCache.sleep_keys.length > 100) tCache.sleep_keys = tCache.sleep_keys.slice(-100)
+                             tCache.last_sync_time = dtStr
+                             tCache.last_sync_status = 'synced'
+                             try { saveFileStr('telemetry_cache.json', JSON.stringify(tCache)) } catch(e) {}
+                             
+                             if (debugText) debugText.setProperty(prop.TEXT, `Health: Synced at ${dtStr}`)
+                         } else {
+                             if (debugText) debugText.setProperty(prop.TEXT, `Sync Failed: ${(res && res.error) ? res.error : 'Unknown'}`)
+                         }
+                         setSyncing(false)
+                     }).catch(e => {
+                         logger.error('Telemetry push failed', e)
+                         if (debugText) debugText.setProperty(prop.TEXT, `Sync err: ${e}`)
+                         setSyncing(false)
+                     })
+                 } else {
+                     tCache.last_sync_status = 'no_new_data'
+                     try { saveFileStr('telemetry_cache.json', JSON.stringify(tCache)) } catch(e) {}
+                     if (debugText) debugText.setProperty(prop.TEXT, 'Health: No New Data')
+                     setSyncing(false)
+                 }
              } catch(err) {
                  logger.error('Sensor read failed', err)
                  if (debugText) debugText.setProperty(prop.TEXT, `Read err: ${err}`)
@@ -1309,7 +1331,7 @@ Page(
                 return
               }
 
-              statusText.setProperty(prop.TEXT, 'Enter PIN in DayOne to link')
+              statusText.setProperty(prop.TEXT, 'Waiting for authorization…')
               let attempts = 0;
               const pollTimer = setInterval(() => {
                 this.request({ method: 'POLL_WATCH', params: { pin } }).then(pollRes => {

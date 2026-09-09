@@ -46,6 +46,7 @@ class WatchSessionManager private constructor(private val context: Context) {
         const val KEY_WATER_TOTAL = "daily_water_total"
         const val KEY_SMOKES_TOTAL = "daily_smokes_total"
         const val KEY_LAST_HEALTH_SYNC = "last_health_sync_time"
+        const val KEY_LAST_HEALTH_SYNC_STATUS = "last_health_sync_status"
 
         @Volatile
         private var instance: WatchSessionManager? = null
@@ -101,9 +102,16 @@ class WatchSessionManager private constructor(private val context: Context) {
     private val _dataRefreshTrigger = MutableStateFlow(0)
     val dataRefreshTrigger: StateFlow<Int> = _dataRefreshTrigger
 
-    fun recordHealthSync() {
+    fun recordHealthSync(status: String = "synced") {
         val now = System.currentTimeMillis()
-        prefs.edit().putString(KEY_LAST_HEALTH_SYNC, now.toString()).apply()
+        prefs.edit()
+            .putString(KEY_LAST_HEALTH_SYNC, now.toString())
+            .putString(KEY_LAST_HEALTH_SYNC_STATUS, status)
+            .apply()
+    }
+
+    fun recordHealthSyncNoNewData() {
+        prefs.edit().putString(KEY_LAST_HEALTH_SYNC_STATUS, "no_new_data").apply()
     }
 
     fun persistWaterTotal(water: Int) {

@@ -63,11 +63,12 @@ export struct SmokesView {
     let cig = 0;
     let heat = 0;
     for (const log of this.dayLogs) {
+      const count = Math.max(1, Math.round(log.value ?? 1));
       const type = this.getSmokeType(log);
       if (type === 'Heated Tobacco') {
-        heat += 1;
+        heat += count;
       } else {
-        cig += 1;
+        cig += count;
       }
     }
     this.cigTotal = cig;
@@ -137,10 +138,12 @@ export struct SmokesView {
 
   private showDeleteConfirm(log: SupabaseHabitLog): void {
     this.triggerHaptic();
+    const count = Math.max(1, Math.round(log.value ?? 1));
     const typeName = this.getSmokeType(log);
+    const displayType = count > 1 ? `${count}× ${typeName}` : `1 ${typeName}`;
     this.getUIContext().showAlertDialog({
       title: 'Delete Log?',
-      message: `Delete 1 ${typeName} entry?`,
+      message: `Delete ${displayType} entry?`,
       buttonDirection: DialogButtonDirection.VERTICAL,
       buttons: [
         {
@@ -322,7 +325,7 @@ export struct SmokesView {
                 .margin({ right: 6 })
 
               Column() {
-                Text(`1 ${this.getSmokeType(log) === 'Heated Tobacco' ? 'Heat' : 'Cig'}`)
+                Text(`${Math.max(1, Math.round(log.value ?? 1)) > 1 ? `${Math.max(1, Math.round(log.value ?? 1))}× ` : ''}${this.getSmokeType(log) === 'Heated Tobacco' ? 'Heat' : 'Cig'}`)
                   .fontSize(11)
                   .fontWeight(FontWeight.Medium)
                   .fontColor('#FFFFFF')

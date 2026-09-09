@@ -13,6 +13,7 @@ const REFRESH_TOKEN_KEY = 'supabase_refresh_token';
 const USER_ID_KEY = 'supabase_user_id';
 const PAIRED_WATCH_ID_KEY = 'paired_watch_id';
 const LAST_HEALTH_SYNC_KEY = 'last_health_sync_time';
+const LAST_HEALTH_SYNC_STATUS_KEY = 'last_health_sync_status';
 
 export class WatchSessionManager {
   private static instance: WatchSessionManager | null = null;
@@ -282,6 +283,23 @@ export class WatchSessionManager {
       return (await this.pref.get(LAST_HEALTH_SYNC_KEY, 0)) as number;
     } catch (_e) {
       return 0;
+    }
+  }
+
+  public async setLastHealthSyncStatus(status: string): Promise<void> {
+    if (!this.pref) return;
+    try {
+      await this.pref.put(LAST_HEALTH_SYNC_STATUS_KEY, status);
+      await this.pref.flush();
+    } catch (_e) {}
+  }
+
+  public async getLastHealthSyncStatus(): Promise<string> {
+    if (!this.pref) return '';
+    try {
+      return (await this.pref.get(LAST_HEALTH_SYNC_STATUS_KEY, '')) as string;
+    } catch (_e) {
+      return '';
     }
   }
 

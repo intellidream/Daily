@@ -148,6 +148,10 @@ class HealthTelemetryManager {
         
         guard !allPayloads.isEmpty else {
             os_log("No new telemetry data to sync.", type: .info)
+            UserDefaults.standard.set("no_new_data", forKey: "last_health_sync_status")
+            if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
+                groupPrefs.set("no_new_data", forKey: "last_health_sync_status")
+            }
             return
         }
         
@@ -159,8 +163,10 @@ class HealthTelemetryManager {
             
             let syncTimestamp = Date().timeIntervalSince1970
             UserDefaults.standard.set(syncTimestamp, forKey: "last_health_sync_time")
+            UserDefaults.standard.set("synced", forKey: "last_health_sync_status")
             if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
                 groupPrefs.set(syncTimestamp, forKey: "last_health_sync_time")
+                groupPrefs.set("synced", forKey: "last_health_sync_status")
             }
             
             // Only advance anchors AFTER successful upload to ensure zero data loss

@@ -146,14 +146,20 @@ Both WearOS and HarmonyOS utilize the exact same handshake channel established b
 
 ## 8. Universal Health Sync Timestamp Format
 
-All 4 platforms now adhere to the unified sync status string:
+All 4 platforms now adhere to the unified sync status strings (Title Case for each word, no trailing period):
 ```text
-Health: synced at [DateTime]
+Health: Synced at [DateTime]
+Health: Not Synced
+Health: No New Data
 ```
-- For same-day synchronization: `Health: synced at HH:mm` (e.g., `Health: synced at 14:32`).
-- For previous-day synchronization: `Health: synced at HH:mm, d MMM` (e.g., `Health: synced at 14:32, 9 Sep`).
-- If never synced: `Health: not synced` (styled in warning/error red).
-- Unified on ZeppOS (`debugText`), WearOS (`AboutScreen`), HarmonyOS (`AboutView`), and watchOS (`AboutView`).
+- Where `[DateTime]` is formatted with both date and time down to seconds: `d MMM, HH:mm:ss` (e.g., `9 Sep, 19:15:32`).
+- If never synced: `Health: Not Synced` (styled in warning/error red).
+- If background sync executed but no new sensors/samples were recorded: `Health: No New Data` (styled in yellow/gold).
+- Unified across:
+  - **Apple watchOS**: `AboutView.swift` (`Health:` label + status value).
+  - **Amazfit ZeppOS**: `page/index.js` (`debugText` widget).
+  - **Google WearOS**: `AboutScreen.kt` (`Health:` row + `syncText`).
+  - **Huawei HarmonyOS**: `AboutView.ets` (`Health:` row + `syncText`).
 
 ---
 
@@ -307,4 +313,40 @@ When pairing the WearOS watch application with DayOne Desktop/Mobile, the pairin
      ]
      ```
    - Cu dispunerea verticală, butoanele ocupă întreaga lățime a dialogului, afișând complet și lizibil cuvintele `Delete` / `Unpair` și `Cancel`.
+
+---
+
+## 9. Rafinări Ecosistem: Intrări Multiple Smokes, Haptics watchOS & Mesaje Unificate
+
+### 1. Suport Complet pentru Intrări Multiple de Fumat (Multi-Unit Smokes Logs)
+- **Problemă**: Când un utilizator adăuga o intrare cu valoare multiplă (de ex. `value: 13.0` pentru 13 țigări sau heat sticks), unele platforme afișau doar tipul de bază (`1 Heat` sau `Cig`) și la ștergere scădeau doar `1` în loc de întreaga cantitate.
+- **Soluție Transversală**:
+  - **Apple watchOS** (`SmokesView.swift`): extrage `count = max(1, Int(log.value))`; afișează `13× Heated Tobacco` în listă și în dialogul de confirmare; scade `count` complet din `dayTotal` și `dayHeat`/`dayCig` la ștergere.
+  - **Amazfit ZeppOS** (`page/logs.js`): extrage `val = Math.max(1, Math.round(item.value || 1))`; afișează `${val}× Heated Tobacco` sau `Cigarette`; la ștergerea prin `DELETE_HABIT_LOG`, la revenirea în dashboard `refreshDashboard()` reîncarcă totalurile recalculate corect de server.
+  - **Huawei HarmonyOS** (`SmokesView.ets`): în `computeTotals()`, cumulează `count = Math.max(1, Math.round(log.value ?? 1))` pentru `heat` și `cig`; afișează `${count}× Heat/Cig` în listă și în dialogul `showDeleteConfirm`; la ștergere se recalculează totalul fără întreaga intrare.
+  - **Google WearOS** (`SmokesScreen.kt`): extrage `count = maxOf(1, log.value.toInt())`, afișează `13× Heated Tobacco` și scade cantitatea integrală la ștergere.
+
+### 2. Feedback Haptic & Audio pe Apple Watch (watchOS)
+- În `BubblesView.swift` și `SmokesView.swift`, la finalizarea apelului `fetchData()` (care se declanșează atât la refresh-ul ecranului, cât și la navigarea între zile prin chevrons `‹` / `›`), se apelează:
+  ```swift
+  WKInterfaceDevice.current().play(.success)
+  ```
+  producând vibrația haptică și sunetul de confirmare de sistem identic cu cel din graficele săptămânale de 7 zile.
+
+### 3. Mesaj Unificat de Autorizare la Împerechere (Pairing PIN)
+Pe toate cele 4 sisteme de operare, mesajul afișat în timp ce ceasul așteaptă validarea PIN-ului pe PC/Telefon a fost unificat strict la:
+```text
+Waiting for authorization…
+```
+(utilizând caracterul Unicode ellipsis `…` U+2026):
+- **watchOS**: `WatchSessionManager.swift` (`self.pairingStatus = "Waiting for authorization…"`)
+- **WearOS**: `PairingScreen.kt` (`Text("Waiting for authorization…", ...)`)
+- **HarmonyOS**: `PairingView.ets` (`Text('Waiting for authorization…')`)
+- **ZeppOS**: `page/index.js` (`statusText.setProperty(prop.TEXT, 'Waiting for authorization…')`)
+
+### 4. Text Unificat Health Telemetry în Ecranul About
+Textul de stare a sincronizării Health pe toate cele 4 platforme (Title Case pentru fiecare cuvânt, fără punct la final):
+- Sincronizat: `Health: Synced at [DateTime]` (cu dată, oră, minut, secundă, de ex. `9 Sep, 19:15:32`).
+- Niciodată sincronizat: `Health: Not Synced`
+- Nicio dată nouă la scanare: `Health: No New Data`
 

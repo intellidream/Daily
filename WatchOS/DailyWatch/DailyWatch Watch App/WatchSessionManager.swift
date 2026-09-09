@@ -151,12 +151,12 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                 let (_, response) = try await URLSession.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
                     DispatchQueue.main.async {
-                        self.pairingStatus = "Waiting for Daily on PC..."
+                        self.pairingStatus = "Waiting for authorization…"
                         self.startPolling(pin: pin)
                     }
                 } else {
                     DispatchQueue.main.async {
-                        self.pairingStatus = "Waiting for Daily on PC..."
+                        self.pairingStatus = "Waiting for authorization…"
                         // Even if 409 (conflict), we still poll in case it exists
                         self.startPolling(pin: pin)
                     }
