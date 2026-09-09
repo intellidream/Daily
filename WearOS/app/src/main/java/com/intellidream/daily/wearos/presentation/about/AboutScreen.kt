@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,20 +55,19 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun AboutScreen(sessionManager: WatchSessionManager) {
+fun AboutScreen(
+    sessionManager: WatchSessionManager,
+    isPageActive: Boolean = true
+) {
     val context = LocalContext.current
     val view = LocalView.current
     val listState = rememberScalingLazyListState()
     val scope = rememberCoroutineScope()
-    val focusRequester = remember { FocusRequester() }
     var showUnpairDialog by remember { mutableStateOf(false) }
     var syncText by remember { mutableStateOf("synced") }
     var syncColor by remember { mutableStateOf(Color(0xFFFFCC00)) }
 
-    LaunchedEffect(Unit) {
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Exception) {}
+    LaunchedEffect(isPageActive) {
         try {
             val prefs = context.getSharedPreferences(WatchSessionManager.PREFS_NAME, Context.MODE_PRIVATE)
             val lastSyncStr = prefs.getString(WatchSessionManager.KEY_LAST_HEALTH_SYNC, null)
@@ -100,16 +100,7 @@ fun AboutScreen(sessionManager: WatchSessionManager) {
             state = listState,
             autoCentering = null,
             contentPadding = PaddingValues(top = 22.dp, bottom = 28.dp, start = 8.dp, end = 8.dp),
-            modifier = Modifier
-                .fillMaxSize()
-                .focusRequester(focusRequester)
-                .focusable()
-                .onRotaryScrollEvent {
-                    scope.launch {
-                        listState.scrollBy(it.verticalScrollPixels)
-                    }
-                    true
-                },
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             item {
@@ -125,18 +116,26 @@ fun AboutScreen(sessionManager: WatchSessionManager) {
             }
 
             item {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "DayOne Orbit",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = "v1.0",
-                    fontSize = 11.sp,
-                    color = Color.Gray
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "DayOne Orbit",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "v1.0",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
             item {
@@ -195,9 +194,9 @@ fun AboutScreen(sessionManager: WatchSessionManager) {
                         showUnpairDialog = true
                     },
                     modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .height(36.dp),
-                    shape = RoundedCornerShape(8.dp),
+                        .width(128.dp)
+                        .height(32.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(backgroundColor = Color(0x33FF3B30))
                 ) {
                     Text(

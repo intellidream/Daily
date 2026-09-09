@@ -37,14 +37,14 @@ fun TemporalNavHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(30.dp),
+            .height(32.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Previous Button (‹)
         Box(
             modifier = Modifier
-                .size(width = 28.dp, height = 24.dp)
+                .size(width = 36.dp, height = 28.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.White.copy(alpha = 0.12f))
                 .clickable {
@@ -56,8 +56,8 @@ fun TemporalNavHeader(
             Text(
                 text = "‹",
                 color = accentColor,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold
             )
         }
 
@@ -75,7 +75,7 @@ fun TemporalNavHeader(
         if (canGoForward) {
             Box(
                 modifier = Modifier
-                    .size(width = 28.dp, height = 24.dp)
+                    .size(width = 36.dp, height = 28.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color.White.copy(alpha = 0.12f))
                     .clickable {
@@ -87,13 +87,13 @@ fun TemporalNavHeader(
                 Text(
                     text = "›",
                     color = accentColor,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         } else {
             // Invisible placeholder for balanced layout centering
-            Box(modifier = Modifier.size(width = 28.dp, height = 24.dp))
+            Box(modifier = Modifier.size(width = 36.dp, height = 28.dp))
         }
     }
 }

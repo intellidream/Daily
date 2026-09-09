@@ -51,6 +51,7 @@ import java.time.Instant
 import java.time.ZoneId
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
+import com.intellidream.daily.wearos.domain.util.HabitDateParser
 import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.launch
@@ -70,7 +71,10 @@ data class WaterDayBucket(
 }
 
 @Composable
-fun Bubbles7DaysScreen(sessionManager: WatchSessionManager) {
+fun Bubbles7DaysScreen(
+    sessionManager: WatchSessionManager,
+    isPageActive: Boolean = true
+) {
     var weekOffset by remember { mutableIntStateOf(0) }
     var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedBubblesGoal ?: 2000) }
     var buckets by remember { mutableStateOf<List<WaterDayBucket>>(emptyList()) }
@@ -78,14 +82,7 @@ fun Bubbles7DaysScreen(sessionManager: WatchSessionManager) {
 
     val scope = rememberCoroutineScope()
     val listState = rememberScalingLazyListState()
-    val focusRequester = remember { FocusRequester() }
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
-
-    LaunchedEffect(Unit) {
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Exception) {}
-    }
 
     val localDateFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val dayLabelFmt = remember { SimpleDateFormat("EEE", Locale.getDefault()) }
@@ -160,33 +157,39 @@ fun Bubbles7DaysScreen(sessionManager: WatchSessionManager) {
                         filter {
                             eq("habit_type", "water")
                             eq("is_deleted", false)
-                            gte("logged_at", startStr)
-                            lt("logged_at", endStr)
+                            and {
+                                gte("logged_at", startStr)
+                                lt("logged_at", endStr)
+                            }
                         }
                     }.decodeList<HabitLog>()
 
+                android.util.Log.d("Bubbles7Days", "Fetched ${logs.size} logs for week offset $weekOffset (range: $startStr to $endStr)")
+
                 for (log in logs) {
                     try {
-                        val localDate = try {
-                            OffsetDateTime.parse(log.logged_at).atZoneSameInstant(ZoneId.systemDefault()).toLocalDate()
-                        } catch (_: Exception) {
-                            Instant.parse(log.logged_at).atZone(ZoneId.systemDefault()).toLocalDate()
-                        }
-                        val logDateStr = localDate.toString()
-                        val bucket = tempBuckets.find { it.dateStr == logDateStr }
-                        if (bucket != null) {
-                            val isCoffee = log.metadata?.contains("Coffee") == true
-                            if (isCoffee) {
-                                bucket.coffee += log.value
-                            } else {
-                                bucket.water += log.value
+                        val localDate = HabitDateParser.parseToLocalDate(log.logged_at)
+                        if (localDate != null) {
+                            val logDateStr = localDate.toString()
+                            val bucket = tempBuckets.find { it.dateStr == logDateStr }
+                            if (bucket != null) {
+                                val isCoffee = log.metadata?.contains("Coffee", ignoreCase = true) == true
+                                if (isCoffee) {
+                                    bucket.coffee += log.value
+                                } else {
+                                    bucket.water += log.value
+                                }
                             }
                         }
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        android.util.Log.w("Bubbles7Days", "Failed to process log: ${e.message}")
+                    }
                 }
 
                 buckets = tempBuckets
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.e("Bubbles7Days", "Failed to fetch week logs: ${e.message}", e)
                 buckets = tempBuckets
             } finally {
                 isLoading = false
@@ -222,16 +225,7 @@ fun Bubbles7DaysScreen(sessionManager: WatchSessionManager) {
             state = listState,
             autoCentering = null,
             contentPadding = PaddingValues(top = 22.dp, bottom = 28.dp, start = 8.dp, end = 8.dp),
-            modifier = Modifier
-                .fillMaxSize()
-                .focusRequester(focusRequester)
-                .focusable()
-                .onRotaryScrollEvent {
-                    scope.launch {
-                        listState.scrollBy(it.verticalScrollPixels)
-                    }
-                    true
-                },
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header

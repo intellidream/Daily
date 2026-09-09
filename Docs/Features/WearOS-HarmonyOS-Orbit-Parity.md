@@ -173,3 +173,53 @@ When pairing the WearOS watch application with DayOne Desktop/Mobile, the pairin
 2. **Immediate UI State Transition**: In `checkPairingStatus()`, once the token and user ID are verified, `_isAuthenticated.value = true` and `_isPairing.value = false` are updated immediately, allowing the UI to transition seamlessly to the 5-page dashboard without waiting on non-blocking background tasks (`importOrbitSession`, remote record cleanup, or device registration).
 3. **SupervisorJob Coroutine Protection**: Ensured `WatchSessionManager` uses `SupervisorJob() + Dispatchers.IO` so that failures in auxiliary network coroutines never cancel the session management scope.
 
+---
+
+## 9. WearOS Refinements: Last Week Histograms, Rotary Scroll & About Polish
+
+### 1. Last Week Histogram Deserialization Fix
+- **Problem**: When navigating to "Last Week" on both Bubbles and Smokes 7-day screens, the charts rendered 0 bars and 0 averages, despite logs existing in Supabase.
+- **Root Cause**: Earlier logs in Supabase contained raw JSON objects inside the `metadata` column (e.g., `{"drink": "Small Water"}` or `{"type": "Cigarette"}`), unlike newer stringified JSON values (`"{\"drink\":\"...\"}"`). In Kotlinx Serialization, deserializing a JSON object into a `String?` field threw a `JsonDecodingException` which was caught silently, discarding all week logs. Furthermore, legacy timestamps with space separators or fractional microsecond precisions failed standard ISO8601 parsing.
+- **Solution**:
+  - Implemented `FlexibleMetadataSerializer` and `FlexibleDoubleSerializer` on `HabitLog`, dynamically converting `JsonNull`, `JsonPrimitive`, `JsonObject`, and `JsonArray` into safe strings, and accommodating mixed integer/double types.
+  - Created `HabitDateParser.parseToLocalDate` with multi-tier parsing (OffsetDateTime, Instant, and SimpleDateFormat patterns for PostgreSQL timestamps).
+  - Enlarged `TemporalNavHeader` chevron touch targets to 36x28dp with bold 17sp gliphs for effortless tapping on round screens.
+
+### 2. Rotary Crown Multi-Page Focus Fix
+- **Problem**: Physical rotary crown scrolling worked exclusively on the initial page (Bubbles) but did not work when swiping to Smokes (to scroll down to today's logs) or other pages.
+- **Root Cause**: `HorizontalPager` pre-composes adjacent pages. When using `LaunchedEffect(Unit)`, only the initial page requested and maintained rotary focus. As the user navigated horizontally to other pages, the active page never called `focusRequester.requestFocus()`, leaving rotary events captured by page 0 or dropped.
+- **Solution**:
+  - Passed `isPageActive = (pagerState.currentPage == page)` from `DailyWearApp`'s `HorizontalPager` into each screen (`BubblesScreen`, `Bubbles7DaysScreen`, `SmokesScreen`, `Smokes7DaysScreen`, `AboutScreen`).
+  - Added `LaunchedEffect(isPageActive)` in all screens: whenever a screen becomes active, it immediately requests focus via `focusRequester.requestFocus()`, ensuring the rotary crown smoothly scrolls each page's list.
+
+### 3. About Screen Layout & Button Polish
+- **Problem**: The app version `v1.0` was drawn overlapping the title text `DayOne Orbit`, and the "Unpair Watch" button was disproportionately wide across the bottom of the circular display.
+- **Solution**:
+  - Encapsulated `DayOne Orbit` and `v1.0` inside a centered `Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth())` with a 2dp spacer, ensuring `v1.0` is always centered neatly beneath the title.
+  - Refined the "Unpair Watch" button into a sleek, compact pill button with `width(128.dp)`, `height(32.dp)`, and `shape = RoundedCornerShape(16.dp)`, eliminating edge-to-edge stretching on circular watch faces.
+
+---
+
+## 10. WearOS Rotary Coordination & Previous Days Non-Cumulative Isolation Fix
+
+### 1. Rotary Crown Multi-Page Focus Architecture (`HierarchicalFocusCoordinator`)
+- **Problem**: Physical crown rotary scrolling only worked on Page 0 (Bubbles). Swiping to Smokes (Page 2) or Charts (Pages 1 & 3) failed to scroll with the physical crown on hardware devices (OnePlus Watch 2 / `OPWWE251`), despite touch drag working.
+- **Root Cause**:
+  1. `androidx.wear.compose.foundation`'s `ScalingLazyColumn` natively uses `rememberActiveFocusRequester()` for its default rotary behavior (`RotaryScrollableDefaults.behavior(listState)`), which requires a parent `HierarchicalFocusCoordinator` to know which leaf composable is active in a pager hierarchy.
+  2. In `DailyWearApp`, `HorizontalPager` did not declare `HierarchicalFocusCoordinator`. Page 0 retained focus permanently from initial composition, while Page 2 failed to gain focus mid-swipe. Rotary events on Page 2 were dispatched to Page 0 in the background.
+  3. Screens attached conflicting, unregistered manual `FocusRequester` instances and `.onRotaryScrollEvent { ... }` handlers that intercepted rotary input and short-circuited Compose's native rotary fling and haptic behaviors.
+- **Solution**:
+  - Wrapped each page in `HorizontalPager` with `HierarchicalFocusCoordinator(requiresFocus = { pagerState.currentPage == page && !pagerState.isScrollInProgress })`. When a swipe animation settles on a page, focus is cleanly transferred to that page's list while clearing focus from previous pages.
+  - Removed manual `.onRotaryScrollEvent` listeners and manual focus requesters from `BubblesScreen`, `SmokesScreen`, `Bubbles7DaysScreen`, `Smokes7DaysScreen`, and `AboutScreen`, delegating rotary input directly to Wear Compose's built-in `rotaryScrollable` handler with velocity tracking and rotary haptics.
+
+### 2. Previous Days Cumulative Logs Accumulation Fix
+- **Problem**: When navigating to previous days (`dayOffset < 0`) via the temporal chevrons on `BubblesScreen` or `SmokesScreen`, entries appeared cumulative — yesterday displayed yesterday + today; two days ago displayed day -2 + yesterday + today.
+- **Root Cause**:
+  1. `postgrest-kt` 3.0.0 builds query parameters using `params.mapToFirstValue()`, taking only the first item in `List<String>` for a given key. When calling `gte("logged_at", startStr)` followed by `lt("logged_at", endStr)`, both mapped to key `"logged_at"`, causing `mapToFirstValue()` to silently discard `lt(...)`. The network request sent to PostgREST was strictly `logged_at=gte.startStr`, pulling all logs from that past date up to the present.
+  2. `BubblesScreen` and `SmokesScreen` lacked an in-memory local date safeguard, directly calculating totals and populating `dayLogs` with all returned records.
+- **Solution**:
+  - Wrapped timestamp constraints in PostgREST `and { gte("logged_at", startStr); lt("logged_at", endStr) }`, generating PostgREST URL parameter `and=(logged_at.gte.startStr,logged_at.lt.endStr)` where both upper and lower bounds are preserved and evaluated on Supabase.
+  - Formatted timestamps using ISO-8601 UTC strings via `Instant.ofEpochMilli(time).toString()`.
+  - Added strict in-memory local date filtering via `HabitDateParser.parseToLocalDate(log.logged_at)?.toString() == targetDateStr`, guaranteeing 100% mathematical day isolation even in edge cases of network or timezone boundary mismatches.
+
+

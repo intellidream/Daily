@@ -46,6 +46,7 @@ import androidx.wear.compose.material.Text
 import com.intellidream.daily.wearos.data.OfflineSyncManager
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
+import com.intellidream.daily.wearos.domain.util.HabitDateParser
 import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
@@ -53,6 +54,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -73,6 +75,7 @@ import androidx.wear.compose.material.dialog.Dialog
 @Composable
 fun BubblesScreen(
     sessionManager: WatchSessionManager,
+    isPageActive: Boolean = true,
     onOpenLogs: ((habitType: String, dateTitle: String, logs: List<HabitLog>, onDelete: (HabitLog) -> Unit) -> Unit)? = null
 ) {
     var dayOffset by remember { mutableIntStateOf(0) }
@@ -87,7 +90,6 @@ fun BubblesScreen(
 
     val scope = rememberCoroutineScope()
     val listState = rememberScalingLazyListState()
-    val focusRequester = remember { FocusRequester() }
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
     val view = LocalView.current
 
@@ -139,36 +141,50 @@ fun BubblesScreen(
                 cal.set(Calendar.MILLISECOND, 0)
                 cal.add(Calendar.DAY_OF_YEAR, dayOffset)
                 val startOfDay = cal.time
-                val startStr = isoFormat.format(startOfDay)
+                val startStr = Instant.ofEpochMilli(startOfDay.time).toString()
+
+                val targetDayCal = cal.clone() as Calendar
 
                 cal.add(Calendar.DAY_OF_YEAR, 1)
                 val endOfDay = cal.time
-                val endStr = isoFormat.format(endOfDay)
+                val endStr = Instant.ofEpochMilli(endOfDay.time).toString()
 
                 val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
                     .select {
                         filter {
                             eq("habit_type", "water")
                             eq("is_deleted", false)
-                            gte("logged_at", startStr)
-                            lt("logged_at", endStr)
+                            and {
+                                gte("logged_at", startStr)
+                                lt("logged_at", endStr)
+                            }
                         }
                     }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
 
+                val targetDateStr = localFormat.format(targetDayCal.time)
+                val dayOnlyLogs = logs.filter { log ->
+                    try {
+                        val parsed = HabitDateParser.parseToLocalDate(log.logged_at)
+                        parsed?.toString() == targetDateStr
+                    } catch (_: Exception) {
+                        true
+                    }
+                }
+
                 var tWater = 0
                 var tCoffee = 0
-                for (log in logs) {
+                for (log in dayOnlyLogs) {
                     val isCoffee = log.metadata?.contains("Coffee") == true
                     if (isCoffee) tCoffee += log.value.toInt() else tWater += log.value.toInt()
                 }
 
-                dayLogs = logs
+                dayLogs = dayOnlyLogs
                 todayWater = tWater
                 todayCoffee = tCoffee
                 todayTotal = tWater + tCoffee
 
                 if (dayOffset == 0) {
-                    sessionManager.cachedBubblesLogs = logs
+                    sessionManager.cachedBubblesLogs = dayOnlyLogs
                     sessionManager.persistWaterTotal(todayTotal)
                 }
             } catch (e: Exception) {
@@ -257,12 +273,6 @@ fun BubblesScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Exception) {}
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -272,16 +282,7 @@ fun BubblesScreen(
             state = listState,
             autoCentering = null,
             contentPadding = PaddingValues(top = 22.dp, bottom = 28.dp, start = 8.dp, end = 8.dp),
-            modifier = Modifier
-                .fillMaxSize()
-                .onRotaryScrollEvent {
-                    scope.launch {
-                        listState.scrollBy(it.verticalScrollPixels)
-                    }
-                    true
-                }
-                .focusRequester(focusRequester)
-                .focusable(),
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header

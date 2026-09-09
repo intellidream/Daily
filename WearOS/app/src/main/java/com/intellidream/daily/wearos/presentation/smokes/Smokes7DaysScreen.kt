@@ -50,6 +50,7 @@ import java.time.Instant
 import java.time.ZoneId
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
+import com.intellidream.daily.wearos.domain.util.HabitDateParser
 import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.launch
@@ -69,7 +70,10 @@ data class SmokeDayBucket(
 }
 
 @Composable
-fun Smokes7DaysScreen(sessionManager: WatchSessionManager) {
+fun Smokes7DaysScreen(
+    sessionManager: WatchSessionManager,
+    isPageActive: Boolean = true
+) {
     var weekOffset by remember { mutableIntStateOf(0) }
     var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedSmokesGoal ?: 20) }
     var buckets by remember { mutableStateOf<List<SmokeDayBucket>>(emptyList()) }
@@ -77,14 +81,7 @@ fun Smokes7DaysScreen(sessionManager: WatchSessionManager) {
 
     val scope = rememberCoroutineScope()
     val listState = rememberScalingLazyListState()
-    val focusRequester = remember { FocusRequester() }
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
-
-    LaunchedEffect(Unit) {
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Exception) {}
-    }
 
     val localDateFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val dayLabelFmt = remember { SimpleDateFormat("EEE", Locale.getDefault()) }
@@ -159,33 +156,39 @@ fun Smokes7DaysScreen(sessionManager: WatchSessionManager) {
                         filter {
                             eq("habit_type", "smokes")
                             eq("is_deleted", false)
-                            gte("logged_at", startStr)
-                            lt("logged_at", endStr)
+                            and {
+                                gte("logged_at", startStr)
+                                lt("logged_at", endStr)
+                            }
                         }
                     }.decodeList<HabitLog>()
 
+                android.util.Log.d("Smokes7Days", "Fetched ${logs.size} logs for week offset $weekOffset (range: $startStr to $endStr)")
+
                 for (log in logs) {
                     try {
-                        val localDate = try {
-                            OffsetDateTime.parse(log.logged_at).atZoneSameInstant(ZoneId.systemDefault()).toLocalDate()
-                        } catch (_: Exception) {
-                            Instant.parse(log.logged_at).atZone(ZoneId.systemDefault()).toLocalDate()
-                        }
-                        val logDateStr = localDate.toString()
-                        val bucket = tempBuckets.find { it.dateStr == logDateStr }
-                        if (bucket != null) {
-                            val isHeat = log.metadata?.contains("Heated") == true
-                            if (isHeat) {
-                                bucket.heat += log.value
-                            } else {
-                                bucket.cig += log.value
+                        val localDate = HabitDateParser.parseToLocalDate(log.logged_at)
+                        if (localDate != null) {
+                            val logDateStr = localDate.toString()
+                            val bucket = tempBuckets.find { it.dateStr == logDateStr }
+                            if (bucket != null) {
+                                val isHeat = log.metadata?.contains("Heated", ignoreCase = true) == true
+                                if (isHeat) {
+                                    bucket.heat += log.value
+                                } else {
+                                    bucket.cig += log.value
+                                }
                             }
                         }
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        android.util.Log.w("Smokes7Days", "Failed to process log: ${e.message}")
+                    }
                 }
 
                 buckets = tempBuckets
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.e("Smokes7Days", "Failed to fetch week logs: ${e.message}", e)
                 buckets = tempBuckets
             } finally {
                 isLoading = false
@@ -227,16 +230,7 @@ fun Smokes7DaysScreen(sessionManager: WatchSessionManager) {
             state = listState,
             autoCentering = null,
             contentPadding = PaddingValues(top = 22.dp, bottom = 28.dp, start = 8.dp, end = 8.dp),
-            modifier = Modifier
-                .fillMaxSize()
-                .focusRequester(focusRequester)
-                .focusable()
-                .onRotaryScrollEvent {
-                    scope.launch {
-                        listState.scrollBy(it.verticalScrollPixels)
-                    }
-                    true
-                },
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header
