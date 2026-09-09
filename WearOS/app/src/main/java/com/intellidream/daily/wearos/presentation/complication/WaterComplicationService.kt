@@ -1,22 +1,39 @@
 package com.intellidream.daily.wearos.presentation.complication
 
-import androidx.datastore.preferences.core.stringPreferencesKey
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.data.PlainComplicationText
 import androidx.wear.watchface.complications.data.ShortTextComplicationData
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
-import com.intellidream.daily.wearos.data.dataStore
-import kotlinx.coroutines.flow.first
+import com.intellidream.daily.wearos.data.WatchSessionManager
+import com.intellidream.daily.wearos.presentation.MainActivity
 
 class WaterComplicationService : SuspendingComplicationDataSourceService() {
+    private fun createTapAction(): PendingIntent {
+        val intent = Intent(applicationContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("page", 0)
+        }
+        return PendingIntent.getActivity(
+            applicationContext,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     override fun getPreviewData(type: ComplicationType): ComplicationData? {
         if (type == ComplicationType.SHORT_TEXT) {
             return ShortTextComplicationData.Builder(
                 text = PlainComplicationText.Builder("💧0").build(),
                 contentDescription = PlainComplicationText.Builder("Water Total").build()
-            ).build()
+            )
+                .setTapAction(createTapAction())
+                .build()
         }
         return null
     }
@@ -26,13 +43,15 @@ class WaterComplicationService : SuspendingComplicationDataSourceService() {
         
         var water = "0"
         try {
-            val prefs = applicationContext.dataStore.data.first()
-            water = prefs[stringPreferencesKey("daily_water_total")] ?: "0"
+            val prefs = applicationContext.getSharedPreferences(WatchSessionManager.PREFS_NAME, Context.MODE_PRIVATE)
+            water = prefs.getString(WatchSessionManager.KEY_WATER_TOTAL, "0") ?: "0"
         } catch (ignored: Exception) {}
 
         return ShortTextComplicationData.Builder(
             text = PlainComplicationText.Builder("💧$water").build(),
             contentDescription = PlainComplicationText.Builder("Water Total").build()
-        ).build()
+        )
+            .setTapAction(createTapAction())
+            .build()
     }
 }

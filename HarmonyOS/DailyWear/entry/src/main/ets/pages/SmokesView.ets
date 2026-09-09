@@ -128,6 +128,37 @@ export struct SmokesView {
     }
   }
 
+  private formatTime(isoString: string): string {
+    const d = new Date(isoString);
+    const h = d.getHours().toString().padStart(2, '0');
+    const m = d.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
+  private showDeleteConfirm(log: SupabaseHabitLog): void {
+    this.triggerHaptic();
+    const typeName = this.getSmokeType(log);
+    this.getUIContext().showAlertDialog({
+      title: 'Delete Log?',
+      message: `Delete 1 ${typeName} entry?`,
+      primaryButton: {
+        value: 'Cancel',
+        fontColor: '#888888',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: 'Delete',
+        fontColor: '#FF3B30',
+        action: async () => {
+          this.triggerHaptic();
+          this.dayLogs = this.dayLogs.filter(l => l.id !== log.id);
+          this.computeTotals();
+          await SupabaseClient.getInstance().softDeleteLog(log.id);
+        }
+      }
+    });
+  }
+
   build() {
     Scroll() {
       Column() {
@@ -163,7 +194,7 @@ export struct SmokesView {
 
         // Progress Ring & Action Buttons Row
         Row() {
-          // Circular Progress Ring (clickable to open Logs)
+          // Circular Progress Ring
           Stack({ alignContent: Alignment.Center }) {
             // Background track
             Circle()
@@ -200,10 +231,6 @@ export struct SmokesView {
           }
           .width(86)
           .height(86)
-          .onClick(() => {
-            this.triggerHaptic();
-            this.onOpenLogs('smokes', this.getFormattedDateTitle(), this.dayLogs);
-          })
 
           // 2 Quick Add Action Buttons (🔥 Cig, ⚡ Heat)
           Column() {
@@ -245,7 +272,7 @@ export struct SmokesView {
         .alignItems(VerticalAlign.Center)
         .margin({ top: 4, bottom: 6 })
 
-        // Breakdown Summary Row with chevron (Tapping opens Logs)
+        // Breakdown Summary Row
         Row() {
           Text('🔥')
             .fontSize(11)
@@ -266,25 +293,62 @@ export struct SmokesView {
             .fontWeight(FontWeight.Medium)
             .fontColor('#FFFFFF')
             .margin({ left: 2 })
-
-          Text('›')
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#FF5555')
-            .margin({ left: 4 })
         }
         .width('90%')
-        .height(32)
-        .borderRadius(8)
+        .height(28)
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
-        .margin({ top: 4, bottom: 12 })
-        .onClick(() => {
-          this.triggerHaptic();
-          this.onOpenLogs('smokes', this.getFormattedDateTitle(), this.dayLogs);
-        })
+        .margin({ top: 2, bottom: 6 })
+
+        // In-Flow Logs List
+        if (this.dayLogs.length > 0) {
+          Row() {
+            Text(`Logs (${this.dayLogs.length})`)
+              .fontSize(11)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#888888')
+          }
+          .width('88%')
+          .margin({ top: 2, bottom: 4 })
+          .justifyContent(FlexAlign.Start)
+
+          ForEach(this.dayLogs, (log: SupabaseHabitLog) => {
+            Row() {
+              Text(this.getSmokeType(log) === 'Heated Tobacco' ? '⚡' : '🔥')
+                .fontSize(14)
+                .margin({ right: 6 })
+
+              Column() {
+                Text(`1 ${this.getSmokeType(log) === 'Heated Tobacco' ? 'Heat' : 'Cig'}`)
+                  .fontSize(11)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#FFFFFF')
+
+                Text(this.formatTime(log.logged_at))
+                  .fontSize(9)
+                  .fontColor('#888888')
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+
+              Text('✕')
+                .fontSize(12)
+                .fontColor('#FF5555')
+                .padding({ left: 8, right: 4 })
+            }
+            .width('88%')
+            .padding({ top: 6, bottom: 6, left: 10, right: 10 })
+            .borderRadius(8)
+            .backgroundColor('rgba(255, 255, 255, 0.08)')
+            .margin({ bottom: 4 })
+            .onClick(() => {
+              this.showDeleteConfirm(log);
+            })
+          }, (log: SupabaseHabitLog) => log.id)
+        }
       }
       .width('100%')
+      .padding({ bottom: 24 })
       .alignItems(HorizontalAlign.Center)
     }
     .scrollable(ScrollDirection.Vertical)

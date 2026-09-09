@@ -1254,7 +1254,7 @@ Page(
                             if (tCache.sleep_keys.length > 100) tCache.sleep_keys = tCache.sleep_keys.slice(-100)
                             try { saveFileStr('telemetry_cache.json', JSON.stringify(tCache)) } catch(e) {}
                             
-                            if (debugText) debugText.setProperty(prop.TEXT, `Health data successfully synced at ${timeStr}`)
+                            if (debugText) debugText.setProperty(prop.TEXT, `Health: synced at ${timeStr}`)
                         } else {
                             if (debugText) debugText.setProperty(prop.TEXT, `Sync Failed: ${(res && res.error) ? res.error : 'Unknown'}`)
                         }

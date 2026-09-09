@@ -58,10 +58,22 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.rotary.onRotaryScrollEvent
+import androidx.compose.ui.text.style.TextAlign
+import androidx.wear.compose.material.Button
+import androidx.wear.compose.material.ButtonDefaults
+import androidx.wear.compose.material.dialog.Alert
+import androidx.wear.compose.material.dialog.Dialog
+
 @Composable
 fun SmokesScreen(
     sessionManager: WatchSessionManager,
-    onOpenLogs: (habitType: String, dateTitle: String, logs: List<HabitLog>, onDelete: (HabitLog) -> Unit) -> Unit
+    onOpenLogs: ((habitType: String, dateTitle: String, logs: List<HabitLog>, onDelete: (HabitLog) -> Unit) -> Unit)? = null
 ) {
     var dayOffset by remember { mutableIntStateOf(0) }
     var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedSmokesGoal ?: 20) }
@@ -70,9 +82,12 @@ fun SmokesScreen(
     var todayCig by remember { mutableIntStateOf(dayLogs.count { it.metadata?.contains("Heated") != true }) }
     var todayHeat by remember { mutableIntStateOf(dayLogs.count { it.metadata?.contains("Heated") == true }) }
     var todayTotal by remember { mutableIntStateOf(todayCig + todayHeat) }
+    var logToDelete by remember { mutableStateOf<HabitLog?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val listState = rememberScalingLazyListState()
+    val focusRequester = remember { FocusRequester() }
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
     val view = LocalView.current
 
@@ -164,7 +179,8 @@ fun SmokesScreen(
                     sessionManager.persistSmokesTotal(todayTotal)
                 }
             } catch (e: Exception) {
-                try { sessionManager.supabaseClient.auth.refreshCurrentSession() } catch (_: Exception) {}
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.w("SmokesScreen", "Failed to fetch logs: ${e.localizedMessage}")
             }
         }
     }
@@ -250,6 +266,12 @@ fun SmokesScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) {}
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -257,7 +279,18 @@ fun SmokesScreen(
     ) {
         ScalingLazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            autoCentering = null,
+            contentPadding = PaddingValues(top = 22.dp, bottom = 28.dp, start = 8.dp, end = 8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .onRotaryScrollEvent {
+                    scope.launch {
+                        listState.scrollBy(it.verticalScrollPixels)
+                    }
+                    true
+                }
+                .focusRequester(focusRequester)
+                .focusable(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header
@@ -306,7 +339,10 @@ fun SmokesScreen(
                             .size(86.dp)
                             .clickable {
                                 view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                                onOpenLogs("smokes", formattedDateTitle, dayLogs, deleteLog)
+                                if (dayLogs.isNotEmpty()) {
+                                    scope.launch { listState.animateScrollToItem(4) }
+                                }
+                                onOpenLogs?.invoke("smokes", formattedDateTitle, dayLogs, deleteLog)
                             }
                     ) {
                         val progress = (todayTotal.toFloat() / maxOf(dailyGoal, 1).toFloat()).coerceIn(0f, 1f)
@@ -371,7 +407,7 @@ fun SmokesScreen(
                 }
             }
 
-            // Centered Breakdown Row with chevron (Tapping opens Logs)
+            // Centered Breakdown Row with chevron (Tapping scrolls to Logs)
             item {
                 Spacer(Modifier.height(8.dp))
                 Row(
@@ -380,7 +416,10 @@ fun SmokesScreen(
                         .clip(RoundedCornerShape(8.dp))
                         .clickable {
                             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                            onOpenLogs("smokes", formattedDateTitle, dayLogs, deleteLog)
+                            if (dayLogs.isNotEmpty()) {
+                                scope.launch { listState.animateScrollToItem(4) }
+                            }
+                            onOpenLogs?.invoke("smokes", formattedDateTitle, dayLogs, deleteLog)
                         }
                         .padding(vertical = 4.dp, horizontal = 8.dp),
                     horizontalArrangement = Arrangement.Center,
@@ -411,7 +450,133 @@ fun SmokesScreen(
                         color = Color(0xFFFF5555)
                     )
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(6.dp))
+            }
+
+            // In-Flow Logs Section (matching watchOS)
+            if (dayLogs.isNotEmpty()) {
+                item {
+                    Text(
+                        text = if (dayOffset == 0) "TODAY'S LOGS" else "LOGS",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.Gray,
+                        modifier = Modifier
+                            .fillMaxWidth(0.88f)
+                            .padding(top = 4.dp, bottom = 2.dp)
+                    )
+                }
+                items(dayLogs.size) { index ->
+                    val log = dayLogs[index]
+                    val isHeat = log.metadata?.contains("Heated") == true
+                    val displayType = if (isHeat) "Heated Tobacco" else "Cigarette"
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth(0.90f)
+                            .padding(vertical = 2.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.1f))
+                            .clickable {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                logToDelete = log
+                                showDeleteDialog = true
+                            }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (isHeat) "⚡" else "🔥", fontSize = 12.sp)
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = displayType,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
+                            )
+                        }
+                        val timeStr = try {
+                            val inst = java.time.Instant.parse(log.logged_at)
+                            val z = inst.atZone(java.time.ZoneId.systemDefault())
+                            String.format(Locale.getDefault(), "%02d:%02d", z.hour, z.minute)
+                        } catch (_: Exception) {
+                            if (log.logged_at.length >= 16) log.logged_at.substring(11, 16) else ""
+                        }
+                        Text(
+                            text = timeStr,
+                            fontSize = 9.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+                item {
+                    Spacer(Modifier.height(14.dp))
+                }
+            }
+        }
+
+        // Delete Confirmation Dialog
+        if (showDeleteDialog && logToDelete != null) {
+            Dialog(
+                showDialog = showDeleteDialog,
+                onDismissRequest = {
+                    showDeleteDialog = false
+                    logToDelete = null
+                }
+            ) {
+                Alert(
+                    title = {
+                        Text(
+                            text = "Delete Log?",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    },
+                    content = {
+                        item {
+                            val isHeat = logToDelete?.metadata?.contains("Heated") == true
+                            val typeName = if (isHeat) "Heated Tobacco" else "Cigarette"
+                            Text(
+                                text = typeName,
+                                fontSize = 11.sp,
+                                color = Color.Gray,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        item {
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    val target = logToDelete
+                                    if (target != null) {
+                                        deleteLog(target)
+                                    }
+                                    showDeleteDialog = false
+                                    logToDelete = null
+                                },
+                                colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFE53935)),
+                                modifier = Modifier.fillMaxWidth().height(32.dp)
+                            ) {
+                                Text("Delete", fontSize = 11.sp, color = Color.White)
+                            }
+                        }
+                        item {
+                            Spacer(Modifier.height(4.dp))
+                            Button(
+                                onClick = {
+                                    showDeleteDialog = false
+                                    logToDelete = null
+                                },
+                                colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF333333)),
+                                modifier = Modifier.fillMaxWidth().height(32.dp)
+                            ) {
+                                Text("Cancel", fontSize = 11.sp, color = Color.LightGray)
+                            }
+                        }
+                    }
+                )
             }
         }
     }

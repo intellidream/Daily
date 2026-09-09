@@ -3,7 +3,41 @@ import { vibrator } from '@kit.SensorServiceKit';
 
 @Component
 export struct AboutView {
-  @Prop refreshTrigger: number = 0;
+  @Prop @Watch('onRefresh') refreshTrigger: number = 0;
+  @State syncText: string = 'synced';
+  @State syncColor: string = '#FFCC00';
+
+  async aboutToAppear() {
+    await this.updateSyncStatus();
+  }
+
+  onRefresh(): void {
+    this.updateSyncStatus();
+  }
+
+  private async updateSyncStatus(): Promise<void> {
+    const timeMs = await WatchSessionManager.getInstance().getLastHealthSyncTime();
+    if (timeMs > 0) {
+      const d = new Date(timeMs);
+      const today = new Date();
+      const isToday = d.getFullYear() === today.getFullYear() &&
+        d.getMonth() === today.getMonth() &&
+        d.getDate() === today.getDate();
+      const h = d.getHours().toString().padStart(2, '0');
+      const m = d.getMinutes().toString().padStart(2, '0');
+      const timeStr = `${h}:${m}`;
+      if (isToday) {
+        this.syncText = `synced at ${timeStr}`;
+      } else {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        this.syncText = `synced at ${timeStr}, ${d.getDate()} ${months[d.getMonth()]}`;
+      }
+      this.syncColor = '#FFCC00';
+    } else {
+      this.syncText = 'not synced';
+      this.syncColor = '#FF3B30';
+    }
+  }
 
   private triggerHaptic(): void {
     try {
@@ -78,10 +112,10 @@ export struct AboutView {
             Text('Health:')
               .fontSize(11)
               .fontColor('#888888')
-            Text('synced')
-              .fontSize(11)
+            Text(this.syncText)
+              .fontSize(10)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#FFCC00')
+              .fontColor(this.syncColor)
           }
           .width('100%')
           .justifyContent(FlexAlign.SpaceBetween)

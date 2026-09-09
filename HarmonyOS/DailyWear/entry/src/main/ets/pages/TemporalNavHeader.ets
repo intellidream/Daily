@@ -16,17 +16,17 @@ export struct TemporalNavHeader {
 
   build() {
     Row() {
-      // Previous Button (◀)
+      // Previous Button (‹)
       Row() {
-        Text('◀')
-          .fontSize(11)
+        Text('‹')
+          .fontSize(16)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.accentColor)
       }
-      .width(36)
-      .height(26)
-      .borderRadius(8)
-      .backgroundColor('#222222')
+      .width(28)
+      .height(24)
+      .borderRadius(6)
+      .backgroundColor('rgba(255, 255, 255, 0.12)')
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
       .onClick(() => {
@@ -42,18 +42,18 @@ export struct TemporalNavHeader {
         .textAlign(TextAlign.Center)
         .layoutWeight(1)
 
-      // Next Button (▶)
+      // Next Button (›)
       if (this.canGoForward) {
         Row() {
-          Text('▶')
-            .fontSize(11)
+          Text('›')
+            .fontSize(16)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.accentColor)
         }
-        .width(36)
-        .height(26)
-        .borderRadius(8)
-        .backgroundColor('#222222')
+        .width(28)
+        .height(24)
+        .borderRadius(6)
+        .backgroundColor('rgba(255, 255, 255, 0.12)')
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
         .onClick(() => {
@@ -62,8 +62,8 @@ export struct TemporalNavHeader {
         })
       } else {
         Row()
-          .width(36)
-          .height(26)
+          .width(28)
+          .height(24)
       }
     }
     .width('94%')

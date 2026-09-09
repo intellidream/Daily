@@ -3,9 +3,12 @@ package com.intellidream.daily.wearos.presentation.about
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,14 +18,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.rotary.onRotaryScrollEvent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -37,17 +46,70 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.dialog.Dialog
 import com.intellidream.daily.wearos.R
 import com.intellidream.daily.wearos.data.WatchSessionManager
+import android.content.Context
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun AboutScreen(sessionManager: WatchSessionManager) {
+    val context = LocalContext.current
     val view = LocalView.current
     val listState = rememberScalingLazyListState()
+    val scope = rememberCoroutineScope()
+    val focusRequester = remember { FocusRequester() }
     var showUnpairDialog by remember { mutableStateOf(false) }
+    var syncText by remember { mutableStateOf("synced") }
+    var syncColor by remember { mutableStateOf(Color(0xFFFFCC00)) }
+
+    LaunchedEffect(Unit) {
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) {}
+        try {
+            val prefs = context.getSharedPreferences(WatchSessionManager.PREFS_NAME, Context.MODE_PRIVATE)
+            val lastSyncStr = prefs.getString(WatchSessionManager.KEY_LAST_HEALTH_SYNC, null)
+            val lastSyncTime = lastSyncStr?.toLongOrNull() ?: 0L
+            if (lastSyncTime > 0) {
+                val cal = Calendar.getInstance()
+                val syncCal = Calendar.getInstance().apply { timeInMillis = lastSyncTime }
+                val isToday = cal.get(Calendar.YEAR) == syncCal.get(Calendar.YEAR) &&
+                        cal.get(Calendar.DAY_OF_YEAR) == syncCal.get(Calendar.DAY_OF_YEAR)
+                val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+                val timeStr = timeFmt.format(Date(lastSyncTime))
+                if (isToday) {
+                    syncText = "synced at $timeStr"
+                    syncColor = Color(0xFFFFCC00)
+                } else {
+                    val dateFmt = SimpleDateFormat("d MMM", Locale.getDefault())
+                    val dateStr = dateFmt.format(Date(lastSyncTime))
+                    syncText = "synced at $timeStr, $dateStr"
+                    syncColor = Color(0xFFFFCC00)
+                }
+            } else {
+                syncText = "not synced"
+                syncColor = Color(0xFFFF3B30)
+            }
+        } catch (_: Exception) {}
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         ScalingLazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            autoCentering = null,
+            contentPadding = PaddingValues(top = 22.dp, bottom = 28.dp, start = 8.dp, end = 8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .focusable()
+                .onRotaryScrollEvent {
+                    scope.launch {
+                        listState.scrollBy(it.verticalScrollPixels)
+                    }
+                    true
+                },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             item {
@@ -106,10 +168,11 @@ fun AboutScreen(sessionManager: WatchSessionManager) {
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Health:", fontSize = 11.sp, color = Color.Gray)
-                        Text("synced", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFFFFCC00))
+                        Text(syncText, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = syncColor)
                     }
                 }
             }

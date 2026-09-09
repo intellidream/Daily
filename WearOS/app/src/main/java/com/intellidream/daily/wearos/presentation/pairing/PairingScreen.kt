@@ -42,10 +42,6 @@ fun PairingScreen(sessionManager: WatchSessionManager) {
     val view = LocalView.current
     val scrollState = rememberScrollState()
 
-    LaunchedEffect(Unit) {
-        sessionManager.checkExistingSession()
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()

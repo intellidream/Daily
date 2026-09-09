@@ -8,6 +8,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +40,7 @@ data class ActiveLogsScreenState(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DailyWearApp() {
+fun DailyWearApp(targetPage: Int = -1) {
     val context = LocalContext.current
     val sessionManager = remember { WatchSessionManager.getInstance(context) }
     val isAuthenticated by sessionManager.isAuthenticated.collectAsState()
@@ -83,7 +84,17 @@ fun DailyWearApp() {
                     )
                 } else {
                     // Canonical 5-Page Horizontal Pager matching watchOS & ZeppOS
-                    val pagerState = rememberPagerState(pageCount = { 5 })
+                    val pagerState = rememberPagerState(
+                        initialPage = if (targetPage in 0..4) targetPage else 0,
+                        pageCount = { 5 }
+                    )
+
+                    LaunchedEffect(targetPage) {
+                        if (targetPage in 0..4 && pagerState.currentPage != targetPage) {
+                            pagerState.scrollToPage(targetPage)
+                        }
+                    }
+
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize()
@@ -101,11 +112,8 @@ fun DailyWearApp() {
                         }
                     }
                 }
-            } else if (isPairing) {
-                PairingScreen(sessionManager)
             } else {
-                // Empty background while waiting for DataStore to load
-                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background))
+                PairingScreen(sessionManager)
             }
         }
     }

@@ -41,12 +41,12 @@ fun TemporalNavHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Previous Button (◀)
+        // Previous Button (‹)
         Box(
             modifier = Modifier
-                .size(width = 34.dp, height = 26.dp)
+                .size(width = 28.dp, height = 24.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF222222))
+                .background(Color.White.copy(alpha = 0.12f))
                 .clickable {
                     view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                     onPrevious()
@@ -54,10 +54,10 @@ fun TemporalNavHeader(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "◀",
+                text = "‹",
                 color = accentColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
             )
         }
 
@@ -71,13 +71,13 @@ fun TemporalNavHeader(
             modifier = Modifier.weight(1f)
         )
 
-        // Next Button (▶) - hidden when on current date/week
+        // Next Button (›) - hidden when on current date/week
         if (canGoForward) {
             Box(
                 modifier = Modifier
-                    .size(width = 34.dp, height = 26.dp)
+                    .size(width = 28.dp, height = 24.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF222222))
+                    .background(Color.White.copy(alpha = 0.12f))
                     .clickable {
                         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                         onNext()
@@ -85,15 +85,15 @@ fun TemporalNavHeader(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "▶",
+                    text = "›",
                     color = accentColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         } else {
             // Invisible placeholder for balanced layout centering
-            Box(modifier = Modifier.size(width = 34.dp, height = 26.dp))
+            Box(modifier = Modifier.size(width = 28.dp, height = 24.dp))
         }
     }
 }

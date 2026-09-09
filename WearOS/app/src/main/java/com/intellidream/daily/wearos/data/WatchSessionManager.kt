@@ -1,9 +1,6 @@
 package com.intellidream.daily.wearos.data
 
 import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.intellidream.daily.wearos.domain.model.PairedWatch
 import com.intellidream.daily.wearos.domain.model.WatchPairing
 import com.intellidream.daily.wearos.domain.model.WatchPairingInsert
@@ -14,6 +11,7 @@ import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
+import io.github.jan.supabase.auth.user.UserSession
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
 import io.ktor.client.HttpClient
@@ -36,11 +34,18 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-val Context.dataStore by preferencesDataStore(name = "daily_prefs")
-
 class WatchSessionManager private constructor(private val context: Context) {
 
     companion object {
+        const val PREFS_NAME = "daily_prefs"
+        const val KEY_ACCESS_TOKEN = "supabase_access_token"
+        const val KEY_REFRESH_TOKEN = "supabase_refresh_token"
+        const val KEY_USER_ID = "supabase_user_id"
+        const val KEY_PAIRED_WATCH_ID = "paired_watch_id"
+        const val KEY_WATER_TOTAL = "daily_water_total"
+        const val KEY_SMOKES_TOTAL = "daily_smokes_total"
+        const val KEY_LAST_HEALTH_SYNC = "last_health_sync_time"
+
         @Volatile
         private var instance: WatchSessionManager? = null
 
@@ -53,6 +58,10 @@ class WatchSessionManager private constructor(private val context: Context) {
                 }
             }
         }
+    }
+
+    private val prefs by lazy {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     private val supabaseUrl = "https://akkfouifxztnfwwiclwg.supabase.co"
@@ -91,31 +100,46 @@ class WatchSessionManager private constructor(private val context: Context) {
     private val _dataRefreshTrigger = MutableStateFlow(0)
     val dataRefreshTrigger: StateFlow<Int> = _dataRefreshTrigger
 
-    // For Complications and Tiles
-    val waterTotalCacheKey = stringPreferencesKey("daily_water_total")
-    val smokesTotalCacheKey = stringPreferencesKey("daily_smokes_total")
+    fun recordHealthSync() {
+        val now = System.currentTimeMillis()
+        prefs.edit().putString(KEY_LAST_HEALTH_SYNC, now.toString()).apply()
+    }
 
     fun persistWaterTotal(water: Int) {
-        scope.launch {
-            context.dataStore.edit { prefs ->
-                prefs[waterTotalCacheKey] = water.toString()
-            }
-        }
+        prefs.edit().putString(KEY_WATER_TOTAL, water.toString()).apply()
     }
 
     fun persistSmokesTotal(smokes: Int) {
-        scope.launch {
-            context.dataStore.edit { prefs ->
-                prefs[smokesTotalCacheKey] = smokes.toString()
-            }
-        }
+        prefs.edit().putString(KEY_SMOKES_TOTAL, smokes.toString()).apply()
     }
 
-    private val pairedWatchIdKey = stringPreferencesKey("paired_watch_id")
-
-    private var pollJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
+    @Volatile private var pollJob: Job? = null
+    @Volatile private var isPolling = false
+    @Volatile private var isPairingCompleted = false
+    private val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
     @Volatile private var isRecovering = false
+    @Volatile private var isCheckingSession = false
+
+    /**
+     * Imports a 10-year Orbit watch JWT session into the Supabase Auth client.
+     * We set expiresIn to 10 years (315360000L seconds) so supabase-kt never considers
+     * the token expired and PostgREST always attaches the Bearer token to requests.
+     */
+    suspend fun importOrbitSession(accessToken: String, refreshToken: String = "") {
+        try {
+            val session = UserSession(
+                accessToken = accessToken,
+                refreshToken = refreshToken,
+                expiresIn = 315360000L,
+                tokenType = "bearer",
+                user = null
+            )
+            supabaseClient.auth.importSession(session, autoRefresh = false)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            android.util.Log.w("WatchSessionManager", "importOrbitSession non-fatal: ${e.localizedMessage}")
+        }
+    }
 
     /**
      * Listens to the Supabase Auth plugin's session status. When the plugin auto-refreshes
@@ -128,44 +152,37 @@ class WatchSessionManager private constructor(private val context: Context) {
                 when (status) {
                     is SessionStatus.Authenticated -> {
                         val session = status.session
-                        context.dataStore.edit { prefs ->
-                            prefs[stringPreferencesKey("supabase_access_token")] = session.accessToken
-                            prefs[stringPreferencesKey("supabase_refresh_token")] = session.refreshToken
-                        }
                         val uid = session.user?.id ?: extractUserId(session.accessToken)
+                        prefs.edit()
+                            .putString(KEY_ACCESS_TOKEN, session.accessToken)
+                            .putString(KEY_REFRESH_TOKEN, session.refreshToken)
+                            .apply()
                         if (uid != null) {
-                            context.dataStore.edit { prefs ->
-                                prefs[stringPreferencesKey("supabase_user_id")] = uid
-                            }
+                            prefs.edit().putString(KEY_USER_ID, uid).apply()
                             _currentUserId.value = uid
                         }
                         _isAuthenticated.value = true
                         _isPairing.value = false
                     }
                     is SessionStatus.NotAuthenticated -> {
-                        // Attempt recovery from DataStore tokens regardless of current auth state.
-                        // The Auth plugin fires NotAuthenticated on process restart with expired tokens
-                        // AND when auto-refresh fails — we must recover in both cases.
+                        // Attempt recovery from SharedPreferences tokens regardless of current auth state.
                         if (!isRecovering) {
-                            val prefs = context.dataStore.data.first()
-                            val savedUserId = prefs[stringPreferencesKey("supabase_user_id")]
+                            val savedUserId = prefs.getString(KEY_USER_ID, null)
                             if (!savedUserId.isNullOrEmpty()) {
-                                val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
-                                val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
-                                if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty()) {
+                                val accessToken = prefs.getString(KEY_ACCESS_TOKEN, null)
+                                val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, "") ?: ""
+                                if (!accessToken.isNullOrEmpty()) {
                                     isRecovering = true
                                     try {
-                                        supabaseClient.auth.importAuthToken(accessToken, refreshToken)
-                                        // AutoRefresh is false, relying on Token Pushes
+                                        importOrbitSession(accessToken, refreshToken)
                                     } catch (e: Exception) {
-                                        // Recovery failed — keep _isAuthenticated optimistically true
-                                        // so screens can still show cached data. Will retry on next resume.
-                                        _isAuthenticated.value = true
-                                        _currentUserId.value = savedUserId
-                                        _isPairing.value = false
+                                        if (e is kotlinx.coroutines.CancellationException) throw e
                                     } finally {
                                         isRecovering = false
                                     }
+                                    _currentUserId.value = savedUserId
+                                    _isAuthenticated.value = true
+                                    _isPairing.value = false
                                 }
                             } else if (_isAuthenticated.value) {
                                 // No stored user — truly logged out
@@ -181,79 +198,86 @@ class WatchSessionManager private constructor(private val context: Context) {
     }
 
     fun checkExistingSession() {
+        android.util.Log.d("WatchSessionManager", "checkExistingSession called: isChecking=$isCheckingSession, auth=${_isAuthenticated.value}")
+        if (isCheckingSession || _isAuthenticated.value) return
+        isCheckingSession = true
         scope.launch {
-            // 1. Check if the Auth plugin already has a cached session.
-            val existingSession = supabaseClient.auth.currentSessionOrNull()
-            if (existingSession != null) {
-                val uid = existingSession.user?.id ?: extractUserId(existingSession.accessToken)
-                if (uid != null) {
-                    // Show authenticated UI immediately using cached data
-                    _currentUserId.value = uid
+            try {
+                // 1. Check if the Auth plugin already has a cached session.
+                val existingSession = supabaseClient.auth.currentSessionOrNull()
+                android.util.Log.d("WatchSessionManager", "checkExistingSession: in-memory session = ${existingSession != null}")
+                if (existingSession != null) {
+                    val uid = existingSession.user?.id ?: extractUserId(existingSession.accessToken)
+                    if (uid != null) {
+                        // Show authenticated UI immediately using cached data
+                        _currentUserId.value = uid
+                        _isAuthenticated.value = true
+                        _isPairing.value = false
+                        prefs.edit()
+                            .putString(KEY_ACCESS_TOKEN, existingSession.accessToken)
+                            .putString(KEY_REFRESH_TOKEN, existingSession.refreshToken)
+                            .putString(KEY_USER_ID, uid)
+                            .apply()
+                        return@launch
+                    }
+                }
+
+                // 2. Fall back to SharedPreferences tokens
+                val accessToken = prefs.getString(KEY_ACCESS_TOKEN, null)
+                val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, "") ?: ""
+                var savedUserId = prefs.getString(KEY_USER_ID, null)
+                android.util.Log.d("WatchSessionManager", "checkExistingSession SharedPreferences: hasToken=${!accessToken.isNullOrEmpty()}, uid=$savedUserId")
+                
+                if (savedUserId.isNullOrEmpty() && !accessToken.isNullOrEmpty()) {
+                    savedUserId = extractUserId(accessToken)
+                    if (savedUserId != null) {
+                        prefs.edit().putString(KEY_USER_ID, savedUserId).apply()
+                    }
+                }
+
+                // Note: 10-year Orbit watch JWTs have empty refresh tokens, so only require accessToken & savedUserId
+                if (!accessToken.isNullOrEmpty() && !savedUserId.isNullOrEmpty()) {
+                    importOrbitSession(accessToken, refreshToken)
+                    _currentUserId.value = savedUserId
                     _isAuthenticated.value = true
                     _isPairing.value = false
-                    // Sync to DataStore so complication/tile services can read user_id
-                    context.dataStore.edit { prefs ->
-                        prefs[stringPreferencesKey("supabase_access_token")] = existingSession.accessToken
-                        prefs[stringPreferencesKey("supabase_refresh_token")] = existingSession.refreshToken
-                        prefs[stringPreferencesKey("supabase_user_id")] = uid
+                    android.util.Log.d("WatchSessionManager", "checkExistingSession: restored session for user $savedUserId")
+                } else {
+                    android.util.Log.d("WatchSessionManager", "checkExistingSession: no valid session found, isPairing=${_isPairing.value}, pin=${_pairingCode.value}")
+                    if (!_isPairing.value || _pairingCode.value.isEmpty()) {
+                        generatePairingCode()
                     }
-                    // We rely on pushing tokens from MAUI instead
-                    // try {
-                    //    supabaseClient.auth.refreshCurrentSession()
-                    // } catch (e: Exception) {
-                    // }
-                    return@launch
                 }
-            }
-
-            // 2. Fall back to DataStore tokens (e.g. first launch after pairing, before Auth plugin
-            //    had a chance to persist to its own storage).
-            val prefs = context.dataStore.data.first()
-            val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
-            val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
-            var savedUserId = prefs[stringPreferencesKey("supabase_user_id")]
-            
-            if (savedUserId.isNullOrEmpty() && !accessToken.isNullOrEmpty()) {
-                // Self-heal from previous bug where user_id wasn't saved reliably
-                savedUserId = extractUserId(accessToken)
-                if (savedUserId != null) {
-                    context.dataStore.edit { p -> p[stringPreferencesKey("supabase_user_id")] = savedUserId }
-                }
-            }
-
-            if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty() && !savedUserId.isNullOrEmpty()) {
-                // Optimistic UI loading instantly
-                _currentUserId.value = savedUserId
-                _isAuthenticated.value = true
-                _isPairing.value = false
-                
-                isRecovering = true
-                try {
-                    supabaseClient.auth.importAuthToken(accessToken, refreshToken)
-                } catch (e: Exception) {
-                    // Do not aggressively logout if network fails here.
-                    // The session listener's NotAuthenticated handler will retry.
-                } finally {
-                    isRecovering = false
-                }
-            } else {
-                generatePairingCode()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.e("WatchSessionManager", "checkExistingSession exception", e)
+            } finally {
+                isCheckingSession = false
             }
         }
     }
 
     fun generatePairingCode() {
+        if (_isAuthenticated.value) {
+            android.util.Log.d("WatchSessionManager", "generatePairingCode: already authenticated, skipping")
+            return
+        }
+        stopPolling()
+        isPairingCompleted = false
         _isPairing.value = true
         _errorMessage.value = ""
         val code = String.format("%06d", (0..999999).random())
         _pairingCode.value = code
+        android.util.Log.d("WatchSessionManager", "generatePairingCode: generated code=$code")
 
         scope.launch {
             try {
                 val pairing = WatchPairingInsert(pin_code = code)
                 supabaseClient.postgrest["watch_pairing_codes"].insert(pairing)
+                android.util.Log.d("WatchSessionManager", "generatePairingCode: insert OK in Supabase, starting polling")
                 startPolling()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 android.util.Log.e("WatchSessionManager", "Pairing insert failed", e)
                 val msg = e.localizedMessage ?: e.cause?.localizedMessage ?: e::class.java.simpleName
                 _errorMessage.value = "Insert Err: $msg"
@@ -261,51 +285,107 @@ class WatchSessionManager private constructor(private val context: Context) {
         }
     }
 
-    private fun startPolling() {
+    fun stopPolling() {
+        android.util.Log.d("WatchSessionManager", "stopPolling called")
+        isPolling = false
         pollJob?.cancel()
+        pollJob = null
+    }
+
+    private fun startPolling() {
+        stopPolling()
+        isPolling = true
+        isPairingCompleted = false
+        android.util.Log.d("WatchSessionManager", "startPolling launched for pin=${_pairingCode.value}")
         pollJob = scope.launch {
-            while (isActive) {
+            while (isActive && isPolling) {
                 delay(2500)
+                if (!isActive || !isPolling) break
+                android.util.Log.d("WatchSessionManager", "Polling tick: checking pin=${_pairingCode.value}")
                 checkPairingStatus()
             }
         }
     }
 
     private suspend fun checkPairingStatus() {
+        if (!isPolling || isPairingCompleted || _pairingCode.value.isEmpty()) {
+            android.util.Log.d("WatchSessionManager", "checkPairingStatus skipped: isPolling=$isPolling, isPairingCompleted=$isPairingCompleted, pin=${_pairingCode.value}")
+            return
+        }
+        val currentPin = _pairingCode.value
+
         try {
+            android.util.Log.d("WatchSessionManager", "checkPairingStatus querying watch_pairing_codes for pin=$currentPin")
             val pairings = supabaseClient.postgrest["watch_pairing_codes"]
-                .select { filter { eq("pin_code", _pairingCode.value) } }
+                .select { filter { eq("pin_code", currentPin) } }
                 .decodeList<WatchPairing>()
 
+            android.util.Log.d("WatchSessionManager", "checkPairingStatus result count: ${pairings.size}")
             val pairing = pairings.firstOrNull()
             if (pairing != null) {
-                if (!pairing.access_token.isNullOrEmpty()) {
-                    val token = pairing.access_token
+                val token = pairing.access_token
+                android.util.Log.d("WatchSessionManager", "checkPairingStatus record: claimed=${pairing.claimed}, hasToken=${!token.isNullOrEmpty()}")
+                if (!token.isNullOrEmpty()) {
+                    // 1. IMMEDIATELY stop polling so no subsequent poll can ever trigger
+                    if (isPairingCompleted) return
+                    isPairingCompleted = true
+                    stopPolling()
+
                     val refresh = pairing.refresh_token.orEmpty()
-                    
-                    // importAuthToken triggers the session listener, which will persist
-                    // tokens to DataStore and update _isAuthenticated / _currentUserId.
-                    supabaseClient.auth.importAuthToken(token, refresh)
-                    val uid = extractUserId(token)
+                    val uid = extractUserId(token) ?: pairing.user_id
+                    android.util.Log.d("WatchSessionManager", "checkPairingStatus: extracted uid=$uid")
 
                     if (uid != null) {
-                        // Session listener handles DataStore persistence and state updates.
-                        // Just clean up the pairing row and stop polling.
-                        supabaseClient.postgrest["watch_pairing_codes"]
-                            .delete { filter { eq("pin_code", _pairingCode.value) } }
+                        // 2. Persistent storage in SharedPreferences (instant synchronous in-memory write + async disk flush)
+                        prefs.edit()
+                            .putString(KEY_ACCESS_TOKEN, token)
+                            .putString(KEY_REFRESH_TOKEN, refresh)
+                            .putString(KEY_USER_ID, uid)
+                            .apply()
+                        android.util.Log.d("WatchSessionManager", "checkPairingStatus: saved to SharedPreferences")
 
-                        // Register this device in the persistent paired_watches table
-                        registerPairing(token, uid)
-                            
-                        pollJob?.cancel()
+                        // 3. Update UI states IMMEDIATELY so the watch immediately switches to the 5-page dashboard!
+                        _currentUserId.value = uid
+                        _isAuthenticated.value = true
+                        _isPairing.value = false
+                        _pairingCode.value = ""
+                        _errorMessage.value = ""
+                        android.util.Log.d("WatchSessionManager", "checkPairingStatus: SUCCESS! Set isAuthenticated=true")
+
+                        // 4. Import session into client so PostgREST has valid Bearer token
+                        scope.launch {
+                            importOrbitSession(token, refresh)
+                        }
+
+                        // 5. Clean up pairing code row (best-effort)
+                        scope.launch {
+                            try {
+                                supabaseClient.postgrest["watch_pairing_codes"]
+                                    .delete { filter { eq("pin_code", currentPin) } }
+                            } catch (e: Exception) {
+                                if (e is kotlinx.coroutines.CancellationException) throw e
+                            }
+                        }
+
+                        // 6. Register device in paired_watches table (guarded for idempotency)
+                        scope.launch {
+                            registerPairing(token, uid)
+                        }
+
                         _dataRefreshTrigger.value++
+                    } else {
+                        // In the rare event user ID cannot be determined yet, resume polling
+                        android.util.Log.w("WatchSessionManager", "checkPairingStatus: uid is null, resuming polling")
+                        isPairingCompleted = false
+                        startPolling()
                     }
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (e !is kotlinx.coroutines.CancellationException) {
-                _errorMessage.value = "Poll Err: ${e.localizedMessage}"
-            }
+            android.util.Log.e("WatchSessionManager", "checkPairingStatus poll exception", e)
+            _errorMessage.value = "Poll Err: ${e.localizedMessage}"
         }
     }
 
@@ -323,8 +403,8 @@ class WatchSessionManager private constructor(private val context: Context) {
                 _isAuthenticated.value = true
                 _currentUserId.value = session.user?.id ?: extractUserId(session.accessToken)
             } else {
-                // Auth plugin has no session at all — full recovery from DataStore
-                recoverFromDataStore()
+                // Auth plugin has no session at all — full recovery from SharedPreferences
+                recoverFromPreferences()
             }
 
             // Tell screens to re-fetch their data now that auth is fresh
@@ -333,48 +413,48 @@ class WatchSessionManager private constructor(private val context: Context) {
             // Flush any logs that were queued while offline
             if (_isAuthenticated.value) {
                 OfflineSyncManager.shared.syncPendingLogs(supabaseClient)
+                recordHealthSync()
             }
         }
     }
 
     /**
-     * Recovers a Supabase session from DataStore-persisted tokens. Called when the Auth
-     * plugin's in-memory session is gone or its refresh attempt failed. The refresh token
-     * stored in DataStore has a much longer lifetime than the access token (90 days default)
-     * so this should succeed even after extended sleep/Doze periods.
+     * Recovers a Supabase session from SharedPreferences-persisted tokens. Called when the Auth
+     * plugin's in-memory session is gone or its refresh attempt failed.
      */
-    private suspend fun recoverFromDataStore() {
-        val prefs = context.dataStore.data.first()
-        val accessToken = prefs[stringPreferencesKey("supabase_access_token")]
-        val refreshToken = prefs[stringPreferencesKey("supabase_refresh_token")]
-        val savedUserId = prefs[stringPreferencesKey("supabase_user_id")]
+    private suspend fun recoverFromPreferences() {
+        val accessToken = prefs.getString(KEY_ACCESS_TOKEN, null)
+        val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, "") ?: ""
+        val savedUserId = prefs.getString(KEY_USER_ID, null)
 
-        if (!accessToken.isNullOrEmpty() && !refreshToken.isNullOrEmpty()) {
-            // Keep user authenticated while we attempt recovery
-            if (!savedUserId.isNullOrEmpty()) {
-                _isAuthenticated.value = true
-                _currentUserId.value = savedUserId
-            }
+        if (!accessToken.isNullOrEmpty() && !savedUserId.isNullOrEmpty()) {
             isRecovering = true
             try {
-                supabaseClient.auth.importAuthToken(accessToken, refreshToken)
-                // Success — the session listener will persist the new tokens
+                importOrbitSession(accessToken, refreshToken)
             } catch (e: Exception) {
-                // Recovery failed — don't logout on transient network failures.
-                // The refresh token is still valid. Will retry on next resume.
+                if (e is kotlinx.coroutines.CancellationException) throw e
             } finally {
                 isRecovering = false
             }
+            _currentUserId.value = savedUserId
+            _isAuthenticated.value = true
         }
     }
 
     /**
      * Registers this device in the persistent paired_watches table after a successful
-     * pairing. Saves the returned record ID to DataStore so we can check for repair
-     * tokens on future app resumes.
+     * pairing. Saves the returned record ID to SharedPreferences so we can check for repair
+     * tokens on future app resumes. Guarded against multiple duplicate insertions.
      */
     private suspend fun registerPairing(accessToken: String, userId: String) {
         try {
+            // Idempotency check: if we already have an active paired_watch_id stored, do not insert again
+            val existingWatchId = prefs.getString(KEY_PAIRED_WATCH_ID, null)
+            if (!existingWatchId.isNullOrEmpty()) {
+                android.util.Log.i("WatchSessionManager", "Device already registered with id: $existingWatchId")
+                return
+            }
+
             val deviceName = android.os.Build.MODEL ?: "Wear OS"
 
             val client = HttpClient(CIO) {
@@ -408,13 +488,12 @@ class WatchSessionManager private constructor(private val context: Context) {
                 val id = firstObj?.get("id")?.jsonPrimitive?.content
                 
                 if (id != null) {
-                    context.dataStore.edit { prefs ->
-                        prefs[pairedWatchIdKey] = id
-                    }
+                    prefs.edit().putString(KEY_PAIRED_WATCH_ID, id).apply()
                 }
             }
             client.close()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // Non-critical — pairing still works without the persistent record
         }
     }
@@ -425,8 +504,7 @@ class WatchSessionManager private constructor(private val context: Context) {
      */
     private suspend fun checkForRepairTokens() {
         try {
-            val prefs = context.dataStore.data.first()
-            val pairedWatchId = prefs[pairedWatchIdKey] ?: return
+            val pairedWatchId = prefs.getString(KEY_PAIRED_WATCH_ID, null) ?: return
 
             val records = supabaseClient.postgrest["paired_watches"]
                 .select { filter { eq("id", pairedWatchId) } }
@@ -438,7 +516,7 @@ class WatchSessionManager private constructor(private val context: Context) {
 
             if (!pendingAccess.isNullOrEmpty() && !pendingRefresh.isNullOrEmpty()) {
                 // Apply the fresh tokens
-                supabaseClient.auth.importAuthToken(pendingAccess, pendingRefresh)
+                importOrbitSession(pendingAccess, pendingRefresh)
 
                 // Clear the pending tokens so we don't re-apply on next resume
                 supabaseClient.postgrest["paired_watches"]
@@ -453,12 +531,11 @@ class WatchSessionManager private constructor(private val context: Context) {
     }
 
     fun logout() {
-        pollJob?.cancel()
+        stopPolling()
         scope.launch {
             // Deactivate the paired_watches record
             try {
-                val prefs = context.dataStore.data.first()
-                val pairedWatchId = prefs[pairedWatchIdKey]
+                val pairedWatchId = prefs.getString(KEY_PAIRED_WATCH_ID, null)
                 if (pairedWatchId != null) {
                     supabaseClient.postgrest["paired_watches"]
                         .update({ set("is_active", false) }) {
@@ -467,12 +544,13 @@ class WatchSessionManager private constructor(private val context: Context) {
                 }
             } catch (_: Exception) {}
 
-            context.dataStore.edit { prefs ->
-                prefs.remove(stringPreferencesKey("supabase_access_token"))
-                prefs.remove(stringPreferencesKey("supabase_refresh_token"))
-                prefs.remove(stringPreferencesKey("supabase_user_id"))
-                prefs.remove(pairedWatchIdKey)
-            }
+            prefs.edit()
+                .remove(KEY_ACCESS_TOKEN)
+                .remove(KEY_REFRESH_TOKEN)
+                .remove(KEY_USER_ID)
+                .remove(KEY_PAIRED_WATCH_ID)
+                .apply()
+
             try { supabaseClient.auth.signOut() } catch (e: Exception) {}
             _isAuthenticated.value = false
             _currentUserId.value = null

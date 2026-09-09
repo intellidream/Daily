@@ -276,6 +276,7 @@ struct Bubbles7DaysView: View {
                     }
                     self.isSyncing = false
                     self.saveCache(for: offset, buckets: initialBuckets)
+                    WKInterfaceDevice.current().play(.success)
                 }
             } catch {
                 DispatchQueue.main.async {

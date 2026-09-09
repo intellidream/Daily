@@ -172,7 +172,8 @@ struct SmokesView: View {
                             .padding(.horizontal, 7)
                             .background(Color.white.opacity(0.1))
                             .cornerRadius(6)
-                            .onLongPressGesture {
+                            .onTapGesture {
+                                WKInterfaceDevice.current().play(.click)
                                 selectedLog = log
                                 showDeleteConfirm = true
                             }
@@ -346,6 +347,7 @@ struct SmokesView: View {
                 DispatchQueue.main.async {
                     self.isSyncing = false
                     WidgetCenter.shared.reloadAllTimelines()
+                    WKInterfaceDevice.current().play(.success)
                 }
             } catch {
                 OfflineSyncManager.shared.enqueue(log: newLog)

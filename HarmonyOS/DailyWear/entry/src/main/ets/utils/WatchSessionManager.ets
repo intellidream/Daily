@@ -12,6 +12,7 @@ const ACCESS_TOKEN_KEY = 'supabase_access_token';
 const REFRESH_TOKEN_KEY = 'supabase_refresh_token';
 const USER_ID_KEY = 'supabase_user_id';
 const PAIRED_WATCH_ID_KEY = 'paired_watch_id';
+const LAST_HEALTH_SYNC_KEY = 'last_health_sync_time';
 
 export class WatchSessionManager {
   private static instance: WatchSessionManager | null = null;
@@ -267,12 +268,30 @@ export class WatchSessionManager {
     }
   }
 
+  public async setLastHealthSyncTime(timeMs: number): Promise<void> {
+    if (!this.pref) return;
+    try {
+      await this.pref.put(LAST_HEALTH_SYNC_KEY, timeMs);
+      await this.pref.flush();
+    } catch (_e) {}
+  }
+
+  public async getLastHealthSyncTime(): Promise<number> {
+    if (!this.pref) return 0;
+    try {
+      return (await this.pref.get(LAST_HEALTH_SYNC_KEY, 0)) as number;
+    } catch (_e) {
+      return 0;
+    }
+  }
+
   private async saveSession(token: string, refresh: string, userId: string): Promise<void> {
     if (!this.pref) return;
     try {
       await this.pref.put(ACCESS_TOKEN_KEY, token);
       await this.pref.put(REFRESH_TOKEN_KEY, refresh);
       await this.pref.put(USER_ID_KEY, userId);
+      await this.pref.put(LAST_HEALTH_SYNC_KEY, Date.now());
       await this.pref.flush();
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'Failed to save credentials to preferences');
@@ -317,10 +336,8 @@ export class WatchSessionManager {
       const userId = await this.pref.get(USER_ID_KEY, '') as string;
 
       if (token && refresh && userId) {
-        // We no longer force-refresh on resume.
-        // The watch relies entirely on `checkForRepairTokens()` which will update the 
-        // token if the main app pushed a new one.
-        // await this.refreshSession(refresh, userId);
+        // Record sync timestamp for AboutView
+        await this.setLastHealthSyncTime(Date.now());
       }
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'onAppResumed error: ' + JSON.stringify(e));

@@ -37,9 +37,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
-import androidx.wear.compose.material.CircularProgressIndicator
-import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.Text
+import androidx.wear.compose.material.Icon
+import androidx.wear.compose.material.CircularProgressIndicator
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.rotary.onRotaryScrollEvent
+import java.time.OffsetDateTime
+import java.time.Instant
+import java.time.ZoneId
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
 import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
@@ -49,7 +58,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 
 data class WaterDayBucket(
     val dateStr: String,
@@ -70,21 +78,18 @@ fun Bubbles7DaysScreen(sessionManager: WatchSessionManager) {
 
     val scope = rememberCoroutineScope()
     val listState = rememberScalingLazyListState()
+    val focusRequester = remember { FocusRequester() }
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
+
+    LaunchedEffect(Unit) {
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) {}
+    }
 
     val localDateFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val dayLabelFmt = remember { SimpleDateFormat("EEE", Locale.getDefault()) }
     val weekTitleFmt = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
-    val isoFmt = remember {
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-    }
-    val parseFmt = remember {
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-    }
 
     // Monday-to-Sunday calculation
     fun getWeekWindow(offset: Int): Pair<Calendar, Calendar> {
@@ -121,8 +126,8 @@ fun Bubbles7DaysScreen(sessionManager: WatchSessionManager) {
         scope.launch {
             isLoading = true
             val (monCal, nextMonCal) = getWeekWindow(weekOffset)
-            val startStr = isoFmt.format(monCal.time)
-            val endStr = isoFmt.format(nextMonCal.time)
+            val startStr = Instant.ofEpochMilli(monCal.timeInMillis).toString()
+            val endStr = Instant.ofEpochMilli(nextMonCal.timeInMillis).toString()
             val todayStr = localDateFmt.format(Date())
 
             val tempBuckets = mutableListOf<WaterDayBucket>()
@@ -162,18 +167,19 @@ fun Bubbles7DaysScreen(sessionManager: WatchSessionManager) {
 
                 for (log in logs) {
                     try {
-                        val pureUTC = log.logged_at.replace("Z", "") + "Z"
-                        val date = parseFmt.parse(pureUTC)
-                        if (date != null) {
-                            val logDateStr = localDateFmt.format(date)
-                            val bucket = tempBuckets.find { it.dateStr == logDateStr }
-                            if (bucket != null) {
-                                val isCoffee = log.metadata?.contains("Coffee") == true
-                                if (isCoffee) {
-                                    bucket.coffee += log.value
-                                } else {
-                                    bucket.water += log.value
-                                }
+                        val localDate = try {
+                            OffsetDateTime.parse(log.logged_at).atZoneSameInstant(ZoneId.systemDefault()).toLocalDate()
+                        } catch (_: Exception) {
+                            Instant.parse(log.logged_at).atZone(ZoneId.systemDefault()).toLocalDate()
+                        }
+                        val logDateStr = localDate.toString()
+                        val bucket = tempBuckets.find { it.dateStr == logDateStr }
+                        if (bucket != null) {
+                            val isCoffee = log.metadata?.contains("Coffee") == true
+                            if (isCoffee) {
+                                bucket.coffee += log.value
+                            } else {
+                                bucket.water += log.value
                             }
                         }
                     } catch (_: Exception) {}
@@ -214,7 +220,18 @@ fun Bubbles7DaysScreen(sessionManager: WatchSessionManager) {
     ) {
         ScalingLazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            autoCentering = null,
+            contentPadding = PaddingValues(top = 22.dp, bottom = 28.dp, start = 8.dp, end = 8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .focusable()
+                .onRotaryScrollEvent {
+                    scope.launch {
+                        listState.scrollBy(it.verticalScrollPixels)
+                    }
+                    true
+                },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header
