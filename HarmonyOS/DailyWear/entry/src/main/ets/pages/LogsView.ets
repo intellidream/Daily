@@ -51,19 +51,22 @@ export struct LogsView {
     this.getUIContext().showAlertDialog({
       title: 'Delete Log?',
       message: 'This will permanently remove this entry.',
-      primaryButton: {
-        value: 'Cancel',
-        fontColor: '#888888',
-        action: () => {}
-      },
-      secondaryButton: {
-        value: 'Delete',
-        fontColor: '#FF3B30',
-        action: () => {
-          this.triggerHaptic();
-          this.onDelete(logId);
+      buttonDirection: DialogButtonDirection.VERTICAL,
+      buttons: [
+        {
+          value: 'Delete',
+          fontColor: '#FF3B30',
+          action: () => {
+            this.triggerHaptic();
+            this.onDelete(logId);
+          }
+        },
+        {
+          value: 'Cancel',
+          fontColor: '#888888',
+          action: () => {}
         }
-      }
+      ]
     });
   }
 
@@ -102,8 +105,8 @@ export struct LogsView {
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
       }
-      .width('92%')
-      .margin({ top: 10, bottom: 8 })
+      .width('84%')
+      .margin({ top: 22, bottom: 8 })
       .alignItems(VerticalAlign.Center)
 
       // Logs List
@@ -176,7 +179,7 @@ export struct LogsView {
                   this.showDeleteConfirm(log.id);
                 })
               }
-              .width('92%')
+              .width('84%')
               .padding({ top: 8, bottom: 8, left: 10, right: 10 })
               .borderRadius(10)
               .backgroundColor('#1C1C1E')
@@ -184,7 +187,7 @@ export struct LogsView {
             }, (log: SupabaseHabitLog) => log.id)
           }
           .width('100%')
-          .padding({ bottom: 20 })
+          .padding({ bottom: 36 })
           .alignItems(HorizontalAlign.Center)
         }
         .scrollable(ScrollDirection.Vertical)

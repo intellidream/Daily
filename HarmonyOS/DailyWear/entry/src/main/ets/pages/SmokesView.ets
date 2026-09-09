@@ -141,21 +141,24 @@ export struct SmokesView {
     this.getUIContext().showAlertDialog({
       title: 'Delete Log?',
       message: `Delete 1 ${typeName} entry?`,
-      primaryButton: {
-        value: 'Cancel',
-        fontColor: '#888888',
-        action: () => {}
-      },
-      secondaryButton: {
-        value: 'Delete',
-        fontColor: '#FF3B30',
-        action: async () => {
-          this.triggerHaptic();
-          this.dayLogs = this.dayLogs.filter(l => l.id !== log.id);
-          this.computeTotals();
-          await SupabaseClient.getInstance().softDeleteLog(log.id);
+      buttonDirection: DialogButtonDirection.VERTICAL,
+      buttons: [
+        {
+          value: 'Delete',
+          fontColor: '#FF3B30',
+          action: async () => {
+            this.triggerHaptic();
+            this.dayLogs = this.dayLogs.filter(l => l.id !== log.id);
+            this.computeTotals();
+            await SupabaseClient.getInstance().softDeleteLog(log.id);
+          }
+        },
+        {
+          value: 'Cancel',
+          fontColor: '#888888',
+          action: () => {}
         }
-      }
+      ]
     });
   }
 
@@ -173,7 +176,7 @@ export struct SmokesView {
             .margin({ left: 4 })
         }
         .justifyContent(FlexAlign.Center)
-        .margin({ top: 4, bottom: 2 })
+        .margin({ top: 0, bottom: 2 })
 
         // Temporal Navigation Header (Days)
         TemporalNavHeader({
@@ -294,7 +297,7 @@ export struct SmokesView {
             .fontColor('#FFFFFF')
             .margin({ left: 2 })
         }
-        .width('90%')
+        .width('84%')
         .height(28)
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
@@ -308,7 +311,7 @@ export struct SmokesView {
               .fontWeight(FontWeight.Bold)
               .fontColor('#888888')
           }
-          .width('88%')
+          .width('82%')
           .margin({ top: 2, bottom: 4 })
           .justifyContent(FlexAlign.Start)
 
@@ -336,7 +339,7 @@ export struct SmokesView {
                 .fontColor('#FF5555')
                 .padding({ left: 8, right: 4 })
             }
-            .width('88%')
+            .width('82%')
             .padding({ top: 6, bottom: 6, left: 10, right: 10 })
             .borderRadius(8)
             .backgroundColor('rgba(255, 255, 255, 0.08)')
@@ -348,7 +351,7 @@ export struct SmokesView {
         }
       }
       .width('100%')
-      .padding({ bottom: 24 })
+      .padding({ top: 22, bottom: 36 })
       .alignItems(HorizontalAlign.Center)
     }
     .scrollable(ScrollDirection.Vertical)

@@ -258,3 +258,53 @@ When pairing the WearOS watch application with DayOne Desktop/Mobile, the pairin
     - Allowed repair token recovery when `pending_access_token` is present even if `pending_refresh_token` is empty string (matching DayOne Desktop's long-lived token architecture).
   - In `FeaturesPage.xaml.cs` (WinUI) and `Settings.razor` (Blazor):
     - Initialized `LastTokenPush = DateTime.UtcNow` upon creating `PairedWatch` rows.
+
+---
+
+## HarmonyOS: Rezolvare Conflict Semnătură & Aliniere `bundleName`
+
+### 1. Descrierea Erorii la Semnare
+- **Eroare**: `hvigor ERROR: 00303074 Configuration Error: The bundleName in app.json does not match the bundleName in the generated SigningConfigs. At file: HarmonyOS/DailyWear/build-profile.json5`.
+- **Cauză**: În commit-ul recent, `bundleName` din `HarmonyOS/DailyWear/AppScope/app.json5` fusese modificat în `"com.intellidream.daily.orbit"`. Certificatul de dezvoltator și profilul de provisioning generat (`.p7b`) din `~/.ohos/config/` erau emise și semnate de Huawei Developer Relations CA pentru `bundle-name: "com.intellidream.daily"`. La etapa `SignHap`, `hvigor` valida corespondența strictă între `app.json5` și profilul de semnare.
+
+### 2. Soluție & Rezolvare
+1. **Corectare `bundleName`**: În `AppScope/app.json5`, s-a revenit la `"bundleName": "com.intellidream.daily"`. Numele vizual al aplicației pe ceas rămâne `"DayOne Orbit"` prin `label: "$string:app_name"`.
+2. **Compilare & Semnare Validată**: Rulat `hvigorw assembleHap`, finalizat cu succes:
+   `Finished :entry:default@SignHap... after 2 s 404 ms` -> `BUILD SUCCESSFUL in 42 s`.
+3. **Instalare Emulator**: La reinstalarea pe simulatorul Huawei (`127.0.0.1:5555`), a apărut `code:9568332 error: install sign info inconsistent` din cauza versiunii vechi nesemnate deja instalate. S-a efectuat `hdc app uninstall com.intellidream.daily` urmat de instalarea curată a pachetului semnat `entry-default-signed.hap`.
+4. **Verificare Live**: Aplicația a pornit cu succes pe simulator, a generat PIN-ul de pairing, s-a împerecheat și a încărcat dashboard-ul de date în timp real.
+
+---
+
+## HarmonyOS: Optimizare Layout Ecran Rotund & Dialoguri Accesibile
+
+### 1. Probleme Identificate pe Ceasul Circular (466x466)
+1. **Titluri & Butoane Navigare Tăiate**: Titlurile ecranelor de logging (`💧 Bubbles`, `🔥 Smokes`) și cel din grafice (`7 Days`) erau împinse prea sus, lipite de curbura superioară a cadranului.
+2. **Săgeți Navigare Temporală Ascunse (`‹` / `›`)**: `TemporalNavHeader` avea lățimea setată la `94%` (438px). Pe un ecran rotund de 466px, lățimea vizibilă a corzii la înălțimea y=50 este de doar ~288px, astfel încât butoanele `‹` și `›` erau împinse complet în afara marginii vizibile a ecranului.
+3. **Elemente Ieșite din Ecran în Grafice (Charts 7 Days)**: Rândul de sumar `💧 Avg: ...  Goal: ...` și `🔥 Avg: ...  Base: ...` avea lățimea de `90%` cu `SpaceBetween`, poziționând etichetele în colțurile tăiate de curba ecranului. Histograma la `90%` era de asemenea la limită.
+4. **Buton Unpair Prea Mare**: În ecranul `AboutView`, butonul `Unpair Watch` ocupa `85%` din lățime cu o înălțime de 36px, având un aspect mult prea lat și disproporționat.
+5. **Trunchiere Text Butoane Dialog ("C..." și "D...")**: La ștergerea unui log sau la unpair, `AlertDialog` afișa butoanele orizontal (side-by-side). Pe ecranul mic al ceasului, lățimea fiecărui buton era sub 80px, forțând ArkUI să trunchieze textele `Cancel` și `Delete` în `C...` și `D...`.
+
+### 2. Soluții Implementate
+1. **Header & Padding Sigur pentru Display Circular**:
+   - În `BubblesView.ets`, `SmokesView.ets`, `Bubbles7DaysView.ets`, `Smokes7DaysView.ets` și `AboutView.ets`, containerul `Column` din `Scroll()` a primit `.padding({ top: 22, bottom: 36 })`, iar marginea de sus a titlurilor a fost redusă la `0`. Titlul și iconițele stau acum natural și aerisit sub rama curbată de sus.
+2. **Ajustare Lățime `TemporalNavHeader`**:
+   - Redusă lățimea containerului de la `94%` la `78%`.
+   - Mărit butonul `‹` și `›` la `width(30)`, `height(26)`, `borderRadius(8)` și font `17px`.
+   - Ambele butoane de navigare temporală sunt acum 100% vizibile, confortabile la atingere și au un spațiu de siguranță de ~35px față de rama rotundă.
+3. **Optimizare Grafice 7 Zile**:
+   - Histogramele reduse la `.width('82%')`.
+   - Rândul de sumar `Avg / Goal` a fost centrat la `.width('82%')` cu separator `•` (`💧 Avg: 1900 ml/d  •  Goal: 2000 ml`), eliminând complet ieșirea textelor în afara ecranului.
+4. **Redimensionare Buton `Unpair Watch`**:
+   - Transformat într-un pill button compact, centrat: `width(128)`, `height(30)`, `borderRadius(15)` cu text de `11px`, identic cu rezolvarea de pe WearOS.
+5. **Dialoguri Verticale pentru Butoane Complete (`Cancel` & `Delete`)**:
+   - În toate ecranele (`BubblesView`, `SmokesView`, `LogsView`, `AboutView`), s-a configurat `showAlertDialog` folosind:
+     ```ets
+     buttonDirection: DialogButtonDirection.VERTICAL,
+     buttons: [
+       { value: 'Delete', fontColor: '#FF3B30', action: async () => { ... } },
+       { value: 'Cancel', fontColor: '#888888', action: () => {} }
+     ]
+     ```
+   - Cu dispunerea verticală, butoanele ocupă întreaga lățime a dialogului, afișând complet și lizibil cuvintele `Delete` / `Unpair` și `Cancel`.
+

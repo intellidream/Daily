@@ -83,7 +83,7 @@ export struct Bubbles7DaysView {
             .margin({ left: 4 })
         }
         .justifyContent(FlexAlign.Center)
-        .margin({ top: 4, bottom: 2 })
+        .margin({ top: 0, bottom: 2 })
 
         // Temporal Nav Header (Weeks)
         TemporalNavHeader({
@@ -177,33 +177,36 @@ export struct Bubbles7DaysView {
             .height('100%')
             .alignItems(VerticalAlign.Bottom)
           }
-          .width('90%')
+          .width('82%')
           .height(84)
           .margin({ top: 6, bottom: 6 })
         }
 
         // Summary Row: Avg & Goal
         Row() {
-          Row() {
-            Text('💧')
-              .fontSize(11)
-            Text(`Avg: ${this.getWeeklyAverage()} ml/d`)
-              .fontSize(11)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#FFFFFF')
-              .margin({ left: 3 })
-          }
+          Text('💧')
+            .fontSize(11)
+          Text(`Avg: ${this.getWeeklyAverage()} ml/d`)
+            .fontSize(11)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFFFFF')
+            .margin({ left: 3 })
+
+          Text('  •  ')
+            .fontSize(10)
+            .fontColor('#666666')
 
           Text(`Goal: ${this.waterGoal} ml`)
             .fontSize(10)
             .fontColor('#888888')
         }
-        .width('90%')
-        .justifyContent(FlexAlign.SpaceBetween)
+        .width('82%')
+        .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
-        .margin({ top: 4, bottom: 12 })
+        .margin({ top: 6, bottom: 16 })
       }
       .width('100%')
+      .padding({ top: 22, bottom: 36 })
       .alignItems(HorizontalAlign.Center)
     }
     .scrollable(ScrollDirection.Vertical)

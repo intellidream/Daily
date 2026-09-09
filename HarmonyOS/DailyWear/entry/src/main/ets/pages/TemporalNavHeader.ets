@@ -19,13 +19,13 @@ export struct TemporalNavHeader {
       // Previous Button (‹)
       Row() {
         Text('‹')
-          .fontSize(16)
+          .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.accentColor)
       }
-      .width(28)
-      .height(24)
-      .borderRadius(6)
+      .width(30)
+      .height(26)
+      .borderRadius(8)
       .backgroundColor('rgba(255, 255, 255, 0.12)')
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
@@ -46,13 +46,13 @@ export struct TemporalNavHeader {
       if (this.canGoForward) {
         Row() {
           Text('›')
-            .fontSize(16)
+            .fontSize(17)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.accentColor)
         }
-        .width(28)
-        .height(24)
-        .borderRadius(6)
+        .width(30)
+        .height(26)
+        .borderRadius(8)
         .backgroundColor('rgba(255, 255, 255, 0.12)')
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
@@ -62,14 +62,14 @@ export struct TemporalNavHeader {
         })
       } else {
         Row()
-          .width(28)
-          .height(24)
+          .width(30)
+          .height(26)
       }
     }
-    .width('94%')
+    .width('78%')
     .height(30)
     .justifyContent(FlexAlign.SpaceBetween)
     .alignItems(VerticalAlign.Center)
-    .margin({ top: 4, bottom: 4 })
+    .margin({ top: 2, bottom: 4 })
   }
 }
