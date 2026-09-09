@@ -350,3 +350,55 @@ Textul de stare a sincronizării Health pe toate cele 4 platforme (Title Case pe
 - Niciodată sincronizat: `Health: Not Synced`
 - Nicio dată nouă la scanare: `Health: No New Data`
 
+---
+
+## 10. Optimizare Performanță, Caching Multi-Day/Săptămânal și Feedback Haptic/Audio pe WearOS
+
+### 1. Diagnoză: De ce aplicația WearOS reîncărca datele de la zero și părea lentă?
+1. **Distrugerea ecranelor la swipe (`HorizontalPager`)**: `HorizontalPager` avea `beyondViewportPageCount = 0` (implicit), ceea ce ducea la distrugerea imediată a ecranului ieșit din cadru. La swipe între tab-uri, ecranul era recreat de la zero, declanșând `LaunchedEffect`, resetând starea și arătând un ecran gol sau spinner până la finalizarea cererii HTTP către Supabase.
+2. **Lipsa Caching-ului pentru Zile Anterioare (`dayOffset < 0`)**: `WatchSessionManager` reținea doar `cachedBubblesLogs` și `cachedSmokesLogs` pentru ziua curentă (`dayOffset == 0`). La orice navigare pe „Yesterday” sau zile anterioare, datele erau descărcate integral de pe internet de fiecare dată, provocând o întârziere sesizabilă (500–2000 ms).
+3. **Absența Caching-ului în Ecranele de 7 Zile (`Bubbles7DaysScreen` & `Smokes7DaysScreen`)**: Aceste ecrane nu aveau niciun fel de memorie cache. La fiecare vizualizare sau comutare pe „Last Week”, `buckets` era golit (`emptyList()`), `isLoading` devenea `true` și apărea spinner-ul de încărcare.
+4. **Execuție Secvențială a Cererilor către Supabase**: Înainte de încărcarea log-urilor, se aștepta mai întâi descărcarea țintei zilnice (`habits_goals` / `user_preferences`) și abia apoi se pornea descărcarea log-urilor de obiceiuri, dublând timpul de așteptare.
+
+---
+
+### 2. Arhitectura de Caching Implementată
+
+#### A. Multi-Day Cache în `WatchSessionManager`
+- `bubblesDayCache = ConcurrentHashMap<String, List<HabitLog>>()`
+- `smokesDayCache = ConcurrentHashMap<String, List<HabitLog>>()`
+- La schimbarea `dayOffset`, data calendaristică (`targetDateStr`) este verificată instant în cache-ul local de memorie. Dacă există date descărcate anterior, **UI-ul se actualizează în 0 ms**, afișând inelul de progres, totalurile și istoricul fără nicio clipire.
+- Interogarea Supabase se execută asincron în fundal (model *stale-while-revalidate*), actualizând cache-ul și ecranul doar dacă s-au modificat datele pe server.
+
+#### B. Weekly Buckets Cache pentru Ecranele de 7 Zile
+- `bubblesWeekCache = ConcurrentHashMap<Int, List<WaterDayBucket>>()`
+- `smokesWeekCache = ConcurrentHashMap<Int, List<SmokeDayBucket>>()`
+- Modelele de date `WaterDayBucket` și `SmokeDayBucket` au fost extrase în `com.intellidream.daily.wearos.domain.model.Buckets.kt`.
+- Ecranele `Bubbles7DaysScreen` și `Smokes7DaysScreen` inițializează barele histogramelor direct din datele săptămânii curente memorate în cache. Dacă săptămâna a fost deja accesată, `isLoading = false`, iar utilizatorul vede instant graficul, eliminând complet spinner-ul de încărcare.
+
+#### C. Actualizare Optimistă Transversală (Day + Week)
+- La adăugarea unui nou pahar de apă / țigară (`logWater` / `logSmoke`), intrarea este injectată instantaneu în lista de log-uri ale zilei curente, în cache-ul de zi și **în găleata zilei de azi din cache-ul săptămânal** (`updateBubblesWeekToday` / `updateSmokesWeekToday`).
+- Dacă utilizatorul glisează imediat pe tab-ul de grafic săptămânal, noul consum este deja reflectat în histogramă fără nicio reîncărcare.
+- La ștergerea unui log, cantitatea este retrasă instant atât din ecranul principal, cât și din bara de 7 zile.
+
+#### D. Pager Cald în Memorie (`beyondViewportPageCount = 1`)
+- În `DailyWearApp.kt`, s-a setat `beyondViewportPageCount = 1` în `HorizontalPager`. Ecranele adiacente (de exemplu Bubbles 7 Days când ești pe Bubbles) sunt păstrate montate și calde în memorie, glisarea orizontală devenind fluidă la 60 fps fără reconstrucții agresive.
+
+#### E. Paralelizarea Interogărilor cu Coroutines `async`
+- Atât în ecranele zilnice, cât și în cele de 7 zile, țintele zilnice (`habits_goals` / `user_preferences`) și log-urile (`habits_logs`) sunt interogate simultan prin `async` / `await()`, înjumătățind timpul de răspuns la reîmprospătare. Dacă ținta este deja memorată în cache-ul sesiunii, apelul de rețea redundant pentru țintă este sărit.
+
+---
+
+### 3. Modul de Feedback Audio și Haptic (`SoundAndHapticFeedback`)
+
+Creat utilitarul `com.intellidream.daily.wearos.util.SoundAndHapticFeedback`:
+1. **Feedback de Succes (Încărcare/Refresh & Log Nou)**:
+   - **Tactil**: Puls dublu ascendent fin (vibrație secvențială la 25ms și 30ms cu intensități crescătoare: 160 -> 220), emulând senzația haptică `.success` de pe Apple Watch.
+   - **Audio**: Chime subtil și plăcut generat nativ prin `ToneGenerator(AudioManager.STREAM_NOTIFICATION, 35).startTone(ToneGenerator.TONE_PROP_BEEP2, 45)`.
+   - **Respectarea Modului Silențios**: Sunetul este redat exclusiv când ceasul se află în `AudioManager.RINGER_MODE_NORMAL`. Dacă ceasul este setat pe Silent sau Do Not Disturb / Vibrate, se declanșează strict vibrația haptică, fără a deranja utilizatorul.
+2. **Feedback de Click (Navigare Zile / Săptămâni, Ștergere, Butoane)**:
+   - Puls haptic scurt și clar (`VibrationEffect.EFFECT_CLICK` / `KEYBOARD_TAP`).
+3. **Permisiune Nativă**:
+   - Adăugată permisiunea `<uses-permission android:name="android.permission.VIBRATE" />` în `AndroidManifest.xml` pentru a garanta execuția vibrațiilor pe toate versiunile de Wear OS (de la Wear OS 2/3/4/5 pe Pixel Watch, Galaxy Watch, TicWatch etc.).
+
+

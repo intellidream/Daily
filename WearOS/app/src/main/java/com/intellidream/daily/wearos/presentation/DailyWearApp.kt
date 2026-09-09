@@ -73,6 +73,7 @@ fun DailyWearApp(targetPage: Int = -1) {
 
                 HorizontalPager(
                     state = pagerState,
+                    beyondViewportPageCount = 1,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
                     val isPageActive = (pagerState.currentPage == page)

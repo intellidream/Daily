@@ -35,10 +35,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellidream.daily.wearos.util.SoundAndHapticFeedback
+import kotlinx.coroutines.async
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Icon
@@ -78,20 +81,15 @@ fun BubblesScreen(
     isPageActive: Boolean = true,
     onOpenLogs: ((habitType: String, dateTitle: String, logs: List<HabitLog>, onDelete: (HabitLog) -> Unit) -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     var dayOffset by remember { mutableIntStateOf(0) }
     var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedBubblesGoal ?: 2000) }
     var isLogging by remember { mutableStateOf(false) }
-    var dayLogs by remember { mutableStateOf<List<HabitLog>>(sessionManager.cachedBubblesLogs ?: emptyList()) }
-    var todayWater by remember { mutableIntStateOf(dayLogs.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }) }
-    var todayCoffee by remember { mutableIntStateOf(dayLogs.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }) }
-    var todayTotal by remember { mutableIntStateOf(todayWater + todayCoffee) }
-    var logToDelete by remember { mutableStateOf<HabitLog?>(null) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val listState = rememberScalingLazyListState()
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
-    val view = LocalView.current
 
     val localFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val dayTitleFormat = remember { SimpleDateFormat("EEE, d MMM", Locale.getDefault()) }
@@ -100,6 +98,25 @@ fun BubblesScreen(
             timeZone = TimeZone.getTimeZone("UTC")
         }
     }
+
+    val targetDateStr = remember(dayOffset) {
+        val cal = Calendar.getInstance()
+        if (dayOffset != 0) cal.add(Calendar.DAY_OF_YEAR, dayOffset)
+        localFormat.format(cal.time)
+    }
+
+    val initialLogs = remember(targetDateStr) {
+        sessionManager.getBubblesLogs(targetDateStr)
+            ?: (if (dayOffset == 0) sessionManager.cachedBubblesLogs else null)
+            ?: emptyList()
+    }
+
+    var dayLogs by remember { mutableStateOf<List<HabitLog>>(initialLogs) }
+    var todayWater by remember { mutableIntStateOf(dayLogs.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }) }
+    var todayCoffee by remember { mutableIntStateOf(dayLogs.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }) }
+    var todayTotal by remember { mutableIntStateOf(todayWater + todayCoffee) }
+    var logToDelete by remember { mutableStateOf<HabitLog?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     val formattedDateTitle = remember(dayOffset) {
         when (dayOffset) {
@@ -113,84 +130,109 @@ fun BubblesScreen(
         }
     }
 
+    // Fast local memory cache hit when dayOffset changes: 0ms UI update
+    LaunchedEffect(dayOffset) {
+        val cached = sessionManager.getBubblesLogs(targetDateStr)
+        if (cached != null) {
+            dayLogs = cached
+            var tWater = 0
+            var tCoffee = 0
+            for (log in cached) {
+                if (log.metadata?.contains("Coffee") == true) tCoffee += log.value.toInt() else tWater += log.value.toInt()
+            }
+            todayWater = tWater
+            todayCoffee = tCoffee
+            todayTotal = tWater + tCoffee
+        }
+    }
+
     val fetchLogs = {
         scope.launch {
-            try {
-                // Fetch dynamic goal if viewing today
-                if (dayOffset == 0) {
-                    val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
+            // Concurrent execution: fetch goal (if needed) and logs in parallel
+            val goalDeferred = async {
+                if (dayOffset == 0 && sessionManager.cachedBubblesGoal == null) {
+                    try {
+                        val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
+                            .select {
+                                filter {
+                                    eq("habit_type", "water")
+                                    eq("is_deleted", false)
+                                }
+                            }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
+
+                        if (goals.isNotEmpty()) {
+                            val goal = goals.first().target_value?.toInt() ?: 2000
+                            sessionManager.cachedBubblesGoal = goal
+                            dailyGoal = goal
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+
+            val logsDeferred = async {
+                try {
+                    val cal = Calendar.getInstance()
+                    cal.set(Calendar.HOUR_OF_DAY, 0)
+                    cal.set(Calendar.MINUTE, 0)
+                    cal.set(Calendar.SECOND, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    cal.add(Calendar.DAY_OF_YEAR, dayOffset)
+                    val startOfDay = cal.time
+                    val startStr = Instant.ofEpochMilli(startOfDay.time).toString()
+
+                    val targetDayCal = cal.clone() as Calendar
+
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                    val endOfDay = cal.time
+                    val endStr = Instant.ofEpochMilli(endOfDay.time).toString()
+
+                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
                         .select {
                             filter {
                                 eq("habit_type", "water")
                                 eq("is_deleted", false)
+                                and {
+                                    gte("logged_at", startStr)
+                                    lt("logged_at", endStr)
+                                }
                             }
-                        }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
+                        }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
 
-                    if (goals.isNotEmpty()) {
-                        dailyGoal = goals.first().target_value?.toInt() ?: 2000
-                        sessionManager.cachedBubblesGoal = dailyGoal
-                    }
-                }
-            } catch (_: Exception) {}
-
-            try {
-                val cal = Calendar.getInstance()
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
-                cal.set(Calendar.MILLISECOND, 0)
-                cal.add(Calendar.DAY_OF_YEAR, dayOffset)
-                val startOfDay = cal.time
-                val startStr = Instant.ofEpochMilli(startOfDay.time).toString()
-
-                val targetDayCal = cal.clone() as Calendar
-
-                cal.add(Calendar.DAY_OF_YEAR, 1)
-                val endOfDay = cal.time
-                val endStr = Instant.ofEpochMilli(endOfDay.time).toString()
-
-                val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                    .select {
-                        filter {
-                            eq("habit_type", "water")
-                            eq("is_deleted", false)
-                            and {
-                                gte("logged_at", startStr)
-                                lt("logged_at", endStr)
-                            }
+                    val targetStr = localFormat.format(targetDayCal.time)
+                    val dayOnlyLogs = logs.filter { log ->
+                        try {
+                            val parsed = HabitDateParser.parseToLocalDate(log.logged_at)
+                            parsed?.toString() == targetStr
+                        } catch (_: Exception) {
+                            true
                         }
-                    }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
-
-                val targetDateStr = localFormat.format(targetDayCal.time)
-                val dayOnlyLogs = logs.filter { log ->
-                    try {
-                        val parsed = HabitDateParser.parseToLocalDate(log.logged_at)
-                        parsed?.toString() == targetDateStr
-                    } catch (_: Exception) {
-                        true
                     }
-                }
 
-                var tWater = 0
-                var tCoffee = 0
-                for (log in dayOnlyLogs) {
-                    val isCoffee = log.metadata?.contains("Coffee") == true
-                    if (isCoffee) tCoffee += log.value.toInt() else tWater += log.value.toInt()
-                }
+                    var tWater = 0
+                    var tCoffee = 0
+                    for (log in dayOnlyLogs) {
+                        val isCoffee = log.metadata?.contains("Coffee") == true
+                        if (isCoffee) tCoffee += log.value.toInt() else tWater += log.value.toInt()
+                    }
 
-                dayLogs = dayOnlyLogs
-                todayWater = tWater
-                todayCoffee = tCoffee
-                todayTotal = tWater + tCoffee
+                    dayLogs = dayOnlyLogs
+                    todayWater = tWater
+                    todayCoffee = tCoffee
+                    todayTotal = tWater + tCoffee
 
-                if (dayOffset == 0) {
-                    sessionManager.cachedBubblesLogs = dayOnlyLogs
-                    sessionManager.persistWaterTotal(todayTotal)
+                    sessionManager.setBubblesLogs(targetStr, dayOnlyLogs)
+                    if (dayOffset == 0) {
+                        sessionManager.persistWaterTotal(todayTotal)
+                    }
+                    SoundAndHapticFeedback.playSuccess(context, view)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    android.util.Log.w("BubblesScreen", "Failed to fetch logs: ${e.localizedMessage}")
                 }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                android.util.Log.w("BubblesScreen", "Failed to fetch logs: ${e.localizedMessage}")
             }
+
+            goalDeferred.await()
+            logsDeferred.await()
         }
     }
 
@@ -209,10 +251,12 @@ fun BubblesScreen(
         val newLogs = dayLogs.filter { it.id != log.id }
         dayLogs = newLogs
 
+        sessionManager.setBubblesLogs(targetDateStr, newLogs)
         if (dayOffset == 0) {
-            sessionManager.cachedBubblesLogs = newLogs
             sessionManager.persistWaterTotal(todayTotal)
+            sessionManager.updateBubblesWeekToday(isCoffee = isCoffee, delta = -log.value)
         }
+        SoundAndHapticFeedback.playClick(context, view)
 
         scope.launch {
             try {
@@ -229,13 +273,11 @@ fun BubblesScreen(
     val logWater: (Int, String) -> Unit = { amount, type ->
         if (!isLogging) {
             isLogging = true
-            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            SoundAndHapticFeedback.playLogAdded(context, view)
 
-            todayTotal += amount
-            if (type.contains("Coffee")) todayCoffee += amount else todayWater += amount
-            if (dayOffset == 0) {
-                sessionManager.persistWaterTotal(todayTotal)
-            }
+            val isCoffee = type.contains("Coffee")
+            if (isCoffee) todayCoffee += amount else todayWater += amount
+            todayTotal = todayWater + todayCoffee
 
             val metadata = buildJsonObject { put("drink", type) }.toString()
 
@@ -245,6 +287,7 @@ fun BubblesScreen(
                 targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
             }
             val loggedAtStr = isoFormat.format(targetCal.time)
+            val currentDateStr = localFormat.format(targetCal.time)
 
             val newLog = HabitLog(
                 user_id = sessionManager.currentUserId.value,
@@ -257,8 +300,10 @@ fun BubblesScreen(
 
             val newHistory = listOf(newLog) + dayLogs
             dayLogs = newHistory
+            sessionManager.setBubblesLogs(currentDateStr, newHistory)
             if (dayOffset == 0) {
-                sessionManager.cachedBubblesLogs = newHistory
+                sessionManager.persistWaterTotal(todayTotal)
+                sessionManager.updateBubblesWeekToday(isCoffee = isCoffee, delta = amount.toDouble())
             }
 
             scope.launch {
@@ -308,8 +353,16 @@ fun BubblesScreen(
                     title = formattedDateTitle,
                     canGoForward = dayOffset < 0,
                     accentColor = Color.Cyan,
-                    onPrevious = { dayOffset -= 1 },
-                    onNext = { if (dayOffset < 0) dayOffset += 1 },
+                    onPrevious = {
+                        SoundAndHapticFeedback.playClick(context, view)
+                        dayOffset -= 1
+                    },
+                    onNext = {
+                        if (dayOffset < 0) {
+                            SoundAndHapticFeedback.playClick(context, view)
+                            dayOffset += 1
+                        }
+                    },
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
@@ -493,7 +546,7 @@ fun BubblesScreen(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.White.copy(alpha = 0.1f))
                             .clickable {
-                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                SoundAndHapticFeedback.playClick(context, view)
                                 logToDelete = log
                                 showDeleteDialog = true
                             }
@@ -581,6 +634,7 @@ fun BubblesScreen(
                             Spacer(Modifier.height(4.dp))
                             Button(
                                 onClick = {
+                                    SoundAndHapticFeedback.playClick(context, view)
                                     showDeleteDialog = false
                                     logToDelete = null
                                 },

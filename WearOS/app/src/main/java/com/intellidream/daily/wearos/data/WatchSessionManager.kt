@@ -5,6 +5,12 @@ import com.intellidream.daily.wearos.domain.model.PairedWatch
 import com.intellidream.daily.wearos.domain.model.WatchPairing
 import com.intellidream.daily.wearos.domain.model.WatchPairingInsert
 import com.intellidream.daily.wearos.domain.model.HabitLog
+import com.intellidream.daily.wearos.domain.model.WaterDayBucket
+import com.intellidream.daily.wearos.domain.model.SmokeDayBucket
+import java.util.concurrent.ConcurrentHashMap
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
@@ -97,6 +103,60 @@ class WatchSessionManager private constructor(private val context: Context) {
     
     var cachedSmokesGoal: Int? = null
     var cachedSmokesLogs: List<HabitLog>? = null
+
+    // Multi-day in-memory caching keyed by date string (e.g. "2026-09-09")
+    val bubblesDayCache = ConcurrentHashMap<String, List<HabitLog>>()
+    val smokesDayCache = ConcurrentHashMap<String, List<HabitLog>>()
+
+    // Weekly bucket in-memory caching keyed by weekOffset (0 = This Week, -1 = Last Week)
+    val bubblesWeekCache = ConcurrentHashMap<Int, List<WaterDayBucket>>()
+    val smokesWeekCache = ConcurrentHashMap<Int, List<SmokeDayBucket>>()
+
+    fun getBubblesLogs(dateStr: String): List<HabitLog>? = bubblesDayCache[dateStr]
+
+    fun setBubblesLogs(dateStr: String, logs: List<HabitLog>) {
+        bubblesDayCache[dateStr] = logs
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        if (dateStr == todayStr) {
+            cachedBubblesLogs = logs
+        }
+    }
+
+    fun getSmokesLogs(dateStr: String): List<HabitLog>? = smokesDayCache[dateStr]
+
+    fun setSmokesLogs(dateStr: String, logs: List<HabitLog>) {
+        smokesDayCache[dateStr] = logs
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        if (dateStr == todayStr) {
+            cachedSmokesLogs = logs
+        }
+    }
+
+    fun getBubblesWeek(weekOffset: Int): List<WaterDayBucket>? = bubblesWeekCache[weekOffset]
+
+    fun setBubblesWeek(weekOffset: Int, buckets: List<WaterDayBucket>) {
+        bubblesWeekCache[weekOffset] = buckets
+    }
+
+    fun getSmokesWeek(weekOffset: Int): List<SmokeDayBucket>? = smokesWeekCache[weekOffset]
+
+    fun setSmokesWeek(weekOffset: Int, buckets: List<SmokeDayBucket>) {
+        smokesWeekCache[weekOffset] = buckets
+    }
+
+    fun updateBubblesWeekToday(isCoffee: Boolean, delta: Double) {
+        bubblesWeekCache[0]?.find { it.isToday }?.let { bucket ->
+            if (isCoffee) bucket.coffee = maxOf(0.0, bucket.coffee + delta)
+            else bucket.water = maxOf(0.0, bucket.water + delta)
+        }
+    }
+
+    fun updateSmokesWeekToday(isHeated: Boolean, delta: Double) {
+        smokesWeekCache[0]?.find { it.isToday }?.let { bucket ->
+            if (isHeated) bucket.heat = maxOf(0.0, bucket.heat + delta)
+            else bucket.cig = maxOf(0.0, bucket.cig + delta)
+        }
+    }
 
     // Bumped on every resume to tell screens to re-fetch data
     private val _dataRefreshTrigger = MutableStateFlow(0)

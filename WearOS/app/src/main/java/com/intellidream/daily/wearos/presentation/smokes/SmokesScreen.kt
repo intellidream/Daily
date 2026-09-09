@@ -34,10 +34,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellidream.daily.wearos.util.SoundAndHapticFeedback
+import kotlinx.coroutines.async
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Icon
@@ -78,20 +81,15 @@ fun SmokesScreen(
     isPageActive: Boolean = true,
     onOpenLogs: ((habitType: String, dateTitle: String, logs: List<HabitLog>, onDelete: (HabitLog) -> Unit) -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     var dayOffset by remember { mutableIntStateOf(0) }
     var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedSmokesGoal ?: 20) }
     var isLogging by remember { mutableStateOf(false) }
-    var dayLogs by remember { mutableStateOf<List<HabitLog>>(sessionManager.cachedSmokesLogs ?: emptyList()) }
-    var todayCig by remember { mutableIntStateOf(dayLogs.count { it.metadata?.contains("Heated") != true }) }
-    var todayHeat by remember { mutableIntStateOf(dayLogs.count { it.metadata?.contains("Heated") == true }) }
-    var todayTotal by remember { mutableIntStateOf(todayCig + todayHeat) }
-    var logToDelete by remember { mutableStateOf<HabitLog?>(null) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val listState = rememberScalingLazyListState()
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
-    val view = LocalView.current
 
     val localFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val dayTitleFormat = remember { SimpleDateFormat("EEE, d MMM", Locale.getDefault()) }
@@ -100,6 +98,25 @@ fun SmokesScreen(
             timeZone = TimeZone.getTimeZone("UTC")
         }
     }
+
+    val targetDateStr = remember(dayOffset) {
+        val cal = Calendar.getInstance()
+        if (dayOffset != 0) cal.add(Calendar.DAY_OF_YEAR, dayOffset)
+        localFormat.format(cal.time)
+    }
+
+    val initialLogs = remember(targetDateStr) {
+        sessionManager.getSmokesLogs(targetDateStr)
+            ?: (if (dayOffset == 0) sessionManager.cachedSmokesLogs else null)
+            ?: emptyList()
+    }
+
+    var dayLogs by remember { mutableStateOf<List<HabitLog>>(initialLogs) }
+    var todayCig by remember { mutableIntStateOf(dayLogs.filter { it.metadata?.contains("Heated") != true }.sumOf { maxOf(1, it.value.toInt()) }) }
+    var todayHeat by remember { mutableIntStateOf(dayLogs.filter { it.metadata?.contains("Heated") == true }.sumOf { maxOf(1, it.value.toInt()) }) }
+    var todayTotal by remember { mutableIntStateOf(todayCig + todayHeat) }
+    var logToDelete by remember { mutableStateOf<HabitLog?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     val formattedDateTitle = remember(dayOffset) {
         when (dayOffset) {
@@ -121,85 +138,112 @@ fun SmokesScreen(
         }
     }
 
+    // Fast local memory cache hit when dayOffset changes: 0ms UI update
+    LaunchedEffect(dayOffset) {
+        val cached = sessionManager.getSmokesLogs(targetDateStr)
+        if (cached != null) {
+            dayLogs = cached
+            var tCig = 0
+            var tHeat = 0
+            for (log in cached) {
+                val count = maxOf(1, log.value.toInt())
+                val isHeat = log.metadata?.contains("Heated") == true
+                if (isHeat) tHeat += count else tCig += count
+            }
+            todayCig = tCig
+            todayHeat = tHeat
+            todayTotal = tCig + tHeat
+        }
+    }
+
     val fetchLogs = {
         scope.launch {
-            try {
-                // Fetch dynamic baseline if viewing today
-                if (dayOffset == 0) {
-                    val userId = sessionManager.currentUserId.value
-                    if (userId != null) {
-                        val prefs = sessionManager.supabaseClient.postgrest["user_preferences"]
-                            .select {
-                                filter { eq("id", userId) }
-                            }.decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
+            // Concurrent execution: fetch dynamic baseline and logs in parallel
+            val goalDeferred = async {
+                if (dayOffset == 0 && sessionManager.cachedSmokesGoal == null) {
+                    try {
+                        val userId = sessionManager.currentUserId.value
+                        if (userId != null) {
+                            val prefs = sessionManager.supabaseClient.postgrest["user_preferences"]
+                                .select {
+                                    filter { eq("id", userId) }
+                                }.decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
 
-                        if (prefs.isNotEmpty()) {
-                            dailyGoal = prefs.first().smokes_baseline ?: 20
-                            sessionManager.cachedSmokesGoal = dailyGoal
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-
-            try {
-                val cal = Calendar.getInstance()
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
-                cal.set(Calendar.MILLISECOND, 0)
-                cal.add(Calendar.DAY_OF_YEAR, dayOffset)
-                val startOfDay = cal.time
-                val startStr = Instant.ofEpochMilli(startOfDay.time).toString()
-
-                val targetDayCal = cal.clone() as Calendar
-
-                cal.add(Calendar.DAY_OF_YEAR, 1)
-                val endOfDay = cal.time
-                val endStr = Instant.ofEpochMilli(endOfDay.time).toString()
-
-                val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                    .select {
-                        filter {
-                            eq("habit_type", "smokes")
-                            eq("is_deleted", false)
-                            and {
-                                gte("logged_at", startStr)
-                                lt("logged_at", endStr)
+                            if (prefs.isNotEmpty()) {
+                                val goal = prefs.first().smokes_baseline ?: 20
+                                dailyGoal = goal
+                                sessionManager.cachedSmokesGoal = goal
                             }
                         }
-                    }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
-
-                val targetDateStr = localFormat.format(targetDayCal.time)
-                val dayOnlyLogs = logs.filter { log ->
-                    try {
-                        val parsed = HabitDateParser.parseToLocalDate(log.logged_at)
-                        parsed?.toString() == targetDateStr
-                    } catch (_: Exception) {
-                        true
-                    }
+                    } catch (_: Exception) {}
                 }
-
-                var tCig = 0
-                var tHeat = 0
-                for (log in dayOnlyLogs) {
-                    val count = maxOf(1, log.value.toInt())
-                    val isHeat = log.metadata?.contains("Heated") == true
-                    if (isHeat) tHeat += count else tCig += count
-                }
-
-                dayLogs = dayOnlyLogs
-                todayCig = tCig
-                todayHeat = tHeat
-                todayTotal = tCig + tHeat
-
-                if (dayOffset == 0) {
-                    sessionManager.cachedSmokesLogs = dayOnlyLogs
-                    sessionManager.persistSmokesTotal(todayTotal)
-                }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                android.util.Log.w("SmokesScreen", "Failed to fetch logs: ${e.localizedMessage}")
             }
+
+            val logsDeferred = async {
+                try {
+                    val cal = Calendar.getInstance()
+                    cal.set(Calendar.HOUR_OF_DAY, 0)
+                    cal.set(Calendar.MINUTE, 0)
+                    cal.set(Calendar.SECOND, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    cal.add(Calendar.DAY_OF_YEAR, dayOffset)
+                    val startOfDay = cal.time
+                    val startStr = Instant.ofEpochMilli(startOfDay.time).toString()
+
+                    val targetDayCal = cal.clone() as Calendar
+
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                    val endOfDay = cal.time
+                    val endStr = Instant.ofEpochMilli(endOfDay.time).toString()
+
+                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
+                        .select {
+                            filter {
+                                eq("habit_type", "smokes")
+                                eq("is_deleted", false)
+                                and {
+                                    gte("logged_at", startStr)
+                                    lt("logged_at", endStr)
+                                }
+                            }
+                        }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
+
+                    val targetStr = localFormat.format(targetDayCal.time)
+                    val dayOnlyLogs = logs.filter { log ->
+                        try {
+                            val parsed = HabitDateParser.parseToLocalDate(log.logged_at)
+                            parsed?.toString() == targetStr
+                        } catch (_: Exception) {
+                            true
+                        }
+                    }
+
+                    var tCig = 0
+                    var tHeat = 0
+                    for (log in dayOnlyLogs) {
+                        val count = maxOf(1, log.value.toInt())
+                        val isHeat = log.metadata?.contains("Heated") == true
+                        if (isHeat) tHeat += count else tCig += count
+                    }
+
+                    dayLogs = dayOnlyLogs
+                    todayCig = tCig
+                    todayHeat = tHeat
+                    todayTotal = tCig + tHeat
+
+                    sessionManager.setSmokesLogs(targetStr, dayOnlyLogs)
+                    if (dayOffset == 0) {
+                        sessionManager.persistSmokesTotal(todayTotal)
+                    }
+                    SoundAndHapticFeedback.playSuccess(context, view)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    android.util.Log.w("SmokesScreen", "Failed to fetch logs: ${e.localizedMessage}")
+                }
+            }
+
+            goalDeferred.await()
+            logsDeferred.await()
         }
     }
 
@@ -219,10 +263,12 @@ fun SmokesScreen(
         val newLogs = dayLogs.filter { it.id != log.id }
         dayLogs = newLogs
 
+        sessionManager.setSmokesLogs(targetDateStr, newLogs)
         if (dayOffset == 0) {
-            sessionManager.cachedSmokesLogs = newLogs
             sessionManager.persistSmokesTotal(todayTotal)
+            sessionManager.updateSmokesWeekToday(isHeated = isHeat, delta = -count.toDouble())
         }
+        SoundAndHapticFeedback.playClick(context, view)
 
         scope.launch {
             try {
@@ -239,15 +285,11 @@ fun SmokesScreen(
     val logSmoke: (String) -> Unit = { type ->
         if (!isLogging) {
             isLogging = true
-            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            SoundAndHapticFeedback.playLogAdded(context, view)
 
             val isHeat = type.contains("Heated")
             if (isHeat) todayHeat += 1 else todayCig += 1
             todayTotal += 1
-
-            if (dayOffset == 0) {
-                sessionManager.persistSmokesTotal(todayTotal)
-            }
 
             val metadata = buildJsonObject { put("type", type) }.toString()
 
@@ -257,6 +299,7 @@ fun SmokesScreen(
                 targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
             }
             val loggedAtStr = isoFormat.format(targetCal.time)
+            val currentDateStr = localFormat.format(targetCal.time)
 
             val newLog = HabitLog(
                 user_id = sessionManager.currentUserId.value,
@@ -269,8 +312,10 @@ fun SmokesScreen(
 
             val newHistory = listOf(newLog) + dayLogs
             dayLogs = newHistory
+            sessionManager.setSmokesLogs(currentDateStr, newHistory)
             if (dayOffset == 0) {
-                sessionManager.cachedSmokesLogs = newHistory
+                sessionManager.persistSmokesTotal(todayTotal)
+                sessionManager.updateSmokesWeekToday(isHeated = isHeat, delta = 1.0)
             }
 
             scope.launch {
@@ -320,8 +365,16 @@ fun SmokesScreen(
                     title = formattedDateTitle,
                     canGoForward = dayOffset < 0,
                     accentColor = Color(0xFFFF5555),
-                    onPrevious = { dayOffset -= 1 },
-                    onNext = { if (dayOffset < 0) dayOffset += 1 },
+                    onPrevious = {
+                        SoundAndHapticFeedback.playClick(context, view)
+                        dayOffset -= 1
+                    },
+                    onNext = {
+                        if (dayOffset < 0) {
+                            SoundAndHapticFeedback.playClick(context, view)
+                            dayOffset += 1
+                        }
+                    },
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
@@ -342,7 +395,7 @@ fun SmokesScreen(
                         modifier = Modifier
                             .size(86.dp)
                             .clickable {
-                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                SoundAndHapticFeedback.playClick(context, view)
                                 if (dayLogs.isNotEmpty()) {
                                     scope.launch { listState.animateScrollToItem(4) }
                                 }
@@ -484,7 +537,7 @@ fun SmokesScreen(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.White.copy(alpha = 0.1f))
                             .clickable {
-                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                SoundAndHapticFeedback.playClick(context, view)
                                 logToDelete = log
                                 showDeleteDialog = true
                             }
@@ -574,6 +627,7 @@ fun SmokesScreen(
                             Spacer(Modifier.height(4.dp))
                             Button(
                                 onClick = {
+                                    SoundAndHapticFeedback.playClick(context, view)
                                     showDeleteDialog = false
                                     logToDelete = null
                                 },

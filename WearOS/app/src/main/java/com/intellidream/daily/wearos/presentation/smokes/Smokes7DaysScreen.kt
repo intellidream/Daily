@@ -48,36 +48,34 @@ import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import java.time.OffsetDateTime
 import java.time.Instant
 import java.time.ZoneId
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
+import com.intellidream.daily.wearos.domain.model.SmokeDayBucket
 import com.intellidream.daily.wearos.domain.util.HabitDateParser
 import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
+import com.intellidream.daily.wearos.util.SoundAndHapticFeedback
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-data class SmokeDayBucket(
-    val dateStr: String,
-    val dayLabel: String,
-    val isToday: Boolean,
-    var cig: Double = 0.0,
-    var heat: Double = 0.0
-) {
-    val total: Double get() = cig + heat
-}
-
 @Composable
 fun Smokes7DaysScreen(
     sessionManager: WatchSessionManager,
     isPageActive: Boolean = true
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     var weekOffset by remember { mutableIntStateOf(0) }
     var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedSmokesGoal ?: 20) }
-    var buckets by remember { mutableStateOf<List<SmokeDayBucket>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    val initialCached = sessionManager.getSmokesWeek(0)
+    var buckets by remember { mutableStateOf<List<SmokeDayBucket>>(initialCached ?: emptyList()) }
+    var isLoading by remember { mutableStateOf(initialCached == null) }
 
     val scope = rememberCoroutineScope()
     val listState = rememberScalingLazyListState()
@@ -118,9 +116,20 @@ fun Smokes7DaysScreen(
         }
     }
 
+    // Fast local memory cache hit when weekOffset changes: 0ms UI update
+    LaunchedEffect(weekOffset) {
+        val cached = sessionManager.getSmokesWeek(weekOffset)
+        if (cached != null) {
+            buckets = cached
+            isLoading = false
+        }
+    }
+
     val fetchWeekData: () -> Unit = {
         scope.launch {
-            isLoading = true
+            if (sessionManager.getSmokesWeek(weekOffset) == null) {
+                isLoading = true
+            }
             val (monCal, nextMonCal) = getWeekWindow(weekOffset)
             val startStr = Instant.ofEpochMilli(monCal.timeInMillis).toString()
             val endStr = Instant.ofEpochMilli(nextMonCal.timeInMillis).toString()
@@ -135,65 +144,76 @@ fun Smokes7DaysScreen(
                 tempBuckets.add(SmokeDayBucket(dStr, lbl, dStr == todayStr))
             }
 
-            try {
-                // Fetch dynamic goal if needed
-                val userId = sessionManager.currentUserId.value
-                if (userId != null) {
-                    val prefs = sessionManager.supabaseClient.postgrest["user_preferences"]
-                        .select {
-                            filter { eq("id", userId) }
-                        }.decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
-                    if (prefs.isNotEmpty()) {
-                        dailyGoal = prefs.first().smokes_baseline ?: 20
-                        sessionManager.cachedSmokesGoal = dailyGoal
-                    }
-                }
-            } catch (_: Exception) {}
-
-            try {
-                val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                    .select {
-                        filter {
-                            eq("habit_type", "smokes")
-                            eq("is_deleted", false)
-                            and {
-                                gte("logged_at", startStr)
-                                lt("logged_at", endStr)
+            val goalDeferred = async {
+                if (sessionManager.cachedSmokesGoal == null) {
+                    try {
+                        val userId = sessionManager.currentUserId.value
+                        if (userId != null) {
+                            val prefs = sessionManager.supabaseClient.postgrest["user_preferences"]
+                                .select {
+                                    filter { eq("id", userId) }
+                                }.decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
+                            if (prefs.isNotEmpty()) {
+                                val goal = prefs.first().smokes_baseline ?: 20
+                                dailyGoal = goal
+                                sessionManager.cachedSmokesGoal = goal
                             }
                         }
-                    }.decodeList<HabitLog>()
+                    } catch (_: Exception) {}
+                }
+            }
 
-                android.util.Log.d("Smokes7Days", "Fetched ${logs.size} logs for week offset $weekOffset (range: $startStr to $endStr)")
-
-                for (log in logs) {
-                    try {
-                        val localDate = HabitDateParser.parseToLocalDate(log.logged_at)
-                        if (localDate != null) {
-                            val logDateStr = localDate.toString()
-                            val bucket = tempBuckets.find { it.dateStr == logDateStr }
-                            if (bucket != null) {
-                                val count = if (log.value > 0) log.value else 1.0
-                                val isHeat = log.metadata?.contains("Heated", ignoreCase = true) == true
-                                if (isHeat) {
-                                    bucket.heat += count
-                                } else {
-                                    bucket.cig += count
+            val logsDeferred = async {
+                try {
+                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
+                        .select {
+                            filter {
+                                eq("habit_type", "smokes")
+                                eq("is_deleted", false)
+                                and {
+                                    gte("logged_at", startStr)
+                                    lt("logged_at", endStr)
                                 }
                             }
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.w("Smokes7Days", "Failed to process log: ${e.message}")
-                    }
-                }
+                        }.decodeList<HabitLog>()
 
-                buckets = tempBuckets
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                android.util.Log.e("Smokes7Days", "Failed to fetch week logs: ${e.message}", e)
-                buckets = tempBuckets
-            } finally {
-                isLoading = false
+                    for (log in logs) {
+                        try {
+                            val localDate = HabitDateParser.parseToLocalDate(log.logged_at)
+                            if (localDate != null) {
+                                val logDateStr = localDate.toString()
+                                val bucket = tempBuckets.find { it.dateStr == logDateStr }
+                                if (bucket != null) {
+                                    val count = if (log.value > 0) log.value else 1.0
+                                    val isHeat = log.metadata?.contains("Heated", ignoreCase = true) == true
+                                    if (isHeat) {
+                                        bucket.heat += count
+                                    } else {
+                                        bucket.cig += count
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w("Smokes7Days", "Failed to process log: ${e.message}")
+                        }
+                    }
+
+                    sessionManager.setSmokesWeek(weekOffset, tempBuckets)
+                    buckets = tempBuckets
+                    SoundAndHapticFeedback.playSuccess(context, view)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    android.util.Log.e("Smokes7Days", "Failed to fetch week logs: ${e.message}", e)
+                    if (buckets.isEmpty()) {
+                        buckets = tempBuckets
+                    }
+                } finally {
+                    isLoading = false
+                }
             }
+
+            goalDeferred.await()
+            logsDeferred.await()
         }
     }
 
@@ -257,8 +277,16 @@ fun Smokes7DaysScreen(
                     title = weekTitle,
                     canGoForward = weekOffset < 0,
                     accentColor = Color(0xFFFF5555),
-                    onPrevious = { weekOffset -= 1 },
-                    onNext = { if (weekOffset < 0) weekOffset += 1 },
+                    onPrevious = {
+                        SoundAndHapticFeedback.playClick(context, view)
+                        weekOffset -= 1
+                    },
+                    onNext = {
+                        if (weekOffset < 0) {
+                            SoundAndHapticFeedback.playClick(context, view)
+                            weekOffset += 1
+                        }
+                    },
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
