@@ -47,6 +47,11 @@ public struct RootView: View {
                                             selectedTab = .news
                                         }
                                     },
+                                    onNavigateToHealth: {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                            selectedTab = .health
+                                        }
+                                    },
                                     onNavigateToSettings: {
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                                             selectedTab = .settings
@@ -57,6 +62,8 @@ public struct RootView: View {
                                 WeatherDetailView()
                             case .news:
                                 NewsFeedView()
+                            case .health:
+                                HealthMainView()
                             case .settings:
                                 SettingsView()
                             }

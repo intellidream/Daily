@@ -8,6 +8,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard"
     case weather = "Weather"
     case news = "News"
+    case health = "Health"
     case settings = "Settings"
     
     public var id: String { rawValue }
@@ -17,6 +18,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .dashboard: return "square.grid.2x2.fill"
         case .weather: return "cloud.sun.fill"
         case .news: return "newspaper.fill"
+        case .health: return "heart.fill"
         case .settings: return "gearshape.fill"
         }
     }

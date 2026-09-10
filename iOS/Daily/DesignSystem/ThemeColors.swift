@@ -39,6 +39,8 @@ public struct ThemeColors {
     // Accent Glow & Highlights
     public static let accentCyan = Color(hex: "00E5FF")
     public static let accentBlue = Color(hex: "4A9EFF")
+    public static let accentPink = Color(hex: "FF2D55")
+    public static let accentPurple = Color(hex: "AF52DE")
     public static let glowPurple = Color(hex: "8A2BE2")
     
     // Status colors

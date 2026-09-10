@@ -5,18 +5,22 @@ public struct DashboardView: View {
     @ObservedObject private var settingsService = SettingsService.shared
     @ObservedObject private var authService = AuthService.shared
     @ObservedObject private var newsService = NewsService.shared
+    @ObservedObject private var healthService = HealthDataService.shared
     
     private let onNavigateToWeather: () -> Void
     private let onNavigateToNews: () -> Void
+    private let onNavigateToHealth: () -> Void
     private let onNavigateToSettings: () -> Void
     
     public init(
         onNavigateToWeather: @escaping () -> Void = {},
         onNavigateToNews: @escaping () -> Void = {},
+        onNavigateToHealth: @escaping () -> Void = {},
         onNavigateToSettings: @escaping () -> Void = {}
     ) {
         self.onNavigateToWeather = onNavigateToWeather
         self.onNavigateToNews = onNavigateToNews
+        self.onNavigateToHealth = onNavigateToHealth
         self.onNavigateToSettings = onNavigateToSettings
     }
     
@@ -29,62 +33,67 @@ public struct DashboardView: View {
                 // --- Real-time Weather Widget Card ---
                 WeatherDashboardCard(onTap: onNavigateToWeather)
                 
-                // --- Health & Telemetry Widget Card Preview ---
-                GlassCard(cornerRadius: 20, padding: 20) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Label("Health & Vitals", systemImage: "heart.text.square.fill")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(ThemeColors.accentBlue)
-                            Spacer()
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(ThemeColors.success)
-                                    .frame(width: 6, height: 6)
-                                Text("Ready for Sensor Sync")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
-                            }
-                        }
-                        
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("STEPS")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
-                                Text("7,420")
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
+                // --- Health & Telemetry Live Widget Card ---
+                Button {
+                    onNavigateToHealth()
+                } label: {
+                    GlassCard(cornerRadius: 20, padding: 20) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Label("Health & Telemetry", systemImage: "heart.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(ThemeColors.accentPink)
+                                Spacer()
+                                HStack(spacing: 4) {
+                                    Text("Open Hub")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(ThemeColors.accentPink)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(ThemeColors.accentPink)
+                                }
                             }
                             
-                            Divider()
-                                .frame(height: 32)
-                                .background(Color.white.opacity(0.15))
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("HEART RATE")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
-                                Text("68 bpm")
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
-                            }
-                            
-                            Divider()
-                                .frame(height: 32)
-                                .background(Color.white.opacity(0.15))
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("SLEEP GOAL")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
-                                Text(String(format: "%.1fh", settingsService.settings.healthSleepTargetHours))
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .foregroundColor(ThemeColors.accentCyan)
+                            HStack(spacing: 16) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("STEPS")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                    Text("\(healthService.totalStepsToday)")
+                                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                }
+                                
+                                Divider()
+                                    .frame(height: 32)
+                                    .background(Color.white.opacity(0.15))
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("HEART RATE")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                    Text(healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm)) bpm" : "--")
+                                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                                        .foregroundColor(ThemeColors.accentPink)
+                                }
+                                
+                                Divider()
+                                    .frame(height: 32)
+                                    .background(Color.white.opacity(0.15))
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("SLEEP")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                    Text(healthService.primarySleepSession?.totalAsleepFormatted ?? "--")
+                                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                                        .foregroundColor(ThemeColors.accentCyan)
+                                }
                             }
                         }
                     }
                 }
+                .buttonStyle(.plain)
                 
                 // --- Live News Feed Widget Card ---
                 Button {
