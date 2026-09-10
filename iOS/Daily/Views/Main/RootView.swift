@@ -6,6 +6,7 @@ public struct RootView: View {
     @State private var selectedTab: NavigationTab = .dashboard
     
     public init() {}
+
     
     public var body: some View {
         Group {
@@ -52,6 +53,11 @@ public struct RootView: View {
                                             selectedTab = .health
                                         }
                                     },
+                                    onNavigateToHabits: {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                            selectedTab = .habits
+                                        }
+                                    },
                                     onNavigateToSettings: {
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                                             selectedTab = .settings
@@ -64,10 +70,13 @@ public struct RootView: View {
                                 NewsFeedView()
                             case .health:
                                 HealthMainView()
+                            case .habits:
+                                HabitsMainView()
                             case .settings:
                                 SettingsView()
                             }
                         }
+
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
                         // Floating Liquid Glass Navigation Capsule

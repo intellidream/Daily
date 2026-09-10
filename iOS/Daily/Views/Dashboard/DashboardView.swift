@@ -10,19 +10,23 @@ public struct DashboardView: View {
     private let onNavigateToWeather: () -> Void
     private let onNavigateToNews: () -> Void
     private let onNavigateToHealth: () -> Void
+    private let onNavigateToHabits: () -> Void
     private let onNavigateToSettings: () -> Void
     
     public init(
         onNavigateToWeather: @escaping () -> Void = {},
         onNavigateToNews: @escaping () -> Void = {},
         onNavigateToHealth: @escaping () -> Void = {},
+        onNavigateToHabits: @escaping () -> Void = {},
         onNavigateToSettings: @escaping () -> Void = {}
     ) {
         self.onNavigateToWeather = onNavigateToWeather
         self.onNavigateToNews = onNavigateToNews
         self.onNavigateToHealth = onNavigateToHealth
+        self.onNavigateToHabits = onNavigateToHabits
         self.onNavigateToSettings = onNavigateToSettings
     }
+
     
     public var body: some View {
         ScrollView {
@@ -95,7 +99,11 @@ public struct DashboardView: View {
                 }
                 .buttonStyle(.plain)
                 
+                // --- Habits & Hydration Live Widget Card ---
+                HabitsDashboardCard(onTap: onNavigateToHabits)
+                
                 // --- Live News Feed Widget Card ---
+
                 Button {
                     onNavigateToNews()
                 } label: {

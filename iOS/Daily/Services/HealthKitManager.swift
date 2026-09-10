@@ -14,7 +14,13 @@ public final class HealthKitManager: ObservableObject {
         HKHealthStore.isHealthDataAvailable()
     }
     
-    public init() {}
+    public init() {
+        HabitsService.shared.onWaterLogged = { [weak self] amountMl, date in
+            Task {
+                await self?.writeWaterIntake(amountMl: amountMl, date: date)
+            }
+        }
+    }
     
     // MARK: - Authorization
     
@@ -22,6 +28,7 @@ public final class HealthKitManager: ObservableObject {
         guard isAvailable else { return false }
         
         var typesToRead = Set<HKObjectType>()
+        var typesToShare = Set<HKSampleType>()
         
         let quantityIdentifiers: [HKQuantityTypeIdentifier] = [
             .stepCount,
@@ -46,12 +53,16 @@ public final class HealthKitManager: ObservableObject {
             }
         }
         
+        if let waterType = HKObjectType.quantityType(forIdentifier: .dietaryWater) {
+            typesToShare.insert(waterType)
+        }
+        
         if let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
             typesToRead.insert(sleepType)
         }
         
         do {
-            try await healthStore.requestAuthorization(toShare: [], read: typesToRead)
+            try await healthStore.requestAuthorization(toShare: typesToShare, read: typesToRead)
             self.isAuthorized = true
             return true
         } catch {
@@ -174,6 +185,39 @@ public final class HealthKitManager: ObservableObject {
         }
     }
     
+    // MARK: - Water Logging (Bubbles)
+    
+    public func writeWaterIntake(amountMl: Double, date: Date = Date()) async {
+        guard isAvailable, let waterType = HKObjectType.quantityType(forIdentifier: .dietaryWater) else { return }
+        
+        let quantity = HKQuantity(unit: HKUnit.literUnit(with: .milli), doubleValue: amountMl)
+        let sample = HKQuantitySample(
+            type: waterType,
+            quantity: quantity,
+            start: date,
+            end: date,
+            metadata: [HKMetadataKeySyncVersion: 1]
+        )
+        
+        do {
+            try await healthStore.save(sample)
+            print("[HealthKitManager] Successfully saved \(amountMl) ml water to HealthKit")
+        } catch {
+            print("[HealthKitManager] Failed to save water to HealthKit: \(error.localizedDescription)")
+        }
+    }
+    
+    public func fetchDietaryWater(for date: Date) async -> Double {
+        guard isAvailable, let waterType = HKObjectType.quantityType(forIdentifier: .dietaryWater) else { return 0 }
+        
+        let cal = Calendar.current
+        let startOfDay = cal.startOfDay(for: date)
+        let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay) ?? date
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        
+        return await fetchCumulativeSum(for: waterType, unit: HKUnit.literUnit(with: .milli), predicate: predicate) ?? 0
+    }
+    
     // MARK: - Helpers
     
     private func fetchCumulativeSum(for quantityType: HKQuantityType, unit: HKUnit, predicate: NSPredicate) async -> Double? {
@@ -189,3 +233,5 @@ public final class HealthKitManager: ObservableObject {
         }
     }
 }
+
+

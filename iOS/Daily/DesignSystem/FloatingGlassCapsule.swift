@@ -9,6 +9,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
     case weather = "Weather"
     case news = "News"
     case health = "Health"
+    case habits = "Habits"
     case settings = "Settings"
     
     public var id: String { rawValue }
@@ -19,6 +20,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .weather: return "cloud.sun.fill"
         case .news: return "newspaper.fill"
         case .health: return "heart.fill"
+        case .habits: return "drop.fill"
         case .settings: return "gearshape.fill"
         }
     }
@@ -35,7 +37,7 @@ public struct FloatingGlassCapsule: View {
     }
     
     public var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             ForEach(NavigationTab.allCases) { tab in
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
@@ -47,19 +49,20 @@ public struct FloatingGlassCapsule: View {
                         #endif
                     }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         Image(systemName: tab.iconName)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                         
                         if selectedTab == tab {
                             Text(tab.rawValue)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 13, weight: .semibold))
                                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
                         }
                     }
                     .foregroundColor(selectedTab == tab ? .white : .white.opacity(0.6))
                     .padding(.vertical, 10)
-                    .padding(.horizontal, selectedTab == tab ? 18 : 14)
+                    .padding(.horizontal, selectedTab == tab ? 14 : 10)
+
                     .background {
                         if selectedTab == tab {
                             Capsule(style: .continuous)
