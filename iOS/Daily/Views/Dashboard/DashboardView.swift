@@ -4,14 +4,19 @@ import DailyCore
 public struct DashboardView: View {
     @ObservedObject private var settingsService = SettingsService.shared
     @ObservedObject private var authService = AuthService.shared
+    @ObservedObject private var newsService = NewsService.shared
+    
     private let onNavigateToWeather: () -> Void
+    private let onNavigateToNews: () -> Void
     private let onNavigateToSettings: () -> Void
     
     public init(
         onNavigateToWeather: @escaping () -> Void = {},
+        onNavigateToNews: @escaping () -> Void = {},
         onNavigateToSettings: @escaping () -> Void = {}
     ) {
         self.onNavigateToWeather = onNavigateToWeather
+        self.onNavigateToNews = onNavigateToNews
         self.onNavigateToSettings = onNavigateToSettings
     }
     
@@ -81,38 +86,88 @@ public struct DashboardView: View {
                     }
                 }
                 
-                // --- News Feed Widget Card Preview ---
-                GlassCard(cornerRadius: 20, padding: 20) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Label("News & Briefings", systemImage: "newspaper.fill")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(ThemeColors.accentCyan)
-                            Spacer()
-                            Text("Fast Path")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(ThemeColors.fgMutedDark)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Apple Intelligence and Next-Gen Architecture")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.white)
-                                .lineLimit(2)
+                // --- Live News Feed Widget Card ---
+                Button {
+                    onNavigateToNews()
+                } label: {
+                    GlassCard(cornerRadius: 20, padding: 20) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Label("News & Briefings", systemImage: "newspaper.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(ThemeColors.accentCyan)
+                                Spacer()
+                                HStack(spacing: 4) {
+                                    Text("Explore Feeds")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(ThemeColors.accentCyan)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(ThemeColors.accentCyan)
+                                }
+                            }
                             
-                            HStack(spacing: 8) {
-                                Text("TechCrunch")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(ThemeColors.accentBlue)
-                                Text("•")
-                                    .foregroundColor(ThemeColors.fgMutedDark)
-                                Text("12m ago")
-                                    .font(.system(size: 11, weight: .regular))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
+                            if let top = newsService.topHeadline {
+                                HStack(alignment: .top, spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(top.title)
+                                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                            .lineLimit(2)
+                                            .multilineTextAlignment(.leading)
+                                        
+                                        HStack(spacing: 6) {
+                                            Text(top.publicationName ?? "Briefing")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundColor(ThemeColors.accentBlue)
+                                            Text("•")
+                                                .font(.system(size: 9))
+                                                .foregroundColor(ThemeColors.fgMutedDark)
+                                            Text(top.relativeTimeFormatted)
+                                                .font(.system(size: 11))
+                                                .foregroundColor(ThemeColors.fgMutedDark)
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    if let imgStr = top.imageUrl, let url = URL(string: imgStr) {
+                                        AsyncImage(url: url) { phase in
+                                            switch phase {
+                                            case .success(let img):
+                                                img.resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: 58, height: 58)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                            default:
+                                                EmptyView()
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Apple Intelligence and Next-Gen Architecture")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .lineLimit(2)
+                                    
+                                    HStack(spacing: 8) {
+                                        Text("TechCrunch")
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundColor(ThemeColors.accentBlue)
+                                        Text("•")
+                                            .foregroundColor(ThemeColors.fgMutedDark)
+                                        Text("12m ago")
+                                            .font(.system(size: 11, weight: .regular))
+                                            .foregroundColor(ThemeColors.fgMutedDark)
+                                    }
+                                }
                             }
                         }
                     }
                 }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave room for FloatingGlassCapsule

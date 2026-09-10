@@ -7,6 +7,7 @@ import UIKit
 public enum NavigationTab: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard"
     case weather = "Weather"
+    case news = "News"
     case settings = "Settings"
     
     public var id: String { rawValue }
@@ -15,6 +16,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         switch self {
         case .dashboard: return "square.grid.2x2.fill"
         case .weather: return "cloud.sun.fill"
+        case .news: return "newspaper.fill"
         case .settings: return "gearshape.fill"
         }
     }

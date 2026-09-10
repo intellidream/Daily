@@ -1,0 +1,285 @@
+import Foundation
+
+public enum FeedType: String, Codable, Sendable {
+    case rss
+    case wpJson
+}
+
+public enum FeedCategory: String, CaseIterable, Codable, Sendable {
+    case all
+    case local
+    case markets
+    case world
+    case tech
+    case coding
+    case space
+    case other
+    
+    public var displayName: String {
+        switch self {
+        case .all: return "All News"
+        case .local: return "🇷🇴 Local"
+        case .markets: return "📈 Markets"
+        case .world: return "🌍 World"
+        case .tech: return "💡 Tech"
+        case .coding: return "💻 Coding"
+        case .space: return "🚀 Space"
+        case .other: return "📰 Other"
+        }
+    }
+    
+    public var systemIcon: String {
+        switch self {
+        case .all: return "newspaper"
+        case .local: return "mappin.and.ellipse"
+        case .markets: return "chart.line.uptrend.xyaxis"
+        case .world: return "globe.europe.africa.fill"
+        case .tech: return "cpu"
+        case .coding: return "chevron.left.forwardslash.chevron.right"
+        case .space: return "sparkles"
+        case .other: return "tray.full"
+        }
+    }
+}
+
+public struct FeedSource: Identifiable, Hashable, Codable, Sendable {
+    public var id: String
+    public var name: String
+    public var url: String
+    public var iconUrl: String
+    public var type: FeedType
+    public var category: FeedCategory
+    public var displayOrder: Int
+    
+    public init(
+        id: String = UUID().uuidString,
+        name: String,
+        url: String,
+        iconUrl: String = "",
+        type: FeedType = .rss,
+        category: FeedCategory = .tech,
+        displayOrder: Int = 0
+    ) {
+        self.id = id
+        self.name = name
+        self.url = url
+        self.iconUrl = iconUrl.isEmpty ? "https://www.google.com/s2/favicons?domain=\(URL(string: url)?.host ?? "rss.com")&sz=64" : iconUrl
+        self.type = type
+        self.category = category
+        self.displayOrder = displayOrder
+    }
+}
+
+public struct NewsArticle: Identifiable, Hashable, Codable, Sendable {
+    public var id: String
+    public var title: String
+    public var link: String
+    public var publishDate: Date
+    public var imageUrl: String?
+    public var description: String?
+    public var content: String?
+    public var author: String?
+    public var publicationName: String?
+    public var publicationIconUrl: String?
+    public var category: FeedCategory?
+    
+    public init(
+        id: String? = nil,
+        title: String,
+        link: String,
+        publishDate: Date = Date(),
+        imageUrl: String? = nil,
+        description: String? = nil,
+        content: String? = nil,
+        author: String? = nil,
+        publicationName: String? = nil,
+        publicationIconUrl: String? = nil,
+        category: FeedCategory? = nil
+    ) {
+        self.id = id ?? link
+        self.title = title
+        self.link = link
+        self.publishDate = publishDate
+        self.imageUrl = imageUrl
+        self.description = description
+        self.content = content
+        self.author = author
+        self.publicationName = publicationName
+        self.publicationIconUrl = publicationIconUrl
+        self.category = category
+    }
+    
+    public var isMediumItem: Bool {
+        publicationName?.contains("Medium") == true || link.contains("medium.com")
+    }
+    
+    public var relativeTimeFormatted: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: publishDate, relativeTo: Date())
+    }
+}
+
+public enum SavedArticleType: String, Codable, Sendable {
+    case readLater = "ReadLater"
+    case favorite = "Favorite"
+}
+
+public struct SavedArticle: Identifiable, Hashable, Codable, Sendable {
+    public var id: String
+    public var userId: String
+    public var articleUrl: String
+    public var title: String
+    public var imageUrl: String?
+    public var description: String?
+    public var author: String?
+    public var publicationName: String
+    public var publicationIconUrl: String?
+    public var articleType: String
+    public var articleDate: Date
+    public var createdAt: Date
+    public var updatedAt: Date?
+    public var isDeleted: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case articleUrl = "article_url"
+        case title
+        case imageUrl = "image_url"
+        case description
+        case author
+        case publicationName = "publication_name"
+        case publicationIconUrl = "publication_icon_url"
+        case articleType = "article_type"
+        case articleDate = "article_date"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case isDeleted = "is_deleted"
+    }
+    
+    public init(
+        id: String,
+        userId: String,
+        articleUrl: String,
+        title: String,
+        imageUrl: String? = nil,
+        description: String? = nil,
+        author: String? = nil,
+        publicationName: String,
+        publicationIconUrl: String? = nil,
+        articleType: SavedArticleType,
+        articleDate: Date = Date(),
+        createdAt: Date = Date(),
+        updatedAt: Date? = nil,
+        isDeleted: Bool = false
+    ) {
+        self.id = id
+        self.userId = userId
+        self.articleUrl = articleUrl
+        self.title = title
+        self.imageUrl = imageUrl
+        self.description = description
+        self.author = author
+        self.publicationName = publicationName
+        self.publicationIconUrl = publicationIconUrl
+        self.articleType = articleType.rawValue
+        self.articleDate = articleDate
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.isDeleted = isDeleted
+    }
+    
+    public func toNewsArticle() -> NewsArticle {
+        NewsArticle(
+            id: articleUrl,
+            title: title,
+            link: articleUrl,
+            publishDate: articleDate,
+            imageUrl: imageUrl,
+            description: description,
+            author: author,
+            publicationName: publicationName,
+            publicationIconUrl: publicationIconUrl
+        )
+    }
+}
+
+public struct RssSubscription: Identifiable, Hashable, Codable, Sendable {
+    public var id: String
+    public var userId: String
+    public var name: String
+    public var url: String
+    public var iconUrl: String
+    public var category: String
+    public var displayOrder: Int
+    public var createdAt: Date
+    public var updatedAt: Date?
+    public var isDeleted: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case name
+        case url
+        case iconUrl = "icon_url"
+        case category
+        case displayOrder = "display_order"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case isDeleted = "is_deleted"
+    }
+    
+    public init(
+        id: String,
+        userId: String,
+        name: String,
+        url: String,
+        iconUrl: String,
+        category: String,
+        displayOrder: Int = 0,
+        createdAt: Date = Date(),
+        updatedAt: Date? = nil,
+        isDeleted: Bool = false
+    ) {
+        self.id = id
+        self.userId = userId
+        self.name = name
+        self.url = url
+        self.iconUrl = iconUrl
+        self.category = category
+        self.displayOrder = displayOrder
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.isDeleted = isDeleted
+    }
+    
+    public func toFeedSource() -> FeedSource {
+        let cat = FeedCategory(rawValue: category.lowercased()) ?? .tech
+        let type: FeedType = url.contains("wp-json") ? .wpJson : .rss
+        return FeedSource(
+            id: id,
+            name: name,
+            url: url,
+            iconUrl: iconUrl,
+            type: type,
+            category: cat,
+            displayOrder: displayOrder
+        )
+    }
+}
+
+public struct FeedSearchResult: Identifiable, Hashable, Codable, Sendable {
+    public var id: String { url }
+    public var name: String
+    public var url: String
+    public var iconUrl: String
+    public var website: String
+    
+    public init(name: String, url: String, iconUrl: String = "", website: String = "") {
+        self.name = name
+        self.url = url
+        self.iconUrl = iconUrl
+        self.website = website
+    }
+}
