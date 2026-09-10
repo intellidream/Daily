@@ -63,7 +63,7 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>DayOne visualizes your steps, heart rate, sleep architecture, and biometric vitals directly from HealthKit.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>DayOne syncs your daily activity and wellness metrics to keep your health dashboard up to date.</string>
+	<string>DayOne records your daily hydration intake and wellness metrics to keep your health dashboard and Apple Health synchronized.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>
