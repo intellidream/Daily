@@ -7,27 +7,16 @@ public struct AboutSettingsSection: View {
     public var body: some View {
         GlassCard(cornerRadius: 18, padding: 18) {
             VStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [ThemeColors.accentCyan.opacity(0.3), ThemeColors.accentBlue.opacity(0.1)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 50, height: 50)
-                    
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [ThemeColors.accentCyan, ThemeColors.accentBlue],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
+                Image("AppLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 58, height: 58)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                    )
+                    .shadow(color: ThemeColors.accentCyan.opacity(0.35), radius: 10, x: 0, y: 4)
                 
                 Text("DayOne for iOS")
                     .font(.system(size: 18, weight: .bold, design: .rounded))

@@ -227,3 +227,29 @@ To replace the default system text ("DayOne") on cold startup with the premium O
      - **Live Sync Status Dot**: Emerald green indicator dot on the user's avatar.
      - **Haptic Tactile Buttons**: Medium impact feedback on avatar and frosted glass settings button taps.
 
+---
+
+## 10. Master Icon Border Removal & Cross-Platform Asset Synchronization
+
+### 10.1 Squircle Framing Elimination & Radial Bloom Synthesis
+The legacy master artwork contained a pre-rendered squircle border container with a specular rim around `rect = (105, 101, 813, 821)`. When host operating systems (especially iOS and macOS) applied their own continuous squircle clipping masks, this introduced an awkward "double-frame" box effect.
+
+1. **Pixel-Level Separation & Geometry Analysis**:
+   - Traced the inner squircle stroke at distance field $sdf = 0$ ($x \in [105, 918], y \in [101, 922]$, corner radius $185\text{px}$).
+   - The planetary orb and luminous orbital tracks exist within $sdf \le -57.0$, leaving a clean separation margin.
+2. **Smooth Radial Falloff**:
+   - Eliminated the artificial stroke and replaced the outer boundaries with an organic, Gaussian-weighted radial bloom that seamlessly fades to pure OLED black (`#000000`).
+   - Re-centered the orbit composition to the exact geometric canvas center `(512, 512)`.
+
+### 10.2 Synchronized Multiplatform Assets
+All platform target assets were regenerated using high-precision bicubic filtering:
+- **iOS Asset Catalog (`AppIcon.appiconset`)**: 12 variants including truecolor 24-bit RGB (zero alpha channel) `AppIcon-1024.png` for App Store Connect submission compliance (`ITMS-90717`).
+- **iOS In-App Assets (`AppLogo.imageset`, `LaunchLogo.imageset`)**: Clipped to Apple continuous squircles ($r = 0.2237 \times w$) with an organic outer shadow and subtle specular highlight.
+- **Apple Watch (`DailyWatch/Assets.xcassets/AppIcon.appiconset`)**: Updated circular/squircle watch icon master (`appicon.png`).
+- **macOS Native Binary (`Resources/AppIcon/Daily.icns`)**: Generated from 10 resolution scales (`icon_16x16` to `icon_512x512@2x`) via `iconutil`.
+- **Windows / WinUI 3**: Compiled multi-resolution binary `Resources/AppIcon/Daily.ico` (16, 24, 32, 48, 64, 128, 256 px) deployed to `WinUI/Daily.WinUI/Assets/AppIcon.ico`, `TrayIconDarkTheme.ico`, `TrayIconLightTheme.ico`, and all MSIX package tile targets.
+
+### 10.3 Settings About Card Branding
+In `iOS/Daily/Views/Settings/AboutSettingsSection.swift`:
+- Replaced the generic SF Symbol (`sparkles`) with the new continuous squircle `Image("AppLogo")` formatted at $58 \times 58\,\text{pt}$.
+- Enhanced with ambient cyan bloom backlight and micro specular glass outline.

@@ -69,7 +69,8 @@ Ported from WinUI's `FeaturesPage.xaml`:
 - **Factory Reset**: Restores all local preferences and settings back to system defaults.
 
 ### 2.5 About Section (`AboutSettingsSection.swift`)
-- Displays app branding, sparkling gem icon, Version 1.0.0 (Build 2026.1), and IntellIdream inc. copyright.
+- Displays native `AppLogo` artwork framed in an Apple continuous squircle with cyan ambient aura and specular rim.
+- Displays app branding, version metadata (Version 1.0.0, Build 2026.1), and IntellIdream Inc. copyright notice.
 
 ---
 

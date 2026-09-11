@@ -38,12 +38,19 @@ public struct SettingsView: View {
                 
                 // About DayOne
                 AboutSettingsSection()
+                    .id("about")
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave space for FloatingGlassCapsule
         }
         .onAppear {
-            if ProcessInfo.processInfo.arguments.contains("-scrollToMedium") {
+            if ProcessInfo.processInfo.arguments.contains("-scrollToAbout") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation {
+                        proxy.scrollTo("about", anchor: .bottom)
+                    }
+                }
+            } else if ProcessInfo.processInfo.arguments.contains("-scrollToMedium") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation {
                         proxy.scrollTo("medium_setup", anchor: .center)
