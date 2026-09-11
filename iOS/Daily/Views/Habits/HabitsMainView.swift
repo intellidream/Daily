@@ -33,6 +33,8 @@ public struct HabitsMainView: View {
                         countToday: habitsService.totalSmokesToday,
                         baselineCount: habitsService.smokesBaselineCount,
                         lastSmokeDate: habitsService.lastSmokeTimestamp,
+                        lastSmokeType: habitsService.lastSmokeType,
+                        isToday: habitsService.isToday,
                         smokeBreakdown: habitsService.smokesTypeBreakdown
                     )
                     .padding(.vertical, 8)
@@ -77,6 +79,11 @@ public struct HabitsMainView: View {
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("-habitsSmokes") {
                 habitsService.activeHabit = .smokes
+            }
+            if ProcessInfo.processInfo.arguments.contains("-habitsYesterday") {
+                if let yest = Calendar.current.date(byAdding: .day, value: -1, to: Date()) {
+                    habitsService.selectDate(yest)
+                }
             }
         }
         .refreshable {

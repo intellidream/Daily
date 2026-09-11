@@ -93,19 +93,28 @@ public struct SmokesLungsGaugeView: View {
     public let countToday: Int
     public let baselineCount: Int
     public let lastSmokeDate: Date?
+    public let lastSmokeType: String?
+    public let isToday: Bool
     public let smokeBreakdown: [HabitDrinkBreakdown]
     
     @State private var pulseScale: CGFloat = 1.0
+    @State private var currentTime: Date = Date()
+    
+    private let refreshTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
     
     public init(
         countToday: Int,
         baselineCount: Int,
         lastSmokeDate: Date?,
+        lastSmokeType: String? = nil,
+        isToday: Bool = true,
         smokeBreakdown: [HabitDrinkBreakdown] = []
     ) {
         self.countToday = countToday
         self.baselineCount = max(baselineCount, 1)
         self.lastSmokeDate = lastSmokeDate
+        self.lastSmokeType = lastSmokeType
+        self.isToday = isToday
         self.smokeBreakdown = smokeBreakdown
     }
     
@@ -169,20 +178,96 @@ public struct SmokesLungsGaugeView: View {
         }
     }
     
-    private var timeSinceLastSmokeFormatted: String {
-        guard let last = lastSmokeDate else {
-            return "Smoke-Free Today!"
-        }
-        let interval = Date().timeIntervalSince(last)
-        if interval < 60 {
-            return "Just now"
-        } else if interval < 3600 {
-            let minutes = Int(interval / 60)
-            return "\(minutes)m craving-free"
+    private struct CravingBadgeInfo {
+        let text: String
+        let color: Color
+        let systemIcon: String
+    }
+    
+    private func estimatedSmokingDurationSeconds(for type: String?) -> TimeInterval {
+        guard let t = type?.lowercased() else { return 360 } // Default: 6m
+        if t.contains("cigarillo") || (t.contains("cigar") && !t.contains("cigarette")) {
+            return 12 * 60 // 12 min for cigarillo / small cigar
+        } else if t.contains("heat") || t.contains("iqos") || t.contains("glo") || t.contains("vape") {
+            return 5 * 60  // 5 min for heated tobacco session
+        } else if t.contains("roll") {
+            return 5 * 60  // 5 min for hand-rolled cigarette
         } else {
-            let hours = Int(interval / 3600)
-            let minutes = Int((interval.truncatingRemainder(dividingBy: 3600)) / 60)
-            return "\(hours)h \(minutes)m clean"
+            return 6 * 60  // 6 min for combustible cigarette
+        }
+    }
+    
+    private var cravingBadgeInfo: CravingBadgeInfo {
+        if !isToday {
+            // Retrospective evaluation on a past day
+            if countToday == 0 {
+                return CravingBadgeInfo(
+                    text: "Smoke-Free Day 🌟",
+                    color: Color(hex: "#00FFB2"),
+                    systemIcon: "sparkles"
+                )
+            } else if progressRatio <= 0.6 {
+                return CravingBadgeInfo(
+                    text: "Well Under Limit 🎯",
+                    color: Color(hex: "#00E5FF"),
+                    systemIcon: "checkmark.circle.fill"
+                )
+            } else if progressRatio <= 1.0 {
+                return CravingBadgeInfo(
+                    text: "Near Daily Limit ⚠️",
+                    color: Color(hex: "#FFB800"),
+                    systemIcon: "exclamationmark.triangle.fill"
+                )
+            } else {
+                return CravingBadgeInfo(
+                    text: "Over Daily Limit ✕",
+                    color: Color(hex: "#FF3B30"),
+                    systemIcon: "xmark.circle.fill"
+                )
+            }
+        }
+        
+        // Today live status
+        guard let last = lastSmokeDate else {
+            return CravingBadgeInfo(
+                text: "Smoke-Free Today!",
+                color: Color(hex: "#00FFB2"),
+                systemIcon: "sparkles"
+            )
+        }
+        
+        let elapsed = currentTime.timeIntervalSince(last)
+        let duration = estimatedSmokingDurationSeconds(for: lastSmokeType)
+        
+        if elapsed < duration {
+            // Actively smoking right now!
+            let remainingSec = duration - elapsed
+            let remainingMin = max(1, Int(ceil(remainingSec / 60.0)))
+            let text = remainingSec <= 45 ? "Finishing smoke..." : "Smoking now (~\(remainingMin)m left)"
+            return CravingBadgeInfo(
+                text: text,
+                color: Color(hex: "#F59E0B"),
+                systemIcon: "flame.fill"
+            )
+        } else {
+            // Smoke has finished; craving-free interval counts up from the end of the smoke
+            let cleanInterval = elapsed - duration
+            let text: String
+            if cleanInterval < 60 {
+                text = "Just finished"
+            } else if cleanInterval < 3600 {
+                let minutes = Int(cleanInterval / 60)
+                text = "\(minutes)m craving-free"
+            } else {
+                let hours = Int(cleanInterval / 3600)
+                let minutes = Int((cleanInterval.truncatingRemainder(dividingBy: 3600)) / 60)
+                text = "\(hours)h \(minutes)m clean"
+            }
+            return CravingBadgeInfo(
+                text: text,
+                color: statusColor,
+                systemIcon: "circle.fill"
+            )
         }
     }
     
@@ -293,22 +378,23 @@ public struct SmokesLungsGaugeView: View {
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundColor(Color.white.opacity(0.85))
                     
-                    // Live craving timer badge
+                    // Craving badge (Past-day evaluation or live active smoking / clean timer)
+                    let badge = cravingBadgeInfo
                     HStack(spacing: 4) {
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 5, height: 5)
+                        Image(systemName: badge.systemIcon)
+                            .font(.system(size: badge.systemIcon == "circle.fill" ? 5 : 8.5, weight: .bold))
+                            .foregroundColor(badge.color)
                         
-                        Text(timeSinceLastSmokeFormatted)
+                        Text(badge.text)
                             .font(.system(size: 10, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(Color.black.opacity(0.35))
+                    .background(Color.black.opacity(0.38))
                     .clipShape(Capsule())
                     .overlay {
-                        Capsule().strokeBorder(statusColor.opacity(0.3), lineWidth: 1)
+                        Capsule().strokeBorder(badge.color.opacity(0.35), lineWidth: 1)
                     }
                     .padding(.top, 2)
                     
@@ -368,6 +454,9 @@ public struct SmokesLungsGaugeView: View {
             withAnimation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true)) {
                 pulseScale = 1.04
             }
+        }
+        .onReceive(refreshTimer) { newTime in
+            currentTime = newTime
         }
     }
 }

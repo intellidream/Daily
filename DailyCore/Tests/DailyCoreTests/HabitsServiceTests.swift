@@ -167,6 +167,24 @@ struct HabitsServiceTests {
         )
         #expect(bottleLog.specificIconName == "waterbottle.fill")
         
+        let cigaretteLog = HabitLogRecord(
+            habitType: "smokes",
+            value: 1,
+            unit: "cigs",
+            metadata: "{\"type\":\"Cigarette\"}"
+        )
+        #expect(cigaretteLog.specificIconName == "flame.fill")
+        #expect(cigaretteLog.specificIconColorHex == "#EF4444")
+        
+        let cigarilloLog = HabitLogRecord(
+            habitType: "smokes",
+            value: 1,
+            unit: "cigs",
+            metadata: "{\"type\":\"Cigarillo\"}"
+        )
+        #expect(cigarilloLog.specificIconName == "flame")
+        #expect(cigarilloLog.specificIconColorHex == "#A855F7")
+        
         let heatedLog = HabitLogRecord(
             habitType: "smokes",
             value: 1,

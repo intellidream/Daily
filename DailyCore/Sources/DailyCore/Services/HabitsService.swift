@@ -48,6 +48,9 @@ public final class HabitsService: ObservableObject {
     public var lastSmokeTimestamp: Date? {
         todaysSmokesLogs.first?.loggedAt
     }
+    public var lastSmokeType: String? {
+        todaysSmokesLogs.first?.smokeType
+    }
     public var smokesFinancialMetrics: SmokesFinancialMetrics { smokesFinancials }
     
     public var sevenDayHistory: [HabitTrendDay] {

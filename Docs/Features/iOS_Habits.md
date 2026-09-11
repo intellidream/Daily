@@ -238,6 +238,26 @@ Computes real-time economic and physiological recovery:
 - **`get_smokes_financials` RPC Integration**:
   - Accurately computes lifetime cigarettes avoided and money saved across the entire quit journey (`p_since_date`) by combining raw logs and daily summaries.
 
+### 7.9 Progress Circles Breakdown Tickers, Cigarette vs Cigarillo Discrimination & Smart Craving Assessments
+- **Cigarette vs Cigarillo Categorization & Ticker Pill Colors**:
+  - Resolved substring matching bug in `HabitCircleBreakdownTicker.normalizeSmoke` where `"cigarette".contains("cigar")` mistakenly classified combustible cigarettes as purple Cigarillos.
+  - Added strict prefix guards (`lower.contains("cigarette")` checked before `cigar`) to correctly assign Cigarettes to crimson red (`#EF4444`, `flame.fill`, badge label `[N] Cig`) and Cigarillos to vibrant purple (`#A855F7`, `flame`, badge label `[N] Cigar`).
+- **Context-Aware Craving Badge (Past Day Assessment vs Today Active Smoking)**:
+  - **Retrospective Assessment on Past Days (`!isToday`)**:
+    - Replaces live craving countdown with a daily achievement evaluation:
+      - 0 smokes: `Smoke-Free Day 🌟` in vibrant green (`#00FFB2`) with `sparkles`.
+      - $\le 60\%$ baseline: `Well Under Limit 🎯` in healthy cyan (`#00E5FF`) with `checkmark.circle.fill`.
+      - $60\% - 100\%$ baseline: `Near Daily Limit ⚠️` in amber (`#FFB800`) with `exclamationmark.triangle.fill`.
+      - $> 100\%$ baseline: `Over Daily Limit ✕` in crimson alert red (`#FF3B30`) with `xmark.circle.fill`.
+  - **Active Smoking Duration Awareness & Dynamic Craving Timer (`isToday`)**:
+    - Factors in average scientific smoking duration per tobacco category:
+      - Standard Cigarette: 6 minutes (360 seconds)
+      - Heated Tobacco (IQOS / TEREA / glo): 5 minutes (300 seconds)
+      - Rolled Cigarette: 5 minutes (300 seconds)
+      - Cigarillo / Small Cigar: 12 minutes (720 seconds)
+    - **Active Smoking Phase (`elapsed < duration`)**: Shows live active smoking countdown: `Smoking now (~Xm left)` or `Finishing smoke...` with pulsing flame icon in warm amber (`#F59E0B`).
+    - **Craving-Free Phase (`elapsed >= duration`)**: Clean timer begins counting up *after* the smoke has completed (`elapsed - duration`), dynamically refreshed every 10s via an active view publisher (`Just finished`, `Xm craving-free`, or `Xh Ym clean`).
+
 ---
 
 ## 8. Verification & Automated Test Coverage
@@ -250,10 +270,11 @@ The feature is verified with unit tests in `DailyCoreTests/HabitsServiceTests.sw
 - `Smokes Financials & Avoided Cigarettes Calculations`: Verified pack price, currency formatting, and life regained formulas.
 - `Habits Guidance Protocol Validation`: Verified circadian slots, DHI indices, Armstrong color levels, and 4D step structures.
 - `Multiplier Logging and Display Formatting`: Verified multiplier calculations and formatted string display.
-- `Specific Icons & Colors for Beverage and Tobacco Types`: Verified correct icon resolution for coffee, tea, bottles, heated tobacco, and cigarettes (`flame.fill`).
+- `Specific Icons & Colors for Beverage and Tobacco Types`: Verified correct icon resolution for coffee, tea, bottles, heated tobacco, cigarettes (`flame.fill`, `#EF4444`), and cigarillos (`flame`, `#A855F7`).
 - `User Preferences Record JSON Decoding`: Verified round-trip parsing of Supabase `user_preferences` schema.
 - `Habits Consistency Row Decoding & Date Normalization`: Verified JSON decoding of `get_habits_consistency` RPC responses, FlexibleDouble round-trip serialization, and date normalization.
 - `Habit Date Parser Date-Only String Parsing`: Verified that date-only strings (`yyyy-MM-dd`) are properly parsed to valid `Date` objects.
-- **Full Suite Status**: All tests in `DailyCore` pass 100% green. Build visually verified on `SimulaPhone` with screenshots (zero holes, full 7-day and 16-week data) and deployed to physical iPhone 16 Pro ("Schmitz").
+- **Full Suite Status**: All 20 test cases across 3 suites in `DailyCore` pass 100% green. Build visually verified on `SimulaPhone` (with screenshots of both live Today active timer / corrected red Cigarette pills and Yesterday's `⚠️ Near Daily Limit ⚠️` retrospective evaluation) and deployed live to physical iPhone 16 Pro ("Schmitz").
+
 
 

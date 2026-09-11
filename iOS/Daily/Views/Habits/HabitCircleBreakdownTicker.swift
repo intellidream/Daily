@@ -69,12 +69,14 @@ public struct HabitCircleBreakdownTicker: View {
     
     private func normalizeSmoke(name: String, defaultColor: String, defaultIcon: String) -> (category: String, color: String, icon: String) {
         let lower = name.lowercased()
-        if lower.contains("heat") || lower.contains("iqos") || lower.contains("glo") || lower.contains("vape") {
+        if lower.contains("cigarette") || lower == "cig" || lower.contains("standard") {
+            return ("Cigarette", "#EF4444", "flame.fill")
+        } else if lower.contains("cigarillo") || (lower.contains("cigar") && !lower.contains("cigarette")) {
+            return ("Cigarillo", "#A855F7", "flame")
+        } else if lower.contains("heat") || lower.contains("iqos") || lower.contains("glo") || lower.contains("vape") {
             return ("Heated", "#3B82F6", "bolt.fill")
         } else if lower.contains("roll") {
             return ("Rolled", "#F97316", "leaf.fill")
-        } else if lower.contains("cigar") {
-            return ("Cigarillo", "#A855F7", "flame")
         } else {
             return ("Cigarette", "#EF4444", "flame.fill")
         }
@@ -97,6 +99,7 @@ public struct HabitCircleBreakdownTicker: View {
             case "Cigarette": return "\(Int(item.amount)) Cig"
             case "Heated": return "\(Int(item.amount)) Heat"
             case "Rolled": return "\(Int(item.amount)) Roll"
+            case "Cigarillo": return "\(Int(item.amount)) Cigar"
             default: return "\(Int(item.amount)) \(item.name)"
             }
         }
