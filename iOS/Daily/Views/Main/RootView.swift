@@ -13,13 +13,16 @@ public struct RootView: View {
             switch authService.sessionState {
             case .initializing:
                 LiquidGlassBackground {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 24) {
+                        Image("LaunchLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 120, height: 120)
+                            .shadow(color: ThemeColors.accentCyan.opacity(0.35), radius: 24, x: 0, y: 6)
+                        
                         ProgressView()
                             .tint(ThemeColors.accentCyan)
-                            .scaleEffect(1.3)
-                        Text("DayOne")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
+                            .scaleEffect(1.1)
                     }
                 }
                 

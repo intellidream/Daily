@@ -65,6 +65,13 @@
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>DayOne records your daily hydration intake and wellness metrics to keep your health dashboard and Apple Health synchronized.</string>
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchLogo</string>
+		<key>UIImageRespectsSafeAreaInsets</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

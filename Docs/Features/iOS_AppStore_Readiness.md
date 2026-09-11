@@ -186,3 +186,44 @@ The multi-resolution assets generated in this phase are staged in the centralize
    - Asset: [**`Resources/AppIcon/Daily.ico`**](file:///Users/mihai/Source/Daily/Resources/AppIcon/Daily.ico) (for Window icon and Taskbar) and MSIX tile assets in [**`Resources/AppIcon/Windows/`**](file:///Users/mihai/Source/Daily/Resources/AppIcon/Windows/) (`Square44x44Logo`, `Square150x150Logo`, `StoreLogo`).
    - In the upcoming desktop alignment phase, these assets will replace the legacy monochrome "D" assets in `WinUI/Daily.WinUI/Assets/`, unifying the desktop identity with the Orbit Liquid Glass design system.
 
+---
+
+## 9. Native Launch Screen & Dashboard Header HIG Visual Polish
+
+### 9.1 Launch Screen Pipeline (`generate_launch_assets.swift`)
+To replace the default system text ("DayOne") on cold startup with the premium Orbit icon:
+1. **Automated Squircle Cropping & Masking**:
+   - [**`Scripts/generate_launch_assets.swift`**](file:///Users/mihai/Source/Daily/Scripts/generate_launch_assets.swift) crops the 828x828 squircle artwork out of the 1024x1024 canvas (eliminating the 98px black outer boundary).
+   - Applies Apple's continuous squircle clipping path (`cornerWidth = 0.2237 * width`) with transparent exterior corners and an overlaid 1.2px specular highlight rim.
+   - Generates multi-scale assets (`120x120` @1x, `240x240` @2x, `360x360` @3x) in `iOS/Daily/Resources/Assets.xcassets/LaunchLogo.imageset` and `AppLogo.imageset`.
+2. **OLED Black Launch Background**:
+   - Generated `LaunchBackground.colorset` with sRGB `(0, 0, 0)` for true black pixel-off rendering on iPhone OLED displays.
+3. **`Info.plist` UILaunchScreen Declaration**:
+   ```xml
+   <key>UILaunchScreen</key>
+   <dict>
+       <key>UIColorName</key>
+       <string>LaunchBackground</string>
+       <key>UIImageName</key>
+       <string>LaunchLogo</string>
+       <key>UIImageRespectsSafeAreaInsets</key>
+       <true/>
+   </dict>
+   ```
+4. **Seamless In-App Initializing Transition**:
+   - `RootView.swift` `.initializing` state displays `Image("LaunchLogo")` at the identical 120pt center coordinate with a subtle cyan ambient aura and sleek progress indicator, creating a 100% fluid cold boot transition without layout jumps or textual placeholders.
+
+### 9.2 Dashboard Header Tile & Apple HIG Spacing
+1. **Dynamic Island & Status Bar Clearance**:
+   - According to Apple Human Interface Guidelines (HIG), scroll containers below the status bar and Dynamic Island require dedicated vertical clearance (typically 12–16pt) so container cards don't collide with the sensor housing / camera cutouts.
+   - `DashboardView.swift` added `.padding(.top, 14)` to provide optimal breathing room below the 59pt safe area boundary on modern iPhone devices.
+2. **Translucent Aurora Liquid Glass Hero Container**:
+   - Refactored `HeaderGreetingView.swift` from generic `GlassCard` to a custom translucent hero banner:
+     - **Frosted Glass Base**: `.ultraThinMaterial` on continuous 24pt rounded rectangle.
+     - **Translucent Aurora Wash**: Multi-stop gradient blend of `accentCyan` (0.14), `accentBlue` (0.08), and `glowPurple` (0.07).
+     - **Specular Dual Border**: Luminous multi-stop border with white-to-cyan specular gradient (`lineWidth: 1.2`).
+     - **Ambient Radial Backlight**: Diffuse cyan glow behind the avatar.
+     - **Micro Date Pill Badge**: Translucent cyan capsule with glowing live status pulse (`● FRIDAY, SEPTEMBER 11`).
+     - **Live Sync Status Dot**: Emerald green indicator dot on the user's avatar.
+     - **Haptic Tactile Buttons**: Medium impact feedback on avatar and frosted glass settings button taps.
+

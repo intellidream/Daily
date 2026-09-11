@@ -186,6 +186,7 @@ public struct DashboardView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.top, 14) // Standard Apple HIG breathing room below Dynamic Island / status bar
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
         }
