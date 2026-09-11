@@ -172,7 +172,64 @@ public final class NewsService: ObservableObject {
         isLoading = false
     }
     
+    // MARK: - Medium Integration (WinUI Parity)
+    
+    public var mediumReadingListFeedSource: FeedSource? {
+        let settings = SettingsService.shared.settings
+        guard let username = settings.newsMediumUsername, !username.isEmpty else { return nil }
+        let url = settings.newsMediumReadingListUrl ?? "https://medium.com/feed/@\(username)"
+        return FeedSource(
+            id: "medium_reading_list",
+            name: "Medium Reading List",
+            url: url,
+            iconUrl: "https://cdn-static-1.medium.com/_/fp/icons/favicon-rebrand-medium.37877227.png",
+            type: .rss,
+            category: .tech,
+            displayOrder: 999
+        )
+    }
+    
+    public func subscribeToMediumAuthor(username: String, authorName: String? = nil) {
+        let cleanUser = username.trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n"))
+        guard !cleanUser.isEmpty else { return }
+        let feedUrl = "https://medium.com/feed/@\(cleanUser)"
+        if feeds.contains(where: { $0.url == feedUrl }) { return }
+        let displayName = authorName ?? "@\(cleanUser)"
+        addFeed(name: "Medium: \(displayName)", url: feedUrl, category: .tech)
+    }
+    
+    public func isSubscribedToMediumAuthor(username: String) -> Bool {
+        let cleanUser = username.trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n"))
+        let feedUrl = "https://medium.com/feed/@\(cleanUser)"
+        return feeds.contains(where: { $0.url == feedUrl })
+    }
+    
     private func fetchFeedItems(_ feed: FeedSource) async throws -> [NewsArticle] {
+        if feed.id == "medium_reading_list" {
+            let settings = SettingsService.shared.settings
+            let username = settings.newsMediumUsername ?? ""
+            
+            var targetUrl = feed.url
+            if !targetUrl.contains("/feed/") && !username.isEmpty {
+                targetUrl = "https://medium.com/feed/@\(username)"
+            }
+            
+            if let url = URL(string: targetUrl) {
+                do {
+                    let (data, response) = try await urlSession.data(from: url)
+                    if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                        let parser = FeedParser(feed: feed)
+                        let parsed = parser.parse(xmlData: data)
+                        if !parsed.isEmpty {
+                            return parsed
+                        }
+                    }
+                } catch {
+                    print("[NewsService] Medium RSS fetch error: \(error)")
+                }
+            }
+        }
+        
         guard let url = URL(string: feed.url) else {
             throw URLError(.badURL)
         }

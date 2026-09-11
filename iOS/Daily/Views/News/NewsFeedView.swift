@@ -280,6 +280,17 @@ public struct NewsFeedView: View {
                     }
                 }
                 
+                if let mediumFeed = newsService.mediumReadingListFeedSource {
+                    Divider()
+                    Button {
+                        Task {
+                            await newsService.selectFeed(mediumFeed)
+                        }
+                    } label: {
+                        Label("Medium Reading List", systemImage: "book.pages.fill")
+                    }
+                }
+                
                 Divider()
                 
                 ForEach(newsService.feeds) { feed in

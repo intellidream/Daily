@@ -5,6 +5,9 @@ public struct FeaturesSettingsSection: View {
     @ObservedObject private var settingsService = SettingsService.shared
     @ObservedObject private var habitsService = HabitsService.shared
     
+    @State private var showMediumLoginSheet = false
+    @State private var showDisconnectMediumAlert = false
+    
     public init() {}
     
     public var body: some View {
@@ -264,7 +267,134 @@ public struct FeaturesSettingsSection: View {
                     }
                     .tint(ThemeColors.accentBlue)
                 }
+                
+                Divider()
+                    .background(Color.white.opacity(0.15))
+                
+                // --- Medium Setup (WinUI Parity) ---
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("MEDIUM SETUP")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                        
+                        Spacer()
+                        
+                        if let username = settingsService.settings.newsMediumUsername, !username.isEmpty {
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.green).frame(width: 6, height: 6)
+                                Text("@\(username)")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(Color.green.opacity(0.15)))
+                        } else {
+                            Text("Not Configured")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
+                    
+                    if let username = settingsService.settings.newsMediumUsername, !username.isEmpty {
+                        Text("Your reading list has been configured. You can customize the URL below if needed.")
+                            .font(.system(size: 12))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Reading List URL")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                            
+                            TextField("Reading List URL", text: Binding(
+                                get: { settingsService.settings.newsMediumReadingListUrl ?? "https://medium.com/@\(username)/list/reading-list" },
+                                set: { val in settingsService.update { $0.newsMediumReadingListUrl = val } }
+                            ))
+                            .font(.system(size: 13))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.white.opacity(0.08))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                                    )
+                            )
+                        }
+                        
+                        HStack(spacing: 10) {
+                            Button {
+                                showMediumLoginSheet = true
+                            } label: {
+                                Text("Change Account")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        Capsule().fill(Color.white.opacity(0.12))
+                                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            
+                            Button {
+                                showDisconnectMediumAlert = true
+                            } label: {
+                                Text("Disconnect")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(Color(hex: "#FF6B6B"))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        Capsule().fill(Color(hex: "#FF6B6B").opacity(0.12))
+                                            .overlay(Capsule().strokeBorder(Color(hex: "#FF6B6B").opacity(0.25), lineWidth: 1))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } else {
+                        Text("Reading List URL will be automatically configured upon login.")
+                            .font(.system(size: 12))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        
+                        Button {
+                            showMediumLoginSheet = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "link.badge.plus")
+                                Text("Login to Medium")
+                            }
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(
+                                Capsule().fill(ThemeColors.accentCyan)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .id("medium_setup")
             }
+        }
+        .sheet(isPresented: $showMediumLoginSheet) {
+            MediumLoginSheet()
+        }
+        .alert("Disconnect Medium", isPresented: $showDisconnectMediumAlert) {
+            Button("Disconnect", role: .destructive) {
+                settingsService.update {
+                    $0.newsMediumUsername = nil
+                    $0.newsMediumReadingListUrl = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to disconnect your Medium account and remove your reading list?")
         }
     }
 }

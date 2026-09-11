@@ -119,6 +119,32 @@ public struct NewsReaderView: View {
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .lineLimit(1)
+                
+                if let mediumUser = extractMediumUsername(from: currentArticle) {
+                    let isSubscribed = NewsService.shared.isSubscribedToMediumAuthor(username: mediumUser)
+                    Button {
+                        if !isSubscribed {
+                            withAnimation {
+                                NewsService.shared.subscribeToMediumAuthor(username: mediumUser, authorName: currentArticle.author)
+                            }
+                            triggerHaptic()
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
+                                .font(.system(size: 10))
+                            Text(isSubscribed ? "Following" : "Follow")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundColor(isSubscribed ? .white.opacity(0.6) : ThemeColors.accentCyan)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(isSubscribed ? Color.white.opacity(0.08) : ThemeColors.accentCyan.opacity(0.15))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             
             Spacer()
@@ -310,6 +336,28 @@ public struct NewsReaderView: View {
                 self.isLoadingFullArticle = false
             }
         }
+    }
+    
+    private func extractMediumUsername(from article: NewsArticle) -> String? {
+        guard article.link.contains("medium.com") else { return nil }
+        if let url = URL(string: article.link) {
+            if url.path.hasPrefix("/@") {
+                let parts = url.path.dropFirst(2).split(separator: "/")
+                if let user = parts.first, !user.isEmpty {
+                    return String(user)
+                }
+            }
+            if let host = url.host, host.contains(".medium.com") {
+                let sub = host.split(separator: ".").first
+                if let s = sub, s != "www" && s != "api" {
+                    return String(s)
+                }
+            }
+        }
+        if let author = article.author, author.hasPrefix("@") {
+            return String(author.dropFirst())
+        }
+        return nil
     }
     
     private func triggerHaptic() {

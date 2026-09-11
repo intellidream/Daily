@@ -28,6 +28,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var newsAutoRefreshOnStartup: Bool = true
     public var newsShowImages: Bool = true
     public var newsMediumUsername: String? = nil
+    public var newsMediumReadingListUrl: String? = nil
     
     // MARK: - Cloud & Sync
     public var cloudSyncEnabled: Bool = true

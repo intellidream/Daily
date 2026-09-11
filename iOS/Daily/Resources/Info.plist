@@ -28,6 +28,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.intellidream.daily</string>
+				<string>daily</string>
 			</array>
 		</dict>
 	</array>

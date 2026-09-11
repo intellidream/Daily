@@ -113,14 +113,42 @@ public struct NewsArticleCard: View {
                     // Actions Footer: Read Later, Favorite, Share
                     HStack(spacing: 16) {
                         if let author = article.author, !author.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "person.fill")
-                                    .font(.system(size: 10))
-                                Text(author)
-                                    .font(.system(size: 11, weight: .medium))
+                            HStack(spacing: 6) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 10))
+                                    Text(author)
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                                .lineLimit(1)
+                                
+                                if let mediumUser = extractMediumUsername(from: article) {
+                                    let isSubscribed = NewsService.shared.isSubscribedToMediumAuthor(username: mediumUser)
+                                    Button {
+                                        if !isSubscribed {
+                                            withAnimation {
+                                                NewsService.shared.subscribeToMediumAuthor(username: mediumUser, authorName: author)
+                                            }
+                                            triggerHaptic()
+                                        }
+                                    } label: {
+                                        HStack(spacing: 3) {
+                                            Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
+                                                .font(.system(size: 10))
+                                            Text(isSubscribed ? "Following" : "Follow")
+                                                .font(.system(size: 10, weight: .bold))
+                                        }
+                                        .foregroundColor(isSubscribed ? .white.opacity(0.6) : ThemeColors.accentCyan)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            Capsule().fill(isSubscribed ? Color.white.opacity(0.06) : ThemeColors.accentCyan.opacity(0.12))
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
-                            .foregroundColor(ThemeColors.fgMutedDark)
-                            .lineLimit(1)
                         }
                         
                         Spacer()
@@ -179,6 +207,28 @@ public struct NewsArticleCard: View {
             }
         }
         .buttonStyle(.plain)
+    }
+    
+    private func extractMediumUsername(from article: NewsArticle) -> String? {
+        guard article.link.contains("medium.com") else { return nil }
+        if let url = URL(string: article.link) {
+            if url.path.hasPrefix("/@") {
+                let parts = url.path.dropFirst(2).split(separator: "/")
+                if let user = parts.first, !user.isEmpty {
+                    return String(user)
+                }
+            }
+            if let host = url.host, host.contains(".medium.com") {
+                let sub = host.split(separator: ".").first
+                if let s = sub, s != "www" && s != "api" {
+                    return String(s)
+                }
+            }
+        }
+        if let author = article.author, author.hasPrefix("@") {
+            return String(author.dropFirst())
+        }
+        return nil
     }
     
     private func triggerHaptic() {

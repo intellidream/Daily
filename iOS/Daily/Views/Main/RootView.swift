@@ -5,7 +5,16 @@ public struct RootView: View {
     @ObservedObject private var authService = AuthService.shared
     @State private var selectedTab: NavigationTab = .dashboard
     
-    public init() {}
+    public init() {
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-startTabNews") {
+            self._selectedTab = State(initialValue: .news)
+        } else if args.contains("-startTabSettings") {
+            self._selectedTab = State(initialValue: .settings)
+        } else if args.contains("-startTabHabits") {
+            self._selectedTab = State(initialValue: .habits)
+        }
+    }
 
     
     public var body: some View {
@@ -94,5 +103,19 @@ public struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: authService.sessionState.isAuthenticatedOrGuest)
+        .onOpenURL { url in
+            let target = (url.host ?? url.path).trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                switch target {
+                case "dashboard": selectedTab = .dashboard
+                case "weather": selectedTab = .weather
+                case "news": selectedTab = .news
+                case "health": selectedTab = .health
+                case "habits": selectedTab = .habits
+                case "settings": selectedTab = .settings
+                default: break
+                }
+            }
+        }
     }
 }
