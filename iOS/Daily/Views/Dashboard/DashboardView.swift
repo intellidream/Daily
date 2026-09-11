@@ -189,6 +189,13 @@ public struct DashboardView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
         }
+        .refreshable {
+            async let w: () = WeatherService.shared.refreshWeather(force: true)
+            async let h: () = HealthDataService.shared.loadDataForSelectedDate(forceRefresh: true)
+            async let hab: () = HabitsService.shared.loadDataForSelectedDate(forceRefresh: true)
+            async let n: () = NewsService.shared.loadFeed(NewsService.shared.selectedFeed, forceRefresh: true)
+            _ = await (w, h, hab, n)
+        }
         .task {
             if WeatherService.shared.currentWeather == nil {
                 await WeatherService.shared.refreshWeather()

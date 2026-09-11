@@ -8,7 +8,6 @@ public struct WeatherDetailView: View {
     @ObservedObject private var settingsService = SettingsService.shared
 
     @State private var showingSearchSheet: Bool = false
-    @State private var isSpinningRefresh: Bool = false
 
     public init() {}
 
@@ -144,30 +143,6 @@ public struct WeatherDetailView: View {
                         .foregroundColor(.white)
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Color.white.opacity(0.08)))
-                }
-
-                // Refresh Button
-                Button {
-                    Task {
-                        isSpinningRefresh = true
-                        await weatherService.refreshWeather(force: true)
-                        withAnimation {
-                            isSpinningRefresh = false
-                        }
-                    }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(weatherService.isLoading ? ThemeColors.accentCyan : .white)
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(Color.white.opacity(0.08)))
-                        .rotationEffect(.degrees(isSpinningRefresh || weatherService.isLoading ? 360 : 0))
-                        .animation(
-                            isSpinningRefresh || weatherService.isLoading
-                                ? .linear(duration: 1).repeatForever(autoreverses: false)
-                                : .default,
-                            value: isSpinningRefresh || weatherService.isLoading
-                        )
                 }
             }
         }

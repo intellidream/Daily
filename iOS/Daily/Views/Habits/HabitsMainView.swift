@@ -6,6 +6,7 @@ public struct HabitsMainView: View {
     @ObservedObject private var habitsService = HabitsService.shared
     @State private var showingGuidanceSheet = false
     @State private var showingDatePicker = false
+    @State private var isLogsExpanded = false
     
     public init() {}
     
@@ -38,21 +39,24 @@ public struct HabitsMainView: View {
                 // Quick Logging Grid
                 HabitQuickActionGrid(
                     habitType: habitsService.activeHabit,
-                    onLogWater: { preset in
-                        habitsService.logWater(preset: preset)
+                    onLogWater: { preset, multiplier in
+                        habitsService.logWater(preset: preset, multiplier: multiplier)
                     },
                     onLogCustomWater: { amount, drink in
                         habitsService.logWater(amountMl: amount, drink: drink)
                     },
-                    onLogSmoke: { preset in
-                        habitsService.logSmoke(preset: preset)
+                    onLogSmoke: { preset, multiplier in
+                        habitsService.logSmoke(preset: preset, multiplier: multiplier)
                     },
                     onOpenCravingEmergency: {
                         showingGuidanceSheet = true
                     }
                 )
                 
-                // Analytics: 7-Day Performance & 120-Day Heatmap
+                // Daily Logs Timeline (Collapsible, placed immediately below quick actions)
+                dailyLogsTimeline
+                
+                // Analytics: 7-Day Performance & 112-Day Heatmap
                 HabitHistoryAndHeatmapView(
                     habitType: habitsService.activeHabit,
                     trendDays: habitsService.trendDays,
@@ -61,16 +65,15 @@ public struct HabitsMainView: View {
                     financialMetrics: habitsService.smokesFinancialMetrics,
                     drinkBreakdown: habitsService.drinkBreakdown
                 )
-                
-                // Today's Logs Timeline
-                todayLogsTimeline
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave space for FloatingGlassCapsule
         }
-
+        .task {
+            await habitsService.loadDataForSelectedDate()
+        }
         .refreshable {
-            await habitsService.fetchDay(date: habitsService.selectedDate)
+            await habitsService.loadDataForSelectedDate(forceRefresh: true)
         }
         .sheet(isPresented: $showingGuidanceSheet) {
             HabitGuidanceSheet(initialHabit: habitsService.activeHabit)
@@ -207,7 +210,7 @@ public struct HabitsMainView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "drop.fill")
                         .font(.system(size: 14, weight: .semibold))
-                    Text("Bubbles (Water)")
+                    Text("Bubbles")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                 }
                 .foregroundColor(habitsService.activeHabit == .water ? .white : Color.white.opacity(0.6))
@@ -240,7 +243,7 @@ public struct HabitsMainView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 14, weight: .semibold))
-                    Text("Smokes (Tobacco)")
+                    Text("Smokes")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                 }
                 .foregroundColor(habitsService.activeHabit == .smokes ? .white : Color.white.opacity(0.6))
@@ -273,46 +276,79 @@ public struct HabitsMainView: View {
         }
     }
     
-    // MARK: - Today's Logs Timeline
+    // MARK: - Daily Logs Timeline (Collapsible)
     
-    private var todayLogsTimeline: some View {
+    private var logsSectionTitle: String {
+        let cal = Calendar.current
+        if cal.isDateInToday(habitsService.selectedDate) {
+            return "TODAY'S LOGS"
+        } else if cal.isDateInYesterday(habitsService.selectedDate) {
+            return "YESTERDAY'S LOGS"
+        } else {
+            let df = DateFormatter()
+            df.dateFormat = "d MMM"
+            return "\(df.string(from: habitsService.selectedDate).uppercased()) LOGS"
+        }
+    }
+    
+    private var dailyLogsTimeline: some View {
         GlassCard(cornerRadius: 18, padding: 16) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("TODAY'S LOGS")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
-                    Spacer()
-                    Text("\(habitsService.dailyLogs.count) entries")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundColor(ThemeColors.fgMutedDark)
-                }
-                
-                if habitsService.dailyLogs.isEmpty {
+            VStack(alignment: .leading, spacing: isLogsExpanded ? 12 : 0) {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        isLogsExpanded.toggle()
+                    }
+                } label: {
                     HStack {
+                        Text(logsSectionTitle)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
                         Spacer()
-                        VStack(spacing: 6) {
-                            Image(systemName: "tray")
-                                .font(.system(size: 24))
-                                .foregroundColor(ThemeColors.fgMutedDark)
-                            Text("No entries logged for this date")
-                                .font(.system(size: 13))
-                                .foregroundColor(ThemeColors.fgMutedDark)
-                        }
-                        .padding(.vertical, 14)
-                        Spacer()
+                        Text("\(habitsService.dailyLogs.count) entries")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Image(systemName: isLogsExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
                     }
-                } else {
-                    VStack(spacing: 10) {
-                        ForEach(habitsService.dailyLogs) { log in
-                            HabitLogRow(log: log) {
-                                habitsService.deleteLog(log)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                
+                if isLogsExpanded {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Divider()
+                            .background(Color.white.opacity(0.08))
+                            .padding(.top, 4)
+                        
+                        if habitsService.dailyLogs.isEmpty {
+                            HStack {
+                                Spacer()
+                                VStack(spacing: 6) {
+                                    Image(systemName: "tray")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                    Text("No entries logged for this date")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                }
+                                .padding(.vertical, 14)
+                                Spacer()
                             }
-                            if log.id != habitsService.dailyLogs.last?.id {
-                                Divider().background(Color.white.opacity(0.08))
+                        } else {
+                            VStack(spacing: 10) {
+                                ForEach(habitsService.dailyLogs) { log in
+                                    HabitLogRow(log: log) {
+                                        habitsService.deleteLog(log)
+                                    }
+                                    if log.id != habitsService.dailyLogs.last?.id {
+                                        Divider().background(Color.white.opacity(0.08))
+                                    }
+                                }
                             }
                         }
                     }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
@@ -326,15 +362,15 @@ private struct HabitLogRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: log.habitType == "water" ? "drop.fill" : "flame.fill")
+            Image(systemName: log.specificIconName)
                 .font(.system(size: 14))
-                .foregroundColor(log.habitType == "water" ? ThemeColors.accentCyan : Color(hex: "#FFB800"))
+                .foregroundColor(Color(hex: log.specificIconColorHex))
                 .frame(width: 28, height: 28)
                 .background(Color.white.opacity(0.08))
                 .clipShape(Circle())
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(log.displayName)
+                Text(log.displayTitleWithMultiplier)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white)
                 Text(log.formattedTime)

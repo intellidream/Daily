@@ -7,15 +7,30 @@ import UIKit
 /// Quick logging grid for Bubbles and Smokes with tactile haptics.
 public struct HabitQuickActionGrid: View {
     public let habitType: HabitType
-    public let onLogWater: (WaterPreset) -> Void
+    public let onLogWater: (WaterPreset, Int) -> Void
     public let onLogCustomWater: (Double, String) -> Void
-    public let onLogSmoke: (SmokePreset) -> Void
+    public let onLogSmoke: (SmokePreset, Int) -> Void
     public let onOpenCravingEmergency: () -> Void
     
     @ObservedObject private var settingsService = SettingsService.shared
+    @State private var selectedMultiplier: Int = 1
     @State private var showingCustomWaterSheet = false
     @State private var customAmountText = ""
     @State private var customDrinkName = "Water"
+    
+    public init(
+        habitType: HabitType,
+        onLogWater: @escaping (WaterPreset, Int) -> Void,
+        onLogCustomWater: @escaping (Double, String) -> Void = { _, _ in },
+        onLogSmoke: @escaping (SmokePreset, Int) -> Void,
+        onOpenCravingEmergency: @escaping () -> Void
+    ) {
+        self.habitType = habitType
+        self.onLogWater = onLogWater
+        self.onLogCustomWater = onLogCustomWater
+        self.onLogSmoke = onLogSmoke
+        self.onOpenCravingEmergency = onOpenCravingEmergency
+    }
     
     public init(
         habitType: HabitType,
@@ -25,9 +40,9 @@ public struct HabitQuickActionGrid: View {
         onOpenCravingEmergency: @escaping () -> Void
     ) {
         self.habitType = habitType
-        self.onLogWater = onLogWater
+        self.onLogWater = { preset, _ in onLogWater(preset) }
         self.onLogCustomWater = onLogCustomWater
-        self.onLogSmoke = onLogSmoke
+        self.onLogSmoke = { preset, _ in onLogSmoke(preset) }
         self.onOpenCravingEmergency = onOpenCravingEmergency
     }
     
@@ -46,6 +61,33 @@ public struct HabitQuickActionGrid: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(ThemeColors.fgMutedDark)
                 Spacer()
+                
+                // Multiplier Selector Pill Bar: 1x, 2x, 3x, 5x
+                HStack(spacing: 4) {
+                    ForEach([1, 2, 3, 5], id: \.self) { mult in
+                        Button {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                                selectedMultiplier = mult
+                            }
+                        } label: {
+                            Text("\(mult)x")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundColor(selectedMultiplier == mult ? .white : ThemeColors.fgMutedDark)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(selectedMultiplier == mult ? (habitType == .water ? ThemeColors.accentCyan.opacity(0.35) : Color(hex: "#FF4D4D").opacity(0.35)) : Color.white.opacity(0.06))
+                                .clipShape(Capsule())
+                                .overlay {
+                                    if selectedMultiplier == mult {
+                                        Capsule().strokeBorder(habitType == .water ? ThemeColors.accentCyan : Color(hex: "#FF4D4D"), lineWidth: 1)
+                                    }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                
                 if habitType == .water {
                     Button {
                         showingCustomWaterSheet = true
@@ -53,11 +95,12 @@ public struct HabitQuickActionGrid: View {
                         HStack(spacing: 4) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 11))
-                            Text("Custom ml")
+                            Text("Custom")
                                 .font(.system(size: 11, weight: .semibold))
                         }
                         .foregroundColor(ThemeColors.accentCyan)
                     }
+                    .padding(.leading, 4)
                 }
             }
             .padding(.horizontal, 4)
@@ -68,7 +111,7 @@ public struct HabitQuickActionGrid: View {
                     ForEach(WaterPreset.defaults) { preset in
                         Button {
                             triggerHaptic()
-                            onLogWater(preset)
+                            onLogWater(preset, selectedMultiplier)
                         } label: {
                             VStack(spacing: 6) {
                                 Image(systemName: preset.iconName)
@@ -79,7 +122,7 @@ public struct HabitQuickActionGrid: View {
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundColor(.white)
                                 
-                                Text("+\(Int(preset.amountMl)) ml")
+                                Text("+\(Int(preset.amountMl * Double(selectedMultiplier))) ml")
                                     .font(.system(size: 11, weight: .bold, design: .rounded))
                                     .foregroundColor(ThemeColors.accentCyan)
                             }
@@ -102,7 +145,7 @@ public struct HabitQuickActionGrid: View {
                         ForEach(SmokePreset.defaults) { preset in
                             Button {
                                 triggerHaptic()
-                                onLogSmoke(preset)
+                                onLogSmoke(preset, selectedMultiplier)
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: preset.iconName)
@@ -113,7 +156,7 @@ public struct HabitQuickActionGrid: View {
                                         Text(preset.name)
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundColor(.white)
-                                        Text("+1 Log")
+                                        Text(selectedMultiplier > 1 ? "+\(selectedMultiplier) Logs" : "+1 Log")
                                             .font(.system(size: 10, weight: .medium))
                                             .foregroundColor(ThemeColors.fgMutedDark)
                                     }

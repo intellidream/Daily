@@ -10,7 +10,6 @@ public final class HabitsService: ObservableObject {
     @Published public var selectedDate: Date = Date()
     @Published public var activeHabit: HabitType = .water
     @Published public var isLoading: Bool = false
-
     
     // Bubbles (Water)
     @Published public var waterGoal: Double = 2000
@@ -25,9 +24,15 @@ public final class HabitsService: ObservableObject {
     @Published public var todaysSmokesLogs: [HabitLogRecord] = []
     @Published public var smokesFinancials: SmokesFinancialMetrics = SmokesFinancialMetrics()
     
-    // Trends & Analytics
-    @Published public var sevenDayHistory: [HabitTrendDay] = []
-    @Published public var consistencyHeatmap: [HabitConsistencyCell] = []
+    // Independent Precalculated Trends & Analytics for Bubbles & Smokes
+    @Published public var waterSevenDayHistory: [HabitTrendDay] = []
+    @Published public var smokesSevenDayHistory: [HabitTrendDay] = []
+    @Published public var waterConsistencyHeatmap: [HabitConsistencyCell] = []
+    @Published public var smokesConsistencyHeatmap: [HabitConsistencyCell] = []
+    
+    // Daily aggregate dictionaries cached locally for 0ms instant rendering
+    private var waterDailyTotals: [String: Double] = [:]
+    private var smokesDailyTotals: [String: Int] = [:]
     
     // MARK: - Convenience Computed Properties
     
@@ -44,6 +49,13 @@ public final class HabitsService: ObservableObject {
         todaysSmokesLogs.first?.loggedAt
     }
     public var smokesFinancialMetrics: SmokesFinancialMetrics { smokesFinancials }
+    
+    public var sevenDayHistory: [HabitTrendDay] {
+        activeHabit == .water ? waterSevenDayHistory : smokesSevenDayHistory
+    }
+    public var consistencyHeatmap: [HabitConsistencyCell] {
+        activeHabit == .water ? waterConsistencyHeatmap : smokesConsistencyHeatmap
+    }
     public var trendDays: [HabitTrendDay] { sevenDayHistory }
     public var drinkBreakdown: [HabitDrinkBreakdown] {
         activeHabit == .water ? waterDrinkBreakdown : smokesTypeBreakdown
@@ -70,16 +82,22 @@ public final class HabitsService: ObservableObject {
     // MARK: - Convenience Synchronous / Fire-and-Forget Helpers
     
     public func logWater(preset: WaterPreset) {
-        Task { await logWater(preset: preset, customAmount: nil) }
+        Task { await logWater(preset: preset, customAmount: nil, multiplier: 1) }
+    }
+    public func logWater(preset: WaterPreset, multiplier: Int) {
+        Task { await logWater(preset: preset, customAmount: nil, multiplier: multiplier) }
     }
     public func logWater(amountMl: Double, drink: String = "Water") {
-        Task { await logWater(preset: .glass, customAmount: amountMl) }
+        Task { await logWater(preset: .glass, customAmount: amountMl, multiplier: 1) }
     }
     public func logSmoke(preset: SmokePreset) {
-        Task { await logSmoke(preset: preset, customCount: nil) }
+        Task { await logSmoke(preset: preset, customCount: nil, multiplier: 1) }
+    }
+    public func logSmoke(preset: SmokePreset, multiplier: Int) {
+        Task { await logSmoke(preset: preset, customCount: nil, multiplier: multiplier) }
     }
     public func logSmoke(type: String = "Cigarette") {
-        Task { await logSmoke(preset: .cigarette, customCount: 1) }
+        Task { await logSmoke(preset: .cigarette, customCount: 1, multiplier: 1) }
     }
     public func deleteLog(_ log: HabitLogRecord) {
         Task { await deleteLog(id: log.id) }
@@ -97,7 +115,6 @@ public final class HabitsService: ObservableObject {
     /// Decoupled hook for native platforms to record dietary water into HealthKit without polluting DailyCore.
     public var onWaterLogged: ((_ amountMl: Double, _ date: Date) -> Void)? = nil
 
-    
     // MARK: - Private State & Dependencies
     
     private let supabase = SupabaseService.shared.client
@@ -107,6 +124,8 @@ public final class HabitsService: ObservableObject {
     
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone.current
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
@@ -155,29 +174,47 @@ public final class HabitsService: ObservableObject {
     public func switchHabit(to habit: HabitType) {
         guard activeHabit != habit else { return }
         activeHabit = habit
-        Task {
-            await updateAnalyticsForCurrentHabit()
-        }
     }
     
     // MARK: - Logging Actions
     
-    public func logWater(preset: WaterPreset, customAmount: Double? = nil) async {
-        let amount = customAmount ?? preset.defaultAmountMl
-        let metaDict = ["drink": preset.rawValue]
+    public func logWater(preset: WaterPreset, customAmount: Double? = nil, multiplier: Int = 1) async {
+        let safeMultiplier = max(1, multiplier)
+        let baseAmount = customAmount ?? preset.defaultAmountMl
+        let totalAmount = baseAmount * Double(safeMultiplier)
+        
+        var metaDict: [String: String] = ["drink": preset.rawValue]
+        if safeMultiplier > 1 {
+            metaDict["multiplier"] = "\(safeMultiplier)"
+            metaDict["base_value"] = "\(baseAmount)"
+        }
         let metaJson = (try? JSONSerialization.data(withJSONObject: metaDict, options: []))
             .flatMap { String(data: $0, encoding: .utf8) }
         
         let session = try? await supabase.auth.session
         let userId = session?.user.id
         
+        // Ensure proper date attribution if viewing a past date
+        let logDate: Date
+        if Calendar.current.isDateInToday(selectedDate) {
+            logDate = Date()
+        } else {
+            let cal = Calendar.current
+            let nowTime = cal.dateComponents([.hour, .minute, .second], from: Date())
+            var components = cal.dateComponents([.year, .month, .day], from: selectedDate)
+            components.hour = nowTime.hour
+            components.minute = nowTime.minute
+            components.second = nowTime.second
+            logDate = cal.date(from: components) ?? selectedDate
+        }
+        
         let newRecord = HabitLogRecord(
             id: UUID(),
             userId: userId,
             habitType: "water",
-            value: amount,
+            value: totalAmount,
             unit: "ml",
-            loggedAt: Date(),
+            loggedAt: logDate,
             metadata: metaJson,
             createdAt: Date(),
             updatedAt: Date(),
@@ -189,30 +226,56 @@ public final class HabitsService: ObservableObject {
         recalculateDailyAggregates()
         saveLocalLogs()
         
-        // 2. Trigger HealthKit hook
-        onWaterLogged?(amount, newRecord.loggedAt)
+        // 2. Update daily totals cache & precomputed histories
+        let dateKey = isoDateFormatter.string(from: logDate)
+        waterDailyTotals[dateKey, default: 0] += totalAmount
+        saveDailyTotals()
+        recomputeAllHistoriesAndHeatmaps()
         
-        // 3. Queue & Push to Supabase
+        // 3. Trigger HealthKit hook
+        onWaterLogged?(totalAmount, logDate)
+        
+        // 4. Queue & Push to Supabase
         await pushLogToSupabase(newRecord)
-        await updateAnalyticsForCurrentHabit()
     }
     
-    public func logSmoke(preset: SmokePreset, customCount: Int? = nil) async {
-        let count = customCount ?? preset.defaultCount
-        let metaDict = ["type": preset.rawValue]
+    public func logSmoke(preset: SmokePreset, customCount: Int? = nil, multiplier: Int = 1) async {
+        let safeMultiplier = max(1, multiplier)
+        let baseCount = customCount ?? preset.defaultCount
+        let totalCount = baseCount * safeMultiplier
+        
+        var metaDict: [String: String] = ["type": preset.rawValue]
+        if safeMultiplier > 1 {
+            metaDict["multiplier"] = "\(safeMultiplier)"
+            metaDict["base_value"] = "\(baseCount)"
+        }
         let metaJson = (try? JSONSerialization.data(withJSONObject: metaDict, options: []))
             .flatMap { String(data: $0, encoding: .utf8) }
         
         let session = try? await supabase.auth.session
         let userId = session?.user.id
         
+        // Ensure proper date attribution if viewing a past date
+        let logDate: Date
+        if Calendar.current.isDateInToday(selectedDate) {
+            logDate = Date()
+        } else {
+            let cal = Calendar.current
+            let nowTime = cal.dateComponents([.hour, .minute, .second], from: Date())
+            var components = cal.dateComponents([.year, .month, .day], from: selectedDate)
+            components.hour = nowTime.hour
+            components.minute = nowTime.minute
+            components.second = nowTime.second
+            logDate = cal.date(from: components) ?? selectedDate
+        }
+        
         let newRecord = HabitLogRecord(
             id: UUID(),
             userId: userId,
             habitType: "smokes",
-            value: Double(count),
+            value: Double(totalCount),
             unit: "cigs",
-            loggedAt: Date(),
+            loggedAt: logDate,
             metadata: metaJson,
             createdAt: Date(),
             updatedAt: Date(),
@@ -224,19 +287,41 @@ public final class HabitsService: ObservableObject {
         recalculateDailyAggregates()
         saveLocalLogs()
         
-        // 2. Push to Supabase
+        // 2. Update daily totals cache & precomputed histories
+        let dateKey = isoDateFormatter.string(from: logDate)
+        smokesDailyTotals[dateKey, default: 0] += totalCount
+        saveDailyTotals()
+        recomputeAllHistoriesAndHeatmaps()
+        
+        // 3. Push to Supabase
         await pushLogToSupabase(newRecord)
-        await updateAnalyticsForCurrentHabit()
     }
     
     public func deleteLog(id: UUID) async {
+        var deletedRecord: HabitLogRecord?
         if activeHabit == .water {
-            todaysWaterLogs.removeAll { $0.id == id }
+            if let idx = todaysWaterLogs.firstIndex(where: { $0.id == id }) {
+                deletedRecord = todaysWaterLogs.remove(at: idx)
+            }
         } else {
-            todaysSmokesLogs.removeAll { $0.id == id }
+            if let idx = todaysSmokesLogs.firstIndex(where: { $0.id == id }) {
+                deletedRecord = todaysSmokesLogs.remove(at: idx)
+            }
         }
+        
+        if let rec = deletedRecord {
+            let dateKey = isoDateFormatter.string(from: rec.loggedAt)
+            if rec.habitType == "water" {
+                waterDailyTotals[dateKey] = max(0, (waterDailyTotals[dateKey] ?? rec.value) - rec.value)
+            } else {
+                smokesDailyTotals[dateKey] = max(0, (smokesDailyTotals[dateKey] ?? Int(rec.value)) - Int(rec.value))
+            }
+            saveDailyTotals()
+        }
+        
         recalculateDailyAggregates()
         saveLocalLogs()
+        recomputeAllHistoriesAndHeatmaps()
         
         // Asynchronously mark deleted in Supabase
         do {
@@ -247,8 +332,6 @@ public final class HabitsService: ObservableObject {
         } catch {
             print("[HabitsService] Note: Offline soft-delete queued for \(id): \(error.localizedDescription)")
         }
-        
-        await updateAnalyticsForCurrentHabit()
     }
     
     public func updateWaterGoal(_ newGoal: Double) async {
@@ -257,9 +340,10 @@ public final class HabitsService: ObservableObject {
         userDefaults.set(newGoal, forKey: "water_goal")
         
         let session = try? await supabase.auth.session
-        if let userId = session?.user.id {
+        if let userId = session?.user.id.uuidString.lowercased() {
+            // 1. Upsert habits_goals
             let goalRecord = HabitGoalRecord(
-                userId: userId,
+                userId: UUID(uuidString: userId),
                 habitType: "water",
                 targetValue: newGoal,
                 unit: "ml",
@@ -268,8 +352,16 @@ public final class HabitsService: ObservableObject {
                 isDeleted: false
             )
             _ = try? await supabase.from("habits_goals").upsert(goalRecord).execute()
+            
+            // 2. Also upsert water_goal into user_preferences
+            struct WaterPrefUpdate: Codable {
+                let id: String
+                let water_goal: Double
+            }
+            _ = try? await supabase.from("user_preferences").upsert(WaterPrefUpdate(id: userId, water_goal: newGoal)).execute()
         }
-        await updateAnalyticsForCurrentHabit()
+        recalculateDailyAggregates()
+        recomputeAllHistoriesAndHeatmaps()
     }
     
     public func updateSmokesSettings(_ newSettings: SmokesSettings) async {
@@ -280,9 +372,30 @@ public final class HabitsService: ObservableObject {
         userDefaults.set(newSettings.baselineCigsPerDay, forKey: "smokes_baseline")
         
         let session = try? await supabase.auth.session
-        if let userId = session?.user.id {
+        if let userId = session?.user.id.uuidString.lowercased() {
+            // 1. Upsert user_preferences
+            struct SmokesPrefUpdate: Codable {
+                let id: String
+                let smokes_baseline: Int
+                let smokes_pack_size: Int
+                let smokes_pack_cost: Double
+                let smokes_currency: String
+                let smokes_quit_date: String
+            }
+            let isoQuit = isoTimestampFormatter.string(from: newSettings.quitStartDate)
+            let prefUpdate = SmokesPrefUpdate(
+                id: userId,
+                smokes_baseline: newSettings.baselineCigsPerDay,
+                smokes_pack_size: newSettings.cigsPerPack,
+                smokes_pack_cost: newSettings.costPerPack,
+                smokes_currency: newSettings.currency,
+                smokes_quit_date: isoQuit
+            )
+            _ = try? await supabase.from("user_preferences").upsert(prefUpdate).execute()
+            
+            // 2. Also keep habits_goals synced
             let goalRecord = HabitGoalRecord(
-                userId: userId,
+                userId: UUID(uuidString: userId),
                 habitType: "smokes",
                 targetValue: Double(newSettings.baselineCigsPerDay),
                 unit: "cigs",
@@ -293,7 +406,7 @@ public final class HabitsService: ObservableObject {
             _ = try? await supabase.from("habits_goals").upsert(goalRecord).execute()
         }
         recalculateDailyAggregates()
-        await updateAnalyticsForCurrentHabit()
+        recomputeAllHistoriesAndHeatmaps()
     }
     
     // MARK: - Data Fetching & Sync
@@ -306,25 +419,69 @@ public final class HabitsService: ObservableObject {
         let startOfDay = cal.startOfDay(for: selectedDate)
         guard let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay) else { return }
         
-        let startIso = isoTimestampFormatter.string(from: startOfDay)
-        let endIso = isoTimestampFormatter.string(from: endOfDay)
+        let isoUtcFormatter = ISO8601DateFormatter()
+        isoUtcFormatter.formatOptions = [.withInternetDateTime]
+        isoUtcFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        
+        let startIso = isoUtcFormatter.string(from: startOfDay)
+        let endIso = isoUtcFormatter.string(from: endOfDay)
         
         let session = try? await supabase.auth.session
-        if let userId = session?.user.id.uuidString.lowercased() {
-            // 1. Fetch Goals
+        let userId = session?.user.id.uuidString.lowercased()
+        
+        if let uid = userId {
+            // 1. Fetch user_preferences (smokes configuration & water target)
+            do {
+                let prefs: [UserPreferencesRecord] = try await supabase.from("user_preferences")
+                    .select()
+                    .eq("id", value: uid)
+                    .limit(1)
+                    .execute()
+                    .value
+                
+                if let p = prefs.first {
+                    if let base = p.smokes_baseline, base > 0 {
+                        self.smokesSettings.baselineCigsPerDay = base
+                        userDefaults.set(base, forKey: "smokes_baseline")
+                    }
+                    if let pack = p.smokes_pack_size, pack > 0 {
+                        self.smokesSettings.cigsPerPack = pack
+                    }
+                    if let cost = p.smokes_pack_cost, cost >= 0 {
+                        self.smokesSettings.costPerPack = cost
+                    }
+                    if let curr = p.smokes_currency, !curr.isEmpty {
+                        self.smokesSettings.currency = curr
+                    }
+                    if let qStr = p.smokes_quit_date, let qDate = HabitDateParser.parse(qStr) {
+                        self.smokesSettings.quitStartDate = qDate
+                    }
+                    if let wg = p.water_goal, wg > 0 {
+                        self.waterGoal = wg
+                        userDefaults.set(wg, forKey: "water_goal")
+                    }
+                    if let sData = try? JSONEncoder().encode(self.smokesSettings) {
+                        userDefaults.set(sData, forKey: "smokes_settings")
+                    }
+                }
+            } catch {
+                print("[HabitsService] Note: Could not fetch user_preferences: \(error.localizedDescription)")
+            }
+            
+            // 2. Fetch Goals from habits_goals (fallback / sync)
             do {
                 let goals: [HabitGoalRecord] = try await supabase.from("habits_goals")
                     .select()
-                    .eq("user_id", value: userId)
+                    .eq("user_id", value: uid)
                     .eq("is_deleted", value: false)
                     .execute()
                     .value
                 
                 for g in goals {
-                    if g.habitType == "water" {
+                    if g.habitType == "water" && g.targetValue > 0 {
                         self.waterGoal = g.targetValue
                         userDefaults.set(g.targetValue, forKey: "water_goal")
-                    } else if g.habitType == "smokes" {
+                    } else if g.habitType == "smokes" && g.targetValue > 0 && self.smokesSettings.baselineCigsPerDay == 0 {
                         self.smokesSettings.baselineCigsPerDay = Int(g.targetValue)
                         userDefaults.set(Int(g.targetValue), forKey: "smokes_baseline")
                     }
@@ -332,33 +489,133 @@ public final class HabitsService: ObservableObject {
             } catch {
                 print("[HabitsService] Note: Could not fetch habits_goals: \(error.localizedDescription)")
             }
-            
-            // 2. Fetch Logs for this day
-            do {
-                let logs: [HabitLogRecord] = try await supabase.from("habits_logs")
-                    .select()
-                    .eq("user_id", value: userId)
-                    .gte("logged_at", value: startIso)
-                    .lt("logged_at", value: endIso)
-                    .eq("is_deleted", value: false)
-                    .order("logged_at", ascending: false)
-                    .execute()
-                    .value
-                
-                self.todaysWaterLogs = logs.filter { $0.habitType == "water" }
-                self.todaysSmokesLogs = logs.filter { $0.habitType == "smokes" }
-                saveLocalLogs()
-            } catch {
-                print("[HabitsService] Note: Could not fetch habits_logs: \(error.localizedDescription)")
-                loadLocalLogsForSelectedDate()
+        }
+        
+        // 3. Fetch Logs for this selected day
+        do {
+            var query = supabase.from("habits_logs")
+                .select()
+                .gte("logged_at", value: startIso)
+                .lt("logged_at", value: endIso)
+                .eq("is_deleted", value: false)
+            if let uid = userId {
+                query = query.eq("user_id", value: uid)
             }
-        } else {
-            // Guest mode / offline
+            let logs: [HabitLogRecord] = try await query
+                .order("logged_at", ascending: false)
+                .execute()
+                .value
+            
+            self.todaysWaterLogs = logs.filter { $0.habitType == "water" }
+            self.todaysSmokesLogs = logs.filter { $0.habitType == "smokes" }
+            saveLocalLogs()
+        } catch {
+            print("[HabitsService] Note: Could not fetch habits_logs: \(error.localizedDescription)")
             loadLocalLogsForSelectedDate()
         }
         
+        // 4. Batch query 112 days (16 full weeks) of consistency history
+        let today = cal.startOfDay(for: Date())
+        let heatStartDate = cal.date(byAdding: .day, value: -111, to: today) ?? today
+        let startStr = isoDateFormatter.string(from: heatStartDate)
+        let endStr = isoDateFormatter.string(from: today)
+        
+        var fetchedConsistency = false
+        var newWaterTotals: [String: Double] = [:]
+        var newSmokesTotals: [String: Int] = [:]
+        
+        // 4A. Primary: Call Supabase RPC get_habits_consistency for Water & Smokes
+        do {
+            let waterParams = HabitsConsistencyParams(p_habit_type: "water", p_start_date: startStr, p_end_date: endStr)
+            let waterRows: [HabitsConsistencyRow] = try await supabase.rpc("get_habits_consistency", params: waterParams).execute().value
+            
+            let smokesParams = HabitsConsistencyParams(p_habit_type: "smokes", p_start_date: startStr, p_end_date: endStr)
+            let smokesRows: [HabitsConsistencyRow] = try await supabase.rpc("get_habits_consistency", params: smokesParams).execute().value
+            
+            for r in waterRows {
+                newWaterTotals[r.normalizedDayKey] = r.total_value.value
+            }
+            for r in smokesRows {
+                newSmokesTotals[r.normalizedDayKey] = Int(r.total_value.value)
+            }
+            fetchedConsistency = true
+            print("[HabitsService] Successfully fetched consistency RPC: \(waterRows.count) water days, \(smokesRows.count) smokes days.")
+        } catch {
+            print("[HabitsService] Note: RPC get_habits_consistency failed (\(error.localizedDescription)). Falling back to direct tables...")
+        }
+        
+        // 4B. Fallback: Dual-Table Ingestion (habits_daily_summaries + habits_logs)
+        if !fetchedConsistency {
+            do {
+                // 1. Fetch habits_daily_summaries
+                var sumQuery = supabase.from("habits_daily_summaries")
+                    .select("habit_type,date,total_value,log_count")
+                    .gte("date", value: startStr)
+                if let uid = userId {
+                    sumQuery = sumQuery.eq("user_id", value: uid)
+                }
+                let summaries: [HabitsDailySummaryRow] = (try? await sumQuery.execute().value) ?? []
+                for s in summaries {
+                    let k = s.normalizedDayKey
+                    if s.habit_type == "water" {
+                        newWaterTotals[k] = s.total_value.value
+                    } else if s.habit_type == "smokes" {
+                        newSmokesTotals[k] = Int(s.total_value.value)
+                    }
+                }
+                
+                // 2. Fetch raw habits_logs (override summaries where raw logs exist)
+                let startIso112 = isoUtcFormatter.string(from: heatStartDate)
+                var logsQuery = supabase.from("habits_logs")
+                    .select("value,metadata,logged_at,habit_type")
+                    .gte("logged_at", value: startIso112)
+                    .eq("is_deleted", value: false)
+                if let uid = userId {
+                    logsQuery = logsQuery.eq("user_id", value: uid)
+                }
+                let rawLogs: [HabitHistoricalLogItem] = (try? await logsQuery.limit(5000).execute().value) ?? []
+                
+                var rawWater: [String: Double] = [:]
+                var rawSmokes: [String: Int] = [:]
+                for l in rawLogs {
+                    guard let logDate = HabitDateParser.parse(l.logged_at) else { continue }
+                    let k = isoDateFormatter.string(from: logDate)
+                    if l.habit_type == "water" {
+                        rawWater[k, default: 0] += l.value.value
+                    } else if l.habit_type == "smokes" {
+                        rawSmokes[k, default: 0] += Int(l.value.value)
+                    }
+                }
+                for (k, v) in rawWater {
+                    newWaterTotals[k] = v
+                }
+                for (k, v) in rawSmokes {
+                    newSmokesTotals[k] = v
+                }
+            }
+        }
+        
+        // Merge into persistent daily totals
+        for (k, v) in newWaterTotals {
+            self.waterDailyTotals[k] = v
+        }
+        for (k, v) in newSmokesTotals {
+            self.smokesDailyTotals[k] = v
+        }
+        
+        // Ensure currently selected date's raw logs update the totals
+        let selectedKey = isoDateFormatter.string(from: selectedDate)
+        self.waterDailyTotals[selectedKey] = todaysWaterLogs.reduce(0.0) { $0 + $1.value }
+        self.smokesDailyTotals[selectedKey] = todaysSmokesLogs.reduce(0) { $0 + Int($1.value) }
+        
+        saveDailyTotals()
+        saveWeekCachesForWatch()
+        
+        // 5. Fetch Smokes Financials
+        await fetchSmokesFinancials(userId: userId)
+        
         recalculateDailyAggregates()
-        await updateAnalyticsForCurrentHabit()
+        recomputeAllHistoriesAndHeatmaps()
         await flushOfflineQueue()
     }
     
@@ -378,6 +635,59 @@ public final class HabitsService: ObservableObject {
         if let queueData = userDefaults.data(forKey: "offline_habits_queue"),
            let queue = try? JSONDecoder().decode([HabitLogRecord].self, from: queueData) {
             self.offlineLogQueue = queue
+        }
+        
+        // Load cached daily totals dictionary
+        if let wData = userDefaults.data(forKey: "habits_water_daily_totals"),
+           let wDict = try? JSONDecoder().decode([String: Double].self, from: wData) {
+            self.waterDailyTotals = wDict
+        }
+        if let sData = userDefaults.data(forKey: "habits_smokes_daily_totals"),
+           let sDict = try? JSONDecoder().decode([String: Int].self, from: sData) {
+            self.smokesDailyTotals = sDict
+        }
+        
+        loadLocalLogsForSelectedDate()
+        recalculateDailyAggregates()
+        recomputeAllHistoriesAndHeatmaps()
+    }
+    
+    private func saveDailyTotals() {
+        if let wData = try? JSONEncoder().encode(waterDailyTotals) {
+            userDefaults.set(wData, forKey: "habits_water_daily_totals")
+        }
+        if let sData = try? JSONEncoder().encode(smokesDailyTotals) {
+            userDefaults.set(sData, forKey: "habits_smokes_daily_totals")
+        }
+    }
+    
+    public func saveWeekCachesForWatch() {
+        let cal = Calendar.current
+        let now = Date()
+        let startOfToday = cal.startOfDay(for: now)
+        let weekday = cal.component(.weekday, from: startOfToday) // 1=Sun, 2=Mon...
+        let daysFromMonday = (weekday == 1) ? 6 : (weekday - 2)
+        guard let thisMonday = cal.date(byAdding: .day, value: -daysFromMonday, to: startOfToday) else { return }
+        
+        var waterBuckets: [WaterDayBucket] = []
+        var smokeBuckets: [SmokeDayBucket] = []
+        
+        for i in 0..<7 {
+            if let dayDate = cal.date(byAdding: .day, value: i, to: thisMonday) {
+                let dateKey = isoDateFormatter.string(from: dayDate)
+                let wVal = waterDailyTotals[dateKey] ?? 0
+                let sVal = Double(smokesDailyTotals[dateKey] ?? 0)
+                
+                waterBuckets.append(WaterDayBucket(date: dayDate, dayLabel: "", water: wVal, coffee: 0))
+                smokeBuckets.append(SmokeDayBucket(date: dayDate, dayLabel: "", cig: sVal, heat: 0))
+            }
+        }
+        
+        if let wData = try? JSONEncoder().encode(waterBuckets) {
+            userDefaults.set(wData, forKey: "bubbles_week_cache")
+        }
+        if let sData = try? JSONEncoder().encode(smokeBuckets) {
+            userDefaults.set(sData, forKey: "smokes_week_cache")
         }
     }
     
@@ -479,123 +789,175 @@ public final class HabitsService: ObservableObject {
         }.sorted { $0.amount > $1.amount }
         
         // Smokes Financials & Interval
-        let cal = Calendar.current
-        let days = max(1, cal.dateComponents([.day], from: smokesSettings.quitStartDate, to: selectedDate).day ?? 1)
-        let expectedCeiling = days * smokesSettings.baselineCigsPerDay
-        let avoided = max(0, expectedCeiling - sCount)
-        let costPerCig = smokesSettings.costPerCig
-        let moneySaved = Double(avoided) * costPerCig
+        let lastLog = todaysSmokesLogs.first
+        let timeSince = lastLog.map { Date().timeIntervalSince($0.loggedAt) }
         
+        let currentSavings = smokesFinancials.moneySaved
+        let currentAvoided = smokesFinancials.cigsAvoided
+        let days = smokesFinancials.daysTracked
+        
+        self.smokesFinancials = SmokesFinancialMetrics(
+            moneySaved: currentSavings,
+            cigsAvoided: currentAvoided,
+            daysTracked: days,
+            costPerCig: smokesSettings.costPerCig,
+            lastSmokeDate: lastLog?.loggedAt,
+            timeSinceLastSmoke: timeSince
+        )
+    }
+    
+    // MARK: - Smokes Financials & RPC
+    
+    private func fetchSmokesFinancials(userId: String?) async {
+        let cal = Calendar.current
+        let days = max(1, (cal.dateComponents([.day], from: smokesSettings.quitStartDate, to: Date()).day ?? 0) + 1)
+        let costPerCig = smokesSettings.costPerCig
+        let baseline = smokesSettings.baselineCigsPerDay
+        
+        var totalSmokedCount: Int?
+        var daysTrackedCount: Int = days
+        
+        // Try RPC get_smokes_financials
+        let isoSince = isoTimestampFormatter.string(from: smokesSettings.quitStartDate)
+        do {
+            let res: SmokesFinancialsRpcResult = try await supabase.rpc(
+                "get_smokes_financials",
+                params: SmokesFinancialsParams(p_since_date: isoSince)
+            ).execute().value
+            
+            if let t = res.total_smoked?.value {
+                totalSmokedCount = Int(t)
+            }
+            if let d = res.days_tracked, d > 0 {
+                daysTrackedCount = d
+            }
+        } catch {
+            print("[HabitsService] Note: RPC get_smokes_financials fallback (\(error.localizedDescription)). Calculating from daily totals...")
+        }
+        
+        let totalSmoked: Int
+        if let ts = totalSmokedCount {
+            totalSmoked = ts
+        } else {
+            // Local calculation from daily totals
+            var sum = 0
+            for dayOffset in 0..<daysTrackedCount {
+                if let d = cal.date(byAdding: .day, value: -dayOffset, to: Date()) {
+                    let k = isoDateFormatter.string(from: d)
+                    sum += smokesDailyTotals[k] ?? 0
+                }
+            }
+            totalSmoked = sum
+        }
+        
+        let avoided = max(0, (daysTrackedCount * baseline) - totalSmoked)
+        let moneySaved = Double(avoided) * costPerCig
         let lastLog = todaysSmokesLogs.first
         let timeSince = lastLog.map { Date().timeIntervalSince($0.loggedAt) }
         
         self.smokesFinancials = SmokesFinancialMetrics(
             moneySaved: moneySaved,
             cigsAvoided: avoided,
-            daysTracked: days,
+            daysTracked: daysTrackedCount,
             costPerCig: costPerCig,
             lastSmokeDate: lastLog?.loggedAt,
             timeSinceLastSmoke: timeSince
         )
     }
     
-    private func updateAnalyticsForCurrentHabit() async {
+    private func recomputeAllHistoriesAndHeatmaps() {
         let cal = Calendar.current
-        
-        // 1. Build 7-Day History
-        var history: [HabitTrendDay] = []
         let dayFormatter = DateFormatter()
         dayFormatter.dateFormat = "EEE"
-        
-        for offset in (0..<7).reversed() {
-            if let targetDate = cal.date(byAdding: .day, value: -offset, to: selectedDate) {
-                let label = offset == 0 ? "Today" : dayFormatter.string(from: targetDate)
-                let dateKey = isoDateFormatter.string(from: targetDate)
-                
-                let val: Double
-                let goal: Double
-                if activeHabit == .water {
-                    if offset == 0 {
-                        val = waterTotalToday
-                    } else if let data = userDefaults.data(forKey: "local_water_logs_\(dateKey)"),
-                              let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: data) {
-                        val = logs.reduce(0.0) { $0 + $1.value }
-                    } else {
-                        val = 0
-                    }
-                    goal = waterGoal
-                } else {
-                    if offset == 0 {
-                        val = Double(smokesTotalToday)
-                    } else if let data = userDefaults.data(forKey: "local_smokes_logs_\(dateKey)"),
-                              let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: data) {
-                        val = logs.reduce(0.0) { $0 + $1.value }
-                    } else {
-                        val = 0
-                    }
-                    goal = Double(smokesSettings.baselineCigsPerDay)
-                }
-                
-                let met = activeHabit == .water ? (val >= goal) : (val <= goal)
-                history.append(HabitTrendDay(date: targetDate, dayLabel: label, value: val, goal: goal, isGoalMet: met))
-            }
-        }
-        self.sevenDayHistory = history
-        
-        // 2. Build 4-Month Consistency Heatmap (120 days)
-        var heatmap: [HabitConsistencyCell] = []
         let tooltipFormatter = DateFormatter()
         tooltipFormatter.dateFormat = "MMM d, yyyy"
         
-        for dayOffset in (0..<120).reversed() {
-            if let dayDate = cal.date(byAdding: .day, value: -dayOffset, to: Date()) {
+        // Sync selected date total into daily totals dictionary
+        let selectedKey = isoDateFormatter.string(from: selectedDate)
+        waterDailyTotals[selectedKey] = waterTotalToday
+        smokesDailyTotals[selectedKey] = smokesTotalToday
+        
+        let today = cal.startOfDay(for: Date())
+        
+        // 1. Precalculate 7-Day History for Water & Smokes (Last 7 days ending Today)
+        var wHistory: [HabitTrendDay] = []
+        var sHistory: [HabitTrendDay] = []
+        
+        let sevenDaysAgo = cal.date(byAdding: .day, value: -6, to: today) ?? today
+        
+        for i in 0..<7 {
+            if let targetDate = cal.date(byAdding: .day, value: i, to: sevenDaysAgo) {
+                let label = cal.isDateInToday(targetDate) ? "Today" : dayFormatter.string(from: targetDate)
+                let dateKey = isoDateFormatter.string(from: targetDate)
+                
+                // Water
+                let wVal: Double = waterDailyTotals[dateKey] ?? 0
+                let wGoal = waterGoal
+                let wMet = wVal >= wGoal && wGoal > 0
+                wHistory.append(HabitTrendDay(date: targetDate, dayLabel: label, value: wVal, goal: wGoal, isGoalMet: wMet))
+                
+                // Smokes
+                let sVal: Double = Double(smokesDailyTotals[dateKey] ?? 0)
+                let sGoal = Double(smokesSettings.baselineCigsPerDay)
+                let sMet = sVal <= sGoal
+                sHistory.append(HabitTrendDay(date: targetDate, dayLabel: label, value: sVal, goal: sGoal, isGoalMet: sMet))
+            }
+        }
+        self.waterSevenDayHistory = wHistory
+        self.smokesSevenDayHistory = sHistory
+        
+        // 2. Precalculate 112-Day (16 full weeks) Consistency Heatmap for Water & Smokes
+        var wHeatmap: [HabitConsistencyCell] = []
+        var sHeatmap: [HabitConsistencyCell] = []
+        
+        let heatStart = cal.date(byAdding: .day, value: -111, to: today) ?? today
+        
+        for i in 0..<112 {
+            if let dayDate = cal.date(byAdding: .day, value: i, to: heatStart) {
                 let dateKey = isoDateFormatter.string(from: dayDate)
                 let tipDate = tooltipFormatter.string(from: dayDate)
                 
-                let val: Double
-                if activeHabit == .water {
-                    if cal.isDateInToday(dayDate) {
-                        val = waterTotalToday
-                    } else if let data = userDefaults.data(forKey: "local_water_logs_\(dateKey)"),
-                              let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: data) {
-                        val = logs.reduce(0.0) { $0 + $1.value }
-                    } else {
-                        val = 0
-                    }
-                    
-                    let level: Int
-                    let ratio = waterGoal > 0 ? (val / waterGoal) : 0
-                    if ratio >= 1.0 { level = 4 }
-                    else if ratio >= 0.75 { level = 3 }
-                    else if ratio >= 0.50 { level = 2 }
-                    else if ratio > 0 { level = 1 }
-                    else { level = 0 }
-                    
-                    let tip = "\(tipDate): \(Int(val)) ml (\(Int(ratio * 100))%)"
-                    heatmap.append(HabitConsistencyCell(date: dayDate, dateKey: dateKey, value: val, intensityLevel: level, tooltip: tip))
+                // Water
+                let wVal: Double = waterDailyTotals[dateKey] ?? 0
+                let wRatio = waterGoal > 0 ? (wVal / waterGoal) : 0
+                let wLevel: Int
+                if wVal == 0 {
+                    wLevel = 0
+                } else if wRatio >= 1.0 {
+                    wLevel = 4
+                } else if wRatio >= 0.75 {
+                    wLevel = 3
+                } else if wRatio >= 0.50 {
+                    wLevel = 2
                 } else {
-                    if cal.isDateInToday(dayDate) {
-                        val = Double(smokesTotalToday)
-                    } else if let data = userDefaults.data(forKey: "local_smokes_logs_\(dateKey)"),
-                              let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: data) {
-                        val = logs.reduce(0.0) { $0 + $1.value }
-                    } else {
-                        val = 0
-                    }
-                    
-                    let level: Int
-                    let baseline = Double(smokesSettings.baselineCigsPerDay)
-                    if val == 0 { level = 4 } // 0 smokes = great consistency!
-                    else if val <= baseline * 0.5 { level = 3 }
-                    else if val <= baseline * 0.75 { level = 2 }
-                    else if val <= baseline { level = 1 }
-                    else { level = 0 }
-                    
-                    let tip = "\(tipDate): \(Int(val)) cigs"
-                    heatmap.append(HabitConsistencyCell(date: dayDate, dateKey: dateKey, value: val, intensityLevel: level, tooltip: tip))
+                    wLevel = 1
                 }
+                let wTip = "\(tipDate): \(Int(wVal)) ml"
+                let wGoalMet = wVal >= waterGoal && waterGoal > 0
+                wHeatmap.append(HabitConsistencyCell(date: dayDate, dateKey: dateKey, value: wVal, intensityLevel: wLevel, tooltip: wTip, isGoalMet: wGoalMet))
+                
+                // Smokes
+                let sVal: Double = Double(smokesDailyTotals[dateKey] ?? 0)
+                let baseline = Double(smokesSettings.baselineCigsPerDay)
+                let sRatio = baseline > 0 ? (sVal / baseline) : 0
+                let sLevel: Int
+                if sVal == 0 {
+                    sLevel = 0 // Dark neutral (smoke-free or no logs)
+                } else if sRatio < 0.5 {
+                    sLevel = 1 // Green (low consumption, great discipline)
+                } else if sRatio < 0.8 {
+                    sLevel = 2 // Yellow (moderate)
+                } else if sRatio <= 1.0 {
+                    sLevel = 3 // Orange (close to baseline limit)
+                } else {
+                    sLevel = 4 // Red (exceeded baseline)
+                }
+                let sTip = sVal == 0 ? "\(tipDate): 0 cigs" : "\(tipDate): \(Int(sVal)) cigs (Limit: \(Int(baseline)))"
+                let sGoalMet = sVal <= baseline
+                sHeatmap.append(HabitConsistencyCell(date: dayDate, dateKey: dateKey, value: sVal, intensityLevel: sLevel, tooltip: sTip, isGoalMet: sGoalMet))
             }
         }
-        self.consistencyHeatmap = heatmap
+        self.waterConsistencyHeatmap = wHeatmap
+        self.smokesConsistencyHeatmap = sHeatmap
     }
 }

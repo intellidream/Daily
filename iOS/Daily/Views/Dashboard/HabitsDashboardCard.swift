@@ -35,7 +35,7 @@ public struct HabitsDashboardCard: View {
                             Image(systemName: "drop.fill")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundColor(ThemeColors.accentCyan)
-                            Text("Habits & Daily Intake")
+                            Text("Habits & Cravings")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(ThemeColors.accentCyan)
                         }
@@ -63,7 +63,7 @@ public struct HabitsDashboardCard: View {
                 HStack(spacing: 16) {
                     // Water Metric
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("HYDRATION (BUBBLES)")
+                        Text("BUBBLES")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(ThemeColors.fgMutedDark)
                         
@@ -83,7 +83,7 @@ public struct HabitsDashboardCard: View {
                     
                     // Smokes Metric
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("SMOKES TODAY")
+                        Text("SMOKES")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(ThemeColors.fgMutedDark)
                         
@@ -98,21 +98,22 @@ public struct HabitsDashboardCard: View {
                     }
                 }
                 
-                // Quick Add Glass Action Chips
-                HStack(spacing: 8) {
+                // Quick Add Glass Action Chips (5 Compact Chips)
+                HStack(spacing: 6) {
+                    // 300 Water
                     Button {
                         triggerHaptic()
-                        habitsService.logWater(amountMl: 150, drink: "Water")
+                        habitsService.logWater(preset: .largeWater)
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3) {
                             Image(systemName: "drop.fill")
-                                .font(.system(size: 10))
-                            Text("+150ml")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .font(.system(size: 9))
+                            Text("300")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
                         }
                         .foregroundColor(ThemeColors.accentCyan)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 6)
                         .background(ThemeColors.accentCyan.opacity(0.12))
                         .clipShape(Capsule())
                         .overlay {
@@ -121,19 +122,20 @@ public struct HabitsDashboardCard: View {
                     }
                     .buttonStyle(.plain)
                     
+                    // 150 Water
                     Button {
                         triggerHaptic()
-                        habitsService.logWater(amountMl: 300, drink: "Water")
+                        habitsService.logWater(preset: .smallWater)
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3) {
                             Image(systemName: "drop.fill")
-                                .font(.system(size: 10))
-                            Text("+300ml")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .font(.system(size: 9))
+                            Text("150")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
                         }
                         .foregroundColor(ThemeColors.accentCyan)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 6)
                         .background(ThemeColors.accentCyan.opacity(0.12))
                         .clipShape(Capsule())
                         .overlay {
@@ -142,25 +144,70 @@ public struct HabitsDashboardCard: View {
                     }
                     .buttonStyle(.plain)
                     
-                    Spacer()
-                    
+                    // 100 Coffee
                     Button {
                         triggerHaptic()
-                        habitsService.logSmoke(type: "Cigarette")
+                        habitsService.logWater(preset: .coffee)
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "cup.and.saucer.fill")
+                                .font(.system(size: 9))
+                            Text("100")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                        }
+                        .foregroundColor(Color(hex: "#F59E0B"))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 6)
+                        .background(Color(hex: "#F59E0B").opacity(0.12))
+                        .clipShape(Capsule())
+                        .overlay {
+                            Capsule().strokeBorder(Color(hex: "#F59E0B").opacity(0.3), lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Spacer(minLength: 0)
+                    
+                    // Cigarette
+                    Button {
+                        triggerHaptic()
+                        habitsService.logSmoke(preset: .cigarette)
+                    } label: {
+                        HStack(spacing: 3) {
                             Image(systemName: "flame.fill")
-                                .font(.system(size: 10))
-                            Text("+1 Smoke")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .font(.system(size: 9))
+                            Text("Cig")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
                         }
-                        .foregroundColor(Color(hex: "#FFB800"))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(Color(hex: "#FFB800").opacity(0.12))
+                        .foregroundColor(Color(hex: "#EF4444"))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 6)
+                        .background(Color(hex: "#EF4444").opacity(0.12))
                         .clipShape(Capsule())
                         .overlay {
-                            Capsule().strokeBorder(Color(hex: "#FFB800").opacity(0.3), lineWidth: 1)
+                            Capsule().strokeBorder(Color(hex: "#EF4444").opacity(0.3), lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Heated
+                    Button {
+                        triggerHaptic()
+                        habitsService.logSmoke(preset: .heated)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 9))
+                            Text("Heat")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                        }
+                        .foregroundColor(Color(hex: "#3B82F6"))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 6)
+                        .background(Color(hex: "#3B82F6").opacity(0.12))
+                        .clipShape(Capsule())
+                        .overlay {
+                            Capsule().strokeBorder(Color(hex: "#3B82F6").opacity(0.3), lineWidth: 1)
                         }
                     }
                     .buttonStyle(.plain)

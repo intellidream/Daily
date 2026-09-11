@@ -3,6 +3,7 @@ import DailyCore
 
 public struct FeaturesSettingsSection: View {
     @ObservedObject private var settingsService = SettingsService.shared
+    @ObservedObject private var habitsService = HabitsService.shared
     
     public init() {}
     
@@ -131,6 +132,7 @@ public struct FeaturesSettingsSection: View {
                                 set: { val in
                                     let rounded = (val * 4).rounded() / 4
                                     settingsService.update { $0.habitsWaterTargetLiters = rounded }
+                                    Task { await habitsService.updateWaterGoal(rounded * 1000) }
                                 }
                             ),
                             in: 1.0...4.0,
@@ -148,6 +150,89 @@ public struct FeaturesSettingsSection: View {
                             .foregroundColor(.white)
                     }
                     .tint(ThemeColors.accentBlue)
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.15))
+                
+                // --- Tobacco & Smokes ---
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("TOBACCO & SMOKES REDUCTION")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Color(hex: "#FF6B6B"))
+                    
+                    // Daily Baseline
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Daily Baseline")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white)
+                            Text("Target ceiling before quitting")
+                                .font(.system(size: 11))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                        Spacer()
+                        Stepper("\(habitsService.smokesSettings.baselineCigsPerDay) cigs", value: Binding(
+                            get: { habitsService.smokesSettings.baselineCigsPerDay },
+                            set: { val in
+                                var s = habitsService.smokesSettings
+                                s.baselineCigsPerDay = max(0, val)
+                                Task { await habitsService.updateSmokesSettings(s) }
+                            }
+                        ), in: 0...100)
+                        .labelsHidden()
+                        
+                        Text("\(habitsService.smokesSettings.baselineCigsPerDay)")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(Color(hex: "#FF6B6B"))
+                            .frame(minWidth: 28, alignment: .trailing)
+                    }
+                    
+                    // Pack Size
+                    HStack {
+                        Text("Cigarettes per Pack")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Stepper("\(habitsService.smokesSettings.cigsPerPack)", value: Binding(
+                            get: { habitsService.smokesSettings.cigsPerPack },
+                            set: { val in
+                                var s = habitsService.smokesSettings
+                                s.cigsPerPack = max(1, val)
+                                Task { await habitsService.updateSmokesSettings(s) }
+                            }
+                        ), in: 10...50)
+                        .labelsHidden()
+                        
+                        Text("\(habitsService.smokesSettings.cigsPerPack)")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .frame(minWidth: 28, alignment: .trailing)
+                    }
+                    
+                    // Pack Cost & Currency
+                    HStack {
+                        Text("Pack Cost (\(habitsService.smokesSettings.currency))")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Stepper(value: Binding(
+                            get: { habitsService.smokesSettings.costPerPack },
+                            set: { val in
+                                var s = habitsService.smokesSettings
+                                s.costPerPack = max(0, (val * 10).rounded() / 10)
+                                Task { await habitsService.updateSmokesSettings(s) }
+                            }
+                        ), in: 0...200, step: 0.50) {
+                            EmptyView()
+                        }
+                        .labelsHidden()
+                        
+                        Text(String(format: "%.2f", habitsService.smokesSettings.costPerPack))
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .frame(minWidth: 48, alignment: .trailing)
+                    }
                 }
                 
                 Divider()

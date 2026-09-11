@@ -68,6 +68,14 @@ public enum HabitDateParser {
         return f
     }()
 
+    private static let ymdFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
     public static func parse(_ raw: String) -> Date? {
         if let d = isoFractional.date(from: raw) { return d }
         if let d = isoStandard.date(from: raw) { return d }
@@ -76,7 +84,234 @@ public enum HabitDateParser {
         if let d = isoStandard.date(from: tString) { return d }
         if let d = posixWithMillis.date(from: tString) { return d }
         if let d = posixStandard.date(from: tString) { return d }
+        if let d = ymdFormatter.date(from: raw) { return d }
         return nil
+    }
+}
+
+// MARK: - Safe Decodable Helpers & Aggregations (Cross-Platform)
+
+public struct FlexibleDouble: Codable, Sendable {
+    public let value: Double
+    
+    public init(value: Double) {
+        self.value = value
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let d = try? container.decode(Double.self) {
+            self.value = d
+        } else if let i = try? container.decode(Int.self) {
+            self.value = Double(i)
+        } else if let s = try? container.decode(String.self), let d = Double(s) {
+            self.value = d
+        } else {
+            self.value = 0.0
+        }
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
+    }
+}
+
+public enum AnyCodableScalar: Decodable, Sendable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let s = try? container.decode(String.self) {
+            self = .string(s)
+        } else if let i = try? container.decode(Int.self) {
+            self = .int(i)
+        } else if let d = try? container.decode(Double.self) {
+            self = .double(d)
+        } else if let b = try? container.decode(Bool.self) {
+            self = .bool(b)
+        } else {
+            self = .string("")
+        }
+    }
+    
+    public var asString: String {
+        switch self {
+        case .string(let s): return s
+        case .int(let i): return String(i)
+        case .double(let d): return String(d)
+        case .bool(let b): return String(b)
+        }
+    }
+}
+
+public struct HabitLogMetadataHelper: Decodable, Sendable {
+    public let rawString: String
+    
+    public init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer() {
+            if container.decodeNil() {
+                self.rawString = ""
+                return
+            }
+            if let str = try? container.decode(String.self) {
+                self.rawString = str
+                return
+            }
+            if let dict = try? container.decode([String: AnyCodableScalar].self) {
+                self.rawString = dict.map { "\($0.key):\($0.value.asString)" }.joined(separator: ",")
+                return
+            }
+        }
+        self.rawString = ""
+    }
+    
+    public func contains(_ substring: String) -> Bool {
+        rawString.localizedCaseInsensitiveContains(substring)
+    }
+}
+
+public struct HabitHistoricalLogItem: Decodable, Sendable {
+    public let value: FlexibleDouble
+    public let metadata: HabitLogMetadataHelper?
+    public let logged_at: String
+    public let habit_type: String
+    
+    enum CodingKeys: String, CodingKey {
+        case value
+        case metadata
+        case logged_at
+        case habit_type
+    }
+}
+
+// MARK: - Server RPC & Daily Summary Models
+
+public struct HabitsConsistencyParams: Encodable, Sendable {
+    public let p_habit_type: String
+    public let p_start_date: String
+    public let p_end_date: String
+    
+    public init(p_habit_type: String, p_start_date: String, p_end_date: String) {
+        self.p_habit_type = p_habit_type
+        self.p_start_date = p_start_date
+        self.p_end_date = p_end_date
+    }
+}
+
+public struct HabitsConsistencyRow: Codable, Sendable {
+    public let day: String
+    public let total_value: FlexibleDouble
+    public let log_count: Int?
+    
+    public var normalizedDayKey: String {
+        if day.count >= 10 {
+            return String(day.prefix(10))
+        }
+        return day
+    }
+    
+    public init(day: String, total_value: FlexibleDouble, log_count: Int? = nil) {
+        self.day = day
+        self.total_value = total_value
+        self.log_count = log_count
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case day
+        case total_value
+        case log_count
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.day = try container.decode(String.self, forKey: .day)
+        self.total_value = try container.decode(FlexibleDouble.self, forKey: .total_value)
+        self.log_count = try container.decodeIfPresent(Int.self, forKey: .log_count)
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(day, forKey: .day)
+        try container.encode(total_value.value, forKey: .total_value)
+        try container.encodeIfPresent(log_count, forKey: .log_count)
+    }
+}
+
+public struct HabitsDailySummaryRow: Decodable, Sendable {
+    public let habit_type: String
+    public let date: String
+    public let total_value: FlexibleDouble
+    public let log_count: Int?
+    
+    public var normalizedDayKey: String {
+        if date.count >= 10 {
+            return String(date.prefix(10))
+        }
+        return date
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case habit_type
+        case date
+        case total_value
+        case log_count
+    }
+}
+
+public struct SmokesFinancialsParams: Encodable, Sendable {
+    public let p_since_date: String
+    
+    public init(p_since_date: String) {
+        self.p_since_date = p_since_date
+    }
+}
+
+public struct SmokesFinancialsRpcResult: Codable, Sendable {
+    public let total_smoked: FlexibleDouble?
+    public let days_tracked: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case total_smoked
+        case days_tracked
+    }
+}
+
+
+public struct WaterDayBucket: Identifiable, Codable, Sendable {
+    public var id: UUID = UUID()
+    public let date: Date
+    public let dayLabel: String
+    public var water: Double
+    public var coffee: Double
+    public var total: Double { water + coffee }
+    
+    public init(id: UUID = UUID(), date: Date, dayLabel: String, water: Double, coffee: Double) {
+        self.id = id
+        self.date = date
+        self.dayLabel = dayLabel
+        self.water = water
+        self.coffee = coffee
+    }
+}
+
+public struct SmokeDayBucket: Identifiable, Codable, Sendable {
+    public var id: UUID = UUID()
+    public let date: Date
+    public let dayLabel: String
+    public var cig: Double
+    public var heat: Double
+    public var total: Double { cig + heat }
+    
+    public init(id: UUID = UUID(), date: Date, dayLabel: String, cig: Double, heat: Double) {
+        self.id = id
+        self.date = date
+        self.dayLabel = dayLabel
+        self.cig = cig
+        self.heat = heat
     }
 }
 
@@ -157,9 +392,9 @@ public struct HabitLogRecord: Identifiable, Codable, Sendable {
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        self.userId = try container.decodeIfPresent(UUID.self, forKey: .userId)
-        self.habitType = try container.decode(String.self, forKey: .habitType)
+        self.id = (try? container.decodeIfPresent(UUID.self, forKey: .id)) ?? UUID()
+        self.userId = try? container.decodeIfPresent(UUID.self, forKey: .userId)
+        self.habitType = (try? container.decode(String.self, forKey: .habitType)) ?? "water"
         
         // Handle value as Double or Int
         if let d = try? container.decode(Double.self, forKey: .value) {
@@ -172,7 +407,7 @@ public struct HabitLogRecord: Identifiable, Codable, Sendable {
             self.value = 0.0
         }
         
-        self.unit = try container.decodeIfPresent(String.self, forKey: .unit) ?? "ml"
+        self.unit = (try? container.decodeIfPresent(String.self, forKey: .unit)) ?? "ml"
         
         // Handle loggedAt as Date or ISO8601 String
         if let date = try? container.decode(Date.self, forKey: .loggedAt) {
@@ -186,8 +421,9 @@ public struct HabitLogRecord: Identifiable, Codable, Sendable {
         // Metadata can be String, JSON object, or nil
         if let str = try? container.decode(String.self, forKey: .metadata) {
             self.metadata = str
-        } else if let dict = try? container.decode([String: String].self, forKey: .metadata) {
-            if let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
+        } else if let dict = try? container.decode([String: AnyCodableScalar].self, forKey: .metadata) {
+            let strDict = dict.mapValues { $0.asString }
+            if let data = try? JSONSerialization.data(withJSONObject: strDict, options: []),
                let jsonString = String(data: data, encoding: .utf8) {
                 self.metadata = jsonString
             } else {
@@ -199,7 +435,7 @@ public struct HabitLogRecord: Identifiable, Codable, Sendable {
         
         self.createdAt = try? container.decodeIfPresent(Date.self, forKey: .createdAt)
         self.updatedAt = try? container.decodeIfPresent(Date.self, forKey: .updatedAt)
-        self.isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        self.isDeleted = (try? container.decodeIfPresent(Bool.self, forKey: .isDeleted)) ?? false
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -227,12 +463,104 @@ public struct HabitLogRecord: Identifiable, Codable, Sendable {
         return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: String]
     }
     
+    public var multiplier: Int {
+        if let mStr = parsedMetadata?["multiplier"], let m = Int(mStr), m > 0 {
+            return m
+        }
+        return 1
+    }
+    
     public var drinkType: String {
         parsedMetadata?["drink"] ?? (habitType == "water" ? "Water" : "Cigarette")
     }
     
     public var smokeType: String {
         parsedMetadata?["type"] ?? (habitType == "smokes" ? "Cigarette" : "Water")
+    }
+    
+    public var specificIconName: String {
+        if habitType == "water" {
+            let d = drinkType.lowercased()
+            if d.contains("coffee") || d.contains("espresso") {
+                return "cup.and.saucer.fill"
+            } else if d.contains("tea") {
+                return "mug.fill"
+            } else if d.contains("bottle") {
+                return "waterbottle.fill"
+            }
+            return "drop.fill"
+        } else {
+            let s = smokeType.lowercased()
+            if s.contains("heat") || s.contains("vape") {
+                return "bolt.fill"
+            } else if s.contains("roll") {
+                return "leaf.fill"
+            } else if s.contains("cigarillo") || (s.contains("cigar") && !s.contains("cigarette")) {
+                return "flame"
+            }
+            return "flame.fill"
+        }
+    }
+    
+    public var specificIconColorHex: String {
+        if habitType == "water" {
+            let d = drinkType.lowercased()
+            if d.contains("coffee") || d.contains("espresso") {
+                return "#F59E0B"
+            } else if d.contains("tea") {
+                return "#10B981"
+            }
+            return "#00F0FF"
+        } else {
+            let s = smokeType.lowercased()
+            if s.contains("heat") || s.contains("vape") {
+                return "#3B82F6"
+            } else if s.contains("roll") {
+                return "#F97316"
+            } else if s.contains("cigarillo") || (s.contains("cigar") && !s.contains("cigarette")) {
+                return "#A855F7"
+            }
+            return "#EF4444"
+        }
+    }
+    
+    public var displayTitleWithMultiplier: String {
+        let base = displayName
+        if multiplier > 1 {
+            let totalStr = habitType == "water" ? "\(Int(value)) ml" : "\(Int(value))"
+            return "\(multiplier)× \(base) (+\(totalStr))"
+        }
+        return base
+    }
+}
+
+// MARK: - User Preferences Record (Supabase `user_preferences`)
+
+public struct UserPreferencesRecord: Codable, Sendable {
+    public var id: String?
+    public var smokes_baseline: Int?
+    public var smokes_pack_size: Int?
+    public var smokes_pack_cost: Double?
+    public var smokes_currency: String?
+    public var smokes_quit_date: String?
+    public var water_goal: Double?
+    
+    public init(
+        id: String? = nil,
+        smokes_baseline: Int? = nil,
+        smokes_pack_size: Int? = nil,
+        smokes_pack_cost: Double? = nil,
+        smokes_currency: String? = nil,
+        smokes_quit_date: String? = nil,
+        water_goal: Double? = nil
+    ) {
+        self.id = id
+        self.smokes_baseline = smokes_baseline
+        self.smokes_pack_size = smokes_pack_size
+        self.smokes_pack_cost = smokes_pack_cost
+        self.smokes_currency = smokes_currency
+        self.smokes_quit_date = smokes_quit_date
+        self.water_goal = water_goal
     }
 }
 
@@ -559,9 +887,9 @@ public struct HabitConsistencyCell: Identifiable, Sendable {
     public var value: Double
     public var intensityLevel: Int // 0 (empty) to 4 (max)
     public var tooltip: String
+    public var isGoalMet: Bool
     
     public var amount: Double { value }
-    public var isGoalMet: Bool { intensityLevel >= 4 }
     public var dateFormatted: String { tooltip }
     
     public init(
@@ -569,13 +897,15 @@ public struct HabitConsistencyCell: Identifiable, Sendable {
         dateKey: String,
         value: Double,
         intensityLevel: Int,
-        tooltip: String
+        tooltip: String,
+        isGoalMet: Bool = false
     ) {
         self.date = date
         self.dateKey = dateKey
         self.value = value
         self.intensityLevel = max(0, min(intensityLevel, 4))
         self.tooltip = tooltip
+        self.isGoalMet = isGoalMet
     }
 }
 

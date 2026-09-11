@@ -164,7 +164,7 @@ public struct HabitHistoryAndHeatmapView: View {
                             Text("CONSISTENCY HEATMAP")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(ThemeColors.fgMutedDark)
-                            Text("120-Day Discipline")
+                            Text(habitType == .water ? "Hydration Consistency (16 Weeks)" : "Tobacco Discipline (16 Weeks)")
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
                         }
@@ -172,7 +172,7 @@ public struct HabitHistoryAndHeatmapView: View {
                         
                         // Intensity scale legend
                         HStack(spacing: 3) {
-                            Text("Less")
+                            Text(habitType == .water ? "Less" : "Low")
                                 .font(.system(size: 9))
                                 .foregroundColor(ThemeColors.fgMutedDark)
                             ForEach(0..<5) { level in
@@ -180,7 +180,7 @@ public struct HabitHistoryAndHeatmapView: View {
                                     .fill(heatmapColor(for: level))
                                     .frame(width: 8, height: 8)
                             }
-                            Text("More")
+                            Text(habitType == .water ? "More" : "High")
                                 .font(.system(size: 9))
                                 .foregroundColor(ThemeColors.fgMutedDark)
                         }
@@ -188,17 +188,32 @@ public struct HabitHistoryAndHeatmapView: View {
                     
                     if let selected = selectedHeatmapCell {
                         HStack {
-                            Text("\(selected.dateFormatted):")
+                            Text(selected.dateFormatted)
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(ThemeColors.accentCyan)
-                            Text(habitType == .water ? "\(Int(selected.amount)) ml logged" : "\(Int(selected.amount)) units logged")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
                             Spacer()
-                            if selected.isGoalMet {
-                                Text("Goal Met ✓")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(Color(hex: "#00FFB2"))
+                            if habitType == .water {
+                                if selected.isGoalMet {
+                                    Text("Goal Met ✓")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(Color(hex: "#00FFB2"))
+                                }
+                            } else {
+                                if selected.value > 0 {
+                                    if selected.isGoalMet {
+                                        Text("Under Limit ✓")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(Color(hex: "#00FFB2"))
+                                    } else {
+                                        Text("Over Limit ✕")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(Color(hex: "#FF3B30"))
+                                    }
+                                } else {
+                                    Text("Smoke Free ✨")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(Color(hex: "#00FFB2"))
+                                }
                             }
                         }
                         .padding(.horizontal, 10)
@@ -207,32 +222,41 @@ public struct HabitHistoryAndHeatmapView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     
-                    // Heatmap Grid: Horizontal ScrollView for 16-17 weeks
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        let columns = chunkedHeatmapWeeks(heatmapCells)
-                        HStack(spacing: 3.5) {
-                            ForEach(0..<columns.count, id: \.self) { colIndex in
-                                VStack(spacing: 3.5) {
-                                    ForEach(columns[colIndex]) { cell in
-                                        Button {
-                                            selectedHeatmapCell = cell
-                                        } label: {
-                                            RoundedRectangle(cornerRadius: 3)
-                                                .fill(heatmapColor(for: cell.intensityLevel))
-                                                .frame(width: 12, height: 12)
-                                                .overlay {
-                                                    if selectedHeatmapCell?.id == cell.id {
-                                                        RoundedRectangle(cornerRadius: 3)
-                                                            .strokeBorder(Color.white, lineWidth: 1.5)
+                    // Heatmap Grid: Horizontal ScrollView for 16 weeks
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            let columns = chunkedHeatmapWeeks(heatmapCells)
+                            HStack(spacing: 3.5) {
+                                ForEach(0..<columns.count, id: \.self) { colIndex in
+                                    VStack(spacing: 3.5) {
+                                        ForEach(columns[colIndex]) { cell in
+                                            Button {
+                                                selectedHeatmapCell = cell
+                                            } label: {
+                                                RoundedRectangle(cornerRadius: 3)
+                                                    .fill(heatmapColor(for: cell.intensityLevel))
+                                                    .frame(width: 12, height: 12)
+                                                    .overlay {
+                                                        if selectedHeatmapCell?.id == cell.id {
+                                                            RoundedRectangle(cornerRadius: 3)
+                                                                .strokeBorder(Color.white, lineWidth: 1.5)
+                                                        }
                                                     }
-                                                }
+                                            }
+                                            .buttonStyle(.plain)
                                         }
-                                        .buttonStyle(.plain)
                                     }
+                                    .id(colIndex)
                                 }
                             }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
+                        .onAppear {
+                            let columns = chunkedHeatmapWeeks(heatmapCells)
+                            if !columns.isEmpty {
+                                proxy.scrollTo(columns.count - 1, anchor: .trailing)
+                            }
+                        }
                     }
                 }
             }
@@ -275,17 +299,17 @@ public struct HabitHistoryAndHeatmapView: View {
             switch level {
             case 1: return ThemeColors.accentCyan.opacity(0.3)
             case 2: return ThemeColors.accentCyan.opacity(0.55)
-            case 3: return ThemeColors.accentBlue.opacity(0.8)
+            case 3: return ThemeColors.accentBlue.opacity(0.85)
             case 4: return Color(hex: "#00FFB2")
             default: return Color.white.opacity(0.06)
             }
         } else {
             switch level {
-            case 1: return Color(hex: "#00FFB2").opacity(0.35)
-            case 2: return Color(hex: "#00FFB2").opacity(0.7)
-            case 3: return Color(hex: "#FFB800").opacity(0.75)
-            case 4: return Color(hex: "#FF3B30")
-            default: return Color.white.opacity(0.06)
+            case 1: return Color(hex: "#00FFB2") // Green: well under baseline (<50%)
+            case 2: return Color(hex: "#FFB800") // Yellow: moderate (50%-80%)
+            case 3: return Color(hex: "#FF9500") // Orange: close to limit (80%-100%)
+            case 4: return Color(hex: "#FF3B30") // Red: exceeded limit (>100%)
+            default: return Color.white.opacity(0.06) // 0 / smoke-free: dark neutral
             }
         }
     }

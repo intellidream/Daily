@@ -75,21 +75,6 @@ public struct HealthMainView: View {
             }
             
             Spacer()
-            
-            // Refresh Button
-            Button {
-                Task {
-                    await healthService.loadDataForSelectedDate(forceRefresh: true)
-                }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 38, height: 38)
-                    .background(Circle().fill(Color.white.opacity(0.08)))
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-            }
-            .buttonStyle(.plain)
         }
     }
     

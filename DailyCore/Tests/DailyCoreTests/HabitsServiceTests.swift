@@ -122,4 +122,120 @@ struct HabitsServiceTests {
         #expect(HabitsGuidance.recoveryMilestones[0].timeframe == "20 Minutes")
         #expect(HabitsGuidance.recoveryMilestones[5].timeframe == "1 Year")
     }
+    
+    @Test("Multiplier Logging and Display Formatting")
+    func testMultiplierLoggingAndDisplay() {
+        let coffeeLog = HabitLogRecord(
+            habitType: "water",
+            value: 200,
+            unit: "ml",
+            metadata: "{\"drink\":\"Coffee\",\"multiplier\":\"2\",\"base_value\":\"100\"}"
+        )
+        #expect(coffeeLog.multiplier == 2)
+        #expect(coffeeLog.displayTitleWithMultiplier == "2× Coffee (+200 ml)")
+        #expect(coffeeLog.specificIconName == "cup.and.saucer.fill")
+        #expect(coffeeLog.specificIconColorHex == "#F59E0B")
+        
+        let smokeLog = HabitLogRecord(
+            habitType: "smokes",
+            value: 3,
+            unit: "cigs",
+            metadata: "{\"type\":\"Cigarette\",\"multiplier\":\"3\",\"base_value\":\"1\"}"
+        )
+        #expect(smokeLog.multiplier == 3)
+        #expect(smokeLog.displayTitleWithMultiplier == "3× Cigarette (+3)")
+        #expect(smokeLog.specificIconName == "flame.fill")
+        #expect(smokeLog.specificIconColorHex == "#EF4444")
+    }
+    
+    @Test("Specific Icons & Colors for Beverage and Tobacco Types")
+    func testSpecificIconsAndColors() {
+        let teaLog = HabitLogRecord(
+            habitType: "water",
+            value: 250,
+            unit: "ml",
+            metadata: "{\"drink\":\"Tea\"}"
+        )
+        #expect(teaLog.specificIconName == "mug.fill")
+        #expect(teaLog.specificIconColorHex == "#10B981")
+        
+        let bottleLog = HabitLogRecord(
+            habitType: "water",
+            value: 500,
+            unit: "ml",
+            metadata: "{\"drink\":\"Bottle\"}"
+        )
+        #expect(bottleLog.specificIconName == "waterbottle.fill")
+        
+        let heatedLog = HabitLogRecord(
+            habitType: "smokes",
+            value: 1,
+            unit: "cigs",
+            metadata: "{\"type\":\"Heated Tobacco\"}"
+        )
+        #expect(heatedLog.specificIconName == "bolt.fill")
+        #expect(heatedLog.specificIconColorHex == "#3B82F6")
+        
+        let rolledLog = HabitLogRecord(
+            habitType: "smokes",
+            value: 1,
+            unit: "cigs",
+            metadata: "{\"type\":\"Rolled\"}"
+        )
+        #expect(rolledLog.specificIconName == "leaf.fill")
+        #expect(rolledLog.specificIconColorHex == "#F97316")
+    }
+    
+    @Test("User Preferences Record JSON Decoding")
+    func testUserPreferencesDecoding() throws {
+        let json = """
+        {
+            "id": "12345678-1234-1234-1234-123456789abc",
+            "smokes_baseline": 15,
+            "smokes_pack_size": 20,
+            "smokes_pack_cost": 27.50,
+            "smokes_currency": "RON",
+            "smokes_quit_date": "2026-01-01T00:00:00Z",
+            "water_goal": 2500.0
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let pref = try JSONDecoder().decode(UserPreferencesRecord.self, from: data)
+        #expect(pref.smokes_baseline == 15)
+        #expect(pref.smokes_pack_size == 20)
+        #expect(pref.smokes_pack_cost == 27.50)
+        #expect(pref.smokes_currency == "RON")
+        #expect(pref.water_goal == 2500.0)
+    }
+    
+    @Test("Habits Consistency Row Decoding & Date Normalization")
+    func testHabitsConsistencyRowDecoding() throws {
+        let json = """
+        [
+            {"day": "2026-09-01", "total_value": 2400.0, "log_count": 8},
+            {"day": "2026-09-02T00:00:00Z", "total_value": 15, "log_count": 5}
+        ]
+        """
+        let data = json.data(using: .utf8)!
+        let rows = try JSONDecoder().decode([HabitsConsistencyRow].self, from: data)
+        #expect(rows.count == 2)
+        #expect(rows[0].normalizedDayKey == "2026-09-01")
+        #expect(rows[0].total_value.value == 2400.0)
+        #expect(rows[0].log_count == 8)
+        #expect(rows[1].normalizedDayKey == "2026-09-02")
+        #expect(rows[1].total_value.value == 15.0)
+        
+        // FlexibleDouble encoding round-trip
+        let encoded = try JSONEncoder().encode(rows[0])
+        let decoded = try JSONDecoder().decode(HabitsConsistencyRow.self, from: encoded)
+        #expect(decoded.day == "2026-09-01")
+        #expect(decoded.total_value.value == 2400.0)
+    }
+    
+    @Test("Habit Date Parser Date-Only String Parsing")
+    func testHabitDateParserYMD() {
+        let parsed = HabitDateParser.parse("2026-09-01")
+        #expect(parsed != nil)
+    }
 }
+

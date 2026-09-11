@@ -152,9 +152,9 @@ Computes real-time economic and physiological recovery:
 ## 6. Dashboard Integration & Navigation
 
 1. **Dashboard Live Card (`HabitsDashboardCard`)**:
-   - Displays real-time hydration volume vs. goal with mini progress ring.
-   - Displays daily smoke count vs. baseline limit.
-   - Provides one-tap quick log chips (`+150ml`, `+300ml`, `+1 Smoke`) directly from the primary dashboard screen without navigating away.
+   - Title: `"Habits & Cravings"` with clean subheaders `"BUBBLES"` and `"SMOKES"`.
+   - Displays real-time hydration volume vs. goal and daily smoke count vs. baseline limit.
+   - Provides 5 compact one-tap quick action chips: `[💧 300]`, `[💧 150]`, `[☕ 100]`, `[🚬 Cig]`, `[⚡ Heat]` directly from the primary dashboard screen without navigating away.
    - Smooth navigation tap transitioning directly to the Habits hub.
 2. **Floating Glass Capsule (`FloatingGlassCapsule`)**:
    - Added sixth tab item: `.habits = "Habits"` with system icon `"drop.fill"`.
@@ -162,7 +162,76 @@ Computes real-time economic and physiological recovery:
 
 ---
 
-## 7. Verification & Automated Test Coverage
+## 7. Refinements, Bug Fixes & Architectural Enhancements (v1.1)
+
+### 7.1 Multiplier Intake & Deletion Parity
+- **Multipliers**: Supports quick logging multipliers `1x`, `2x`, `3x`, `5x` directly above the Quick Action grid.
+- **Dynamic Values**: Preset buttons dynamically update their labels (e.g. `+200 ml` or `+2 Logs`) reflecting the active multiplier.
+- **Log Formatting**: Entries display formatted titles such as `2× Coffee (+200 ml)` or `3× Cigarette (+3)`.
+- **Full Deletion**: Deleting a multiplied entry subtracts the full logged volume or count from the day's total and updates the local 120-day historical aggregates.
+
+### 7.2 Specific Beverage & Tobacco Icons
+- In log timelines (`HabitLogRow`) and quick actions, items now render their specific icons and colors rather than generic drops or flames:
+  - Coffee: `cup.and.saucer.fill` (#F59E0B)
+  - Tea: `mug.fill` (#10B981)
+  - Bottle: `waterbottle.fill` (#00F0FF)
+  - Heated Tobacco: `bolt.fill` (#3B82F6)
+  - Rolled: `leaf.fill` (#F97316)
+  - Cigarette: `flame.fill` (#EF4444)
+  - Cigarillo: `flame` (#A855F7)
+
+### 7.3 Supabase `user_preferences` Sync & Settings Section
+- **Database Schema**: Syncs with Supabase `user_preferences` table (`smokes_baseline`, `smokes_pack_size`, `smokes_pack_cost`, `smokes_currency`, `smokes_quit_date`, `water_goal`).
+- **Settings UI**: Added dedicated "TOBACCO & SMOKES REDUCTION" section in `FeaturesSettingsSection` allowing full configuration of daily baseline, pack size, pack cost, and currency, with real-time sync across devices.
+- **Hydration Target Sync**: Adjusting hydration target in Settings immediately updates `HabitsService` and synchronizes to `habits_goals` and `user_preferences`.
+
+### 7.4 Historical Date Context Attribution
+- Fixed date context attribution: When browsing a past date in the calendar, logged items are attributed to that specific date (preserving the current time of day) rather than defaulting to today's date.
+
+### 7.5 Separate Precalculated 7-Day & 120-Day Histories
+- Maintained separate precalculated collections for Water and Smokes (`waterSevenDayHistory`, `smokesSevenDayHistory`, `waterConsistencyHeatmap`, `smokesConsistencyHeatmap`).
+- Cached in App Group `userDefaults` (`group.com.intellidream.daily`) for 0ms instant display upon app launch.
+- Batch queries 120 days of historical logs from Supabase in a single network request to accurately hydrate the GitHub-style consistency heatmaps.
+
+### 7.6 Native iOS Pull-to-Refresh & Desktop Cleanup
+- Added native `.refreshable` to `DashboardView` (refreshing Weather, Health, Habits, and News in parallel) and `HabitsMainView`.
+- Removed legacy desktop-style static refresh buttons from `WeatherDetailView` and `HealthMainView` headers.
+
+### 7.7 Collapsible Logs, Dynamic Title & Resilient Watch-Parity Historical Ingestion
+- **Standardized Cigarette Icon**: Aligned Cigarette icon to `flame.fill` across dashboard chips, log timelines, and `SmokePreset.cigarette`.
+- **Collapsible Logs Timeline**: Relocated daily logs timeline immediately beneath the Quick Logging Grid. Defaults to collapsed with entry count readout and smooth spring disclosure animation.
+- **Dynamic Header Title**: Replaced static header with contextual title: `"TODAY'S LOGS"`, `"YESTERDAY'S LOGS"`, or `"[DATE] LOGS"` (e.g. `10 SEP LOGS`).
+- **Resilient Multiplatform Ingestion**: Introduced `FlexibleDouble`, `AnyCodableScalar`, `HabitLogMetadataHelper`, and `HabitHistoricalLogItem` to prevent malformed rows from discarding 120-day historical batches.
+- **App Group Week Cache Interop**: Bi-directionally synchronizes `bubbles_week_cache` and `smokes_week_cache` with WatchOS so the 7-day trend and watch complications stay perfectly in sync.
+
+---
+
+### 7.8 Server-Side RPC Consistency & Dual-Table Historical Architecture
+- **Root Cause Resolution for Incomplete Data & Missing Days**:
+  - Investigated the Supabase database and WinUI reference implementation (`Services/HabitsService.cs`, `supabase/migrations/habits_rpc_functions.sql`, `Docs/DataStrategy.md`).
+  - Older historical habit data in DayOne is stored across two tables: consolidated daily summaries in `habits_daily_summaries` (`id`, `user_id`, `habit_type`, `date`, `total_value`, `log_count`) and recent granular logs in `habits_logs`.
+  - Previously, iOS was only querying `habits_logs`, resulting in permanent holes and missing historical days in 7-Day Performance and the Consistency Heatmap unless a user navigated to a specific day.
+- **`get_habits_consistency` RPC Integration**:
+  - Integrated Supabase RPC function `get_habits_consistency(p_habit_type, p_start_date, p_end_date)` in `DailyCore`.
+  - Automatically unions `raw` (`habits_logs`) and `summaries` (`habits_daily_summaries`) server-side with raw logs overriding summary aggregates for the same day.
+- **Bulletproof Dual-Table Direct Fallback**:
+  - If RPC fails, network is constrained, or offline, `HabitsService` automatically queries both `habits_daily_summaries` and `habits_logs` concurrently, merging them client-side with raw log precedence.
+- **112-Day / 16 Full Weeks Alignment**:
+  - Aligned heatmap range to 112 days (exactly 16 columns of 7 squares each), eliminating incomplete weeks and shifting weekday rows.
+  - 7-Day Performance chart consistently anchors to the 7 days ending Today (`today - 6` through `today`).
+- **Chromatic Scale Correction for Smokes**:
+  - Fixed smoke heatmap intensity levels to properly reflect consumption:
+    - Level 0 (0 cigs / smoke-free): Dark neutral
+    - Level 1 (< 50% baseline): Emerald Green (great discipline)
+    - Level 2 (50% - 80% baseline): Amber Yellow (moderate)
+    - Level 3 (80% - 100% baseline): Warm Orange (near baseline limit)
+    - Level 4 (> 100% baseline): Crimson Red (exceeded limit)
+- **`get_smokes_financials` RPC Integration**:
+  - Accurately computes lifetime cigarettes avoided and money saved across the entire quit journey (`p_since_date`) by combining raw logs and daily summaries.
+
+---
+
+## 8. Verification & Automated Test Coverage
 
 The feature is verified with unit tests in `DailyCoreTests/HabitsServiceTests.swift`:
 - `Smoke Presets Validation`: Verified baseline counts, types, and nicotine metrics.
@@ -171,4 +240,11 @@ The feature is verified with unit tests in `DailyCoreTests/HabitsServiceTests.sw
 - `Habit Log Record Metadata Parsing`: Verified JSONB deserialization for custom volumes and timestamps.
 - `Smokes Financials & Avoided Cigarettes Calculations`: Verified pack price, currency formatting, and life regained formulas.
 - `Habits Guidance Protocol Validation`: Verified circadian slots, DHI indices, Armstrong color levels, and 4D step structures.
-- **Full Suite Status**: All 27 unit tests pass (100% green across Health, Habits, Weather, News).
+- `Multiplier Logging and Display Formatting`: Verified multiplier calculations and formatted string display.
+- `Specific Icons & Colors for Beverage and Tobacco Types`: Verified correct icon resolution for coffee, tea, bottles, heated tobacco, and cigarettes (`flame.fill`).
+- `User Preferences Record JSON Decoding`: Verified round-trip parsing of Supabase `user_preferences` schema.
+- `Habits Consistency Row Decoding & Date Normalization`: Verified JSON decoding of `get_habits_consistency` RPC responses, FlexibleDouble round-trip serialization, and date normalization.
+- `Habit Date Parser Date-Only String Parsing`: Verified that date-only strings (`yyyy-MM-dd`) are properly parsed to valid `Date` objects.
+- **Full Suite Status**: All tests in `DailyCore` pass 100% green. Build visually verified on `SimulaPhone` with screenshots (zero holes, full 7-day and 16-week data) and deployed to physical iPhone 16 Pro ("Schmitz").
+
+
