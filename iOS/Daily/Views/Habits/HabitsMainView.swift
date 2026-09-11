@@ -24,14 +24,16 @@ public struct HabitsMainView: View {
                     WaterProgressWaveView(
                         currentMl: habitsService.totalWaterMlToday,
                         goalMl: habitsService.waterGoalMl,
-                        progressPercent: habitsService.waterProgressPercent
+                        progressPercent: habitsService.waterProgressPercent,
+                        drinkBreakdown: habitsService.waterDrinkBreakdown
                     )
                     .padding(.vertical, 8)
                 } else {
                     SmokesLungsGaugeView(
                         countToday: habitsService.totalSmokesToday,
                         baselineCount: habitsService.smokesBaselineCount,
-                        lastSmokeDate: habitsService.lastSmokeTimestamp
+                        lastSmokeDate: habitsService.lastSmokeTimestamp,
+                        smokeBreakdown: habitsService.smokesTypeBreakdown
                     )
                     .padding(.vertical, 8)
                 }
@@ -71,6 +73,11 @@ public struct HabitsMainView: View {
         }
         .task {
             await habitsService.loadDataForSelectedDate()
+        }
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-habitsSmokes") {
+                habitsService.activeHabit = .smokes
+            }
         }
         .refreshable {
             await habitsService.loadDataForSelectedDate(forceRefresh: true)

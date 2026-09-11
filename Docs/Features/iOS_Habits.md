@@ -53,10 +53,15 @@ graph TD
 
 ## 3. Bubbles (Hydration) Module
 
-### 3.1 Fluid Wave Simulation (`WaterProgressWaveView`)
+### 3.1 Multi-Liquid Fluid Wave Simulation (`WaterProgressWaveView`)
 The Bubbles hero card renders a circular Liquid Glass gauge with an interactive fluid simulation:
-- **Dual Sine Wave Geometry**: Two harmonic sinusoidal curves with phase offset ($\Delta \phi = \pi$) running at varying frequencies to create realistic liquid sloshing.
-- **Wave Height Dynamics**: Smoothly interpolates wave vertical offset based on daily progress percentage ($0.0 \to 1.0$).
+- **Multi-Liquid Stratification**: Partitions the consumed liquid column into physical fluid layers based on exact consumption volume and beverage type:
+  - **Water Layer (Bottom)**: Standard drinking water, bottles, and glasses rendered in vivid cyan/deep ocean blue (`#00E5FF` to `#0077B6`).
+  - **Tea Layer (Middle)**: Herbal tea and infusions rendered in matcha/herbal green (`#84CC16` to `#3F6212`).
+  - **Coffee Layer (Top)**: Espresso and coffee rendered in warm roast amber with crema highlights (`#F59E0B` to `#92400E`).
+- **Harmonic Sine Waves**: Every fluid interface (both internal beverage boundaries and top surface) undulates independently with sine wave harmonics and 3D parallax back-waves.
+- **Proportional Segmented Outer Rim**: The circular border track is divided into distinct color-coded segments matching each beverage's proportion of the total intake.
+- **In-Circle Breakdown Ticker**: A frosted glass capsule (`HabitCircleBreakdownTicker`) nestled under the status badge displays the exact totals per liquid (e.g. `💧 1500 ml • ☕️ Coffee 200 ml`).
 - **Goal Completion FX**: Upon reaching 100% of the target, an ambient emerald aura and gold star badge illuminate with tactile haptic feedback.
 
 ### 3.2 Quick Presets & Custom Intake
@@ -92,14 +97,18 @@ Clinical self-assessment reference:
 
 ## 4. Smokes (Tobacco Cessation & Reduction) Module
 
-### 4.1 Lungs Silhouette & Chromatic Shift (`SmokesLungsGaugeView`)
-Visualizes tobacco consumption relative to the user's daily baseline:
-- **Vector Silhouette**: Anatomically styled lungs silhouette rendered with smooth Bézier contours.
-- **3-Phase Chromatic Transition**:
-  - **Emerald Green**: $\le 50\%$ of baseline (Excellent reduction / smoke-free).
-  - **Vibrant Amber**: $51\% - 99\%$ of baseline (Controlled intake).
-  - **Crimson Coral**: $\ge 100\%$ of baseline (Exceeded daily baseline threshold).
-- **Live "Craving-Free" Counter**: Computes elapsed duration since the last logged smoke (e.g., `"4h 15m craving-free"`), promoting micro-streaks.
+### 4.1 Lungs Silhouette & Biological Color Degradation (`SmokesLungsGaugeView`)
+Visualizes tobacco consumption relative to the user's daily baseline with anatomical feedback:
+- **Vector Anatomical Silhouette**: Features detailed lobes, trachea, and internal bronchial airway tree branches (`VectorLungsBronchiShape`).
+- **Biological Color Degradation (Healthy Pink to Diseased Gray)**:
+  - **Radiant Healthy Pink (`#FF6B8B`)**: Displayed at 0 cigarettes (smoke-free today), reflecting healthy, oxygenated pulmonary tissue.
+  - **Dusky Rose (`#D77D91`)**: Subtly desaturates as the user logs initial cigarettes ($1\% - 35\%$ of baseline).
+  - **Sickly Ashen Gray (`#78716C`)**: Appears as intake reaches moderate levels ($35\% - 75\%$ of baseline).
+  - **Cold Unwholesome Lead Gray (`#4B5563`)**: Fully envelopes lung tissue as intake approaches the baseline threshold ($75\% - 100\%$).
+  - **Diseased Soot Charcoal (`#27272A`)**: Darkens with a toxic smoky outline when consumption exceeds the baseline ceiling ($> 100\%$).
+- **Segmented Gauge Track Arc**: Proportional multi-colored active gauge arc along the circular rim displaying the relative ratio of cigarette types (Cigarettes, Heated Tobacco, Rolled, Cigarillos).
+- **In-Circle Breakdown Ticker**: A frosted glass capsule (`HabitCircleBreakdownTicker`) displaying exact counts per tobacco type (e.g. `11 Cigarillo • 9 Heat`).
+- **Live "Craving-Free" Counter**: Computes elapsed duration since the last logged smoke (e.g., `"19m craving-free"`), promoting micro-streaks.
 
 ### 4.2 Logging Presets
 - **Cigarette** (+1 Standard combustion cigarette)
