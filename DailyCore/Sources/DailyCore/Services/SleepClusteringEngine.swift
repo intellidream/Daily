@@ -43,8 +43,14 @@ public enum SleepClusteringEngine {
         }
         
         for (device, deviceRecords) in groupedByDevice {
-            // Check explicit nap records first
-            let explicitNaps = deviceRecords.filter { $0.isNap }
+            // Check explicit nap records first - must be genuine daytime naps on targetDate
+            let explicitNaps = deviceRecords.filter { record in
+                guard record.isNap else { return false }
+                let startHour = calendar.component(.hour, from: record.startTime)
+                let endHour = calendar.component(.hour, from: record.effectiveEndTime)
+                let isSameDay = calendar.isDate(record.startTime, inSameDayAs: targetDate)
+                return isSameDay && (startHour >= 9 && endHour <= 21) && record.durationSeconds < 3.5 * 3600
+            }
             for nap in explicitNaps {
                 let napSession = NapSession(
                     id: nap.id,
@@ -205,7 +211,38 @@ public enum SleepClusteringEngine {
             }
             .first
         
-        return (primary, allNocturnalSessions, allNaps)
+        // 6. Deduplicate and merge duplicate or overlapping nap sessions
+        let sortedNaps = allNaps.sorted { $0.startTime < $1.startTime }
+        var uniqueNaps: [NapSession] = []
+        for nap in sortedNaps {
+            if let last = uniqueNaps.last {
+                let overlapStart = max(last.startTime, nap.startTime)
+                let overlapEnd = min(last.endTime, nap.endTime)
+                let overlapSec = max(0, overlapEnd.timeIntervalSince(overlapStart))
+                let minDur = min(last.durationSeconds, nap.durationSeconds)
+                let isSameDevice = (last.sourceDevice == nap.sourceDevice)
+                let isNearDuplicate = abs(last.startTime.timeIntervalSince(nap.startTime)) < 15 * 60 &&
+                                      abs(last.endTime.timeIntervalSince(nap.endTime)) < 15 * 60
+                
+                // If near-exact duplicate or overlapping by more than 40%
+                if isNearDuplicate || (isSameDevice && (overlapSec > 0.4 * minDur || overlapSec > 600)) {
+                    let mergedStart = min(last.startTime, nap.startTime)
+                    let mergedEnd = max(last.endTime, nap.endTime)
+                    let mergedDuration = max(last.durationSeconds, nap.durationSeconds, mergedEnd.timeIntervalSince(mergedStart))
+                    uniqueNaps[uniqueNaps.count - 1] = NapSession(
+                        id: last.id,
+                        startTime: mergedStart,
+                        endTime: mergedEnd,
+                        durationSeconds: mergedDuration,
+                        sourceDevice: last.sourceDevice
+                    )
+                    continue
+                }
+            }
+            uniqueNaps.append(nap)
+        }
+        
+        return (primary, allNocturnalSessions, uniqueNaps)
     }
     
     // MARK: - Granular Stage Clustering

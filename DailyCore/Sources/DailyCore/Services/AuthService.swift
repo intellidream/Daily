@@ -67,6 +67,10 @@ public final class AuthService: NSObject, ObservableObject {
                 refreshToken: session.refreshToken,
                 userId: session.user.id.uuidString
             )
+            
+            Task { @MainActor in
+                await SavedArticlesService.shared.syncWithSupabase()
+            }
         } catch {
             sessionState = .unauthenticated
         }
@@ -144,6 +148,9 @@ public final class AuthService: NSObject, ObservableObject {
             )
             
             sessionState = .authenticated(profile)
+            Task { @MainActor in
+                await SavedArticlesService.shared.syncWithSupabase()
+            }
             isLoading = false
             statusMessage = "Success!"
             return true
@@ -202,6 +209,9 @@ public final class AuthService: NSObject, ObservableObject {
             )
             
             sessionState = .authenticated(profile)
+            Task { @MainActor in
+                await SavedArticlesService.shared.syncWithSupabase()
+            }
             isLoading = false
             statusMessage = "Success!"
             return true

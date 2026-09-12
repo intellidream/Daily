@@ -7,82 +7,95 @@ public struct HabitsMainView: View {
     @State private var showingGuidanceSheet = false
     @State private var showingDatePicker = false
     @State private var isLogsExpanded = false
+    public var onNavigateBack: (() -> Void)? = nil
     
-    public init() {}
+    public init(onNavigateBack: (() -> Void)? = nil) {
+        self.onNavigateBack = onNavigateBack
+    }
     
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Top Day Navigator & Guidance Header
-                headerDayNavigator
-                
-                // Habit Switcher: Bubbles vs Smokes
-                habitTypeSwitcher
-                
-                // Hero Visual Gauge
-                if habitsService.activeHabit == .water {
-                    WaterProgressWaveView(
-                        currentMl: habitsService.totalWaterMlToday,
-                        goalMl: habitsService.waterGoalMl,
-                        progressPercent: habitsService.waterProgressPercent,
-                        drinkBreakdown: habitsService.waterDrinkBreakdown
-                    )
-                    .padding(.vertical, 8)
-                } else {
-                    SmokesLungsGaugeView(
-                        countToday: habitsService.totalSmokesToday,
-                        baselineCount: habitsService.smokesBaselineCount,
-                        lastSmokeDate: habitsService.lastSmokeTimestamp,
-                        lastSmokeType: habitsService.lastSmokeType,
-                        isToday: habitsService.isToday,
-                        smokeBreakdown: habitsService.smokesTypeBreakdown
-                    )
-                    .padding(.vertical, 8)
-                }
-                
-                // Quick Logging Grid
-                HabitQuickActionGrid(
-                    habitType: habitsService.activeHabit,
-                    onLogWater: { preset, multiplier in
-                        habitsService.logWater(preset: preset, multiplier: multiplier)
-                    },
-                    onLogCustomWater: { amount, drink in
-                        habitsService.logWater(amountMl: amount, drink: drink)
-                    },
-                    onLogSmoke: { preset, multiplier in
-                        habitsService.logSmoke(preset: preset, multiplier: multiplier)
-                    },
-                    onOpenCravingEmergency: {
-                        showingGuidanceSheet = true
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Top Day Navigator & Guidance Header
+                    headerDayNavigator
+                    
+                    // Habit Switcher: Bubbles vs Smokes
+                    habitTypeSwitcher
+                    
+                    // Hero Visual Gauge
+                    if habitsService.activeHabit == .water {
+                        WaterProgressWaveView(
+                            currentMl: habitsService.totalWaterMlToday,
+                            goalMl: habitsService.waterGoalMl,
+                            progressPercent: habitsService.waterProgressPercent,
+                            drinkBreakdown: habitsService.waterDrinkBreakdown
+                        )
+                        .padding(.vertical, 8)
+                    } else {
+                        SmokesLungsGaugeView(
+                            countToday: habitsService.totalSmokesToday,
+                            baselineCount: habitsService.smokesBaselineCount,
+                            lastSmokeDate: habitsService.lastSmokeTimestamp,
+                            lastSmokeType: habitsService.lastSmokeType,
+                            isToday: habitsService.isToday,
+                            smokeBreakdown: habitsService.smokesTypeBreakdown
+                        )
+                        .padding(.vertical, 8)
                     }
-                )
-                
-                // Daily Logs Timeline (Collapsible, placed immediately below quick actions)
-                dailyLogsTimeline
-                
-                // Analytics: 7-Day Performance & 112-Day Heatmap
-                HabitHistoryAndHeatmapView(
-                    habitType: habitsService.activeHabit,
-                    trendDays: habitsService.trendDays,
-                    heatmapCells: habitsService.consistencyHeatmap,
-                    goalValue: habitsService.activeHabit == .water ? habitsService.waterGoalMl : Double(habitsService.smokesBaselineCount),
-                    financialMetrics: habitsService.smokesFinancialMetrics,
-                    drinkBreakdown: habitsService.drinkBreakdown
-                )
+                    
+                    // Quick Logging Grid
+                    HabitQuickActionGrid(
+                        habitType: habitsService.activeHabit,
+                        onLogWater: { preset, multiplier in
+                            habitsService.logWater(preset: preset, multiplier: multiplier)
+                        },
+                        onLogCustomWater: { amount, drink in
+                            habitsService.logWater(amountMl: amount, drink: drink)
+                        },
+                        onLogSmoke: { preset, multiplier in
+                            habitsService.logSmoke(preset: preset, multiplier: multiplier)
+                        },
+                        onOpenCravingEmergency: {
+                            showingGuidanceSheet = true
+                        }
+                    )
+                    
+                    // Daily Logs Timeline (Collapsible, placed immediately below quick actions)
+                    dailyLogsTimeline
+                    
+                    // Analytics: 7-Day Performance & 112-Day Heatmap
+                    HabitHistoryAndHeatmapView(
+                        habitType: habitsService.activeHabit,
+                        trendDays: habitsService.trendDays,
+                        heatmapCells: habitsService.consistencyHeatmap,
+                        goalValue: habitsService.activeHabit == .water ? habitsService.waterGoalMl : Double(habitsService.smokesBaselineCount),
+                        financialMetrics: habitsService.smokesFinancialMetrics,
+                        drinkBreakdown: habitsService.drinkBreakdown
+                    )
+                    .id("analyticsBottom")
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 110) // Leave space for FloatingGlassCapsule
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 110) // Leave space for FloatingGlassCapsule
-        }
-        .task {
-            await habitsService.loadDataForSelectedDate()
-        }
-        .onAppear {
-            if ProcessInfo.processInfo.arguments.contains("-habitsSmokes") {
-                habitsService.activeHabit = .smokes
+            .task {
+                await habitsService.loadDataForSelectedDate()
             }
-            if ProcessInfo.processInfo.arguments.contains("-habitsYesterday") {
-                if let yest = Calendar.current.date(byAdding: .day, value: -1, to: Date()) {
-                    habitsService.selectDate(yest)
+            .onAppear {
+                if ProcessInfo.processInfo.arguments.contains("-habitsSmokes") {
+                    habitsService.activeHabit = .smokes
+                }
+                if ProcessInfo.processInfo.arguments.contains("-habitsYesterday") {
+                    if let yest = Calendar.current.date(byAdding: .day, value: -1, to: Date()) {
+                        habitsService.selectDate(yest)
+                    }
+                }
+                if ProcessInfo.processInfo.arguments.contains("-habitsScrollAnalytics") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        withAnimation {
+                            scrollProxy.scrollTo("analyticsBottom", anchor: .bottom)
+                        }
+                    }
                 }
             }
         }
@@ -137,77 +150,106 @@ public struct HabitsMainView: View {
     // MARK: - Header & Day Navigator
     
     private var headerDayNavigator: some View {
-        HStack {
+        HStack(alignment: .center, spacing: 10) {
+            // Left Back Button
+            Button {
+                onNavigateBack?()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle().fill(Color.white.opacity(0.08))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    )
+            }
+            .buttonStyle(.plain)
+            
+            Spacer()
+            
+            // Centered Date Navigator Capsule
             HStack(spacing: 8) {
                 Button {
                     habitsService.goToPreviousDay()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.white)
-                        .frame(width: 32, height: 32)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
+                        .frame(width: 26, height: 26)
+                        .background(Circle().fill(Color.white.opacity(0.08)))
                 }
+                .buttonStyle(.plain)
                 
                 Button {
                     showingDatePicker = true
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "calendar")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(ThemeColors.accentCyan)
                         
                         Text(habitsService.formattedDateTitle)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Capsule())
                 }
+                .buttonStyle(.plain)
                 
-                Button {
-                    habitsService.goToNextDay()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 32, height: 32)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
-                }
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 8) {
                 if !habitsService.isToday {
                     Button {
                         habitsService.goToToday()
                     } label: {
                         Text("Today")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundColor(ThemeColors.accentCyan)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
-                            .background(Color.white.opacity(0.1))
-                            .clipShape(Capsule())
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(ThemeColors.accentCyan.opacity(0.18)))
                     }
-                }
-                
-                Button {
-                    showingGuidanceSheet = true
-                } label: {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(ThemeColors.accentCyan)
-                        .frame(width: 32, height: 32)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        habitsService.goToNextDay()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 26, height: 26)
+                            .background(Circle().fill(Color.white.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.2))
+                        .frame(width: 26, height: 26)
                 }
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.06))
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+            )
+            
+            Spacer()
+            
+            // Right Sparkles Button
+            Button {
+                showingGuidanceSheet = true
+            } label: {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle().fill(Color.white.opacity(0.08))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    )
+            }
+            .buttonStyle(.plain)
         }
         .padding(.top, 12)
     }

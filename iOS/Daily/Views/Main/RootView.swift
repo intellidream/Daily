@@ -13,6 +13,8 @@ public struct RootView: View {
             self._selectedTab = State(initialValue: .settings)
         } else if args.contains("-startTabHabits") {
             self._selectedTab = State(initialValue: .habits)
+        } else if args.contains("-startTabHealth") {
+            self._selectedTab = State(initialValue: .health)
         }
     }
 
@@ -77,15 +79,15 @@ public struct RootView: View {
                                     }
                                 )
                             case .weather:
-                                WeatherDetailView()
+                                WeatherDetailView(onNavigateBack: navigateToDashboard)
                             case .news:
-                                NewsFeedView()
+                                NewsFeedView(onNavigateBack: navigateToDashboard)
                             case .health:
-                                HealthMainView()
+                                HealthMainView(onNavigateBack: navigateToDashboard)
                             case .habits:
-                                HabitsMainView()
+                                HabitsMainView(onNavigateBack: navigateToDashboard)
                             case .settings:
-                                SettingsView()
+                                SettingsView(onNavigateBack: navigateToDashboard)
                             }
                         }
 
@@ -116,6 +118,12 @@ public struct RootView: View {
                 default: break
                 }
             }
+        }
+    }
+    
+    private func navigateToDashboard() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+            selectedTab = .dashboard
         }
     }
 }

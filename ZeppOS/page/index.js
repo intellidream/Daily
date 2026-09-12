@@ -1235,12 +1235,22 @@ Page(
                      const naps = sleep.getNap() || []
                      naps.forEach(nap => {
                          const dur = nap.stop - nap.start
-                         if (dur > 0 && dur < 300) {
-                             const startIso = new Date(todayMidnight + nap.start * 60000).toISOString()
-                             const endIso = new Date(todayMidnight + nap.stop * 60000).toISOString()
-                             const key = `${startIso}-${endIso}-sleep_nap`
-                             if (!tCache.sleep_keys.includes(key)) {
-                                 payload.push({ type: 'sleep_nap', value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })
+                         if (dur >= 10 && dur < 300) {
+                             let napStartMin = nap.start % 1440
+                             let napStopMin = nap.stop % 1440
+                             if (napStopMin <= napStartMin) napStopMin = napStartMin + dur
+                             
+                             const napStartMs = todayMidnight + napStartMin * 60000
+                             const napStopMs = todayMidnight + napStopMin * 60000
+                             
+                             // Genuine daytime naps (09:00 - 21:00) not in the future
+                             if (napStartMin >= 540 && napStopMin <= 1260 && napStopMs <= Date.now()) {
+                                 const startIso = new Date(napStartMs).toISOString()
+                                 const endIso = new Date(napStopMs).toISOString()
+                                 const key = `${startIso}-${endIso}-sleep_nap`
+                                 if (!tCache.sleep_keys.includes(key)) {
+                                     payload.push({ type: 'sleep_nap', value: dur, unit: 'minutes', start_time: startIso, end_time: endIso })
+                                 }
                              }
                          }
                      })

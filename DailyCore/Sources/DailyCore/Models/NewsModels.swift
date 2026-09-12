@@ -190,6 +190,69 @@ public struct SavedArticle: Identifiable, Hashable, Codable, Sendable {
         self.isDeleted = isDeleted
     }
     
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.userId = (try? container.decode(String.self, forKey: .userId)) ?? ""
+        self.articleUrl = try container.decode(String.self, forKey: .articleUrl)
+        self.title = (try? container.decode(String.self, forKey: .title)) ?? ""
+        self.imageUrl = try? container.decodeIfPresent(String.self, forKey: .imageUrl)
+        self.description = try? container.decodeIfPresent(String.self, forKey: .description)
+        self.author = try? container.decodeIfPresent(String.self, forKey: .author)
+        self.publicationName = (try? container.decode(String.self, forKey: .publicationName)) ?? "News"
+        self.publicationIconUrl = try? container.decodeIfPresent(String.self, forKey: .publicationIconUrl)
+        self.articleType = (try? container.decode(String.self, forKey: .articleType)) ?? SavedArticleType.readLater.rawValue
+        
+        if let d = try? container.decode(Date.self, forKey: .articleDate) {
+            self.articleDate = d
+        } else if let s = try? container.decode(String.self, forKey: .articleDate), let d = HabitDateParser.parse(s) {
+            self.articleDate = d
+        } else {
+            self.articleDate = Date()
+        }
+        
+        if let d = try? container.decode(Date.self, forKey: .createdAt) {
+            self.createdAt = d
+        } else if let s = try? container.decode(String.self, forKey: .createdAt), let d = HabitDateParser.parse(s) {
+            self.createdAt = d
+        } else {
+            self.createdAt = Date()
+        }
+        
+        if let d = try? container.decodeIfPresent(Date.self, forKey: .updatedAt) {
+            self.updatedAt = d
+        } else if let s = try? container.decodeIfPresent(String.self, forKey: .updatedAt), let d = HabitDateParser.parse(s) {
+            self.updatedAt = d
+        } else {
+            self.updatedAt = nil
+        }
+        
+        self.isDeleted = (try? container.decode(Bool.self, forKey: .isDeleted)) ?? false
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(userId, forKey: .userId)
+        try container.encode(articleUrl, forKey: .articleUrl)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(imageUrl, forKey: .imageUrl)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(author, forKey: .author)
+        try container.encode(publicationName, forKey: .publicationName)
+        try container.encodeIfPresent(publicationIconUrl, forKey: .publicationIconUrl)
+        try container.encode(articleType, forKey: .articleType)
+        
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        try container.encode(f.string(from: articleDate), forKey: .articleDate)
+        try container.encode(f.string(from: createdAt), forKey: .createdAt)
+        if let u = updatedAt {
+            try container.encode(f.string(from: u), forKey: .updatedAt)
+        }
+        try container.encode(isDeleted, forKey: .isDeleted)
+    }
+    
     public func toNewsArticle() -> NewsArticle {
         NewsArticle(
             id: articleUrl,
@@ -252,6 +315,54 @@ public struct RssSubscription: Identifiable, Hashable, Codable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isDeleted = isDeleted
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.userId = (try? container.decode(String.self, forKey: .userId)) ?? ""
+        self.name = (try? container.decode(String.self, forKey: .name)) ?? ""
+        self.url = try container.decode(String.self, forKey: .url)
+        self.iconUrl = (try? container.decode(String.self, forKey: .iconUrl)) ?? ""
+        self.category = (try? container.decode(String.self, forKey: .category)) ?? "tech"
+        self.displayOrder = (try? container.decode(Int.self, forKey: .displayOrder)) ?? 0
+        
+        if let d = try? container.decode(Date.self, forKey: .createdAt) {
+            self.createdAt = d
+        } else if let s = try? container.decode(String.self, forKey: .createdAt), let d = HabitDateParser.parse(s) {
+            self.createdAt = d
+        } else {
+            self.createdAt = Date()
+        }
+        
+        if let d = try? container.decodeIfPresent(Date.self, forKey: .updatedAt) {
+            self.updatedAt = d
+        } else if let s = try? container.decodeIfPresent(String.self, forKey: .updatedAt), let d = HabitDateParser.parse(s) {
+            self.updatedAt = d
+        } else {
+            self.updatedAt = nil
+        }
+        
+        self.isDeleted = (try? container.decode(Bool.self, forKey: .isDeleted)) ?? false
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(userId, forKey: .userId)
+        try container.encode(name, forKey: .name)
+        try container.encode(url, forKey: .url)
+        try container.encode(iconUrl, forKey: .iconUrl)
+        try container.encode(category, forKey: .category)
+        try container.encode(displayOrder, forKey: .displayOrder)
+        
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        try container.encode(f.string(from: createdAt), forKey: .createdAt)
+        if let u = updatedAt {
+            try container.encode(f.string(from: u), forKey: .updatedAt)
+        }
+        try container.encode(isDeleted, forKey: .isDeleted)
     }
     
     public func toFeedSource() -> FeedSource {

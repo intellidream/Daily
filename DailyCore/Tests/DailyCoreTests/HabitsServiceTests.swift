@@ -58,7 +58,18 @@ struct HabitsServiceTests {
         #expect(metrics.cigsAvoided == 160)
         #expect(abs(metrics.moneySaved - 212.0) < 0.001)
         #expect(metrics.formattedMoneySaved == "+212.00")
+        #expect(metrics.moneySavedFormatted == "+212.00 RON")
+        #expect(metrics.lifeRegainedFormatted == "29h 20m")
         #expect(metrics.formattedTimeSinceLastSmoke == "1h 0m ago")
+        
+        let usdMetrics = SmokesFinancialMetrics(
+            moneySaved: 50.0,
+            cigsAvoided: 25,
+            daysTracked: 5,
+            costPerCig: 2.0,
+            currency: "USD"
+        )
+        #expect(usdMetrics.moneySavedFormatted == "+50.00 USD")
     }
     
     @Test("Habit Log Record Metadata Parsing")

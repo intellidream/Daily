@@ -24,6 +24,8 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .settings: return "gearshape.fill"
         }
     }
+    
+    public static let primaryTabs: [NavigationTab] = [.dashboard, .news, .health, .habits]
 }
 
 /// Floating Liquid Glass navigation capsule anchored at the bottom of the viewport.
@@ -37,8 +39,8 @@ public struct FloatingGlassCapsule: View {
     }
     
     public var body: some View {
-        HStack(spacing: 6) {
-            ForEach(NavigationTab.allCases) { tab in
+        HStack(spacing: 8) {
+            ForEach(NavigationTab.primaryTabs) { tab in
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                         selectedTab = tab

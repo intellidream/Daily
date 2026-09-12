@@ -17,10 +17,14 @@ public struct NewsFeedView: View {
     
     @State private var activeSubTab: NewsSubTab = .live
     @State private var searchQuery = ""
+    @FocusState private var isSearchFocused: Bool
     @State private var selectedArticleForReader: NewsArticle?
     @State private var showManageFeedsSheet = false
+    public var onNavigateBack: (() -> Void)? = nil
     
-    public init() {}
+    public init(onNavigateBack: (() -> Void)? = nil) {
+        self.onNavigateBack = onNavigateBack
+    }
     
     // Filtered articles based on sub-tab and search query
     private var displayedArticles: [NewsArticle] {
@@ -49,16 +53,8 @@ public struct NewsFeedView: View {
             LiquidGlassBackground {
                 ScrollView {
                     VStack(spacing: 16) {
-                        // Top Glass Header Bar
+                        // Top Glass Header Bar with Search & Category Action
                         headerBar
-                        
-                        // Search Field
-                        searchBar
-                        
-                        // Category Pills Carousel
-                        if activeSubTab == .live {
-                            categoryCarousel
-                        }
                         
                         // Sub-Tab Switcher (Live Feed / Read Later / Favorites)
                         subTabSwitcher
@@ -103,33 +99,28 @@ public struct NewsFeedView: View {
         .sheet(isPresented: $showManageFeedsSheet) {
             NewsFeedsManagementSheet()
         }
+        .task {
+            await savedService.syncWithSupabase()
+        }
     }
     
     // MARK: - Header Bar
     
     private var headerBar: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("NEWS & BRIEFINGS")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(ThemeColors.accentCyan)
-                    .tracking(0.8)
-                Text(activeSubTab.rawValue)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-            }
-            
-            Spacer()
-            
-            // Refresh Button
+        HStack(alignment: .center, spacing: 8) {
+            // Left Back Button
             Button {
-                Task {
-                    await newsService.loadFeed(newsService.selectedFeed, forceRefresh: true)
+                if isSearchFocused {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        isSearchFocused = false
+                    }
+                } else {
+                    onNavigateBack?()
                 }
             } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.8))
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
                     .frame(width: 36, height: 36)
                     .background(
                         Circle().fill(Color.white.opacity(0.08))
@@ -138,34 +129,16 @@ public struct NewsFeedView: View {
             }
             .buttonStyle(.plain)
             
-            // Manage Feeds Button
-            Button {
-                showManageFeedsSheet = true
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .frame(width: 36, height: 36)
-                    .background(
-                        Circle().fill(Color.white.opacity(0.08))
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.top, 6)
-    }
-    
-    // MARK: - Search Bar
-    
-    private var searchBar: some View {
-        GlassCard(cornerRadius: 16, padding: 8) {
-            HStack(spacing: 10) {
+            // Expanding Search Field in the Header
+            HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(ThemeColors.fgMutedDark)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(isSearchFocused ? ThemeColors.accentCyan : ThemeColors.fgMutedDark)
                 
-                TextField("Search articles by title or keyword...", text: $searchQuery)
+                TextField("Search articles...", text: $searchQuery)
+                    .font(.system(size: 13, weight: .regular))
                     .foregroundColor(.white)
+                    .focused($isSearchFocused)
                     .autocorrectionDisabled()
                 
                 if !searchQuery.isEmpty {
@@ -173,48 +146,85 @@ public struct NewsFeedView: View {
                         searchQuery = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13))
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 6)
-        }
-    }
-    
-    // MARK: - Category Carousel
-    
-    private var categoryCarousel: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(FeedCategory.allCases, id: \.self) { category in
-                    let isSelected = newsService.selectedCategory == category
+            .padding(.horizontal, 10)
+            .frame(height: 36)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.06))
+                    .overlay(Capsule().strokeBorder(isSearchFocused ? ThemeColors.accentCyan : Color.white.opacity(0.1), lineWidth: 1))
+            )
+            .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isSearchFocused)
+            
+            // Right Actions
+            if isSearchFocused {
+                Button("Cancel") {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        isSearchFocused = false
+                        searchQuery = ""
+                    }
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(ThemeColors.accentCyan)
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            } else {
+                HStack(spacing: 8) {
+                    // Manage Feeds Button (where Refresh button used to be)
                     Button {
-                        Task {
-                            await newsService.selectCategory(category)
-                        }
+                        showManageFeedsSheet = true
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: category.systemIcon)
-                                .font(.system(size: 12))
-                            Text(category.displayName)
-                                .font(.system(size: 13, weight: .semibold))
-                        }
-                        .foregroundColor(isSelected ? .white : .white.opacity(0.7))
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 14)
-                        .background(
-                            Capsule()
-                                .fill(isSelected ? ThemeColors.accentBlue.opacity(0.7) : Color.white.opacity(0.08))
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder(isSelected ? ThemeColors.accentCyan : Color.white.opacity(0.12), lineWidth: 1)
-                                )
-                        )
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle().fill(Color.white.opacity(0.08))
+                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                            )
                     }
                     .buttonStyle(.plain)
+                    
+                    // Category Selector Menu Button
+                    categorySelectorMenu
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+        }
+        .padding(.top, 6)
+    }
+    
+    // MARK: - Category Selector Menu
+    
+    private var categorySelectorMenu: some View {
+        Menu {
+            ForEach(FeedCategory.allCases, id: \.self) { category in
+                Button {
+                    Task {
+                        await newsService.selectCategory(category)
+                    }
+                } label: {
+                    HStack {
+                        Label(category.displayName, systemImage: category.systemIcon)
+                        if newsService.selectedCategory == category {
+                            Image(systemName: "checkmark")
+                        }
+                    }
                 }
             }
+        } label: {
+            Image(systemName: newsService.selectedCategory.systemIcon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(ThemeColors.accentCyan)
+                .frame(width: 36, height: 36)
+                .background(
+                    Circle().fill(ThemeColors.accentCyan.opacity(0.15))
+                        .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.3), lineWidth: 1))
+                )
         }
     }
     

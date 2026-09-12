@@ -61,9 +61,9 @@ public struct VitalMetricTile: View {
     private var formattedValue: String {
         guard let v = record?.value else { return "--" }
         switch metricType {
-        case .steps, .activeEnergy, .basalEnergy, .floorsClimbed, .heartRate, .restingHeartRate, .bloodPressureSystolic, .bloodPressureDiastolic, .hydration, .stress, .pai, .mindfulSession:
+        case .steps, .activeEnergy, .basalEnergy, .floorsClimbed, .heartRate, .restingHeartRate, .hrvSdnn, .hrvRmssd, .oxygenSaturation, .bloodPressureSystolic, .bloodPressureDiastolic, .hydration, .stress, .pai, .mindfulSession:
             return "\(Int(round(v)))"
-        case .distance, .weight, .leanBodyMass, .height, .bmi, .oxygenSaturation, .respiratoryRate, .bodyTemperature, .bodyFatPercentage:
+        case .distance, .weight, .leanBodyMass, .height, .bmi, .respiratoryRate, .bodyTemperature, .bodyFatPercentage:
             return String(format: "%.1f", v)
         case .sleepDuration, .sleepDeep, .sleepRem, .sleepLight, .sleepAwake, .napDuration:
             let hours = Int(v) / 60

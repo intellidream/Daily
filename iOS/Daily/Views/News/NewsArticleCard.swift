@@ -23,11 +23,8 @@ public struct NewsArticleCard: View {
     }
     
     public var body: some View {
-        Button {
-            onTap()
-        } label: {
-            GlassCard(cornerRadius: 20, padding: 16) {
-                VStack(alignment: .leading, spacing: 14) {
+        GlassCard(cornerRadius: 20, padding: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                     // Header: Publication, Category Pill & Timestamp
                     HStack(alignment: .center, spacing: 8) {
                         // Publication Favicon
@@ -205,9 +202,11 @@ public struct NewsArticleCard: View {
                     }
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onTap()
+            }
         }
-        .buttonStyle(.plain)
-    }
     
     private func extractMediumUsername(from article: NewsArticle) -> String? {
         guard article.link.contains("medium.com") else { return nil }

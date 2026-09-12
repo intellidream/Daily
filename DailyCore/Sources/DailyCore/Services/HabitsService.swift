@@ -296,7 +296,10 @@ public final class HabitsService: ObservableObject {
         saveDailyTotals()
         recomputeAllHistoriesAndHeatmaps()
         
-        // 3. Push to Supabase
+        // 3. Update smokes financials
+        await fetchSmokesFinancials(userId: userId?.uuidString.lowercased())
+        
+        // 4. Push to Supabase
         await pushLogToSupabase(newRecord)
     }
     
@@ -325,6 +328,11 @@ public final class HabitsService: ObservableObject {
         recalculateDailyAggregates()
         saveLocalLogs()
         recomputeAllHistoriesAndHeatmaps()
+        
+        if deletedRecord?.habitType == "smokes" {
+            let session = try? await supabase.auth.session
+            await fetchSmokesFinancials(userId: session?.user.id.uuidString.lowercased())
+        }
         
         // Asynchronously mark deleted in Supabase
         do {
@@ -410,6 +418,7 @@ public final class HabitsService: ObservableObject {
         }
         recalculateDailyAggregates()
         recomputeAllHistoriesAndHeatmaps()
+        await fetchSmokesFinancials(userId: session?.user.id.uuidString.lowercased())
     }
     
     // MARK: - Data Fetching & Sync
@@ -795,17 +804,34 @@ public final class HabitsService: ObservableObject {
         let lastLog = todaysSmokesLogs.first
         let timeSince = lastLog.map { Date().timeIntervalSince($0.loggedAt) }
         
-        let currentSavings = smokesFinancials.moneySaved
-        let currentAvoided = smokesFinancials.cigsAvoided
-        let days = smokesFinancials.daysTracked
+        let cal = Calendar.current
+        let defaultDays = max(1, (cal.dateComponents([.day], from: smokesSettings.quitStartDate, to: Date()).day ?? 0) + 1)
+        let days = smokesFinancials.daysTracked > 0 ? smokesFinancials.daysTracked : defaultDays
+        
+        // Calculate fallback avoided & savings if not set
+        var currentSavings = smokesFinancials.moneySaved
+        var currentAvoided = smokesFinancials.cigsAvoided
+        if currentSavings == 0 && currentAvoided == 0 {
+            var sum = 0
+            for dayOffset in 0..<days {
+                if let d = cal.date(byAdding: .day, value: -dayOffset, to: Date()) {
+                    let k = isoDateFormatter.string(from: d)
+                    sum += smokesDailyTotals[k] ?? 0
+                }
+            }
+            let avoided = max(0, (days * smokesSettings.baselineCigsPerDay) - sum)
+            currentAvoided = avoided
+            currentSavings = Double(avoided) * smokesSettings.costPerCig
+        }
         
         self.smokesFinancials = SmokesFinancialMetrics(
             moneySaved: currentSavings,
             cigsAvoided: currentAvoided,
             daysTracked: days,
             costPerCig: smokesSettings.costPerCig,
-            lastSmokeDate: lastLog?.loggedAt,
-            timeSinceLastSmoke: timeSince
+            currency: smokesSettings.currency,
+            lastSmokeDate: lastLog?.loggedAt ?? smokesFinancials.lastSmokeDate,
+            timeSinceLastSmoke: timeSince ?? smokesFinancials.timeSinceLastSmoke
         )
     }
     
@@ -816,6 +842,7 @@ public final class HabitsService: ObservableObject {
         let days = max(1, (cal.dateComponents([.day], from: smokesSettings.quitStartDate, to: Date()).day ?? 0) + 1)
         let costPerCig = smokesSettings.costPerCig
         let baseline = smokesSettings.baselineCigsPerDay
+        let currency = smokesSettings.currency
         
         var totalSmokedCount: Int?
         var daysTrackedCount: Int = days
@@ -863,6 +890,7 @@ public final class HabitsService: ObservableObject {
             cigsAvoided: avoided,
             daysTracked: daysTrackedCount,
             costPerCig: costPerCig,
+            currency: currency,
             lastSmokeDate: lastLog?.loggedAt,
             timeSinceLastSmoke: timeSince
         )

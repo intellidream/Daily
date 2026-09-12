@@ -55,17 +55,6 @@ public struct ArticleWebView: UIViewRepresentable {
         }
         metaHtml += "</div>"
         
-        var pubHeaderHtml = ""
-        if let pubName = article.publicationName, !pubName.isEmpty {
-            let iconUrl = article.publicationIconUrl ?? "https://www.google.com/s2/favicons?domain=rss.com&sz=64"
-            pubHeaderHtml = """
-            <div class='publication-header'>
-                <img class='publication-logo' src='\(iconUrl)' />
-                <span class='publication-name'>\(pubName)</span>
-            </div>
-            """
-        }
-        
         let contentBody = article.content ?? article.description ?? "<p>No content preview available.</p>"
         
         return """
@@ -96,28 +85,6 @@ public struct ArticleWebView: UIViewRepresentable {
                     max-width: 720px;
                     margin: 0 auto;
                     padding: 20px 18px 40px 18px;
-                }
-                .publication-header {
-                    display: flex;
-                    align-items: center;
-                    margin-bottom: 14px;
-                    opacity: 0.9;
-                }
-                .publication-logo {
-                    width: 24px;
-                    height: 24px;
-                    border-radius: 50%;
-                    margin-right: 10px;
-                    background: white;
-                    padding: 2px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-                }
-                .publication-name {
-                    font-size: 13px;
-                    font-weight: 700;
-                    text-transform: uppercase;
-                    letter-spacing: 0.6px;
-                    color: \(metaColor);
                 }
                 h1.title {
                     font-size: \(Int(Double(baseFontSize) * 1.6))px;
@@ -200,7 +167,6 @@ public struct ArticleWebView: UIViewRepresentable {
         </head>
         <body>
             <div class='article-wrap'>
-                \(pubHeaderHtml)
                 <h1 class='title'>\(article.title)</h1>
                 \(metaHtml)
                 \(featuredImageHtml)

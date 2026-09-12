@@ -2,10 +2,20 @@ import Foundation
 import Combine
 import Supabase
 
+/// Multiplatform provider protocol allowing platform-specific engines (such as iOS HealthKit)
+/// to inject on-device biometric telemetry and sleep stages into HealthDataService.
+@MainActor
+public protocol LocalHealthDataProvider: AnyObject {
+    func requestAuthorization() async -> Bool
+    func fetchLocalTelemetry(for date: Date) async -> [HealthTelemetryRecord]
+    func fetchLocalSleepStages(for date: Date) async -> [HealthTelemetryRecord]
+}
+
 /// Central multiplatform service managing health telemetry, vitals, sleep analysis, and historical trends.
 @MainActor
 public final class HealthDataService: ObservableObject {
     public static let shared = HealthDataService()
+    public weak var localDataProvider: LocalHealthDataProvider?
     
     // MARK: - Published State
     
@@ -43,6 +53,8 @@ public final class HealthDataService: ObservableObject {
     private let supabase = SupabaseService.shared.client
     private let cacheTTL: TimeInterval = 300 // 5 minutes in-memory cache
     private var telemetryCache: [String: (timestamp: Date, telemetry: [HealthTelemetryRecord], vitals: [VitalMetricRecord])] = [:]
+    private var cancellables = Set<AnyCancellable>()
+    private var activeLoadTask: Task<Void, Never>?
     
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -57,9 +69,18 @@ public final class HealthDataService: ObservableObject {
     }()
     
     public init() {
-        Task {
-            await loadDataForSelectedDate()
-        }
+        // Observe auth session state changes so that once user authentication resolves,
+        // real telemetry is fetched immediately instead of falling back to or caching demo data.
+        AuthService.shared.$sessionState
+            .dropFirst()
+            .sink { [weak self] state in
+                if case .authenticated = state {
+                    Task { @MainActor [weak self] in
+                        await self?.loadDataForSelectedDate(forceRefresh: true)
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Navigation Actions
@@ -114,18 +135,41 @@ public final class HealthDataService: ObservableObject {
     // MARK: - Data Fetching & Processing
     
     public func loadDataForSelectedDate(forceRefresh: Bool = false) async {
+        if !forceRefresh, let existing = activeLoadTask {
+            await existing.value
+            return
+        }
+        
+        let task = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            await self.performLoadDataForSelectedDate(forceRefresh: forceRefresh)
+        }
+        activeLoadTask = task
+        await task.value
+        if activeLoadTask == task {
+            activeLoadTask = nil
+        }
+    }
+    
+    private func performLoadDataForSelectedDate(forceRefresh: Bool = false) async {
         isLoading = true
         defer { isLoading = false }
         
         let dateKey = isoDateFormatter.string(from: selectedDate)
+        let isToday = Calendar.current.isDateInToday(selectedDate)
+        let effectiveTTL: TimeInterval = isToday ? 30 : cacheTTL
         
         // 1. Check cache if not forcing refresh
-        if !forceRefresh, let cached = telemetryCache[dateKey], Date().timeIntervalSince(cached.timestamp) < cacheTTL {
-            await applyRecords(telemetry: cached.telemetry, vitals: cached.vitals)
-            return
+        if !forceRefresh, let cached = telemetryCache[dateKey], Date().timeIntervalSince(cached.timestamp) < effectiveTTL {
+            let hasSteps = cached.telemetry.contains(where: { $0.isSteps && ($0.value ?? 0) > 0 }) ||
+                           cached.vitals.contains(where: { $0.type == "steps" && $0.value > 0 })
+            if hasSteps || localDataProvider == nil {
+                await applyRecords(telemetry: cached.telemetry, vitals: cached.vitals)
+                return
+            }
         }
         
-        // 2. Fetch from Supabase
+        // 2. Fetch from Supabase and Local Provider concurrently
         var fetchedTelemetry: [HealthTelemetryRecord] = []
         var fetchedVitals: [VitalMetricRecord] = []
         
@@ -139,7 +183,7 @@ public final class HealthDataService: ObservableObject {
             let startIso = isoTimestampFormatter.string(from: windowStart)
             let endIso = isoTimestampFormatter.string(from: windowEnd)
             
-            // Query telemetry
+            // Query Supabase telemetry
             do {
                 let records: [HealthTelemetryRecord] = try await supabase.from("health_telemetry")
                     .select()
@@ -149,12 +193,12 @@ public final class HealthDataService: ObservableObject {
                     .order("start_time", ascending: true)
                     .execute()
                     .value
-                fetchedTelemetry = records
+                fetchedTelemetry.append(contentsOf: records)
             } catch {
                 print("[HealthDataService] Warning: Could not fetch health_telemetry: \(error.localizedDescription)")
             }
             
-            // Query daily vitals
+            // Query Supabase daily vitals
             do {
                 let vitals: [VitalMetricRecord] = try await supabase.from("vitals")
                     .select()
@@ -168,18 +212,31 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 3. Fallback to realistic demo data if Supabase returned empty (e.g. guest or new user)
-        if fetchedTelemetry.isEmpty && fetchedVitals.isEmpty {
+        // 3. Concurrently fetch local on-device provider (e.g. Apple HealthKit)
+        if let provider = localDataProvider {
+            let localTelem = await provider.fetchLocalTelemetry(for: selectedDate)
+            let localSleep = await provider.fetchLocalSleepStages(for: selectedDate)
+            fetchedTelemetry.append(contentsOf: localTelem)
+            fetchedTelemetry.append(contentsOf: localSleep)
+        }
+        
+        // Deduplicate any repeated database or provider records
+        fetchedTelemetry = Self.deduplicateTelemetry(fetchedTelemetry)
+        
+        // 4. Fallback to realistic demo data ONLY if in explicit Guest mode with no data
+        if AuthService.shared.isGuest && fetchedTelemetry.isEmpty && fetchedVitals.isEmpty {
             let demo = generateDemoData(for: selectedDate)
             fetchedTelemetry = demo.telemetry
             fetchedVitals = demo.vitals
         }
         
-        // 4. Update cache & apply
-        telemetryCache[dateKey] = (timestamp: Date(), telemetry: fetchedTelemetry, vitals: fetchedVitals)
+        // 5. Update cache & apply (never cache empty state if session is still initializing)
+        if AuthService.shared.isAuthenticated || AuthService.shared.isGuest {
+            telemetryCache[dateKey] = (timestamp: Date(), telemetry: fetchedTelemetry, vitals: fetchedVitals)
+        }
         await applyRecords(telemetry: fetchedTelemetry, vitals: fetchedVitals)
         
-        // 5. Also load 7-day trend history
+        // 6. Also load 7-day trend history
         await loadHistoricalTrends()
     }
     
@@ -228,6 +285,33 @@ public final class HealthDataService: ObservableObject {
             if let type = v.metricType {
                 vitalsMap[type] = v
                 vitalsValues[type] = v.value
+            }
+        }
+        
+        // Enrich/synthesize missing vitals from telemetry (e.g. from ZeppOS Amazfit, WearOS, HarmonyOS, or Apple Health)
+        let sortedTelemetry = telemetry.sorted { $0.startTime < $1.startTime }
+        for t in sortedTelemetry {
+            guard let val = t.value, val > 0,
+                  let metricType = HealthMetricType.from(rawString: t.type) else { continue }
+            
+            // Skip steps and sleep stages which are handled by dedicated engines
+            if metricType == .steps || t.isSleep || t.isSleepStage {
+                continue
+            }
+            
+            // Populate if not already present or if telemetry has a fresher sample
+            if vitalsMap[metricType] == nil || (t.startTime >= (vitalsMap[metricType]?.createdAt ?? Date.distantPast)) {
+                let record = VitalMetricRecord(
+                    userId: t.userId,
+                    type: metricType.rawValue,
+                    value: val,
+                    unit: t.unit ?? metricType.defaultUnit,
+                    date: dateKey,
+                    sourceDevice: t.sourceDevice,
+                    createdAt: t.startTime
+                )
+                vitalsMap[metricType] = record
+                vitalsValues[metricType] = val
             }
         }
         self.currentVitals = vitalsMap
@@ -281,23 +365,50 @@ public final class HealthDataService: ObservableObject {
         }
         
         // 3. Process Steps & Hourly Cadence
-        var hourlyMap = [Int: Int]()
-        let stepTelemetry = telemetry.filter { $0.isSteps && cal.isDate($0.startTime, inSameDayAs: selectedDate) }
-        for r in stepTelemetry {
-            let hour = cal.component(.hour, from: r.startTime)
-            let count = Int(r.value ?? 0)
-            hourlyMap[hour, default: 0] += count
+        let stepsResult = Self.calculateDailySteps(
+            targetDate: selectedDate,
+            telemetry: telemetry,
+            vitalsSummary: vitalsValues,
+            preferredDevice: selectedDeviceFilter,
+            preferredSource: selectedDeviceSource,
+            calendar: cal
+        )
+        self.hourlySteps = stepsResult.hourlyBuckets
+        self.totalStepsToday = stepsResult.totalSteps
+        self.totalActiveCalories = stepsResult.activeCalories
+        
+        // Ensure restingHeartRate in vitalsMap if computed
+        if vitalsMap[.restingHeartRate] == nil && self.restingBpm > 0 {
+            let rhrRecord = VitalMetricRecord(
+                userId: "computed",
+                type: HealthMetricType.restingHeartRate.rawValue,
+                value: self.restingBpm,
+                unit: "bpm",
+                date: dateKey,
+                sourceDevice: selectedDeviceFilter ?? selectedDeviceSource?.displayName ?? "Biometric Engine"
+            )
+            vitalsMap[.restingHeartRate] = rhrRecord
+            vitalsValues[.restingHeartRate] = self.restingBpm
         }
         
-        var buckets: [HourlyStepBucket] = []
-        for h in 0..<24 {
-            buckets.append(HourlyStepBucket(hour: h, steps: hourlyMap[h] ?? 0))
+        // Ensure hydration in vitalsMap if logged in Habits
+        if vitalsMap[.hydration] == nil {
+            let waterMl = HabitsService.shared.totalWaterMlToday
+            if waterMl > 0 {
+                let hydRecord = VitalMetricRecord(
+                    userId: "habits",
+                    type: HealthMetricType.hydration.rawValue,
+                    value: Double(waterMl),
+                    unit: "ml",
+                    date: dateKey,
+                    sourceDevice: "Bubbles"
+                )
+                vitalsMap[.hydration] = hydRecord
+                vitalsValues[.hydration] = Double(waterMl)
+            }
         }
-        self.hourlySteps = buckets
         
-        let sumSteps = buckets.map(\.steps).reduce(0, +)
-        self.totalStepsToday = sumSteps > 0 ? sumSteps : Int(vitalsValues[.steps] ?? 0)
-        self.totalActiveCalories = vitalsValues[.activeEnergy] ?? Double(Int(Double(totalStepsToday) * 0.042))
+        self.currentVitals = vitalsMap
     }
     
     // MARK: - 7-Day & 30-Day Trend Generator
@@ -306,21 +417,127 @@ public final class HealthDataService: ObservableObject {
         let cal = Calendar.current
         var trends: [HealthMetricType: [DailyMetricTrendPoint]] = [:]
         
-        // Generate last 7 days points
         let metrics: [HealthMetricType] = [.steps, .sleepDuration, .heartRate, .hrvSdnn, .activeEnergy, .weight]
+        
+        // In Guest mode with no real data, generate preview points
+        if AuthService.shared.isGuest && currentVitals.isEmpty {
+            for m in metrics {
+                var points: [DailyMetricTrendPoint] = []
+                for dayOffset in (0..<7).reversed() {
+                    if let date = cal.date(byAdding: .day, value: -dayOffset, to: selectedDate) {
+                        let isComplete = dayOffset > 0
+                        let target = defaultTarget(for: m)
+                        let val = generateHistoricalValue(for: m, dayOffset: dayOffset, target: target)
+                        points.append(DailyMetricTrendPoint(
+                            date: date,
+                            value: val,
+                            target: target,
+                            isCompleteDay: isComplete
+                        ))
+                    }
+                }
+                trends[m] = points
+            }
+            self.historicalTrends = trends
+            return
+        }
+        
+        // For authenticated users, query real 7-day historical vitals from Supabase
+        var historicalVitalsByDate: [String: [HealthMetricType: Double]] = [:]
+        let session = try? await supabase.auth.session
+        if let userId = session?.user.id.uuidString.lowercased(),
+           let minDate = cal.date(byAdding: .day, value: -6, to: selectedDate) {
+            let minDateStr = isoDateFormatter.string(from: minDate)
+            let maxDateStr = isoDateFormatter.string(from: selectedDate)
+            
+            if let vitalsRows: [VitalMetricRecord] = try? await supabase.from("vitals")
+                .select()
+                .eq("user_id", value: userId)
+                .gte("date", value: minDateStr)
+                .lte("date", value: maxDateStr)
+                .execute()
+                .value {
+                for row in vitalsRows {
+                    if let t = row.metricType {
+                        historicalVitalsByDate[row.date, default: [:]][t] = row.value
+                    }
+                }
+            }
+            
+            // Also fetch 7-day telemetry to populate steps and sleep for days without aggregated vitals row
+            let minDateTimeStr = isoTimestampFormatter.string(from: cal.startOfDay(for: minDate))
+            let maxDateTimeStr = isoTimestampFormatter.string(from: cal.date(bySettingHour: 23, minute: 59, second: 59, of: selectedDate) ?? selectedDate)
+            
+            if let telemRows: [HealthTelemetryRecord] = try? await supabase.from("health_telemetry")
+                .select()
+                .eq("user_id", value: userId)
+                .gte("start_time", value: minDateTimeStr)
+                .lte("start_time", value: maxDateTimeStr)
+                .execute()
+                .value {
+                let deduped = Self.deduplicateTelemetry(telemRows)
+                let groupedByDay = Dictionary(grouping: deduped) { r in
+                    isoDateFormatter.string(from: r.startTime)
+                }
+                for (dayStr, dayRecords) in groupedByDay {
+                    guard let dayDate = isoDateFormatter.date(from: dayStr) else { continue }
+                    
+                    if (historicalVitalsByDate[dayStr]?[.steps] ?? 0) <= 0 {
+                        let stepRes = Self.calculateDailySteps(
+                            targetDate: dayDate,
+                            telemetry: dayRecords,
+                            vitalsSummary: historicalVitalsByDate[dayStr] ?? [:],
+                            preferredDevice: selectedDeviceFilter,
+                            preferredSource: selectedDeviceSource,
+                            calendar: cal
+                        )
+                        if stepRes.totalSteps > 0 {
+                            historicalVitalsByDate[dayStr, default: [:]][.steps] = Double(stepRes.totalSteps)
+                        }
+                    }
+                    
+                    if (historicalVitalsByDate[dayStr]?[.sleepDuration] ?? 0) <= 0 {
+                        let sleepRes = SleepClusteringEngine.clusterSleep(
+                            targetDate: dayDate,
+                            telemetry: dayRecords,
+                            vitalsSummary: historicalVitalsByDate[dayStr] ?? [:],
+                            preferredDevice: selectedDeviceFilter
+                        )
+                        if let prim = sleepRes.primarySession, prim.asleepSeconds > 0 {
+                            historicalVitalsByDate[dayStr, default: [:]][.sleepDuration] = prim.asleepSeconds / 60.0
+                        }
+                    }
+                }
+            }
+        }
         
         for m in metrics {
             var points: [DailyMetricTrendPoint] = []
             for dayOffset in (0..<7).reversed() {
                 if let date = cal.date(byAdding: .day, value: -dayOffset, to: selectedDate) {
+                    let dateStr = isoDateFormatter.string(from: date)
                     let isComplete = dayOffset > 0
                     let target = defaultTarget(for: m)
-                    let val = generateHistoricalValue(for: m, dayOffset: dayOffset, target: target)
+                    
+                    var val: Double = 0
+                    if let dayVitals = historicalVitalsByDate[dateStr], let v = dayVitals[m] {
+                        val = v
+                    } else if cal.isDate(date, inSameDayAs: selectedDate) {
+                        // Use current day computed metrics
+                        switch m {
+                        case .steps: val = Double(totalStepsToday)
+                        case .sleepDuration: val = Double(primarySleepSession?.asleepSeconds ?? 0) / 60.0
+                        case .heartRate: val = averageBpm > 0 ? averageBpm : restingBpm
+                        case .activeEnergy: val = totalActiveCalories
+                        default: val = currentVitals[m]?.value ?? 0
+                        }
+                    }
+                    
                     points.append(DailyMetricTrendPoint(
                         date: date,
                         value: val,
                         target: target,
-                        isCompleteDay: isComplete
+                        isCompleteDay: isComplete && val > 0
                     ))
                 }
             }
@@ -491,5 +708,204 @@ public final class HealthDataService: ObservableObject {
         vitals.append(VitalMetricRecord(userId: "demo", type: "bmi", value: 23.6, unit: "kg/m²", date: dateStr, sourceDevice: "HealthKit"))
         
         return (telemetry, vitals)
+    }
+    
+    // MARK: - Daily Steps Processing & Telemetry Deduplication
+    
+    public struct DailyStepsResult: Sendable {
+        public let totalSteps: Int
+        public let hourlyBuckets: [HourlyStepBucket]
+        public let activeCalories: Double
+        public let sourceDeviceUsed: String?
+        
+        public init(
+            totalSteps: Int,
+            hourlyBuckets: [HourlyStepBucket],
+            activeCalories: Double,
+            sourceDeviceUsed: String? = nil
+        ) {
+            self.totalSteps = totalSteps
+            self.hourlyBuckets = hourlyBuckets
+            self.activeCalories = activeCalories
+            self.sourceDeviceUsed = sourceDeviceUsed
+        }
+    }
+    
+    public nonisolated static func deduplicateTelemetry(_ records: [HealthTelemetryRecord]) -> [HealthTelemetryRecord] {
+        var seen = Set<String>()
+        var unique: [HealthTelemetryRecord] = []
+        
+        for r in records {
+            let typeKey = r.normalizedType
+            let devKey = r.sourceDevice?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let stKey = Int(r.startTime.timeIntervalSince1970)
+            let etKey = Int((r.endTime ?? r.startTime).timeIntervalSince1970)
+            let valKey = Int((r.value ?? 0) * 100)
+            
+            let compositeKey = "\(typeKey)_\(devKey)_\(stKey)_\(etKey)_\(valKey)"
+            if seen.insert(compositeKey).inserted {
+                unique.append(r)
+            }
+        }
+        return unique
+    }
+    
+    public nonisolated static func calculateDailySteps(
+        targetDate: Date,
+        telemetry: [HealthTelemetryRecord],
+        vitalsSummary: [HealthMetricType: Double] = [:],
+        preferredDevice: String? = nil,
+        preferredSource: DeviceSource? = nil,
+        calendar: Calendar = .current
+    ) -> DailyStepsResult {
+        let daySteps = telemetry.filter { $0.isSteps && calendar.isDate($0.startTime, inSameDayAs: targetDate) }
+        
+        // Group by device
+        let grouped = Dictionary(grouping: daySteps) { $0.sourceDevice ?? "Unknown" }
+        
+        var deviceResults: [(device: String, total: Int, hourly: [Int: Int], isWearable: Bool)] = []
+        
+        for (device, records) in grouped {
+            let lower = device.lowercased()
+            let source = DeviceSource.from(name: device)
+            let isWearable = (source == .appleWatch || source == .amazfit || source == .oneplus || source == .huawei || source == .healthKit) ||
+                             lower.contains("watch") || lower.contains("balance") || lower.contains("gt5") || lower.contains("health")
+            
+            let isCumulative = isCumulativeStepDevice(device: device, records: records)
+            
+            var hourlyMap = [Int: Int]()
+            var total = 0
+            
+            if isCumulative {
+                // Device reports cumulative total for the day (e.g. Zepp OS step.getCurrent())
+                let sorted = records.sorted { $0.startTime < $1.startTime }
+                let maxVal = sorted.compactMap { $0.value }.max() ?? 0
+                total = Int(maxVal)
+                
+                var prevVal: Double = 0
+                for r in sorted {
+                    guard let val = r.value, val > 0 else { continue }
+                    let delta = val >= prevVal ? (val - prevVal) : val
+                    let hour = calendar.component(.hour, from: r.startTime)
+                    hourlyMap[hour, default: 0] += Int(delta)
+                    prevVal = val
+                }
+            } else {
+                // Device reports interval step slices (e.g. Apple Watch / HealthKit)
+                // Deduplicate overlapping interval slices
+                let sorted = records.sorted { $0.startTime < $1.startTime }
+                var uniqueSlices: [HealthTelemetryRecord] = []
+                for r in sorted {
+                    if let last = uniqueSlices.last {
+                        let isIdenticalInterval = abs(last.startTime.timeIntervalSince(r.startTime)) < 5 &&
+                                                 abs((last.endTime ?? last.startTime).timeIntervalSince(r.endTime ?? r.startTime)) < 5
+                        if isIdenticalInterval { continue }
+                    }
+                    uniqueSlices.append(r)
+                }
+                
+                for r in uniqueSlices {
+                    let val = Int(r.value ?? 0)
+                    let hour = calendar.component(.hour, from: r.startTime)
+                    hourlyMap[hour, default: 0] += val
+                }
+                total = hourlyMap.values.reduce(0, +)
+            }
+            
+            deviceResults.append((device: device, total: total, hourly: hourlyMap, isWearable: isWearable))
+        }
+        
+        // Multi-device selection:
+        // 1. If preferredSource is set
+        var chosen: (device: String, total: Int, hourly: [Int: Int], isWearable: Bool)?
+        if let ps = preferredSource {
+            chosen = deviceResults.first { DeviceSource.from(name: $0.device) == ps }
+        }
+        // 2. If preferredDevice is set
+        if chosen == nil, let pd = preferredDevice, !pd.isEmpty {
+            chosen = deviceResults.first { $0.device.localizedCaseInsensitiveContains(pd) }
+        }
+        // 3. Fallback: Prioritize wearables with max steps, then any device with max steps
+        if chosen == nil {
+            let wearables = deviceResults.filter { $0.isWearable && $0.total > 0 }
+            if let bestWearable = wearables.max(by: { $0.total < $1.total }) {
+                chosen = bestWearable
+            } else {
+                chosen = deviceResults.max(by: { $0.total < $1.total })
+            }
+        }
+        
+        var chosenTotal = chosen?.total ?? 0
+        let chosenHourly = chosen?.hourly ?? [:]
+        var chosenDevice = chosen?.device
+        
+        // Incorporate backend vitals summary (e.g. smartwatch daily sync row)
+        let isAllDevices = preferredSource == nil && (preferredDevice == nil || preferredDevice?.isEmpty == true)
+        if let vitalsSteps = vitalsSummary[.steps], vitalsSteps > 0 {
+            let vitalsInt = Int(vitalsSteps)
+            if isAllDevices {
+                // In "All Devices", take the maximum between live deduplicated sensor telemetry and backend smartwatch vitals summary
+                if vitalsInt > chosenTotal {
+                    chosenTotal = vitalsInt
+                    if chosenDevice == nil {
+                        chosenDevice = "Smartwatch"
+                    }
+                }
+            } else if chosenTotal == 0 {
+                chosenTotal = vitalsInt
+            }
+        }
+        
+        let finalTotal = chosenTotal
+        
+        var buckets: [HourlyStepBucket] = []
+        for h in 0..<24 {
+            buckets.append(HourlyStepBucket(hour: h, steps: chosenHourly[h] ?? 0))
+        }
+        
+        // Active calories
+        var activeCal = vitalsSummary[.activeEnergy] ?? 0
+        if activeCal <= 0 {
+            // Check telemetry for activeEnergy
+            let energyRecs = telemetry.filter {
+                $0.normalizedType == "activeenergy" || $0.normalizedType == "calories"
+            }
+            if let chosenDevice = chosenDevice {
+                let devEnergy = energyRecs.filter { $0.sourceDevice == chosenDevice }
+                if isCumulativeStepDevice(device: chosenDevice, records: devEnergy) {
+                    activeCal = devEnergy.compactMap { $0.value }.max() ?? 0
+                } else {
+                    activeCal = devEnergy.compactMap { $0.value }.reduce(0, +)
+                }
+            }
+            if activeCal <= 0 {
+                // Estimation: 0.042 kcal per step
+                activeCal = Double(Int(Double(finalTotal) * 0.042))
+            }
+        }
+        
+        return DailyStepsResult(
+            totalSteps: finalTotal,
+            hourlyBuckets: buckets,
+            activeCalories: activeCal,
+            sourceDeviceUsed: chosenDevice
+        )
+    }
+    
+    private nonisolated static func isCumulativeStepDevice(device: String, records: [HealthTelemetryRecord]) -> Bool {
+        let lower = device.lowercased()
+        if lower.contains("zepp") || lower.contains("amazfit") || lower.contains("balance") ||
+           lower.contains("huawei") || lower.contains("harmony") || lower.contains("gt5") {
+            return true
+        }
+        let nonZero = records.compactMap { $0.value }.filter { $0 > 0 }
+        if nonZero.count >= 2 {
+            let isIncreasing = zip(nonZero, nonZero.dropFirst()).allSatisfy { $0 <= $1 }
+            let hasLargeValues = nonZero.contains { $0 >= 500 }
+            if isIncreasing && hasLargeValues {
+                return true
+            }
+        }
+        return false
     }
 }

@@ -150,3 +150,93 @@ Shared between iOS and macOS without UIKit or HealthKit dependencies:
   - `dayone_sleep_studio.png`: Clinical Sleep Studio with sleep score ring, bedtime/wake schedule, and stage breakdown.
   - `dayone_heart_rate_zones.png`: Heart & Vitals with resting HR callout, device source badge, and 4 intensity zones.
   - `dayone_health_trends.png`: 7-day metric evolution bar chart and statistics grid.
+
+---
+
+## 7. Phase 4.1: Production Telemetry Hardening, HealthKit Provider & Trends Vertical Stacking
+
+### 7.1 Sleep Clustering Hardening
+- **Strict Daytime Nap Validation**: Hardened `SleepClusteringEngine.swift` so that telemetry records flagged with `isNap` are only extracted as daytime naps if they fall within daytime bounds ($09:00 \le \text{hour} \le 21:00$) and duration is $< 3.5\text{ hours}$. Nocturnal sleep records (e.g. 05:37:00 sleep intervals) are never falsely classified as daytime naps, preserving authentic sleep boundaries (such as 06:04 bedtime to 13:27 wake-up).
+- **ZeppOS Sync Hardening**: In `ZeppOS/page/index.js`, nap calculations were bounded modulo 1440, restricted to daytime hours, and prevented from projecting end times past current device time.
+
+### 7.2 Authentic Data Integrity & Zero Demo Fallback
+- **Elimination of Synthetic Fallbacks**: For authenticated users, all synthetic demo data (fake "Amazfit Balance" / "Apple Watch" device seeds, hardcoded 23:10 $\implies$ 07:10 sleep sessions, and randomized trend generators) have been completely removed.
+- **Graceful Empty States**: If a metric has not been recorded by any connected device or sensor, clean dash indicators (`--`) are rendered instead of misleading mock numbers.
+- **Auth Session Synchronization**: `HealthDataService` observes `AuthService.shared.$sessionState`, automatically purging stale guest cache and triggering a real telemetry fetch upon authentication.
+
+### 7.3 Apple HealthKit Provider Integration
+- **`LocalHealthDataProvider` Protocol**: Defined in `DailyCore` as a `@MainActor` contract decoupling the core service from direct HealthKit dependencies.
+- **`HealthKitManager` Conformance**: Reads on-device steps, active energy, intraday heart rate samples, and sleep stage categories (`HKCategoryValueSleepAnalysis`), mapping them into canonical `HealthTelemetryRecord` items.
+- **Unified Merge**: `HealthDataService.loadDataForSelectedDate` concurrently queries Supabase and `HealthKitManager`, combining watch telemetry with on-device Apple Health records.
+
+### 7.4 Trends Vertical Layout Redesign
+- **Eliminated Redundant Tab Selector**: Removed the top horizontal metric selector pills (`Steps`, `Sleep`, `Heart Rate`, etc.) from `HealthTrendsView.swift` to simplify navigation and eliminate multi-level tab fatigue.
+- **Vertical Card Stacking**: All 6 metric evolution cards (`Steps`, `Sleep Duration`, `Heart Rate`, `Active Energy`, `HRV`, `Weight`) are stacked vertically in a continuous scroll view, each containing its 7-day capsule bar chart and statistics summary (Average, High, Low, Total/Latest).
+
+---
+
+## 8. Phase 4.2: Nap Deduplication & Cumulative vs. Interval Steps Engine
+
+### 8.1 Nap Deduplication & Merging Engine
+- **Telemetry Deduplication**: Added `HealthDataService.deduplicateTelemetry(_:)` to drop identical database rows inserted by repeated sync attempts or multi-device reporting with identical `(type, device, startTime, endTime, value)`.
+- **SleepClusteringEngine Defense-in-Depth**: In `SleepClusteringEngine.clusterSleep(...)`, Step 6 sorts candidate daytime naps and merges overlapping or duplicate nap sessions (near-duplicates within 15 minutes or sessions overlapping by $> 40\%$).
+- **Verification**: On September 11, duplicate 85-minute Zepp OS nap rows (`12:16` to `13:41 UTC`) cleanly collapse into exactly 1 nap of 85 minutes (1h 25m).
+
+### 8.2 Cumulative vs. Interval Steps Aggregator (`calculateDailySteps`)
+- **Root Cause of Distorted Steps**: Zepp OS smartwatches report `step.getCurrent()`, which is the **cumulative daily total** so far. The previous naive code summed every incoming record across the day ($3,107 + 3,254 + 7,986 = 14,347$), creating grossly inflated step counts.
+- **Cumulative Device Support** (Zepp OS, Amazfit, Huawei):
+  - Daily Total: $\max(\text{value})$ across the day (e.g. 7,986 on Sep 12).
+  - Hourly Buckets: Chronological step deltas ($\Delta = \text{val}_i - \text{val}_{i-1}$) allocated to the hour of observation. The sum of hourly buckets matches the daily total exactly ($3,254 + 4,732 = 7,986$).
+- **Interval Device Support** (Apple Watch, Apple Health):
+  - Daily Total: Deduplicates identical interval slices and computes $\sum \text{value}$.
+- **Multi-Device Resolution**:
+  - In "All Devices" view, smart wearables are prioritized over phones (never summing watch steps with phone steps).
+  - Explicit device filters (`Amazfit Balance`, `Apple Watch`, `Apple Health`) isolate the exact device selected.
+- **7-Day Trend Telemetry Ingestion**:
+  - `loadHistoricalTrends()` queries both `vitals` table and `health_telemetry` for the 7-day window. If the backend vitals aggregate row is absent or 0, daily steps and sleep duration are computed on-the-fly from telemetry.
+
+---
+
+## 9. Phase 4.3: Steps Discrepancy Elimination, Lifecycle Synchronization & "Health & Vitals" Rebranding
+
+### 9.1 Steps Discrepancy & Initial Load vs. Refresh Stabilization
+- **Root Cause Analysis**:
+  1. On launch, multiple concurrent tasks (`DailyApp.init`, `HealthDataService.init`, and `DashboardView.task`) triggered `loadDataForSelectedDate()`. Because HealthKit authorization was asynchronous and un-gated, `fetchLocalTelemetry` executed queries before authorization completed, returning empty (`[]`) local records.
+  2. The initial load therefore resolved with only Supabase's older/stale vitals snapshot (7,896) and saved this incomplete dataset into `telemetryCache`.
+  3. When navigating to the Health Hub, the cached 7,896 was served. Only upon pulling down to refresh (`forceRefresh: true`) was HealthKit queried post-authorization, revealing the full, true step count (8,878).
+- **Architectural Resolution**:
+  - **Eager Authorization Gating (`ensureAuthorized`)**: Added `ensureAuthorized() async -> Bool` in `HealthKitManager`. Any query to `fetchLocalTelemetry` or `fetchLocalSleepStages` unconditionally awaits `ensureAuthorized()` before issuing HealthKit queries, guaranteeing that HealthKit is never queried prematurely.
+  - **In-Flight Load Task Coalescing (`activeLoadTask`)**: In `HealthDataService`, concurrent calls to `loadDataForSelectedDate()` share and await the same active `Task<Void, Never>`, eliminating startup race conditions.
+  - **Defensive Cache Integrity Guard**: Added validation preventing `telemetryCache` from serving a zero/missing steps state for the current day when a local data provider is attached.
+  - **Authoritative Max Step Resolution**: In `calculateDailySteps`, "All Devices" view computes `finalTotal = max(chosenTotal, vitalsInt)`, ensuring live deduplicated sensor steps (e.g. 8,878) are never clamped or truncated back to an older backend snapshot (7,896).
+  - **Hourly Deduplicated HealthKit Queries**: HealthKit steps are retrieved via `HKStatisticsCollectionQuery` with 1-hour intervals, preserving exact hourly cadence.
+  - **Automated Test Coverage**: Verified in `HealthServiceTests.swift` via `testStepResolutionBetweenTelemetryAndVitalsSummary` (all 24 tests green).
+
+### 9.2 Rebranding: "Health & Telemetry" $\implies$ "Health & Vitals"
+- Updated user-facing headers in `DashboardView` (card title) and `HealthMainView` (navigation header) from `"Health & Telemetry"` to `"Health & Vitals"`.
+
+---
+
+## 10. Phase 4.4: Minimalist Top Bar, Native Device Selector Menu & Universal Back Navigation
+
+### 10.1 Streamlined Health & Vitals Top Bar Architecture
+- **Native Device Selector Menu**: Replaced the cluttered horizontal device filter pills with a discrete 36x36 glass circular button in the top right. Tapping displays a native iOS `Menu` with checkmarks and complete device names (`All Devices`, `Amazfit Balance`, `Apple Watch`, `Apple Health`, etc.).
+- **Centered Date Navigator**: Moved the date selector (`< Date >`) to the top bar, optically centered between the left back button and right device menu button. Removed the redundant `"HEALTH & VITALS / Biometrics"` banner text to maximize vertical screen efficiency.
+- **Top-Left Universal Back Navigation**: Added a 36x36 glass back button on the top-left enabling instant, fluid spring navigation back to the main Dashboard view.
+
+### 10.2 Streamlined Bottom Floating Capsule Navigation
+- Configured the bottom floating capsule (`FloatingGlassCapsule`) to host the core daily tabs: `Dashboard`, `News`, `Health`, and `Habits`.
+
+### 10.3 Multi-Device Biometrics Pipeline Synthesis (Resting HR, HRV, SpO2, Respiratory Rate, Weight, Hydration)
+- **Root Cause Analysis**:
+  1. `HealthKitManager` previously only queried Steps, Active Energy, Intraday HR, and single-day Resting HR. It lacked queries for HRV (`heartRateVariabilitySDNN`), Blood Oxygen (`oxygenSaturation`), Respiratory Rate (`respiratoryRate`), Body Mass (`bodyMass`), and Body Fat (`bodyFatPercentage`). Furthermore, strict midnight start-of-day predicates missed nocturnal resting metrics recorded before 00:00.
+  2. In `HealthDataService`, `currentVitals` was populated *strictly* from the Supabase `vitals` table. High-frequency sensor records sent by smartwatches (e.g. Amazfit Balance ZeppOS, WearOS, HarmonyOS) into `health_telemetry` were completely ignored for non-step/non-sleep vitals tiles.
+- **Architectural Resolution**:
+  - **HealthKit Biometric Expansion**: Added queries in `HealthKitManager.fetchLocalTelemetry` for `.heartRateVariabilitySDNN`, `.oxygenSaturation`, `.respiratoryRate`, `.bodyMass`, and `.bodyFatPercentage` across a clinical nocturnal window (18:00 D-1 to 24:00 D).
+  - **Telemetry Vitals Synthesis**: In `HealthDataService.processDataForCurrentDate()`, chronological telemetry records are mapped via `HealthMetricType.from(rawString:)` to synthesize and enrich `currentVitals`. Live watch readings (SpO2, HRV, Resting HR, Respiratory Rate, Stress, PAI) automatically populate `vitalsMap` and `VitalMetricTile` instances.
+  - **Habits Hydration Integration**: Connected `HabitsService.shared.totalWaterMlToday` to populate `currentVitals[.hydration]` dynamically when logged.
+  - **Typography & Value Formatting**: Updated `VitalMetricTile` to cleanly format HRV (ms) and Blood Oxygen (%) as rounded integers.
+
+
+
+

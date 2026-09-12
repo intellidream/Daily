@@ -82,6 +82,20 @@ public enum HabitDateParser {
         let tString = raw.replacingOccurrences(of: " ", with: "T")
         if let d = isoFractional.date(from: tString) { return d }
         if let d = isoStandard.date(from: tString) { return d }
+        
+        // Truncate microseconds (e.g. .123456) to 3 digits for ISO8601 parsing
+        if let dotRange = tString.range(of: ".") {
+            let afterDot = tString[dotRange.upperBound...]
+            if let tzIndex = afterDot.firstIndex(where: { $0 == "+" || $0 == "-" || $0 == "Z" }) {
+                let fracDigits = afterDot[..<tzIndex]
+                let tzPart = afterDot[tzIndex...]
+                let truncatedFrac = fracDigits.prefix(3)
+                let paddedFrac = truncatedFrac.padding(toLength: 3, withPad: "0", startingAt: 0)
+                let normalized = String(tString[..<dotRange.upperBound]) + paddedFrac + tzPart
+                if let d = isoFractional.date(from: normalized) { return d }
+            }
+        }
+        
         if let d = posixWithMillis.date(from: tString) { return d }
         if let d = posixStandard.date(from: tString) { return d }
         if let d = ymdFormatter.date(from: raw) { return d }
@@ -763,6 +777,7 @@ public struct SmokesFinancialMetrics: Sendable {
     public var cigsAvoided: Int
     public var daysTracked: Int
     public var costPerCig: Double
+    public var currency: String
     public var lastSmokeDate: Date?
     public var timeSinceLastSmoke: TimeInterval?
     
@@ -771,6 +786,7 @@ public struct SmokesFinancialMetrics: Sendable {
         cigsAvoided: Int = 0,
         daysTracked: Int = 0,
         costPerCig: Double = 1.325,
+        currency: String = "RON",
         lastSmokeDate: Date? = nil,
         timeSinceLastSmoke: TimeInterval? = nil
     ) {
@@ -778,6 +794,7 @@ public struct SmokesFinancialMetrics: Sendable {
         self.cigsAvoided = cigsAvoided
         self.daysTracked = daysTracked
         self.costPerCig = costPerCig
+        self.currency = currency
         self.lastSmokeDate = lastSmokeDate
         self.timeSinceLastSmoke = timeSinceLastSmoke
     }
@@ -787,7 +804,7 @@ public struct SmokesFinancialMetrics: Sendable {
     }
     
     public var moneySavedFormatted: String {
-        String(format: "+%.2f RON", moneySaved)
+        String(format: "+%.2f %@", moneySaved, currency)
     }
     
     public var cigarettesAvoidedCount: Int {

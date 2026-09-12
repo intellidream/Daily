@@ -112,9 +112,25 @@ public struct HabitHistoryAndHeatmapView: View {
             if habitType == .smokes, let metrics = financialMetrics {
                 GlassCard(cornerRadius: 18, padding: 16) {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("FINANCIAL & RECOVERY SAVINGS")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(ThemeColors.fgMutedDark)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("FINANCIAL & RECOVERY SAVINGS")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
+                                Text("Total Milestones")
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                            }
+                            Spacer()
+                            HStack(spacing: 4) {
+                                Image(systemName: "calendar.badge.clock")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(Color(hex: "#00FFB2"))
+                                Text("\(metrics.daysTracked) days tracked")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
+                            }
+                        }
                         
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -122,22 +138,28 @@ public struct HabitHistoryAndHeatmapView: View {
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundColor(ThemeColors.fgMutedDark)
                                 Text(metrics.moneySavedFormatted)
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                                    .font(.system(size: 16, weight: .bold, design: .rounded))
                                     .foregroundColor(Color(hex: "#00FFB2"))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.65)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             
                             Divider()
                                 .frame(height: 32)
                                 .background(Color.white.opacity(0.15))
                             
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("CIGARETTES AVOIDED")
+                                Text("CIGS AVOIDED")
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundColor(ThemeColors.fgMutedDark)
                                 Text("\(metrics.cigarettesAvoidedCount)")
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                                    .font(.system(size: 16, weight: .bold, design: .rounded))
                                     .foregroundColor(ThemeColors.accentCyan)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.65)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             
                             Divider()
                                 .frame(height: 32)
@@ -148,12 +170,32 @@ public struct HabitHistoryAndHeatmapView: View {
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundColor(ThemeColors.fgMutedDark)
                                 Text(metrics.lifeRegainedFormatted)
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                                    .font(.system(size: 16, weight: .bold, design: .rounded))
                                     .foregroundColor(Color(hex: "#FFB800"))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.65)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    Color(hex: "#00FFB2").opacity(0.80),
+                                    Color(hex: "#00E5FF").opacity(0.50),
+                                    Color(hex: "#FFB800").opacity(0.60)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.8
+                        )
+                }
+                .shadow(color: Color(hex: "#00FFB2").opacity(0.12), radius: 10, x: 0, y: 4)
             }
             
             // --- 4-Month (120-Day) Consistency Heatmap ---

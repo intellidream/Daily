@@ -14,29 +14,35 @@ public enum HealthSubTab: String, CaseIterable, Identifiable {
 public struct HealthMainView: View {
     @ObservedObject private var healthService = HealthDataService.shared
     @State private var activeSubTab: HealthSubTab = .overview
+    public var onNavigateBack: (() -> Void)? = nil
     
-    public init() {}
+    public init(onNavigateBack: (() -> Void)? = nil) {
+        self.onNavigateBack = onNavigateBack
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-healthSubTabSleep") {
+            self._activeSubTab = State(initialValue: .sleep)
+        } else if args.contains("-healthSubTabTrends") {
+            self._activeSubTab = State(initialValue: .trends)
+        } else if args.contains("-healthSubTabVitals") {
+            self._activeSubTab = State(initialValue: .vitals)
+        }
+        if args.contains("-healthPrevDay") {
+            healthService.prevDay()
+        }
+    }
     
     public var body: some View {
         LiquidGlassBackground {
             VStack(spacing: 0) {
-                // Top Header Bar
+                // Top Header Bar: Back Button, Centered Date Navigator & Device Selector Menu
                 headerBar
                     .padding(.horizontal, 20)
                     .padding(.top, 14)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 12)
                 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 16) {
-                        // Day Navigator
-                        dayNavigatorBar
-                        
-                        // Device Origin Filter Bar
-                        if !healthService.availableDevices.isEmpty {
-                            deviceFilterBar
-                        }
-                        
-                        // Sub-Tab Switcher
+                        // Sub-Tab Switcher (Overview, Sleep Studio, Heart & Vitals, Trends)
                         subTabSwitcher
                         
                         // Main Content Based on Active Sub-Tab
@@ -57,6 +63,9 @@ public struct HealthMainView: View {
                 .refreshable {
                     await healthService.loadDataForSelectedDate(forceRefresh: true)
                 }
+                .task {
+                    await healthService.loadDataForSelectedDate()
+                }
             }
         }
     }
@@ -64,44 +73,103 @@ public struct HealthMainView: View {
     // MARK: - Header Bar
     
     private var headerBar: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("HEALTH & TELEMETRY")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(ThemeColors.accentCyan)
-                Text("Biometrics")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-            }
-            
-            Spacer()
-        }
-    }
-    
-    // MARK: - Day Navigator Bar
-    
-    private var dayNavigatorBar: some View {
-        HStack {
-            // Previous Day Button
+        HStack(alignment: .center, spacing: 10) {
+            // Back Button
             Button {
-                healthService.prevDay()
+                onNavigateBack?()
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white)
-                    .frame(width: 32, height: 32)
-                    .background(Circle().fill(Color.white.opacity(0.08)))
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle().fill(Color.white.opacity(0.08))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    )
             }
             .buttonStyle(.plain)
             
             Spacer()
             
-            // Date Title
-            Text(formattedDateTitle)
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
+            // Centered Date Navigator
+            dayNavigatorBar
             
             Spacer()
+            
+            // Top Right Device/Source Selector Button with Dropdown Menu
+            deviceSelectorMenu
+        }
+    }
+    
+    // MARK: - Device Selector Menu
+    
+    private var deviceSelectorMenu: some View {
+        Menu {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                    healthService.setDeviceFilter(nil as DeviceSource?)
+                }
+            } label: {
+                HStack {
+                    Text("All Devices")
+                    if healthService.selectedDeviceSource == nil {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+            
+            Divider()
+            
+            ForEach(healthService.availableSources) { source in
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        healthService.setDeviceFilter(source)
+                    }
+                } label: {
+                    HStack {
+                        Label(source.displayName, systemImage: source.systemImage)
+                        if healthService.selectedDeviceSource == source {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            let isFiltered = healthService.selectedDeviceSource != nil
+            let iconName = healthService.selectedDeviceSource?.systemImage ?? "applewatch.radiowaves.left.and.right"
+            Image(systemName: iconName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(isFiltered ? ThemeColors.accentCyan : .white.opacity(0.85))
+                .frame(width: 36, height: 36)
+                .background(
+                    Circle().fill(isFiltered ? ThemeColors.accentCyan.opacity(0.2) : Color.white.opacity(0.08))
+                        .overlay(Circle().strokeBorder(isFiltered ? ThemeColors.accentCyan.opacity(0.6) : Color.white.opacity(0.12), lineWidth: 1))
+                )
+                .shadow(color: isFiltered ? ThemeColors.accentCyan.opacity(0.3) : .clear, radius: 4)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Day Navigator Bar
+    
+    private var dayNavigatorBar: some View {
+        HStack(spacing: 8) {
+            // Previous Day Button
+            Button {
+                healthService.prevDay()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(Color.white.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
+            
+            // Date Title
+            Text(formattedDateTitle)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
             
             // Jump to Today or Next Day Button
             let isToday = Calendar.current.isDateInToday(healthService.selectedDate)
@@ -110,11 +178,11 @@ public struct HealthMainView: View {
                     healthService.jumpToToday()
                 } label: {
                     Text("Today")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundColor(ThemeColors.accentCyan)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(ThemeColors.accentCyan.opacity(0.15)))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(ThemeColors.accentCyan.opacity(0.18)))
                 }
                 .buttonStyle(.plain)
                 
@@ -122,21 +190,21 @@ public struct HealthMainView: View {
                     healthService.nextDay()
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.white)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 26, height: 26)
                         .background(Circle().fill(Color.white.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
             } else {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.white.opacity(0.2))
-                    .frame(width: 32, height: 32)
+                    .frame(width: 26, height: 26)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
         .background(
             Capsule()
                 .fill(Color.white.opacity(0.06))
@@ -159,64 +227,6 @@ public struct HealthMainView: View {
         let f = DateFormatter()
         f.dateFormat = format
         return f.string(from: date)
-    }
-    
-    // MARK: - Device Filter Bar
-    
-    private var deviceFilterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                // "All Devices" pill
-                let isAllSelected = healthService.selectedDeviceSource == nil
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        healthService.setDeviceFilter(nil as DeviceSource?)
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "circle.grid.cross.fill")
-                            .font(.system(size: 10))
-                        Text("All Devices")
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .foregroundColor(isAllSelected ? .white : .white.opacity(0.6))
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 12)
-                    .background(
-                        Capsule()
-                            .fill(isAllSelected ? ThemeColors.accentCyan.opacity(0.6) : Color.white.opacity(0.06))
-                            .overlay(Capsule().strokeBorder(isAllSelected ? ThemeColors.accentCyan : Color.white.opacity(0.1), lineWidth: 1))
-                    )
-                }
-                .buttonStyle(.plain)
-                
-                // Device-specific pills
-                ForEach(healthService.availableSources) { source in
-                    let isSelected = healthService.selectedDeviceSource == source
-                    Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                            healthService.setDeviceFilter(source)
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: source.systemImage)
-                                .font(.system(size: 10))
-                            Text(source.displayName)
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .foregroundColor(isSelected ? .white : .white.opacity(0.6))
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 12)
-                        .background(
-                            Capsule()
-                                .fill(isSelected ? ThemeColors.accentCyan.opacity(0.6) : Color.white.opacity(0.06))
-                                .overlay(Capsule().strokeBorder(isSelected ? ThemeColors.accentCyan : Color.white.opacity(0.1), lineWidth: 1))
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
     }
     
     // MARK: - Sub-Tab Switcher

@@ -47,17 +47,24 @@ public final class SavedArticlesService: ObservableObject {
     }
     
     private func toggle(article: NewsArticle, type: SavedArticleType) {
-        let currentUserId = AuthService.shared.currentUser?.id ?? "guest"
+        let currentUserId = AuthService.shared.currentUser?.id
+            ?? GroupDefaults.shared.userDefaults.string(forKey: "supabase_user_id")
+            ?? "guest"
         let deterministicId = generateDeterministicGuid(userId: currentUserId, url: article.link, type: type)
         
-        if let idx = allSavedArticles.firstIndex(where: { $0.articleUrl == article.link && $0.articleType == type.rawValue }) {
+        if let idx = allSavedArticles.firstIndex(where: {
+            ($0.id.lowercased() == deterministicId.lowercased() || $0.articleUrl == article.link) &&
+            $0.articleType == type.rawValue
+        }) {
             var item = allSavedArticles[idx]
             item.isDeleted.toggle()
             item.updatedAt = Date()
             allSavedArticles[idx] = item
             
-            Task {
-                await pushSavedArticleToSupabase(item)
+            if currentUserId != "guest" {
+                Task {
+                    await pushSavedArticleToSupabase(item)
+                }
             }
         } else {
             let newItem = SavedArticle(
@@ -78,8 +85,10 @@ public final class SavedArticlesService: ObservableObject {
             )
             allSavedArticles.append(newItem)
             
-            Task {
-                await pushSavedArticleToSupabase(newItem)
+            if currentUserId != "guest" {
+                Task {
+                    await pushSavedArticleToSupabase(newItem)
+                }
             }
         }
     }
@@ -87,7 +96,7 @@ public final class SavedArticlesService: ObservableObject {
     // MARK: - Deterministic GUID (WinUI Parity)
     
     public func generateDeterministicGuid(userId: String, url: String, type: SavedArticleType) -> String {
-        let input = "\(userId):\(url):\(type.rawValue)"
+        let input = "\(userId.lowercased()):\(url):\(type.rawValue)"
         let digest = Insecure.MD5.hash(data: Data(input.utf8))
         let bytes = Array(digest)
         // Convert 16 bytes MD5 hash to UUID string
@@ -97,7 +106,7 @@ public final class SavedArticlesService: ObservableObject {
             bytes[8], bytes[9], bytes[10], bytes[11],
             bytes[12], bytes[13], bytes[14], bytes[15]
         )
-        return UUID(uuid: uuidTuple).uuidString
+        return UUID(uuid: uuidTuple).uuidString.lowercased()
     }
     
     // MARK: - Filtering & Persistence
@@ -134,7 +143,15 @@ public final class SavedArticlesService: ObservableObject {
     // MARK: - Supabase Synchronization
     
     public func syncWithSupabase() async {
-        guard let user = AuthService.shared.currentUser else { return }
+        let session = try? await SupabaseService.shared.client.auth.session
+        let userId = session?.user.id.uuidString.lowercased()
+            ?? AuthService.shared.currentUser?.id
+            ?? GroupDefaults.shared.userDefaults.string(forKey: "supabase_user_id")
+        
+        guard let effectiveUserId = userId, effectiveUserId != "guest" else {
+            print("[SavedArticlesService] No authenticated user session, skipping Supabase sync.")
+            return
+        }
         isSyncing = true
         defer { isSyncing = false }
         
@@ -143,19 +160,23 @@ public final class SavedArticlesService: ObservableObject {
             let res = try await client
                 .from("rss_saved_articles")
                 .select()
-                .eq("user_id", value: user.id)
+                .eq("user_id", value: effectiveUserId)
                 .execute()
             
             let response = try JSONDecoder().decode([SavedArticle].self, from: res.data)
+            print("[SavedArticlesService] Successfully synced \(response.count) saved articles from Supabase.")
             
             // Merge remote items with local items
             var merged = allSavedArticles
             for remote in response {
-                if let idx = merged.firstIndex(where: { $0.id == remote.id }) {
-                    // Update if remote is newer
-                    if let remoteUpdated = remote.updatedAt,
-                       let localUpdated = merged[idx].updatedAt,
-                       remoteUpdated > localUpdated {
+                if let idx = merged.firstIndex(where: {
+                    $0.id.lowercased() == remote.id.lowercased() ||
+                    ($0.articleUrl == remote.articleUrl && $0.articleType == remote.articleType)
+                }) {
+                    let local = merged[idx]
+                    let remoteTime = remote.updatedAt ?? remote.createdAt
+                    let localTime = local.updatedAt ?? local.createdAt
+                    if remoteTime >= localTime {
                         merged[idx] = remote
                     }
                 } else {
@@ -170,13 +191,14 @@ public final class SavedArticlesService: ObservableObject {
     }
     
     private func pushSavedArticleToSupabase(_ article: SavedArticle) async {
-        guard AuthService.shared.isAuthenticated else { return }
+        guard article.userId != "guest" else { return }
         do {
             let client = SupabaseService.shared.client
             try await client
                 .from("rss_saved_articles")
                 .upsert(article)
                 .execute()
+            print("[SavedArticlesService] Successfully upserted article \(article.id) to Supabase.")
         } catch {
             print("[SavedArticlesService] Failed to upsert article to Supabase: \(error)")
         }

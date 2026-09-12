@@ -8,8 +8,11 @@ public struct WeatherDetailView: View {
     @ObservedObject private var settingsService = SettingsService.shared
 
     @State private var showingSearchSheet: Bool = false
+    public var onNavigateBack: (() -> Void)? = nil
 
-    public init() {}
+    public init(onNavigateBack: (() -> Void)? = nil) {
+        self.onNavigateBack = onNavigateBack
+    }
 
     private var unitSymbol: String {
         settingsService.settings.weatherUnitSystem.temperatureSymbol
@@ -85,11 +88,30 @@ public struct WeatherDetailView: View {
     // MARK: - Top Location Bar
 
     private var topLocationBar: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+        HStack(alignment: .center, spacing: 10) {
+            // Left Back Button
+            Button {
+                onNavigateBack?()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle().fill(Color.white.opacity(0.08))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    )
+            }
+            .buttonStyle(.plain)
+            .frame(width: 80, alignment: .leading)
+
+            Spacer()
+
+            // Centered Location & Date
+            VStack(spacing: 2) {
+                HStack(spacing: 6) {
                     Text(weatherService.currentLocationName)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
@@ -102,8 +124,8 @@ public struct WeatherDetailView: View {
                             .font(.system(size: 9, weight: .bold, design: .rounded))
                     }
                     .foregroundColor(ThemeColors.accentCyan)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
                     .background {
                         Capsule()
                             .fill(ThemeColors.accentCyan.opacity(0.18))
@@ -111,14 +133,14 @@ public struct WeatherDetailView: View {
                 }
 
                 Text(Date().formatted(date: .abbreviated, time: .omitted))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white.opacity(0.6))
             }
 
             Spacer()
 
-            // Quick Actions
-            HStack(spacing: 10) {
+            // Right Quick Actions
+            HStack(spacing: 8) {
                 // Auto-location restore button (if manual)
                 if !weatherService.isAutoLocation {
                     Button {
@@ -130,8 +152,12 @@ public struct WeatherDetailView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(ThemeColors.accentCyan)
                             .frame(width: 36, height: 36)
-                            .background(Circle().fill(Color.white.opacity(0.08)))
+                            .background(
+                                Circle().fill(Color.white.opacity(0.08))
+                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                            )
                     }
+                    .buttonStyle(.plain)
                 }
 
                 // City Search Button
@@ -142,9 +168,14 @@ public struct WeatherDetailView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(width: 36, height: 36)
-                        .background(Circle().fill(Color.white.opacity(0.08)))
+                        .background(
+                            Circle().fill(Color.white.opacity(0.08))
+                                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                        )
                 }
+                .buttonStyle(.plain)
             }
+            .frame(width: 80, alignment: .trailing)
         }
     }
 

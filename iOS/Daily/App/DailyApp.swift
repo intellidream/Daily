@@ -5,6 +5,16 @@ import DailyCore
 struct DailyApp: App {
     @ObservedObject private var settingsService = SettingsService.shared
     
+    public init() {
+        // Wire native Apple HealthKit provider into HealthDataService
+        HealthDataService.shared.localDataProvider = HealthKitManager.shared
+        
+        // Eagerly initiate HealthKit authorization on launch
+        Task {
+            _ = await HealthKitManager.shared.ensureAuthorized()
+        }
+    }
+    
     var body: some Scene {
         WindowGroup {
             RootView()

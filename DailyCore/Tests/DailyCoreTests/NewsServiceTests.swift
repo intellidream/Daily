@@ -150,6 +150,44 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertNotEqual(guid1, guidFav, "Different SavedArticleTypes must generate distinct GUIDs")
     }
     
+    func testSavedArticlePostgresSerialization() throws {
+        let json = """
+        [
+            {
+                "id": "c1f77d33-40fa-40c2-9e87-0b1a03f4ce8e",
+                "user_id": "99fdb600-7c28-406b-bc54-5aa8c0cfdf2b",
+                "article_url": "https://theverge.com/ai/article1",
+                "title": "Future of Generative Models",
+                "image_url": "https://theverge.com/image.jpg",
+                "description": "Comprehensive analysis",
+                "author": "Tech Staff",
+                "publication_name": "The Verge",
+                "publication_icon_url": "https://theverge.com/icon.png",
+                "article_type": "ReadLater",
+                "article_date": "2026-09-12T20:15:30.123456+00:00",
+                "created_at": "2026-09-12T20:15:30.123456+00:00",
+                "updated_at": "2026-09-12T20:16:00.654321+00:00",
+                "is_deleted": false
+            }
+        ]
+        """
+        
+        let articles = try JSONDecoder().decode([SavedArticle].self, from: Data(json.utf8))
+        XCTAssertEqual(articles.count, 1)
+        let first = articles[0]
+        XCTAssertEqual(first.id, "c1f77d33-40fa-40c2-9e87-0b1a03f4ce8e")
+        XCTAssertEqual(first.title, "Future of Generative Models")
+        XCTAssertEqual(first.articleType, "ReadLater")
+        XCTAssertFalse(first.isDeleted)
+        XCTAssertNotNil(first.updatedAt)
+        
+        // Test round-trip encoding
+        let encodedData = try JSONEncoder().encode(articles)
+        let roundTripped = try JSONDecoder().decode([SavedArticle].self, from: encodedData)
+        XCTAssertEqual(roundTripped.count, 1)
+        XCTAssertEqual(roundTripped[0].id, first.id)
+    }
+    
     // MARK: - 7. Smart Recommendations Round-Robin Fairness
     
     func testSmartRecommendations() {

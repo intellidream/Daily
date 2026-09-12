@@ -187,4 +187,136 @@ struct HealthServiceTests {
         #expect(HeartRateZone.zone(for: 135) == .cardio)
         #expect(HeartRateZone.zone(for: 165) == .peak)
     }
+    
+    @Test func testNapDeduplicationAndMerging() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let napStart = cal.date(byAdding: .hour, value: 14, to: today)!
+        let napEnd = cal.date(byAdding: .minute, value: 85, to: napStart)!
+        
+        // Two duplicate records from Zepp OS sync
+        let dupRecords = [
+            HealthTelemetryRecord(id: "r1", userId: "u", type: "sleep_nap", value: 85, unit: "minutes", startTime: napStart, endTime: napEnd, sourceDevice: "Zepp OS Watch"),
+            HealthTelemetryRecord(id: "r2", userId: "u", type: "sleep_nap", value: 85, unit: "minutes", startTime: napStart, endTime: napEnd, sourceDevice: "Zepp OS Watch")
+        ]
+        
+        // 1. Raw deduplicateTelemetry test
+        let deduped = HealthDataService.deduplicateTelemetry(dupRecords)
+        #expect(deduped.count == 1)
+        
+        // 2. SleepClusteringEngine nap deduplication test
+        let result = SleepClusteringEngine.clusterSleep(targetDate: today, telemetry: dupRecords)
+        #expect(result.naps.count == 1)
+        #expect(result.naps[0].durationSeconds == 85 * 60)
+        #expect(result.naps[0].sourceDevice == "Zepp OS Watch")
+    }
+    
+    @Test func testCumulativeStepCalculation() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let t1 = cal.date(byAdding: .hour, value: 11, to: today)!.addingTimeInterval(16 * 60) // 11:16
+        let t2 = cal.date(byAdding: .hour, value: 11, to: today)!.addingTimeInterval(58 * 60) // 11:58
+        let t3 = cal.date(byAdding: .hour, value: 16, to: today)!.addingTimeInterval(21 * 60) // 16:21
+        
+        // Zepp OS reports cumulative snapshots: 3107, 3254, 7986
+        let zeppRecords = [
+            HealthTelemetryRecord(userId: "u", type: "steps", value: 3107, unit: "count", startTime: t1, endTime: t1, sourceDevice: "Zepp OS Watch"),
+            HealthTelemetryRecord(userId: "u", type: "steps", value: 3254, unit: "count", startTime: t2, endTime: t2, sourceDevice: "Zepp OS Watch"),
+            HealthTelemetryRecord(userId: "u", type: "steps", value: 7986, unit: "count", startTime: t3, endTime: t3, sourceDevice: "Zepp OS Watch")
+        ]
+        
+        let result = HealthDataService.calculateDailySteps(
+            targetDate: today,
+            telemetry: zeppRecords,
+            calendar: cal
+        )
+        
+        // Total steps must be exactly the max cumulative value (7986), NEVER the naive sum (14347)
+        #expect(result.totalSteps == 7986)
+        
+        // Hourly buckets sum must match total steps exactly
+        let hourlySum = result.hourlyBuckets.map(\.steps).reduce(0, +)
+        #expect(hourlySum == 7986)
+        
+        // Hour 11 should have 3254 steps, Hour 16 should have 4732 steps (7986 - 3254)
+        #expect(result.hourlyBuckets[11].steps == 3254)
+        #expect(result.hourlyBuckets[16].steps == 4732)
+    }
+    
+    @Test func testMultiDeviceStepResolution() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let tWatch = cal.date(byAdding: .hour, value: 16, to: today)!
+        let tPhone = cal.date(byAdding: .hour, value: 15, to: today)!
+        
+        let watchRecord = HealthTelemetryRecord(userId: "u", type: "steps", value: 7986, unit: "count", startTime: tWatch, endTime: tWatch, sourceDevice: "Amazfit Balance")
+        let phoneRecord = HealthTelemetryRecord(userId: "u", type: "steps", value: 2400, unit: "count", startTime: tPhone, endTime: tPhone.addingTimeInterval(3600), sourceDevice: "Apple Health")
+        
+        let combined = [watchRecord, phoneRecord]
+        
+        // "All Devices": should pick the primary wearable (Amazfit Balance with 7986 steps) rather than summing (10386)
+        let allDevicesResult = HealthDataService.calculateDailySteps(
+            targetDate: today,
+            telemetry: combined,
+            calendar: cal
+        )
+        #expect(allDevicesResult.totalSteps == 7986)
+        #expect(allDevicesResult.sourceDeviceUsed == "Amazfit Balance")
+        
+        // Explicit filter for Apple Health:
+        let healthKitResult = HealthDataService.calculateDailySteps(
+            targetDate: today,
+            telemetry: combined,
+            preferredSource: .healthKit,
+            calendar: cal
+        )
+        #expect(healthKitResult.totalSteps == 2400)
+    }
+    
+    @Test func testStepResolutionBetweenTelemetryAndVitalsSummary() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let tPhone = cal.date(byAdding: .hour, value: 15, to: today)!
+        
+        // Scenario A: Live HealthKit telemetry reports 8878 steps, while earlier backend vitals has 7896.
+        // In "All Devices" view: Authoritative live steps (8878) must not be truncated back to stale 7896.
+        let liveTelemetry = [
+            HealthTelemetryRecord(userId: "u", type: "steps", value: 8878, unit: "count", startTime: tPhone, endTime: tPhone.addingTimeInterval(3600), sourceDevice: "Apple Health")
+        ]
+        let staleVitalsSummary: [HealthMetricType: Double] = [.steps: 7896]
+        
+        let liveResult = HealthDataService.calculateDailySteps(
+            targetDate: today,
+            telemetry: liveTelemetry,
+            vitalsSummary: staleVitalsSummary,
+            calendar: cal
+        )
+        #expect(liveResult.totalSteps == 8878)
+        
+        // Scenario B: Smartwatch vitals summary has 7896 steps, but phone was only carried for 2400 steps.
+        // In "All Devices" view: Smartwatch count (7896) is preserved over partial phone count (2400).
+        let partialPhoneTelemetry = [
+            HealthTelemetryRecord(userId: "u", type: "steps", value: 2400, unit: "count", startTime: tPhone, endTime: tPhone.addingTimeInterval(3600), sourceDevice: "Apple Health")
+        ]
+        let smartwatchVitalsSummary: [HealthMetricType: Double] = [.steps: 7896]
+        
+        let smartwatchResult = HealthDataService.calculateDailySteps(
+            targetDate: today,
+            telemetry: partialPhoneTelemetry,
+            vitalsSummary: smartwatchVitalsSummary,
+            calendar: cal
+        )
+        #expect(smartwatchResult.totalSteps == 7896)
+        
+        // Scenario C: Explicit device filter for Apple Health (8878)
+        let healthKitFilterResult = HealthDataService.calculateDailySteps(
+            targetDate: today,
+            telemetry: liveTelemetry,
+            vitalsSummary: staleVitalsSummary,
+            preferredSource: .healthKit,
+            calendar: cal
+        )
+        #expect(healthKitFilterResult.totalSteps == 8878)
+    }
 }
+

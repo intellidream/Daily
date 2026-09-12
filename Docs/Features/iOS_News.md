@@ -153,3 +153,51 @@ Shared between iOS and upcoming macOS apps without any UIKit dependencies:
    - Built and code-signed with iOS Team Provisioning Profile.
    - Successfully deployed via `xcrun devicectl device install app` to `62990754-1EE9-5A95-A45E-F4A69DA6E591`.
    - Launched and running live via `xcrun devicectl device process launch`.
+
+---
+
+## 4. Minimalist Top Search Header, Category Dropdown Menu & Article Sharing
+
+### 4.1 Expanding Search Header & Clean Navigation
+- **Unified Search Header**: Removed the static header title and explicit Refresh button. Embedded an expanding `TextField` search bar directly in the top header between the Back button and the right actions. When focused, the search expands smoothly with spring animation, displaying a Cancel button to dismiss.
+- **Native Pull-to-Refresh**: Retained smooth iOS native pull-to-refresh (`.refreshable`) on the feed scroll view, eliminating UI clutter.
+- **Category Selector Menu**: Replaced horizontal category pill carousels with a discrete 36x36 glass circle button in the top right. Tapping opens a native iOS `Menu` displaying category icons, titles, and checkmarks for the active selection (`Local`, `Tech`, `Markets`, `World`, `General`).
+- **Manage Feeds Action**: Positioned the feed management button (`slider.horizontal.3`) immediately adjacent to the category menu.
+
+### 4.2 Distraction-Free Article Reader Sharing
+- **Native ShareLink**: Added a 36x36 glass circular share button (`square.and.arrow.up`) in `NewsReaderView` toolbar. Tapping opens the native iOS Share Sheet to easily share the article's web URL and headline across Messages, AirDrop, Notes, and third-party apps.
+
+### 4.3 Floating Navigation Capsule
+- Added `News` back to `FloatingGlassCapsule.primaryTabs` (`.dashboard, .news, .health, .habits`), allowing instant one-tap switching between the four primary daily experiences.
+
+---
+
+## 5. Favorites & Read Later Synchronization, Simplified Reader Toolbar & Body Header Cleanup
+
+### 5.1 Resilient Postgres ISO8601 Date Serialization
+- **Supabase Timestamp Compatibility**: Implemented custom `init(from decoder: Decoder)` and `encode(to encoder: Encoder)` for `SavedArticle` and `RssSubscription`.
+- **Microsecond Normalization**: Extended `HabitDateParser` to automatically truncate Postgres 6-digit microsecond timestamps (`.123456+00:00`) down to 3-digit ISO8601 milliseconds, eliminating decoding failures on date deserialization.
+- **Eager Session Hydration Hooks**: Added automatic synchronization hooks in `AuthService` (`checkExistingSession`, Google Sign-In, and Apple Sign-In) and inside `NewsFeedView.swift` (`.task { await savedService.syncWithSupabase() }`), ensuring saved articles and favorites are immediately populated on launch or tab appearance.
+- **Deterministic Lowercase UUIDs**: Standardized deterministic MD5 GUIDs to lowercase UUID strings to guarantee 100% parity across WinUI, iOS, and Postgres UUID constraints.
+
+### 5.2 Distraction-Free Reader Toolbar Redesign
+- **Prominent Primary Actions**: Retained only the **Read Later** bookmark button (`bookmark` / `bookmark.fill`) and **Favorite** star button (`star` / `star.fill`) directly visible in the top toolbar.
+- **Rightmost Expandable Menu (`ellipsis.circle`)**: Collapsed all secondary actions into a single 32x32 glass circular menu button on the far right:
+  - **Share Article**: Native iOS `ShareLink`.
+  - **Open in Safari**: Direct external link button.
+  - **Text Size Submenu**: Discrete sizing options (Small, Default, Large, Extra Large).
+  - **Medium Author Follow**: Quick one-tap author subscription when reading Medium stories.
+- **Horizontal Scrolling Publication Title**: Wrapped the top publication icon and title in a horizontal `ScrollView` between the dismiss button and action buttons, ensuring long publication names scroll smoothly without truncation, ellipses, or pushing toolbar action buttons off-screen.
+
+### 5.3 Article Body Publication Header Cleanup
+- **Body De-duplication**: Excised the redundant `<div class='publication-header'>` and its associated CSS from `ArticleWebView.swift`. The article now opens directly with the headline (`h1.title`), author/timestamp metadata, and content body, keeping branding exclusively within the top navigation bar.
+
+### 5.4 Card Interaction Reliability
+- **Touch Collision Prevention**: Refactored `NewsArticleCard` from a wrapping `Button` to a `.contentShape(Rectangle()).onTapGesture { onTap() }` container, allowing child interactive buttons (Read Later, Favorite, Author Follow, and Share) to receive taps with haptics and spring animations without inadvertently opening the article reader.
+
+### 5.5 Dashboard Widget Priority & Layout Repositioning
+- **News Widget Elevation**: Moved the Live News Feed Widget Card directly beneath `WeatherDashboardCard` on the main `DashboardView`, giving real-time headlines top priority below weather conditions.
+- **Eager Feed Loading**: Updated the `.task` lifecycle hook in `DashboardView` to eagerly fetch headlines alongside weather, health vitals, and habits on app startup.
+
+
+

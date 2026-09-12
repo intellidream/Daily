@@ -99,81 +99,31 @@ public struct NewsReaderView: View {
             }
             .buttonStyle(.plain)
             
-            // Publication Branding
-            HStack(spacing: 6) {
-                if let icon = currentArticle.publicationIconUrl, let url = URL(string: icon) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable()
-                                .scaledToFill()
-                                .frame(width: 18, height: 18)
-                                .clipShape(Circle())
-                        default:
-                            EmptyView()
-                        }
-                    }
-                }
-                
-                Text(currentArticle.publicationName ?? "Reader")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                
-                if let mediumUser = extractMediumUsername(from: currentArticle) {
-                    let isSubscribed = NewsService.shared.isSubscribedToMediumAuthor(username: mediumUser)
-                    Button {
-                        if !isSubscribed {
-                            withAnimation {
-                                NewsService.shared.subscribeToMediumAuthor(username: mediumUser, authorName: currentArticle.author)
+            // Publication Branding (scrolls horizontally if long)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    if let icon = currentArticle.publicationIconUrl, let url = URL(string: icon) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable()
+                                    .scaledToFill()
+                                    .frame(width: 18, height: 18)
+                                    .clipShape(Circle())
+                            default:
+                                EmptyView()
                             }
-                            triggerHaptic()
                         }
-                    } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
-                                .font(.system(size: 10))
-                            Text(isSubscribed ? "Following" : "Follow")
-                                .font(.system(size: 10, weight: .bold))
-                        }
-                        .foregroundColor(isSubscribed ? .white.opacity(0.6) : ThemeColors.accentCyan)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule().fill(isSubscribed ? Color.white.opacity(0.08) : ThemeColors.accentCyan.opacity(0.15))
-                        )
                     }
-                    .buttonStyle(.plain)
+                    
+                    Text(currentArticle.publicationName ?? "Reader")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
             
-            Spacer()
-            
-            // Font Size Toggle (A- / A+)
-            Button {
-                withAnimation {
-                    if fontSizeMultiplier >= 1.3 {
-                        fontSizeMultiplier = 0.85
-                    } else {
-                        fontSizeMultiplier += 0.15
-                    }
-                }
-            } label: {
-                HStack(spacing: 2) {
-                    Text("A")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("A")
-                        .font(.system(size: 15, weight: .bold))
-                }
-                .foregroundColor(.white.opacity(0.85))
-                .frame(width: 36, height: 32)
-                .background(
-                    Capsule()
-                        .fill(Color.white.opacity(0.08))
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                )
-            }
-            .buttonStyle(.plain)
+            Spacer(minLength: 4)
             
             // Read Later Bookmark Button
             Button {
@@ -209,17 +159,8 @@ public struct NewsReaderView: View {
             }
             .buttonStyle(.plain)
             
-            // Open in Safari Button
-            if let url = URL(string: currentArticle.link) {
-                Link(destination: url) {
-                    Image(systemName: "safari")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.8))
-                        .frame(width: 32, height: 32)
-                        .background(Circle().fill(Color.white.opacity(0.08)))
-                }
-                .buttonStyle(.plain)
-            }
+            // Far-right Expandable Menu Button containing collapsed actions
+            moreOptionsMenu
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -230,6 +171,97 @@ public struct NewsReaderView: View {
         .overlay(alignment: .bottom) {
             Divider().background(Color.white.opacity(0.1))
         }
+    }
+    
+    // MARK: - More Options Menu (Collapsed Actions)
+    
+    private var moreOptionsMenu: some View {
+        Menu {
+            // Share Article
+            if let url = URL(string: currentArticle.link) {
+                ShareLink(item: url, subject: Text(currentArticle.title), message: Text(currentArticle.title)) {
+                    Label("Share Article", systemImage: "square.and.arrow.up")
+                }
+                
+                // Open in Safari
+                Link(destination: url) {
+                    Label("Open in Safari", systemImage: "safari")
+                }
+            }
+            
+            Divider()
+            
+            // Text Size Submenu
+            Menu {
+                Button {
+                    fontSizeMultiplier = 0.85
+                } label: {
+                    HStack {
+                        Text("Small")
+                        if abs(fontSizeMultiplier - 0.85) < 0.05 { Image(systemName: "checkmark") }
+                    }
+                }
+                
+                Button {
+                    fontSizeMultiplier = 1.0
+                } label: {
+                    HStack {
+                        Text("Default")
+                        if abs(fontSizeMultiplier - 1.0) < 0.05 { Image(systemName: "checkmark") }
+                    }
+                }
+                
+                Button {
+                    fontSizeMultiplier = 1.15
+                } label: {
+                    HStack {
+                        Text("Large")
+                        if abs(fontSizeMultiplier - 1.15) < 0.05 { Image(systemName: "checkmark") }
+                    }
+                }
+                
+                Button {
+                    fontSizeMultiplier = 1.3
+                } label: {
+                    HStack {
+                        Text("Extra Large")
+                        if abs(fontSizeMultiplier - 1.3) < 0.05 { Image(systemName: "checkmark") }
+                    }
+                }
+            } label: {
+                Label("Text Size", systemImage: "textformat.size")
+            }
+            
+            // Medium Author Follow if applicable
+            if let mediumUser = extractMediumUsername(from: currentArticle) {
+                let isSubscribed = NewsService.shared.isSubscribedToMediumAuthor(username: mediumUser)
+                Divider()
+                Button {
+                    if !isSubscribed {
+                        withAnimation {
+                            NewsService.shared.subscribeToMediumAuthor(username: mediumUser, authorName: currentArticle.author)
+                        }
+                        triggerHaptic()
+                    }
+                } label: {
+                    Label(
+                        isSubscribed ? "Following @\(mediumUser)" : "Follow @\(mediumUser)",
+                        systemImage: isSubscribed ? "checkmark.circle.fill" : "person.badge.plus"
+                    )
+                }
+                .disabled(isSubscribed)
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white.opacity(0.85))
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle().fill(Color.white.opacity(0.08))
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                )
+        }
+        .buttonStyle(.plain)
     }
     
     private var bottomRecommendationsBar: some View {

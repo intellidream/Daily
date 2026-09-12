@@ -258,6 +258,35 @@ Computes real-time economic and physiological recovery:
     - **Active Smoking Phase (`elapsed < duration`)**: Shows live active smoking countdown: `Smoking now (~Xm left)` or `Finishing smoke...` with pulsing flame icon in warm amber (`#F59E0B`).
     - **Craving-Free Phase (`elapsed >= duration`)**: Clean timer begins counting up *after* the smoke has completed (`elapsed - duration`), dynamically refreshed every 10s via an active view publisher (`Just finished`, `Xm craving-free`, or `Xh Ym clean`).
 
+### 7.10 Dashboard Habits Progress Rings & Full-Width Financial Recovery Card
+- **Dashboard Habits Card Progress Rings (`HabitsDashboardCard`)**:
+  - Replaced plain text metric readouts with two interactive 38pt circular progress rings:
+    - **Bubbles Ring**: Liquid cyan-to-ocean gradient arc (`#00E5FF` to `#0077B6`) with center `drop.fill`, transitioning to emerald green (`#00FFB2`) with `checkmark` upon goal achievement.
+    - **Smokes Ring**: Color-coded arc dynamically tracking daily allowance ratio with center `flame.fill`:
+      - Disciplined ($\le 80\%$ of baseline): Emerald-cyan gradient (`#00FFB2` $\to$ `#00E5FF`).
+      - Near Limit ($> 80\%$ of baseline): Warning amber gradient (`#FFB800` $\to$ `#FF9500`).
+      - Over Limit ($> 100\%$ of baseline): Alert red-orange gradient (`#FF3B30` $\to$ `#FF9500`) with alert icon.
+    - Fluid spring physics animations on log updates (`.animation(.spring(response: 0.45, dampingFraction: 0.8))`).
+- **Habits Hub Financial & Recovery Savings Tile Styling & Calculation Parity**:
+  - **Full-Width Card Layout**: Expanded inner `VStack` and all 3 metric columns to `.frame(maxWidth: .infinity)`, matching the exact horizontal width of 7-Day Performance and Consistency Heatmap cards.
+  - **Distinctive Recovery Gradient Border**: Applied a 1.8pt rounded stroke border with a 3-stop milestone gradient (`#00FFB2` Money Saved $\to$ `#00E5FF` Cigs Avoided $\to$ `#FFB800` Life Regained) and ambient emerald glow.
+  - **Header Metadata**: Added `"Total Milestones"` subtitle and `[N] days tracked` calendar counter.
+  - **Dynamic Multi-Currency & Precision Formatting**: Updated `SmokesFinancialMetrics` to support dynamic user currency (`RON`, `USD`, `EUR`, etc.) and tuned metric typography (16pt rounded bold with `minimumScaleFactor(0.65)`) to eliminate ellipsis truncation.
+  - **Reactive Financial Sync**: Updated `HabitsService` to trigger `fetchSmokesFinancials(userId:)` on `logSmoke`, `deleteLog`, and `updateSmokesSettings`.
+
+
+### 7.11 Water Quick Presets Crash Resolution & HealthKit Write Hardening
+- **Root Cause Analysis**: Invoking water intake quick logging (e.g. 150 ml or 300 ml presets) triggered an uncaught Objective-C runtime exception `NSInvalidArgumentException: HKMetadataKeySyncVersion is not an allowed metadata key on HKQuantitySample` inside `HealthKitManager.writeWaterIntake`. Apple reserves `HKMetadataKeySyncVersion` exclusively for internal sync engines and forbids third-party apps from setting it on new samples.
+- **Hardening & Metadata Rectification**:
+  - Replaced the forbidden `HKMetadataKeySyncVersion` key with `[HKMetadataKeyWasUserEntered: true]`.
+  - Added authorization verification (`healthStore.authorizationStatus(for: waterType) == .sharingAuthorized`) before attempting store mutations.
+  - Guarded sample persistence with `try await healthStore.save(sample)` with diagnostic error logging.
+- **Verification**: Validated 150 ml, 300 ml, 500 ml, and custom water intake logging; confirmed reactive state updates across Dashboard progress rings and Habits Hub without crashing.
+
+### 7.12 Universal Header Navigation & Centered Date Picker
+- **Centered Date Navigator**: Moved and optically centered the date picker capsule (`< Date >`) at the top of the Habits Hub, flanked symmetrically by a 36x36 glass back button on the left and a 36x36 glass sparkles (AI guidance) button on the right.
+- **Top-Left Back Navigation**: Added direct top-left return navigation to the Dashboard, unifying the header ergonomics across Health, Habits, News, Weather, and Settings.
+
 ---
 
 ## 8. Verification & Automated Test Coverage
@@ -267,14 +296,14 @@ The feature is verified with unit tests in `DailyCoreTests/HabitsServiceTests.sw
 - `Water Presets Validation`: Verified standard volume values and beverage types.
 - `Offline Queue JSON Round-Trip Serialization`: Verified disk serialization, FIFO extraction, and schema stability.
 - `Habit Log Record Metadata Parsing`: Verified JSONB deserialization for custom volumes and timestamps.
-- `Smokes Financials & Avoided Cigarettes Calculations`: Verified pack price, currency formatting, and life regained formulas.
+- `Smokes Financials & Avoided Cigarettes Calculations`: Verified pack price, dynamic currency formatting (`RON`, `USD`), life regained formulas, and time elapsed.
 - `Habits Guidance Protocol Validation`: Verified circadian slots, DHI indices, Armstrong color levels, and 4D step structures.
 - `Multiplier Logging and Display Formatting`: Verified multiplier calculations and formatted string display.
 - `Specific Icons & Colors for Beverage and Tobacco Types`: Verified correct icon resolution for coffee, tea, bottles, heated tobacco, cigarettes (`flame.fill`, `#EF4444`), and cigarillos (`flame`, `#A855F7`).
 - `User Preferences Record JSON Decoding`: Verified round-trip parsing of Supabase `user_preferences` schema.
 - `Habits Consistency Row Decoding & Date Normalization`: Verified JSON decoding of `get_habits_consistency` RPC responses, FlexibleDouble round-trip serialization, and date normalization.
 - `Habit Date Parser Date-Only String Parsing`: Verified that date-only strings (`yyyy-MM-dd`) are properly parsed to valid `Date` objects.
-- **Full Suite Status**: All 20 test cases across 3 suites in `DailyCore` pass 100% green. Build visually verified on `SimulaPhone` (with screenshots of both live Today active timer / corrected red Cigarette pills and Yesterday's `⚠️ Near Daily Limit ⚠️` retrospective evaluation) and deployed live to physical iPhone 16 Pro ("Schmitz").
+- **Full Suite Status**: All 20 test cases across 3 suites in `DailyCore` pass 100% green. Build visually verified on `SimulaPhone` (dashboard progress rings and full-width financial tile screenshots captured) and deployed live to physical iPhone 16 Pro ("Schmitz").
 
 
 
