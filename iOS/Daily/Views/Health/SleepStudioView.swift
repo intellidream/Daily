@@ -10,19 +10,36 @@ public struct SleepStudioView: View {
     public var body: some View {
         VStack(spacing: 16) {
             if let session = healthService.primarySleepSession {
+                let analysis = SleepAnalysisEngine.shared.analyze(
+                    session: session,
+                    nocturnalRestingBpm: healthService.restingBpm > 0 ? healthService.restingBpm : nil,
+                    nocturnalHrvMs: healthService.currentVitals[.hrvSdnn]?.value
+                )
+                
                 // 1. Hero Sleep Score & Schedule Card
                 heroSleepScoreCard(session: session)
                 
-                // 2. Clinical Hypnogram or Proportional Stage Bar
+                // 2. Recovery Verdict & Readiness Card
+                SleepVerdictCard(verdict: analysis.verdict)
+                
+                // 3. AI Sleep Intelligence Companion Card
+                SleepAICoachCard(aiContext: analysis.aiContext, session: session)
+                
+                // 4. Actionable Clinical Sleep Hygiene Tips
+                if !analysis.tips.isEmpty {
+                    SleepAdviceCard(tips: analysis.tips)
+                }
+                
+                // 5. Clinical Hypnogram or Proportional Stage Bar
                 hypnogramContainerCard(session: session)
                 
-                // 3. Sleep Architecture Breakdown Grid
+                // 6. Sleep Architecture Breakdown Grid
                 architectureMetricsGrid(session: session)
             } else {
                 emptySleepCard
             }
             
-            // 4. Daytime Naps Section
+            // 7. Daytime Naps Section
             if !healthService.daytimeNaps.isEmpty {
                 daytimeNapsSection
             }

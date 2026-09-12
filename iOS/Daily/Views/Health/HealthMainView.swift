@@ -19,7 +19,7 @@ public struct HealthMainView: View {
     public init(onNavigateBack: (() -> Void)? = nil) {
         self.onNavigateBack = onNavigateBack
         let args = ProcessInfo.processInfo.arguments
-        if args.contains("-healthSubTabSleep") {
+        if args.contains("-healthSubTabSleep") || args.contains("-testSleepStudio") {
             self._activeSubTab = State(initialValue: .sleep)
         } else if args.contains("-healthSubTabTrends") {
             self._activeSubTab = State(initialValue: .trends)

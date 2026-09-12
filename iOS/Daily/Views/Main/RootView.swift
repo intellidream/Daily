@@ -13,7 +13,7 @@ public struct RootView: View {
             self._selectedTab = State(initialValue: .settings)
         } else if args.contains("-startTabHabits") {
             self._selectedTab = State(initialValue: .habits)
-        } else if args.contains("-startTabHealth") {
+        } else if args.contains("-startTabHealth") || args.contains("-testSleepStudio") {
             self._selectedTab = State(initialValue: .health)
         }
         

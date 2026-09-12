@@ -237,6 +237,43 @@ Shared between iOS and macOS without UIKit or HealthKit dependencies:
   - **Habits Hydration Integration**: Connected `HabitsService.shared.totalWaterMlToday` to populate `currentVitals[.hydration]` dynamically when logged.
   - **Typography & Value Formatting**: Updated `VitalMetricTile` to cleanly format HRV (ms) and Blood Oxygen (%) as rounded integers.
 
+---
 
+## 11. Phase 4.5: Sleep Studio Intelligence, Recovery Verdict & AI Sleep Companion
 
+Inspired by deep research into **StressWatch** (documented in [StressWatch_Research_And_Inspiration.md](StressWatch_Research_And_Inspiration.md)), this phase elevates the Sleep Studio from a passive telemetry chart into a comprehensive, proactive clinical sleep coach.
 
+### 11.1 Deterministic Sleep Recovery Verdict Engine (`SleepAnalysisEngine`)
+- **Scientific Foundation**: Evaluates nocturnal sleep architecture against American Academy of Sleep Medicine (AASM) standards:
+  - **Status Classification (`SleepRecoveryStatus`)**:
+    - `Optimal Recovery` (cyan): Score $\ge 85$, Efficiency $\ge 85\%$, Deep sleep $\ge 14\%$.
+    - `Great Recharging` (green): Score $72 - 84$, balanced recovery.
+    - `Moderate Recovery` (amber): Score $55 - 71$, mild recovery load.
+    - `Recovery Deficit` (coral): Score $< 55$, significant sleep debt.
+  - **Readiness Score (0–100%)**: Quantitative estimation of central nervous system and muscular readiness for daily physical/cognitive strain.
+  - **Three Recovery Pillars**:
+    - **Physical Repair**: Evaluates Deep Sleep (Stage 3 NREM slow-wave sleep) for cellular healing and growth hormone release (`High` / `Adequate` / `Low`).
+    - **Cognitive Rest**: Evaluates REM Sleep for emotional regulation and memory consolidation (`High` / `Adequate` / `Low`).
+    - **Continuity**: Assesses awakening frequency and fragmentation (`Continuous` / `Fragmented`).
+
+### 11.2 Contextual Actionable Sleep Hygiene (`SleepAdviceCard`)
+- Rules-based, offline-first generator that analyzes the specific flaws of the night's sleep to generate up to 3 targeted clinical interventions:
+  - **Cool Bedroom (18–20°C)**: Triggered when Deep sleep $< 15\%$.
+  - **Cut Evening Alcohol & Heavy Carbs**: Triggered when REM sleep $< 18\%$.
+  - **5-Minute Vagal Box Breathing**: Triggered when awakenings $\ge 3$ or efficiency $< 85\%$.
+  - **Morning Sunlight Exposure**: Circadian anchoring recommendation for melatonin regulation.
+
+### 11.3 Interactive AI Sleep Companion (`SleepAICoachCard` & `SleepAIChatSheet`)
+- **Daily Sleep Intelligence Card**: Displays an AI-powered analysis banner, contextual synthesis, and interactive suggested question chips:
+  - *"De ce am avut Deep Sleep scăzut azi noapte?"*
+  - *"Este recomandat un antrenament cardio intens azi?"*
+  - *"Cum îmi pot îmbunătăți somnul REM și HRV-ul nocturn?"*
+  - *"Ce rutină de seară mă ajută să reduc trezirile nocturne?"*
+- **Interactive Chat Modal Sheet (`SleepAIChatSheet`)**:
+  - Lets the user query their sleep metrics in natural language (Romanian and English).
+  - Responds with clinical yet friendly advice based on the user's specific session.
+  - Ready for hybrid connection to Google Gemini Flash API.
+
+### 11.4 Automated Test Coverage
+- Verified in `SleepGuidanceTests.swift` (`testOptimalSleepSessionEvaluation`, `testDisruptedSleepProducesDeficitAndActionableTips`).
+- 100% test pass rate across all 30 tests in `DailyCore`.
