@@ -205,4 +205,11 @@ Outputs: `dist/20001-DayOne_Orbit-1.0.0-<timestamp>.zab` containing binaries for
 - Tactile feedback: `VIBRATOR_SCENE_SHORT_STRONG` on navigation/cancellation, and `VIBRATOR_SCENE_DURATION` on deletion confirmation.
 - **Instant Dashboard Synchronization**: `page/index.js` registers `onResume()`. When returning to the dashboard via back gesture or button, the day's totals, progress arcs, and breakdown strings immediately re-fetch and refresh.
 
+---
+
+## 9. Deployment & Delivery Guide
+
+For complete instructions on installing the app on physical Amazfit devices (Balance, Active 2), fresh machine setup, Developer Mode activation, and `npx zeus preview` procedures, refer to:
+- [ZeppOS-Amazfit-Deployment-Guide.md](file:///Users/mihai/Source/Daily/Docs/Features/ZeppOS-Amazfit-Deployment-Guide.md)
+
 
