@@ -16,6 +16,43 @@ public struct RootView: View {
         } else if args.contains("-startTabHealth") {
             self._selectedTab = State(initialValue: .health)
         }
+        
+        if args.contains("-testMixedDashboard") {
+            AuthService.shared.continueAsGuest()
+            SettingsService.shared.update { s in
+                s.dashboardWidgets = [
+                    DashboardWidgetConfig(id: "weather", size: .small),
+                    DashboardWidgetConfig(id: "news", size: .small),
+                    DashboardWidgetConfig(id: "health", size: .wide),
+                    DashboardWidgetConfig(id: "habits", size: .wide)
+                ]
+            }
+        } else if args.contains("-testTallDashboard") {
+            AuthService.shared.continueAsGuest()
+            SettingsService.shared.update { s in
+                s.dashboardWidgets = [
+                    DashboardWidgetConfig(id: "weather", size: .tall),
+                    DashboardWidgetConfig(id: "news", size: .small),
+                    DashboardWidgetConfig(id: "health", size: .small),
+                    DashboardWidgetConfig(id: "habits", size: .wide)
+                ]
+            }
+        } else if args.contains("-testLargeDashboard") {
+            AuthService.shared.continueAsGuest()
+            SettingsService.shared.update { s in
+                s.dashboardWidgets = [
+                    DashboardWidgetConfig(id: "weather", size: .large),
+                    DashboardWidgetConfig(id: "news", size: .wide),
+                    DashboardWidgetConfig(id: "health", size: .wide),
+                    DashboardWidgetConfig(id: "habits", size: .wide)
+                ]
+            }
+        } else if args.contains("-testDefaultDashboard") {
+            AuthService.shared.continueAsGuest()
+            SettingsService.shared.update { s in
+                s.dashboardWidgets = DashboardWidgetConfig.defaultLayout
+            }
+        }
     }
 
     

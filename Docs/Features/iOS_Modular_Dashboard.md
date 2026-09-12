@@ -16,29 +16,39 @@ Prior to this implementation, the iOS dashboard presented a rigid, vertical stac
 
 ---
 
-## 2. Mathematical 2-Column Bin-Packing Layout (`ModularDashboardLayout`)
+## 2. Dynamic Content-Driven Bin-Packing Layout (`ModularDashboardLayout`)
 
 Implemented as a custom SwiftUI `Layout` (`ModularDashboardLayout: Layout`), introduced natively in iOS 16+:
 
-### 2.1 Deterministic Matrix Packing Algorithm
+### 2.1 Deterministic Matrix Packing with Dynamic Content Sizing
 ```
 Grid Matrix: 2 Columns [0, 1], Infinite Rows [0, 1, 2...]
-Unit Height: 165 pt, Spacing: 16 pt
+Default Unit Height: 150 pt, Grid Spacing: 14 pt
 
+Pass 1: Matrix Slot Allocation
 For each widget in configured order:
   - If colSpan == 2 (Wide, Large):
       Find earliest row r where both (r, 0) and (r, 1) are unoccupied.
       Reserve (r + dr, 0..1) for all dr in 0..<rowSpan.
-      Position at: x = bounds.minX, y = bounds.minY + r * (unitHeight + spacing)
   - If colSpan == 1 (Small, Tall):
-      Find earliest slot (r, c) checking row-by-row, then column 0 then column 1.
+      Find earliest slot (r, c) checking row-by-row, column 0 then column 1.
       Reserve (r + dr, c) for all dr in 0..<rowSpan.
-      Position at: x = bounds.minX + c * (colWidth + spacing), y = bounds.minY + r * (unitHeight + spacing)
+
+Pass 2: Dynamic Row Height Measurement
+  - Wide (2x1) rows: Row height is dynamically measured from subview intrinsic content height
+    via sizeThatFits(ProposedViewSize(width: fullWidth, height: nil)), eliminating all dead whitespace.
+  - Small (1x1) / Tall (1x2) rows: Row height is anchored to defaultUnitHeight (150 pt).
+  - Multi-row spans: Total height = rowHeights[r0] + spacing + rowHeights[r1].
+
+Pass 3: Exact Geometry Placement
+  - Calculate y coordinates by accumulating previous row heights + inter-row spacing (14 pt).
+  - Position views with exact computed frames, enabling pixel-perfect card alignment.
 ```
 
 ### 2.2 ProMotion 120 FPS Performance
 - Computations for 4–10 widgets execute in $< 0.05\text{ ms}$, producing zero frame drops.
-- Because layout calculations are performed entirely within the SwiftUI `Layout` protocol, view transitions animate with native GPU-accelerated spring curves (`.animation(.spring(response: 0.35, dampingFraction: 0.8))`).
+- Dynamic row sizing is computed entirely in SwiftUI's native layout pass without triggering secondary layout passes.
+- Animations utilize GPU-accelerated spring curves (`.animation(.spring(response: 0.35, dampingFraction: 0.8))`).
 
 ---
 

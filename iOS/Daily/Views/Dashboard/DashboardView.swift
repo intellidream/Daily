@@ -42,7 +42,7 @@ public struct DashboardView: View {
     
     public var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Header Greeting with Customize & Settings shortcuts
                 HeaderGreetingView(
                     onAvatarTapped: onNavigateToSettings,
@@ -51,7 +51,7 @@ public struct DashboardView: View {
                 
                 // Modular 2-Column Mathematical Bin-Packing Dashboard
                 let visibleWidgets = settingsService.settings.dashboardWidgets.filter(\.isVisible)
-                ModularDashboardLayout(spacing: 16, unitHeight: 165) {
+                ModularDashboardLayout(spacing: 14, defaultUnitHeight: 150) {
                     ForEach(Array(visibleWidgets.enumerated()), id: \.element.id) { index, config in
                         widgetView(for: config)
                             .widgetSpan(config.size)

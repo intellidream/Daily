@@ -33,6 +33,7 @@ public struct WeatherDashboardCard: View {
                     largeContent
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: size == .wide ? nil : .infinity)
         }
         .buttonStyle(.plain)
     }
@@ -196,10 +197,16 @@ public struct WeatherDashboardCard: View {
         VStack(alignment: .leading, spacing: 10) {
             // Header
             HStack {
-                Label("Weather", systemImage: "cloud.sun.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(ThemeColors.accentCyan)
-                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "cloud.sun.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(ThemeColors.accentCyan)
+                    Text("Weather")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(ThemeColors.accentCyan)
+                }
+                .fixedSize()
+                Spacer(minLength: 4)
                 Text(weatherService.currentLocationName)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(ThemeColors.fgMutedDark)

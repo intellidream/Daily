@@ -28,6 +28,7 @@ public struct HealthDashboardCard: View {
                     largeContent
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: size == .wide ? nil : .infinity)
         }
         .buttonStyle(.plain)
     }
