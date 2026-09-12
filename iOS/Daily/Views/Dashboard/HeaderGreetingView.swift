@@ -6,9 +6,14 @@ public struct HeaderGreetingView: View {
     @ObservedObject private var authService = AuthService.shared
     @ObservedObject private var settingsService = SettingsService.shared
     private let onAvatarTapped: () -> Void
+    private let onCustomizeTapped: (() -> Void)?
     
-    public init(onAvatarTapped: @escaping () -> Void = {}) {
+    public init(
+        onAvatarTapped: @escaping () -> Void = {},
+        onCustomizeTapped: (() -> Void)? = nil
+    ) {
         self.onAvatarTapped = onAvatarTapped
+        self.onCustomizeTapped = onCustomizeTapped
     }
     
     private var formattedDate: String {
@@ -100,34 +105,67 @@ public struct HeaderGreetingView: View {
             
             Spacer()
 
-            // Quick Settings Action Button with Glass styling
-            Button {
-                triggerHaptic()
-                onAvatarTapped()
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.85))
-                    .frame(width: 40, height: 40)
-                    .background(
-                        Circle()
-                            .fill(Color.white.opacity(0.1))
-                            .background(.ultraThinMaterial, in: Circle())
-                    )
-                    .overlay(
-                        Circle()
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [Color.white.opacity(0.4), Color.white.opacity(0.1)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
+            HStack(spacing: 8) {
+                // Customize Dashboard Action Button
+                if let onCustomize = onCustomizeTapped {
+                    Button {
+                        triggerHaptic()
+                        onCustomize()
+                    } label: {
+                        Image(systemName: "slider.horizontal.2.square")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 40, height: 40)
+                            .background(
+                                Circle()
+                                    .fill(Color.white.opacity(0.1))
+                                    .background(.ultraThinMaterial, in: Circle())
                             )
-                    )
-                    .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [Color.white.opacity(0.4), Color.white.opacity(0.1)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            )
+                            .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // Quick Settings Action Button with Glass styling
+                Button {
+                    triggerHaptic()
+                    onAvatarTapped()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.85))
+                        .frame(width: 40, height: 40)
+                        .background(
+                            Circle()
+                                .fill(Color.white.opacity(0.1))
+                                .background(.ultraThinMaterial, in: Circle())
+                        )
+                        .overlay(
+                            Circle()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0.4), Color.white.opacity(0.1)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
+                        )
+                        .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)

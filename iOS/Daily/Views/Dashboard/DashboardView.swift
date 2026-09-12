@@ -1,11 +1,16 @@
 import SwiftUI
 import DailyCore
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public struct DashboardView: View {
     @ObservedObject private var settingsService = SettingsService.shared
     @ObservedObject private var authService = AuthService.shared
     @ObservedObject private var newsService = NewsService.shared
     @ObservedObject private var healthService = HealthDataService.shared
+    
+    @State private var showingCustomizeSheet = false
     
     private let onNavigateToWeather: () -> Void
     private let onNavigateToNews: () -> Void
@@ -27,163 +32,34 @@ public struct DashboardView: View {
         self.onNavigateToSettings = onNavigateToSettings
     }
 
+    private func triggerHaptic() {
+        if settingsService.settings.hapticsEnabled {
+            #if canImport(UIKit)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            #endif
+        }
+    }
     
     public var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Header Greeting
-                HeaderGreetingView(onAvatarTapped: onNavigateToSettings)
+                // Header Greeting with Customize & Settings shortcuts
+                HeaderGreetingView(
+                    onAvatarTapped: onNavigateToSettings,
+                    onCustomizeTapped: { showingCustomizeSheet = true }
+                )
                 
-                // --- Real-time Weather Widget Card ---
-                WeatherDashboardCard(onTap: onNavigateToWeather)
-                
-                // --- Live News Feed Widget Card ---
-                Button {
-                    onNavigateToNews()
-                } label: {
-                    GlassCard(cornerRadius: 20, padding: 20) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack {
-                                Label("News & Briefings", systemImage: "newspaper.fill")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(ThemeColors.accentCyan)
-                                Spacer()
-                                HStack(spacing: 4) {
-                                    Text("Explore Feeds")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundColor(ThemeColors.accentCyan)
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(ThemeColors.accentCyan)
-                                }
+                // Modular 2-Column Mathematical Bin-Packing Dashboard
+                let visibleWidgets = settingsService.settings.dashboardWidgets.filter(\.isVisible)
+                ModularDashboardLayout(spacing: 16, unitHeight: 165) {
+                    ForEach(Array(visibleWidgets.enumerated()), id: \.element.id) { index, config in
+                        widgetView(for: config)
+                            .widgetSpan(config.size)
+                            .contextMenu {
+                                widgetContextMenu(config: config, index: index, totalCount: visibleWidgets.count)
                             }
-                            
-                            if let top = newsService.topHeadline {
-                                HStack(alignment: .top, spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(top.title)
-                                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                                            .foregroundColor(.white)
-                                            .lineLimit(2)
-                                            .multilineTextAlignment(.leading)
-                                        
-                                        HStack(spacing: 6) {
-                                            Text(top.publicationName ?? "Briefing")
-                                                .font(.system(size: 11, weight: .semibold))
-                                                .foregroundColor(ThemeColors.accentBlue)
-                                            Text("•")
-                                                .font(.system(size: 9))
-                                                .foregroundColor(ThemeColors.fgMutedDark)
-                                            Text(top.relativeTimeFormatted)
-                                                .font(.system(size: 11))
-                                                .foregroundColor(ThemeColors.fgMutedDark)
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    if let imgStr = top.imageUrl, let url = URL(string: imgStr) {
-                                        AsyncImage(url: url) { phase in
-                                            switch phase {
-                                             case .success(let img):
-                                                img.resizable()
-                                                    .scaledToFill()
-                                                    .frame(width: 58, height: 58)
-                                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                            default:
-                                                EmptyView()
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Apple Intelligence and Next-Gen Architecture")
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundColor(.white)
-                                        .lineLimit(2)
-                                    
-                                    HStack(spacing: 8) {
-                                        Text("TechCrunch")
-                                            .font(.system(size: 11, weight: .medium))
-                                            .foregroundColor(ThemeColors.accentBlue)
-                                        Text("•")
-                                            .foregroundColor(ThemeColors.fgMutedDark)
-                                        Text("12m ago")
-                                            .font(.system(size: 11, weight: .regular))
-                                            .foregroundColor(ThemeColors.fgMutedDark)
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
-                .buttonStyle(.plain)
-                
-                // --- Health & Vitals Live Widget Card ---
-                Button {
-                    onNavigateToHealth()
-                } label: {
-                    GlassCard(cornerRadius: 20, padding: 20) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack {
-                                Label("Health & Vitals", systemImage: "heart.fill")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(ThemeColors.accentPink)
-                                Spacer()
-                                HStack(spacing: 4) {
-                                    Text("Open Hub")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundColor(ThemeColors.accentPink)
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(ThemeColors.accentPink)
-                                }
-                            }
-                            
-                            HStack(spacing: 16) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("STEPS")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(ThemeColors.fgMutedDark)
-                                    Text("\(healthService.totalStepsToday)")
-                                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                                        .foregroundColor(.white)
-                                }
-                                
-                                Divider()
-                                    .frame(height: 32)
-                                    .background(Color.white.opacity(0.15))
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("HEART RATE")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(ThemeColors.fgMutedDark)
-                                    Text(healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm)) bpm" : "--")
-                                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                                        .foregroundColor(ThemeColors.accentPink)
-                                }
-                                
-                                Divider()
-                                    .frame(height: 32)
-                                    .background(Color.white.opacity(0.15))
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("SLEEP")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(ThemeColors.fgMutedDark)
-                                    Text(healthService.primarySleepSession?.totalAsleepFormatted ?? "--")
-                                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                                        .foregroundColor(ThemeColors.accentCyan)
-                                }
-                            }
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                
-                // --- Habits & Hydration Live Widget Card ---
-                HabitsDashboardCard(onTap: onNavigateToHabits)
             }
             .padding(.top, 14) // Standard Apple HIG breathing room below Dynamic Island / status bar
             .padding(.horizontal, 20)
@@ -202,6 +78,96 @@ public struct DashboardView: View {
             async let hab: () = HabitsService.shared.loadDataForSelectedDate()
             async let n: () = newsService.articles.isEmpty ? newsService.loadFeed(newsService.selectedFeed) : ()
             _ = await (w, h, hab, n)
+        }
+        .sheet(isPresented: $showingCustomizeSheet) {
+            CustomizeDashboardSheet()
+        }
+    }
+
+    // MARK: - Modular Widget Router
+    @ViewBuilder
+    private func widgetView(for config: DashboardWidgetConfig) -> some View {
+        switch config.id {
+        case DashboardWidgetType.weather.rawValue:
+            WeatherDashboardCard(size: config.size, onTap: onNavigateToWeather)
+        case DashboardWidgetType.news.rawValue:
+            NewsDashboardCard(size: config.size, onTap: onNavigateToNews)
+        case DashboardWidgetType.health.rawValue:
+            HealthDashboardCard(size: config.size, onTap: onNavigateToHealth)
+        case DashboardWidgetType.habits.rawValue:
+            HabitsDashboardCard(size: config.size, onTap: onNavigateToHabits)
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: - Instant Context Menu (Resize & Reorder)
+    @ViewBuilder
+    private func widgetContextMenu(config: DashboardWidgetConfig, index: Int, totalCount: Int) -> some View {
+        Section("Widget Size") {
+            ForEach(DashboardWidgetSize.allCases, id: \.self) { size in
+                Button {
+                    triggerHaptic()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        updateWidgetSize(id: config.id, newSize: size)
+                    }
+                } label: {
+                    HStack {
+                        Text(size.displayName)
+                        if config.size == size {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        }
+        
+        Section("Order") {
+            if index > 0 {
+                Button {
+                    triggerHaptic()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        moveWidget(fromIndex: index, toIndex: index - 1)
+                    }
+                } label: {
+                    Label("Move Up", systemImage: "arrow.up")
+                }
+            }
+            
+            if index < totalCount - 1 {
+                Button {
+                    triggerHaptic()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        moveWidget(fromIndex: index, toIndex: index + 1)
+                    }
+                } label: {
+                    Label("Move Down", systemImage: "arrow.down")
+                }
+            }
+        }
+        
+        Section {
+            Button {
+                showingCustomizeSheet = true
+            } label: {
+                Label("Customize Dashboard...", systemImage: "slider.horizontal.2.square")
+            }
+        }
+    }
+
+    private func updateWidgetSize(id: String, newSize: DashboardWidgetSize) {
+        settingsService.update { settings in
+            if let idx = settings.dashboardWidgets.firstIndex(where: { $0.id == id }) {
+                settings.dashboardWidgets[idx].size = newSize
+            }
+        }
+    }
+
+    private func moveWidget(fromIndex: Int, toIndex: Int) {
+        settingsService.update { settings in
+            guard fromIndex >= 0 && fromIndex < settings.dashboardWidgets.count,
+                  toIndex >= 0 && toIndex < settings.dashboardWidgets.count else { return }
+            settings.dashboardWidgets.swapAt(fromIndex, toIndex)
         }
     }
 }

@@ -34,7 +34,74 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var cloudSyncEnabled: Bool = true
     public var lastSyncTimestamp: Date? = nil
     
+    // MARK: - Dashboard Layout
+    public var dashboardWidgets: [DashboardWidgetConfig] = DashboardWidgetConfig.defaultLayout
+    
     public init() {}
+    
+    enum CodingKeys: String, CodingKey {
+        case theme, glassIntensity, hapticsEnabled
+        case weatherAlwaysAutoLocation, weatherUnitSystem, weatherWindUnit, weatherPressureUnit, weatherShowSunrise, weatherShowHumidity
+        case healthMockDataEnabled, healthSleepTargetHours
+        case habitsWaterTargetLiters, habitsRemindersEnabled
+        case newsAutoRefreshOnStartup, newsShowImages, newsMediumUsername, newsMediumReadingListUrl
+        case cloudSyncEnabled, lastSyncTimestamp
+        case dashboardWidgets
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.theme = try c.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .dark
+        self.glassIntensity = try c.decodeIfPresent(GlassIntensity.self, forKey: .glassIntensity) ?? .medium
+        self.hapticsEnabled = try c.decodeIfPresent(Bool.self, forKey: .hapticsEnabled) ?? true
+        self.weatherAlwaysAutoLocation = try c.decodeIfPresent(Bool.self, forKey: .weatherAlwaysAutoLocation) ?? false
+        self.weatherUnitSystem = try c.decodeIfPresent(WeatherUnitSystem.self, forKey: .weatherUnitSystem) ?? .metric
+        self.weatherWindUnit = try c.decodeIfPresent(String.self, forKey: .weatherWindUnit) ?? "m/s"
+        self.weatherPressureUnit = try c.decodeIfPresent(String.self, forKey: .weatherPressureUnit) ?? "hpa"
+        self.weatherShowSunrise = try c.decodeIfPresent(Bool.self, forKey: .weatherShowSunrise) ?? true
+        self.weatherShowHumidity = try c.decodeIfPresent(Bool.self, forKey: .weatherShowHumidity) ?? true
+        self.healthMockDataEnabled = try c.decodeIfPresent(Bool.self, forKey: .healthMockDataEnabled) ?? false
+        self.healthSleepTargetHours = try c.decodeIfPresent(Double.self, forKey: .healthSleepTargetHours) ?? 8.0
+        self.habitsWaterTargetLiters = try c.decodeIfPresent(Double.self, forKey: .habitsWaterTargetLiters) ?? 2.0
+        self.habitsRemindersEnabled = try c.decodeIfPresent(Bool.self, forKey: .habitsRemindersEnabled) ?? true
+        self.newsAutoRefreshOnStartup = try c.decodeIfPresent(Bool.self, forKey: .newsAutoRefreshOnStartup) ?? true
+        self.newsShowImages = try c.decodeIfPresent(Bool.self, forKey: .newsShowImages) ?? true
+        self.newsMediumUsername = try c.decodeIfPresent(String.self, forKey: .newsMediumUsername)
+        self.newsMediumReadingListUrl = try c.decodeIfPresent(String.self, forKey: .newsMediumReadingListUrl)
+        self.cloudSyncEnabled = try c.decodeIfPresent(Bool.self, forKey: .cloudSyncEnabled) ?? true
+        self.lastSyncTimestamp = try c.decodeIfPresent(Date.self, forKey: .lastSyncTimestamp)
+        
+        let loadedWidgets = try c.decodeIfPresent([DashboardWidgetConfig].self, forKey: .dashboardWidgets)
+        if let loadedWidgets = loadedWidgets, !loadedWidgets.isEmpty {
+            self.dashboardWidgets = loadedWidgets
+        } else {
+            self.dashboardWidgets = DashboardWidgetConfig.defaultLayout
+        }
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(theme, forKey: .theme)
+        try c.encode(glassIntensity, forKey: .glassIntensity)
+        try c.encode(hapticsEnabled, forKey: .hapticsEnabled)
+        try c.encode(weatherAlwaysAutoLocation, forKey: .weatherAlwaysAutoLocation)
+        try c.encode(weatherUnitSystem, forKey: .weatherUnitSystem)
+        try c.encode(weatherWindUnit, forKey: .weatherWindUnit)
+        try c.encode(weatherPressureUnit, forKey: .weatherPressureUnit)
+        try c.encode(weatherShowSunrise, forKey: .weatherShowSunrise)
+        try c.encode(weatherShowHumidity, forKey: .weatherShowHumidity)
+        try c.encode(healthMockDataEnabled, forKey: .healthMockDataEnabled)
+        try c.encode(healthSleepTargetHours, forKey: .healthSleepTargetHours)
+        try c.encode(habitsWaterTargetLiters, forKey: .habitsWaterTargetLiters)
+        try c.encode(habitsRemindersEnabled, forKey: .habitsRemindersEnabled)
+        try c.encode(newsAutoRefreshOnStartup, forKey: .newsAutoRefreshOnStartup)
+        try c.encode(newsShowImages, forKey: .newsShowImages)
+        try c.encodeIfPresent(newsMediumUsername, forKey: .newsMediumUsername)
+        try c.encodeIfPresent(newsMediumReadingListUrl, forKey: .newsMediumReadingListUrl)
+        try c.encode(cloudSyncEnabled, forKey: .cloudSyncEnabled)
+        try c.encodeIfPresent(lastSyncTimestamp, forKey: .lastSyncTimestamp)
+        try c.encode(dashboardWidgets, forKey: .dashboardWidgets)
+    }
 }
 
 public enum AppTheme: String, Codable, CaseIterable, Sendable {
