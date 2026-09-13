@@ -112,7 +112,9 @@ The Finances dashboard widget dynamically adjusts layout and content density bas
 
 ## 5. Dedicated Finance Hub (`FinancesMainView.swift`)
 
-Tapping on any Finances widget or selecting the Finances tab in the floating capsule opens the full Finance Hub, partitioned into 3 subtabs:
+Tapping on the Finances dashboard widget opens the full Finance Hub:
+- **Top Header**: Custom glassmorphic navigation header with back button and title. Refresh is executed via native drag-down pull-to-refresh (`.scrollBounceBehavior(.always, axes: .vertical)`).
+- **Sub-Tab Switcher**: 3 sleek segmented sub-tabs (`World`, `Stocks`, `Money`).
 
 ### 5.1 World Subtab (Macro & Real Rates)
 - **Global Pulse (6 Core Pillars)**:
@@ -153,8 +155,8 @@ Tapping on any Finances widget or selecting the Finances tab in the floating cap
   - `accentGreen`: `#10B981` (Emerald green for positive performance, money, and finances primary accent).
   - `accentOrange`: `#F59E0B` (Amber orange for neutral macroeconomic states).
 - **Navigation (`FloatingGlassCapsule.swift`)**:
-  - Added `.finances` as a primary navigation tab with `chart.line.uptrend.xyaxis`.
-  - Tuned capsule item spacing and font sizing with `.fixedSize(horizontal: true, vertical: false)` ensuring pristine rendering without truncation across all screen widths.
+  - The persistent floating capsule retains strictly the core 3 destinations: **Dashboard**, **Health**, and **Habits**, maintaining a focused, clean, and distraction-free navigation anchor.
+  - Dedicated hubs like Finances, Weather, and News are launched directly from their interactive dashboard widgets and custom deep links, featuring native back navigation to return to the Dashboard.
 
 ---
 

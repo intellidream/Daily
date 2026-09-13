@@ -67,6 +67,7 @@ public struct FinancesMainView: View {
                     .padding(.horizontal, 20)
                     .padding(.bottom, 110) // Clearance for floating navigation capsule
                 }
+                .scrollBounceBehavior(.always, axes: .vertical)
                 .refreshable {
                     await financeService.loadFinanceData(forceRefresh: true)
                 }
@@ -127,32 +128,6 @@ public struct FinancesMainView: View {
             }
             
             Spacer()
-            
-            // Refresh Button
-            Button {
-                Task {
-                    await financeService.loadFinanceData(forceRefresh: true)
-                }
-            } label: {
-                if financeService.isLoading {
-                    ProgressView()
-                        .tint(ThemeColors.accentGreen)
-                        .scaleEffect(0.9)
-                        .frame(width: 36, height: 36)
-                } else {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(ThemeColors.accentGreen)
-                        .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.10))
-                        .clipShape(Circle())
-                        .overlay {
-                            Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
-                        }
-                }
-            }
-            .buttonStyle(.plain)
-            .disabled(financeService.isLoading)
         }
     }
 
