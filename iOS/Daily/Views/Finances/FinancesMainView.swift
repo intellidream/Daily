@@ -21,10 +21,12 @@ public enum FinanceSubTab: String, CaseIterable, Identifiable {
 /// Delivers real-time macroeconomic indicators, multi-asset security watchlists, and Smart Ledger account analytics.
 public struct FinancesMainView: View {
     @ObservedObject private var financeService = FinanceService.shared
+    @ObservedObject private var ledgerStore = SmartLedgerStore.shared
     @State private var activeSubTab: FinanceSubTab = .world
     @State private var selectedMarketType: MarketType? = nil // nil = All
     @State private var showingAddTransactionSheet: Bool = false
     @State private var showingAddAccountSheet: Bool = false
+    @State private var showingLedgerEditorSheet: Bool = false
     
     public var onNavigateBack: (() -> Void)? = nil
 
@@ -49,27 +51,27 @@ public struct FinancesMainView: View {
                     .padding(.top, 14)
                     .padding(.bottom, 12)
                 
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 18) {
-                        // Sub-Tab Switcher (World, Stocks, Money)
-                        subTabSwitcher
-                        
-                        // Active Tab Content
-                        switch activeSubTab {
-                        case .world:
-                            worldSection
-                        case .stocks:
-                            stocksSection
-                        case .money:
-                            moneySection
+                ScrollViewReader { scrollProxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 18) {
+                            // Active Tab Content
+                            switch activeSubTab {
+                            case .world:
+                                worldSection
+                            case .stocks:
+                                stocksSection
+                            case .money:
+                                moneySection
+                            }
                         }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 6)
+                        .padding(.bottom, 110) // Clearance for floating navigation capsule
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 110) // Clearance for floating navigation capsule
-                }
-                .scrollBounceBehavior(.always, axes: .vertical)
-                .refreshable {
-                    await financeService.loadFinanceData(forceRefresh: true)
+                    .scrollBounceBehavior(.always, axes: .vertical)
+                    .refreshable {
+                        await financeService.loadFinanceData(forceRefresh: true)
+                    }
                 }
             }
         }
@@ -78,6 +80,9 @@ public struct FinancesMainView: View {
         }
         .sheet(isPresented: $showingAddAccountSheet) {
             AddAccountSheet()
+        }
+        .sheet(isPresented: $showingLedgerEditorSheet) {
+            SmartLedgerEditorSheet()
         }
         .task {
             if financeService.macroIndicators.isEmpty || financeService.watchlistQuotes.isEmpty {
@@ -89,7 +94,7 @@ public struct FinancesMainView: View {
     // MARK: - Header Bar
     @ViewBuilder
     private var headerBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             if let onNavigateBack = onNavigateBack {
                 Button(action: onNavigateBack) {
                     Image(systemName: "chevron.left")
@@ -105,36 +110,15 @@ public struct FinancesMainView: View {
                 .buttonStyle(.plain)
             }
             
-            // Icon & Title
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(ThemeColors.accentGreen.opacity(0.20))
-                        .frame(width: 38, height: 38)
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(ThemeColors.accentGreen)
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Finances")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    
-                    Text("Portfolio overview and market insights")
-                        .font(.system(size: 11))
-                        .foregroundColor(ThemeColors.fgMutedDark)
-                }
-            }
-            
-            Spacer()
+            // Sub-Tab Switcher (World, Stocks, Money) replacing the title
+            subTabSwitcher
         }
     }
 
     // MARK: - Sub-Tab Switcher
     @ViewBuilder
     private var subTabSwitcher: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 4) {
             ForEach(FinanceSubTab.allCases) { tab in
                 let isSelected = activeSubTab == tab
                 Button {
@@ -142,30 +126,49 @@ public struct FinancesMainView: View {
                         activeSubTab = tab
                     }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 5) {
                         Image(systemName: tab.iconName)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                         Text(tab.rawValue)
                             .font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundColor(isSelected ? .white : ThemeColors.fgMutedDark)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 9)
-                    .background(isSelected ? ThemeColors.accentGreen.opacity(0.28) : Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay {
+                    .padding(.vertical, 8)
+                    .background {
                         if isSelected {
-                            RoundedRectangle(cornerRadius: 12)
-                                .strokeBorder(ThemeColors.accentGreen.opacity(0.55), lineWidth: 1)
+                            Capsule(style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            ThemeColors.accentGreen.opacity(0.70),
+                                            ThemeColors.accentGreen.opacity(0.40)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .overlay {
+                                    Capsule(style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                                }
+                                .shadow(color: ThemeColors.accentGreen.opacity(0.35), radius: 6, x: 0, y: 2)
                         }
                     }
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(4)
-        .background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(3)
+        .background {
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.08))
+                .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(ThemeColors.glassDarkBorder, lineWidth: 1)
+        }
     }
 
     // =========================================================================
@@ -538,114 +541,239 @@ public struct FinancesMainView: View {
     }
 
     // =========================================================================
-    // MARK: - 3. MONEY SECTION (Net Worth, Accounts, Ledger & Transactions)
+    // MARK: - 3. MONEY SECTION (Smart Ledger, Net Worth, Categorized Pills & DSL)
     // =========================================================================
     @ViewBuilder
     private var moneySection: some View {
         VStack(spacing: 20) {
             // Net Worth Hero Card
-            GlassCard(cornerRadius: 22, padding: 22) {
-                VStack(spacing: 16) {
-                    Text("TOTAL NET WORTH")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
-                        .tracking(1.5)
-
-                    Text(financeService.summary.formattedNetWorth)
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-
-                    HStack(spacing: 4) {
-                        Image(systemName: financeService.summary.dayChangePercent >= 0 ? "arrow.up.right" : "arrow.down.right")
+            netWorthHeroCard
+            
+            // Render Dynamic Categorized Sections from Parsed Ledger
+            ForEach(ledgerStore.parsedLedger.sections) { section in
+                ledgerSectionCard(section)
+                    .id("section_\(section.name)")
+            }
+        }
+    }
+    
+    // MARK: - Net Worth Hero Card
+    private var netWorthHeroCard: some View {
+        GlassCard(cornerRadius: 22, padding: 20) {
+            VStack(spacing: 16) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("TOTAL NET WORTH")
                             .font(.system(size: 11, weight: .bold))
-                        Text(String(format: "%@$%.2f (%@%.2f%%)", 
-                                    financeService.summary.dayChange >= 0 ? "+" : "",
-                                    financeService.summary.dayChange,
-                                    financeService.summary.dayChangePercent >= 0 ? "+" : "",
-                                    financeService.summary.dayChangePercent))
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundColor(financeService.summary.dayChangePercent >= 0 ? ThemeColors.accentGreen : ThemeColors.accentPink)
-
-                    // 3 Breakdown Badges: Cash, Investments, Liabilities
-                    HStack(spacing: 12) {
-                        metricBadge(label: "CASH", value: financeService.summary.formattedCash, color: ThemeColors.accentCyan)
-                        metricBadge(label: "INVESTED", value: financeService.summary.formattedInvestments, color: ThemeColors.accentPurple)
-                        if financeService.summary.liabilitiesTotal > 0 {
-                            metricBadge(label: "DEBT", value: financeService.summary.formattedLiabilities, color: ThemeColors.accentPink)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-
-            // Accounts Breakdown Card
-            GlassCard(cornerRadius: 20, padding: 18) {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Label("Accounts & Balances", systemImage: "creditcard.fill")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(ThemeColors.accentCyan)
-                        Spacer()
-                        Button {
-                            showingAddAccountSheet = true
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(ThemeColors.accentCyan)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    VStack(spacing: 8) {
-                        ForEach(financeService.accounts) { account in
-                            accountRow(account)
-                        }
-                    }
-                }
-            }
-
-            // Recent Transactions Ledger
-            GlassCard(cornerRadius: 20, padding: 18) {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Label("Recent Transactions", systemImage: "list.bullet.rectangle.portrait.fill")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(ThemeColors.accentGreen)
-                        Spacer()
-                        Button {
-                            showingAddTransactionSheet = true
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 10, weight: .bold))
-                                Text("Add Entry")
-                                    .font(.system(size: 11, weight: .bold))
-                            }
-                            .foregroundColor(ThemeColors.accentGreen)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(ThemeColors.accentGreen.opacity(0.18))
-                            .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if financeService.transactions.isEmpty {
-                        Text("No recorded transactions yet.")
-                            .font(.system(size: 12))
                             .foregroundColor(ThemeColors.fgMutedDark)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.vertical, 16)
-                    } else {
-                        VStack(spacing: 8) {
-                            ForEach(financeService.transactions.prefix(8)) { tx in
-                                transactionRow(tx)
+                            .tracking(1.5)
+                        
+                        Text(ledgerStore.parsedLedger.formattedNetWorth)
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        
+                        HStack(spacing: 6) {
+                            Text("Est.")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                            Text(ledgerStore.parsedLedger.formattedNetWorthEUR)
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(ThemeColors.accentGreen)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Button {
+                        showingLedgerEditorSheet = true
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "square.and.pencil")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Edit Ledger")
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(ThemeColors.accentGreen)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(ThemeColors.accentGreen.opacity(0.18))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().strokeBorder(ThemeColors.accentGreen.opacity(0.40), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                
+                // 4 Breakdown Badges: Deposits, Balance, Incoming, Dentist
+                HStack(spacing: 8) {
+                    metricBadge(label: "DEPOZITE", value: ledgerStore.parsedLedger.formattedBadge(ledgerStore.parsedLedger.depositTotal), color: ThemeColors.accentGreen)
+                    metricBadge(label: "SOLD", value: ledgerStore.parsedLedger.formattedBadge(ledgerStore.parsedLedger.balanceTotal), color: ThemeColors.accentCyan)
+                    metricBadge(label: "INCOMING", value: ledgerStore.parsedLedger.formattedBadge(ledgerStore.parsedLedger.incomingTotal), color: ThemeColors.accentPurple)
+                    if ledgerStore.parsedLedger.dentistTotal > 0 {
+                        metricBadge(label: "DENTIST", value: ledgerStore.parsedLedger.formattedBadge(ledgerStore.parsedLedger.dentistTotal), color: ThemeColors.accentPink)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+    
+    // MARK: - Ledger Section Card
+    @ViewBuilder
+    private func ledgerSectionCard(_ section: SmartLedgerSection) -> some View {
+        let (icon, color, title) = sectionStyle(for: section.name)
+        
+        GlassCard(cornerRadius: 20, padding: 18) {
+            VStack(alignment: .leading, spacing: 14) {
+                // Section Header
+                HStack {
+                    Label(title, systemImage: icon)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(color)
+                    
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(section.formattedTotal)
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        
+                        if section.isScaled && section.totalRaw > 0 {
+                            Text("(\(section.formattedRawTotal))")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
+                }
+                
+                if section.items.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: section.name.lowercased() == "balance" ? "checkmark.circle.fill" : "info.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(color)
+                        Text(section.name.lowercased() == "balance" ? (section.totalCalculated == 0 ? "Zero-Based Budget Balanced · Toți banii au fost alocați" : "Surplus lunar nealocat") : "Sold tratament dentar / obligații planificate")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(color.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                } else {
+                    // Section Items
+                    VStack(spacing: 10) {
+                        ForEach(section.items) { item in
+                            ledgerItemRow(item: item, sectionColor: color)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Ledger Item Pill Row
+    @ViewBuilder
+    private func ledgerItemRow(item: SmartLedgerItem, sectionColor: Color) -> some View {
+        if item.isPureNote {
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(ThemeColors.fgMutedDark)
+                Text(item.key)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(ThemeColors.fgMutedDark)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .center) {
+                    Text(item.key)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(item.formattedCalculatedAmount)
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        
+                        if item.isScaled && item.rawAmount > 0 {
+                            Text("(\(item.formattedRawAmount))")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
+                }
+                
+                // Progress bar for percentage of section if applicable
+                if item.percentageOfSection > 0 {
+                    HStack(spacing: 8) {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.08))
+                                    .frame(height: 4)
+                                Capsule()
+                                    .fill(LinearGradient(
+                                        colors: [sectionColor, sectionColor.opacity(0.65)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ))
+                                    .frame(width: max(4, geo.size.width * CGFloat(item.percentageOfSection)), height: 4)
+                            }
+                        }
+                        .frame(height: 4)
+                        
+                        Text(String(format: "%.1f%%", item.percentageOfSection * 100))
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundColor(sectionColor)
+                    }
+                }
+                
+                // Informative notes pills underneath
+                if !item.notes.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(item.notes, id: \.self) { note in
+                                Text(note)
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.white.opacity(0.06))
+                                    .clipShape(Capsule())
                             }
                         }
                     }
                 }
             }
+            .padding(10)
+            .background(Color.white.opacity(0.03))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+    
+    // MARK: - Section Styling Helper
+    private func sectionStyle(for name: String) -> (icon: String, color: Color, title: String) {
+        switch name.lowercased() {
+        case "incoming":
+            return ("arrow.down.left.circle.fill", ThemeColors.accentPurple, "Incoming")
+        case "outgoing":
+            return ("arrow.up.right.circle.fill", ThemeColors.accentOrange, "Outgoing")
+        case "balance":
+            return ("equal.circle.fill", ThemeColors.accentCyan, "Balance")
+        case "dentist":
+            return ("cross.case.fill", ThemeColors.accentPink, "Dentist")
+        case "deposit":
+            return ("building.columns.fill", ThemeColors.accentGreen, "Deposits & Savings")
+        default:
+            return ("list.bullet.rectangle.portrait.fill", ThemeColors.accentCyan, name.capitalized)
         }
     }
 
@@ -656,11 +784,14 @@ public struct FinancesMainView: View {
                 .font(.system(size: 9, weight: .bold))
                 .foregroundColor(ThemeColors.fgMutedDark)
             Text(value)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.system(size: 13, weight: .bold, design: .rounded))
                 .foregroundColor(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.70)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
+        .padding(.horizontal, 4)
         .background(color.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay {
