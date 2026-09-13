@@ -49,13 +49,16 @@ public struct NewsFeedView: View {
     }
     
     public var body: some View {
-        ZStack {
-            LiquidGlassBackground {
-                ScrollView {
+        LiquidGlassBackground {
+            VStack(spacing: 0) {
+                // Pinned Top Glass Header Bar with Search & Category Action
+                headerBar
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+                    .padding(.bottom, 12)
+                
+                ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 16) {
-                        // Top Glass Header Bar with Search & Category Action
-                        headerBar
-                        
                         // Sub-Tab Switcher (Live Feed / Read Later / Favorites)
                         subTabSwitcher
                         
@@ -80,11 +83,22 @@ public struct NewsFeedView: View {
                         }
                     }
                     .padding(.horizontal, 20)
+                    .padding(.top, 4)
                     .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
                 }
+                .scrollBounceBehavior(.always, axes: .vertical)
                 .refreshable {
-                    await newsService.loadFeed(newsService.selectedFeed, forceRefresh: true)
-                    await savedService.syncWithSupabase()
+                    #if canImport(UIKit)
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    #endif
+                    if activeSubTab == .live {
+                        await newsService.loadFeed(newsService.selectedFeed, forceRefresh: true)
+                    } else {
+                        await savedService.syncWithSupabase()
+                    }
+                    #if canImport(UIKit)
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    #endif
                 }
             }
         }
@@ -195,7 +209,6 @@ public struct NewsFeedView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
-        .padding(.top, 6)
     }
     
     // MARK: - Category Selector Menu

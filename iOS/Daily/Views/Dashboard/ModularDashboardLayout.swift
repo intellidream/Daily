@@ -28,6 +28,7 @@ extension View {
 
 /// A 2-column mathematical bin-packing grid layout for customizable dashboard widgets.
 /// Smoothly arranges 1x1 (Small), 2x1 (Wide), 1x2 (Tall), and 2x2 (Large) widgets without gaps.
+/// Features high-performance Layout.Cache to eliminate frame drops and layout oscillation on 120Hz ProMotion displays.
 public struct ModularDashboardLayout: Layout {
     public var spacing: CGFloat
     public var defaultUnitHeight: CGFloat
@@ -50,19 +51,33 @@ public struct ModularDashboardLayout: Layout {
         let rowSpan: Int
     }
     
-    struct PlacedItem {
-        let index: Int
-        let rect: CGRect
+    public struct PlacedItem: Sendable {
+        public let index: Int
+        public let rect: CGRect
+    }
+    
+    public struct Cache {
+        var lastWidth: CGFloat = -1
+        var items: [PlacedItem] = []
+        var totalHeight: CGFloat = 0
+    }
+    
+    public func makeCache(subviews: Subviews) -> Cache {
+        Cache()
+    }
+    
+    public func updateCache(_ cache: inout Cache, subviews: Subviews) {
+        // Invalidate on data/subview change so fresh measurements are computed
+        cache.lastWidth = -1
     }
     
     private func computePlacements(
         subviews: Subviews,
-        width: CGFloat,
-        origin: CGPoint = .zero
+        width: CGFloat
     ) -> (items: [PlacedItem], totalHeight: CGFloat) {
         guard !subviews.isEmpty else { return ([], 0) }
         
-        let colWidth = max((width - spacing) / 2.0, 80.0)
+        let colWidth = floor(max((width - spacing) / 2.0, 80.0))
         var occupied = Set<GridCoord>()
         var plans: [PlacementPlan] = []
         
@@ -142,10 +157,10 @@ public struct ModularDashboardLayout: Layout {
             let measured = subviews[plan.index].sizeThatFits(ProposedViewSize(width: itemWidth, height: nil))
             if plan.colSpan == 2 {
                 // Wide items span both columns: height is exactly their natural content height
-                rowHeights[plan.startRow] = max(rowHeights[plan.startRow], max(measured.height, 80))
+                rowHeights[plan.startRow] = ceil(max(rowHeights[plan.startRow], max(measured.height, 80)))
             } else {
                 // Small items: use at least defaultUnitHeight (150)
-                rowHeights[plan.startRow] = max(rowHeights[plan.startRow], max(measured.height, defaultUnitHeight))
+                rowHeights[plan.startRow] = ceil(max(rowHeights[plan.startRow], max(measured.height, defaultUnitHeight)))
             }
         }
         
@@ -158,17 +173,17 @@ public struct ModularDashboardLayout: Layout {
                 let measured = subviews[plan.index].sizeThatFits(ProposedViewSize(width: itemWidth, height: nil))
                 
                 if rowHeights[r0] == 0 && rowHeights[r1] == 0 {
-                    let half = max((measured.height - spacing) / 2.0, defaultUnitHeight)
+                    let half = ceil(max((measured.height - spacing) / 2.0, defaultUnitHeight))
                     rowHeights[r0] = half
                     rowHeights[r1] = half
                 } else if rowHeights[r0] == 0 {
-                    rowHeights[r0] = max(measured.height - spacing - rowHeights[r1], defaultUnitHeight)
+                    rowHeights[r0] = ceil(max(measured.height - spacing - rowHeights[r1], defaultUnitHeight))
                 } else if rowHeights[r1] == 0 {
-                    rowHeights[r1] = max(measured.height - spacing - rowHeights[r0], defaultUnitHeight)
+                    rowHeights[r1] = ceil(max(measured.height - spacing - rowHeights[r0], defaultUnitHeight))
                 } else {
                     let currentSum = rowHeights[r0] + spacing + rowHeights[r1]
                     if measured.height > currentSum {
-                        let diff = (measured.height - currentSum) / 2.0
+                        let diff = ceil((measured.height - currentSum) / 2.0)
                         rowHeights[r0] += diff
                         rowHeights[r1] += diff
                     }
@@ -185,29 +200,29 @@ public struct ModularDashboardLayout: Layout {
         
         // 3. Compute row cumulative Y positions
         var rowY = [CGFloat](repeating: 0, count: totalRows)
-        var currentY = origin.y
+        var currentY: CGFloat = 0
         for r in 0..<totalRows {
             rowY[r] = currentY
             currentY += rowHeights[r] + spacing
         }
-        let totalHeight = currentY > origin.y ? (currentY - spacing - origin.y) : 0
+        let totalHeight = currentY > 0 ? ceil(currentY - spacing) : 0
         
-        // 4. Compute exact frame rectangles for each placed item
+        // 4. Compute exact frame rectangles for each placed item (pixel-aligned)
         var items: [PlacedItem] = []
         for plan in plans {
-            let x = (plan.col == 0) ? origin.x : origin.x + colWidth + spacing
-            let y = rowY[plan.startRow]
-            let w = (plan.colSpan == 2) ? width : colWidth
+            let x = floor((plan.col == 0) ? 0 : colWidth + spacing)
+            let y = floor(rowY[plan.startRow])
+            let w = floor((plan.colSpan == 2) ? width : colWidth)
             
             let h: CGFloat
             if plan.rowSpan == 1 {
-                h = rowHeights[plan.startRow]
+                h = floor(rowHeights[plan.startRow])
             } else {
                 let r1 = plan.startRow + 1
                 if r1 < totalRows {
-                    h = rowHeights[plan.startRow] + spacing + rowHeights[r1]
+                    h = floor(rowHeights[plan.startRow] + spacing + rowHeights[r1])
                 } else {
-                    h = rowHeights[plan.startRow]
+                    h = floor(rowHeights[plan.startRow])
                 }
             }
             
@@ -218,17 +233,35 @@ public struct ModularDashboardLayout: Layout {
         return (items, totalHeight)
     }
     
-    public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 353
-        let (_, height) = computePlacements(subviews: subviews, width: width)
-        return CGSize(width: width, height: height)
+    public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+        let width = floor(proposal.width ?? 353)
+        guard width > 0 else { return .zero }
+        
+        if abs(cache.lastWidth - width) > 0.5 || cache.items.isEmpty {
+            let (items, height) = computePlacements(subviews: subviews, width: width)
+            cache.lastWidth = width
+            cache.items = items
+            cache.totalHeight = height
+        }
+        return CGSize(width: width, height: cache.totalHeight)
     }
     
-    public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let (items, _) = computePlacements(subviews: subviews, width: bounds.width, origin: bounds.origin)
-        for item in items {
+    public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let width = floor(bounds.width)
+        guard width > 0 else { return }
+        
+        if abs(cache.lastWidth - width) > 0.5 || cache.items.isEmpty {
+            let (items, height) = computePlacements(subviews: subviews, width: width)
+            cache.lastWidth = width
+            cache.items = items
+            cache.totalHeight = height
+        }
+        
+        for item in cache.items {
+            guard item.index < subviews.count else { continue }
+            let origin = CGPoint(x: floor(bounds.origin.x + item.rect.origin.x), y: floor(bounds.origin.y + item.rect.origin.y))
             subviews[item.index].place(
-                at: item.rect.origin,
+                at: origin,
                 proposal: ProposedViewSize(item.rect.size)
             )
         }

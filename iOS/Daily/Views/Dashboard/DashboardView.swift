@@ -6,9 +6,6 @@ import UIKit
 
 public struct DashboardView: View {
     @ObservedObject private var settingsService = SettingsService.shared
-    @ObservedObject private var authService = AuthService.shared
-    @ObservedObject private var newsService = NewsService.shared
-    @ObservedObject private var healthService = HealthDataService.shared
     
     @State private var showingCustomizeSheet = false
     
@@ -44,7 +41,7 @@ public struct DashboardView: View {
     }
     
     public var body: some View {
-        ScrollView {
+        ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 16) {
                 // Header Greeting with Customize & Settings shortcuts
                 HeaderGreetingView(
@@ -68,6 +65,7 @@ public struct DashboardView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
         }
+        .scrollBounceBehavior(.always, axes: .vertical)
         .refreshable {
             async let w: () = WeatherService.shared.refreshWeather(force: true)
             async let h: () = HealthDataService.shared.loadDataForSelectedDate(forceRefresh: true)
@@ -80,7 +78,7 @@ public struct DashboardView: View {
             async let w: () = WeatherService.shared.currentWeather == nil ? WeatherService.shared.refreshWeather() : ()
             async let h: () = HealthDataService.shared.loadDataForSelectedDate()
             async let hab: () = HabitsService.shared.loadDataForSelectedDate()
-            async let n: () = newsService.articles.isEmpty ? newsService.loadFeed(newsService.selectedFeed) : ()
+            async let n: () = NewsService.shared.articles.isEmpty ? NewsService.shared.loadFeed(NewsService.shared.selectedFeed) : ()
             async let f: () = FinanceService.shared.loadFinanceData()
             _ = await (w, h, hab, n, f)
         }

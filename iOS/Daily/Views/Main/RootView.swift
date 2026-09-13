@@ -150,8 +150,24 @@ public struct RootView: View {
                                 SettingsView(onNavigateBack: navigateToDashboard)
                             }
                         }
-
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                                .onEnded { value in
+                                    guard selectedTab != .dashboard else { return }
+                                    let startX = value.startLocation.x
+                                    let translationX = value.translation.width
+                                    let translationY = value.translation.height
+                                    
+                                    // Edge swipe right: started within 50pt of left edge, dragged right > 60pt, horizontally dominant
+                                    if startX <= 50 && translationX > 60 && abs(translationX) > abs(translationY) * 1.3 {
+                                        #if canImport(UIKit)
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                        #endif
+                                        navigateToDashboard()
+                                    }
+                                }
+                        )
                         
                         // Floating Liquid Glass Navigation Capsule
                         FloatingGlassCapsule(selectedTab: $selectedTab)

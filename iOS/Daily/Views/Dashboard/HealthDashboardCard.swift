@@ -71,14 +71,12 @@ public struct HealthDashboardCard: View {
             
             // Progress Bar towards 10,000 steps
             let progress = min(Double(healthService.totalStepsToday) / 10000.0, 1.0)
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.12))
-                    Capsule()
-                        .fill(LinearGradient(colors: [ThemeColors.accentPink, ThemeColors.accentCyan], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: geo.size.width * CGFloat(progress))
-                }
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.12))
+                Capsule()
+                    .fill(LinearGradient(colors: [ThemeColors.accentPink, ThemeColors.accentCyan], startPoint: .leading, endPoint: .trailing))
+                    .scaleEffect(x: CGFloat(progress), y: 1.0, anchor: .leading)
             }
             .frame(height: 5)
             
