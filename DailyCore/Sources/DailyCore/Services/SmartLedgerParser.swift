@@ -260,13 +260,21 @@ public final class SmartLedgerParser: Sendable {
         return notes
     }
     
-    /// Cleans key names, removing dangling slashes or extra notes if needed.
+    /// Cleans key names: strips parenthesized metadata notes (...) and trailing slashes,
+    /// while strictly preserving intentional double-slashes "//" inside key categories (e.g. Itp/Rvg/4.27//Ghs/Prk/Csc/Rca/1.27).
     private func cleanKeyName(_ key: String) -> String {
         var k = key.trimmingCharacters(in: .whitespaces)
-        // If key ends with comment or //, clean it
-        if let range = k.range(of: "//") {
-            k = String(k[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+        
+        // 1. Remove parenthesized metadata expressions (...) from the key
+        k = k.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
+        k = k.trimmingCharacters(in: .whitespaces)
+        
+        // 2. If the main text ends in a trailing slash '/' (because it was followed by a parenthesized comment), strip it
+        while k.hasSuffix("/") {
+            k.removeLast()
+            k = k.trimmingCharacters(in: .whitespaces)
         }
+        
         return k
     }
     

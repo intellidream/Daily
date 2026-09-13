@@ -270,4 +270,29 @@ final class SmartLedgerParserTests: XCTestCase {
         let reParsed = parser.parse(updatedText)
         XCTAssertEqual(reParsed.outgoingTotal, 15000.0, accuracy: 0.01)
     }
+    
+    func testPreserveDoubleSlashInKey() {
+        let parser = SmartLedgerParser()
+        let parsed = parser.parse(sampleLedger)
+        
+        let outgoing = parsed.sections.first { $0.name == "Outgoing" }
+        let itpItem = outgoing?.items.first { $0.key.contains("Itp") }
+        XCTAssertNotNil(itpItem)
+        XCTAssertEqual(itpItem?.key, "Itp/Rvg/4.27//Ghs/Prk/Csc/Rca/1.27")
+        XCTAssertEqual(itpItem?.displayName, "Itp/Rvg/4.27//Ghs/Prk/Csc/Rca/1.27")
+    }
+    
+    func testCleanKeyWithEmbeddedParenthesesAndTrailingSlash() {
+        let parser = SmartLedgerParser()
+        let parsed = parser.parse(sampleLedger)
+        
+        let outgoing = parsed.sections.first { $0.name == "Outgoing" }
+        let serviciuItem = outgoing?.items.first { $0.key.contains("Serviciu") }
+        XCTAssertNotNil(serviciuItem)
+        XCTAssertEqual(serviciuItem?.key, "Serviciu//Outs")
+        XCTAssertEqual(serviciuItem?.displayName, "Serviciu//Outs")
+        XCTAssertEqual(serviciuItem?.notes.count, 2)
+        XCTAssertEqual(serviciuItem?.notes[0], "0/*100")
+        XCTAssertEqual(serviciuItem?.notes[1], "0*200")
+    }
 }

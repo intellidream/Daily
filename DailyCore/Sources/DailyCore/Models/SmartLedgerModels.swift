@@ -14,17 +14,17 @@ public struct SmartLedgerItem: Identifiable, Codable, Equatable, Sendable {
     public var rawLine: String
     public var percentageOfSection: Double
     
-    /// Clean display title for UI pills (e.g. "Tigari" for "Tigari (40/45)").
+    /// Clean display title for UI pills (e.g. "Tigari" for "Tigari (40/45)" or "Serviciu//Outs" for "Serviciu/(0/*100)/Outs/(0*200)").
     public var displayName: String {
-        var clean = key
-        // If key ends with a parenthesized suffix like "(40/45)", strip it for clean pill title display
-        if let lastOpen = clean.lastIndex(of: "("), clean.hasSuffix(")") {
-            let candidate = String(clean[..<lastOpen]).trimmingCharacters(in: .whitespaces)
-            if !candidate.isEmpty {
-                return candidate
-            }
+        if isPureNote {
+            return key
         }
-        return key
+        var clean = key.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        while clean.hasSuffix("/") {
+            clean.removeLast()
+            clean = clean.trimmingCharacters(in: .whitespaces)
+        }
+        return clean.isEmpty ? key : clean
     }
     
     public init(

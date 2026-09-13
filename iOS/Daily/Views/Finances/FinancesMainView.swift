@@ -43,6 +43,18 @@ public struct FinancesMainView: View {
         } else {
             self._activeSubTab = State(initialValue: .money)
         }
+        
+        if args.contains("-testOpenItpAdjust") {
+            if let outgoing = ledgerStore.parsedLedger.sections.first(where: { $0.name.lowercased() == "outgoing" }),
+               let firstItem = outgoing.items.first {
+                self._selectedAdjustItem = State(initialValue: firstItem)
+            }
+        } else if args.contains("-testOpenServiciuAdjust") {
+            if let outgoing = ledgerStore.parsedLedger.sections.first(where: { $0.name.lowercased() == "outgoing" }),
+               let servItem = outgoing.items.first(where: { $0.key.contains("Serviciu") }) {
+                self._selectedAdjustItem = State(initialValue: servItem)
+            }
+        }
     }
 
     public var body: some View {
@@ -721,25 +733,32 @@ public struct FinancesMainView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .center, spacing: 10) {
-                    // Tappable Key Name -> opens Quick Adjust Sheet
+                HStack(alignment: .center, spacing: 6) {
+                    // Horizontally scrollable title allowing left-right dragging, tap opens quick adjust
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Text(item.displayName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(.vertical, 2)
+                    }
+                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                    .onTapGesture {
+                        selectedAdjustItem = item
+                    }
+                    
+                    // Quick adjust indicator button
                     Button {
                         selectedAdjustItem = item
                     } label: {
-                        HStack(spacing: 6) {
-                            Text(item.displayName)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                            
-                            Image(systemName: "slider.horizontal.3")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(ThemeColors.fgMutedDark.opacity(0.6))
-                        }
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(ThemeColors.fgMutedDark.opacity(0.7))
+                            .padding(.horizontal, 2)
                     }
                     .buttonStyle(.plain)
                     
-                    Spacer()
+                    Spacer(minLength: 6)
                     
                     // Amount badges
                     VStack(alignment: .trailing, spacing: 1) {

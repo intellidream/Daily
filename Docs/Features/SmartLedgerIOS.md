@@ -41,8 +41,12 @@ It mirrors the Double-Entry DSL architecture established in WinUI (`Daily.Servic
 - **AST Line Parser**:
   - Detects Markdown section delimiters (`**Incoming**`, `**Outgoing**`, etc.).
   - Filters empty lines and Markdown horizontal rules (`---`).
-  - Pre-processes parenthesized expressions (`(...)`) to extract metadata notes, then strips them before numeric tokenization.
-  - Strips inline comments (`//`).
+  - Pre-processes parenthesized expressions (`(...)`) across the line to extract metadata notes, then strips them before numeric tokenization.
+  - **Key Cleaning (`cleanKeyName`)**:
+    - Preserves intentional double-slashes `//` within category keys (e.g., `Itp/Rvg/4.27//Ghs/Prk/Csc/Rca/1.27`).
+    - Strips embedded parenthesized notes from category names (e.g., `Serviciu/(0/*100)/Outs/(0*200)` -> `Serviciu//Outs`) and aggregates extracted note tokens (`["0/*100", "0*200"]`).
+    - Strips trailing slashes left when a trailing parenthesized note is removed.
+    - Preserves pure note lines (`isPureNote`) verbatim without stripping outer parentheses.
   - Converts European/Romanian number formats (thousands dot `44.000`, decimal comma `53.156,47`).
   - Applies 100x multiplier conditionally based on section position relative to `**Deposit**`.
   - Handles explicit `Total = ...` and `(Total = ...)` expressions.
@@ -69,6 +73,13 @@ It mirrors the Double-Entry DSL architecture established in WinUI (`Daily.Servic
   - Each non-note item row features inline Liquid Glass `[ − ]` and `[ + ]` steppers with spring haptics.
   - Pre-Deposit scaled items step by 1 unit (= 100 Lei).
   - Unscaled items step by 100 Lei.
+- **Horizontally Scrollable Category Titles**:
+  - Main list rows wrap category names in `ScrollView(.horizontal, showsIndicators: false)` so users can drag long keys (like `Itp/Rvg/4.27//Ghs/Prk/Csc/Rca/1.27` or `V/N/Y/O/AI/M/W/E/I/Ap/Am/Sy/Ad/Sp`) left and right.
+  - Dedicated slider indicator button (`slider.horizontal.3`) pinned next to the title clearly indicates quick-adjust access.
+- **Auto-Scrolling Title Component (`AutoScrollingText.swift`)**:
+  - Used in `SmartLedgerQuickAdjustSheet.swift` in both the top navigation bar (`ToolbarItem(placement: .principal)`) and the hero card.
+  - Synchronously computes text intrinsic width using `UIFont`.
+  - If text exceeds container bounds, smoothly animates horizontal marquee scrolling (start -> pause -> end -> pause -> start) and supports manual touch dragging with auto-resume.
 - **Quick Adjust Sheet (`SmartLedgerQuickAdjustSheet.swift`)**:
   - Tapping any category pill or note chip opens the quick adjustment modal.
   - Preset delta chips:
@@ -84,6 +95,6 @@ It mirrors the Double-Entry DSL architecture established in WinUI (`Daily.Servic
 ---
 
 ## Verification & Testing
-- **Unit Tests**: `DailyCoreTests/SmartLedgerParserTests.swift` passes 8/8 tests (including AST parsing, positive balance, increment adjustment with total balancing, comment/note preservation, category addition, and deletion). All 55 test cases in `DailyCore` passing cleanly.
-- **Simulator Inspection (SimulaPhone)**: Verified interactive `[ - ]` and `[ + ]` steppers, subtab ordering, floating capsule order `[Dashboard, Money, Health, Habits]`, and screenshot captures.
+- **Unit Tests**: `DailyCoreTests/SmartLedgerParserTests.swift` passes 10/10 tests (including preserving `//` in keys, stripping embedded parenthesized notes, positive balance, increment adjustment with total balancing, comment/note preservation, category addition, and deletion). All 57 test cases across `DailyCore` passing cleanly.
+- **Simulator Inspection (SimulaPhone)**: Verified interactive `[ - ]` and `[ + ]` steppers, subtab ordering, floating capsule order `[Dashboard, Money, Health, Habits]`, horizontal title dragging in list, and auto-scrolling titles in detail sheets.
 - **Physical Device Deployment**: Built, signed, installed, and launched on iPhone 16 Pro ("Schmitz").

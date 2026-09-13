@@ -60,14 +60,24 @@ public struct SmartLedgerQuickAdjustSheet: View {
                     .padding(.bottom, 32)
                 }
             }
-            .navigationTitle(item.displayName)
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Închide") {
                         dismiss()
                     }
                     .foregroundColor(ThemeColors.fgMutedDark)
+                }
+                
+                ToolbarItem(placement: .principal) {
+                    AutoScrollingText(
+                        text: item.displayName,
+                        fontSize: 15,
+                        weight: .bold,
+                        color: .white,
+                        alignment: .center,
+                        fixedContainerWidth: 200
+                    )
+                    .frame(width: 200, height: 32)
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
@@ -118,6 +128,18 @@ public struct SmartLedgerQuickAdjustSheet: View {
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
                 }
+                
+                // Prominent auto-scrolling category title
+                AutoScrollingText(
+                    text: item.displayName,
+                    fontSize: 18,
+                    weight: .bold,
+                    design: .rounded,
+                    color: .white,
+                    alignment: .center
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 2)
                 
                 Text(item.formattedCalculatedAmount)
                     .font(.system(size: 34, weight: .bold, design: .rounded))
