@@ -16,6 +16,7 @@ public struct DashboardView: View {
     private let onNavigateToNews: () -> Void
     private let onNavigateToHealth: () -> Void
     private let onNavigateToHabits: () -> Void
+    private let onNavigateToFinances: () -> Void
     private let onNavigateToSettings: () -> Void
     
     public init(
@@ -23,12 +24,14 @@ public struct DashboardView: View {
         onNavigateToNews: @escaping () -> Void = {},
         onNavigateToHealth: @escaping () -> Void = {},
         onNavigateToHabits: @escaping () -> Void = {},
+        onNavigateToFinances: @escaping () -> Void = {},
         onNavigateToSettings: @escaping () -> Void = {}
     ) {
         self.onNavigateToWeather = onNavigateToWeather
         self.onNavigateToNews = onNavigateToNews
         self.onNavigateToHealth = onNavigateToHealth
         self.onNavigateToHabits = onNavigateToHabits
+        self.onNavigateToFinances = onNavigateToFinances
         self.onNavigateToSettings = onNavigateToSettings
     }
 
@@ -70,14 +73,16 @@ public struct DashboardView: View {
             async let h: () = HealthDataService.shared.loadDataForSelectedDate(forceRefresh: true)
             async let hab: () = HabitsService.shared.loadDataForSelectedDate(forceRefresh: true)
             async let n: () = NewsService.shared.loadFeed(NewsService.shared.selectedFeed, forceRefresh: true)
-            _ = await (w, h, hab, n)
+            async let f: () = FinanceService.shared.loadFinanceData(forceRefresh: true)
+            _ = await (w, h, hab, n, f)
         }
         .task {
             async let w: () = WeatherService.shared.currentWeather == nil ? WeatherService.shared.refreshWeather() : ()
             async let h: () = HealthDataService.shared.loadDataForSelectedDate()
             async let hab: () = HabitsService.shared.loadDataForSelectedDate()
             async let n: () = newsService.articles.isEmpty ? newsService.loadFeed(newsService.selectedFeed) : ()
-            _ = await (w, h, hab, n)
+            async let f: () = FinanceService.shared.loadFinanceData()
+            _ = await (w, h, hab, n, f)
         }
         .sheet(isPresented: $showingCustomizeSheet) {
             CustomizeDashboardSheet()
@@ -96,6 +101,8 @@ public struct DashboardView: View {
             HealthDashboardCard(size: config.size, onTap: onNavigateToHealth)
         case DashboardWidgetType.habits.rawValue:
             HabitsDashboardCard(size: config.size, onTap: onNavigateToHabits)
+        case DashboardWidgetType.finances.rawValue:
+            FinancesDashboardCard(size: config.size, onTap: onNavigateToFinances)
         default:
             EmptyView()
         }

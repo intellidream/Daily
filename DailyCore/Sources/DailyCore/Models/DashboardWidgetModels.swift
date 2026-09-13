@@ -50,6 +50,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
     case news    = "news"
     case health  = "health"
     case habits  = "habits"
+    case finances = "finances"
     
     public var title: String {
         switch self {
@@ -57,6 +58,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
         case .news:    return "News & Briefings"
         case .health:  return "Health & Vitals"
         case .habits:  return "Habits & Cravings"
+        case .finances: return "Finances & Markets"
         }
     }
     
@@ -66,6 +68,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
         case .news:    return "newspaper.fill"
         case .health:  return "heart.fill"
         case .habits:  return "drop.fill"
+        case .finances: return "chart.line.uptrend.xyaxis"
         }
     }
 }
@@ -86,13 +89,14 @@ public struct DashboardWidgetConfig: Codable, Identifiable, Equatable, Sendable 
         DashboardWidgetType(rawValue: id)
     }
     
-    /// Default factory dashboard layout: all 4 primary widgets in wide (2x1) format.
+    /// Default factory dashboard layout: all primary widgets in wide (2x1) format.
     public static var defaultLayout: [DashboardWidgetConfig] {
         [
             DashboardWidgetConfig(id: DashboardWidgetType.weather.rawValue, size: .wide, isVisible: true),
             DashboardWidgetConfig(id: DashboardWidgetType.news.rawValue, size: .wide, isVisible: true),
             DashboardWidgetConfig(id: DashboardWidgetType.health.rawValue, size: .wide, isVisible: true),
-            DashboardWidgetConfig(id: DashboardWidgetType.habits.rawValue, size: .wide, isVisible: true)
+            DashboardWidgetConfig(id: DashboardWidgetType.habits.rawValue, size: .wide, isVisible: true),
+            DashboardWidgetConfig(id: DashboardWidgetType.finances.rawValue, size: .wide, isVisible: true)
         ]
     }
 }

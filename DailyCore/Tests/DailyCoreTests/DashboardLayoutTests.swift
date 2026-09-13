@@ -22,8 +22,8 @@ struct DashboardLayoutTests {
     @Test("Default Dashboard Layout Configuration")
     func testDefaultLayout() {
         let defaults = DashboardWidgetConfig.defaultLayout
-        #expect(defaults.count == 4)
-        #expect(defaults.map(\.id) == ["weather", "news", "health", "habits"])
+        #expect(defaults.count == 5)
+        #expect(defaults.map(\.id) == ["weather", "news", "health", "habits", "finances"])
         #expect(defaults.allSatisfy { $0.size == .wide && $0.isVisible })
     }
     
@@ -34,7 +34,8 @@ struct DashboardLayoutTests {
             DashboardWidgetConfig(id: "weather", size: .small),
             DashboardWidgetConfig(id: "health", size: .small),
             DashboardWidgetConfig(id: "news", size: .tall),
-            DashboardWidgetConfig(id: "habits", size: .large)
+            DashboardWidgetConfig(id: "habits", size: .large),
+            DashboardWidgetConfig(id: "finances", size: .wide)
         ]
         
         let encoder = JSONEncoder()
@@ -43,11 +44,12 @@ struct DashboardLayoutTests {
         let decoder = JSONDecoder()
         let decoded = try decoder.decode(AppSettings.self, from: data)
         
-        #expect(decoded.dashboardWidgets.count == 4)
+        #expect(decoded.dashboardWidgets.count == 5)
         #expect(decoded.dashboardWidgets[0].size == .small)
         #expect(decoded.dashboardWidgets[1].size == .small)
         #expect(decoded.dashboardWidgets[2].size == .tall)
         #expect(decoded.dashboardWidgets[3].size == .large)
+        #expect(decoded.dashboardWidgets[4].size == .wide)
     }
     
     @Test("Legacy AppSettings JSON Graceful Fallback to Default Widgets")
@@ -63,7 +65,7 @@ struct DashboardLayoutTests {
         let data = legacyJson.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
         
-        #expect(decoded.dashboardWidgets.count == 4)
+        #expect(decoded.dashboardWidgets.count == 5)
         #expect(decoded.dashboardWidgets == DashboardWidgetConfig.defaultLayout)
     }
 }

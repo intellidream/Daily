@@ -73,7 +73,13 @@ public struct AppSettings: Codable, Equatable, Sendable {
         
         let loadedWidgets = try c.decodeIfPresent([DashboardWidgetConfig].self, forKey: .dashboardWidgets)
         if let loadedWidgets = loadedWidgets, !loadedWidgets.isEmpty {
-            self.dashboardWidgets = loadedWidgets
+            var configured = loadedWidgets
+            for defaultWidget in DashboardWidgetConfig.defaultLayout {
+                if !configured.contains(where: { $0.id == defaultWidget.id }) {
+                    configured.append(defaultWidget)
+                }
+            }
+            self.dashboardWidgets = configured
         } else {
             self.dashboardWidgets = DashboardWidgetConfig.defaultLayout
         }

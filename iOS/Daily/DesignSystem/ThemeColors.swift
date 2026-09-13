@@ -41,6 +41,8 @@ public struct ThemeColors {
     public static let accentBlue = Color(hex: "4A9EFF")
     public static let accentPink = Color(hex: "FF2D55")
     public static let accentPurple = Color(hex: "AF52DE")
+    public static let accentGreen = Color(hex: "00E676")
+    public static let accentOrange = Color(hex: "FF9500")
     public static let glowPurple = Color(hex: "8A2BE2")
     
     // Status colors

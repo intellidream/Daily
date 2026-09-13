@@ -277,3 +277,7 @@ Inspired by deep research into **StressWatch** (documented in [StressWatch_Resea
 ### 11.4 Automated Test Coverage
 - Verified in `SleepGuidanceTests.swift` (`testOptimalSleepSessionEvaluation`, `testDisruptedSleepProducesDeficitAndActionableTips`).
 - 100% test pass rate across all 30 tests in `DailyCore`.
+
+### 11.5 Next Steps & Roadmap: Gemini Cloud & Local LLM Integration
+- [ ] **Gemini API Configuration**: Provide settings UI / secure configuration for Google Gemini API key to enable live online generative health reasoning.
+- [ ] **Dual-Engine Auto Fallback**: Use Gemini 1.5/2.0 Flash when online/configured, with automatic fallback to local rule-based `SleepAnalysisEngine` when offline.

@@ -11,6 +11,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
     case health = "Health"
     case habits = "Habits"
     case settings = "Settings"
+    case finances = "Finances"
     
     public var id: String { rawValue }
     
@@ -22,10 +23,11 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .health: return "heart.fill"
         case .habits: return "drop.fill"
         case .settings: return "gearshape.fill"
+        case .finances: return "chart.line.uptrend.xyaxis"
         }
     }
     
-    public static let primaryTabs: [NavigationTab] = [.dashboard, .news, .health, .habits]
+    public static let primaryTabs: [NavigationTab] = [.dashboard, .news, .health, .habits, .finances]
 }
 
 /// Floating Liquid Glass navigation capsule anchored at the bottom of the viewport.
@@ -39,7 +41,7 @@ public struct FloatingGlassCapsule: View {
     }
     
     public var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             ForEach(NavigationTab.primaryTabs) { tab in
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
@@ -51,19 +53,21 @@ public struct FloatingGlassCapsule: View {
                         #endif
                     }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 5) {
                         Image(systemName: tab.iconName)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                         
                         if selectedTab == tab {
                             Text(tab.rawValue)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .fixedSize(horizontal: true, vertical: false)
+                                .lineLimit(1)
                                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
                         }
                     }
                     .foregroundColor(selectedTab == tab ? .white : .white.opacity(0.6))
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, selectedTab == tab ? 14 : 10)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, selectedTab == tab ? 12 : 9)
 
                     .background {
                         if selectedTab == tab {

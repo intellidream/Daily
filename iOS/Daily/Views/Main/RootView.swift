@@ -15,6 +15,8 @@ public struct RootView: View {
             self._selectedTab = State(initialValue: .habits)
         } else if args.contains("-startTabHealth") || args.contains("-testSleepStudio") {
             self._selectedTab = State(initialValue: .health)
+        } else if args.contains("-startTabFinances") {
+            self._selectedTab = State(initialValue: .finances)
         }
         
         if args.contains("-testMixedDashboard") {
@@ -24,24 +26,38 @@ public struct RootView: View {
                     DashboardWidgetConfig(id: "weather", size: .small),
                     DashboardWidgetConfig(id: "news", size: .small),
                     DashboardWidgetConfig(id: "health", size: .wide),
-                    DashboardWidgetConfig(id: "habits", size: .wide)
+                    DashboardWidgetConfig(id: "habits", size: .wide),
+                    DashboardWidgetConfig(id: "finances", size: .wide)
                 ]
             }
-        } else if args.contains("-testTallDashboard") {
+        } else if args.contains("-testFinancesSmall") {
             AuthService.shared.continueAsGuest()
             SettingsService.shared.update { s in
                 s.dashboardWidgets = [
-                    DashboardWidgetConfig(id: "weather", size: .tall),
+                    DashboardWidgetConfig(id: "finances", size: .small),
+                    DashboardWidgetConfig(id: "weather", size: .small),
+                    DashboardWidgetConfig(id: "news", size: .wide),
+                    DashboardWidgetConfig(id: "health", size: .wide),
+                    DashboardWidgetConfig(id: "habits", size: .wide)
+                ]
+            }
+        } else if args.contains("-testTallDashboard") || args.contains("-testFinancesTall") {
+            AuthService.shared.continueAsGuest()
+            SettingsService.shared.update { s in
+                s.dashboardWidgets = [
+                    DashboardWidgetConfig(id: "finances", size: .tall),
+                    DashboardWidgetConfig(id: "weather", size: .small),
                     DashboardWidgetConfig(id: "news", size: .small),
-                    DashboardWidgetConfig(id: "health", size: .small),
+                    DashboardWidgetConfig(id: "health", size: .wide),
                     DashboardWidgetConfig(id: "habits", size: .wide)
                 ]
             }
-        } else if args.contains("-testLargeDashboard") {
+        } else if args.contains("-testLargeDashboard") || args.contains("-testFinancesLarge") {
             AuthService.shared.continueAsGuest()
             SettingsService.shared.update { s in
                 s.dashboardWidgets = [
-                    DashboardWidgetConfig(id: "weather", size: .large),
+                    DashboardWidgetConfig(id: "finances", size: .large),
+                    DashboardWidgetConfig(id: "weather", size: .wide),
                     DashboardWidgetConfig(id: "news", size: .wide),
                     DashboardWidgetConfig(id: "health", size: .wide),
                     DashboardWidgetConfig(id: "habits", size: .wide)
@@ -109,6 +125,11 @@ public struct RootView: View {
                                             selectedTab = .habits
                                         }
                                     },
+                                    onNavigateToFinances: {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                            selectedTab = .finances
+                                        }
+                                    },
                                     onNavigateToSettings: {
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                                             selectedTab = .settings
@@ -123,6 +144,8 @@ public struct RootView: View {
                                 HealthMainView(onNavigateBack: navigateToDashboard)
                             case .habits:
                                 HabitsMainView(onNavigateBack: navigateToDashboard)
+                            case .finances:
+                                FinancesMainView(onNavigateBack: navigateToDashboard)
                             case .settings:
                                 SettingsView(onNavigateBack: navigateToDashboard)
                             }
@@ -151,6 +174,7 @@ public struct RootView: View {
                 case "news": selectedTab = .news
                 case "health": selectedTab = .health
                 case "habits": selectedTab = .habits
+                case "finances": selectedTab = .finances
                 case "settings": selectedTab = .settings
                 default: break
                 }
