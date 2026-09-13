@@ -16,41 +16,40 @@ Prior to this implementation, the iOS dashboard presented a rigid, vertical stac
 
 ---
 
-## 2. Dynamic Content-Driven Bin-Packing Layout (`ModularDashboardLayout`)
+## 2. Standardized Modular Grid Architecture (`ModularDashboardLayout`)
 
 Implemented as a custom SwiftUI `Layout` (`ModularDashboardLayout: Layout`), introduced natively in iOS 16+:
 
-### 2.1 Deterministic Matrix Packing with Dynamic Content Sizing
+### 2.1 Closed-Form Deterministic Sizing (Apple WidgetKit & WinUI 3 Model)
+Following Apple WidgetKit and WinUI 3 `VariableSizedWrapGrid` standards, the layout uses a closed-form geometric grid with a standardized unit height:
 ```
-Grid Matrix: 2 Columns [0, 1], Infinite Rows [0, 1, 2...]
-Default Unit Height: 150 pt, Grid Spacing: 14 pt
+Standard Unit Height (H_unit): 155 pt
+Grid Spacing (S): 14 pt
+Columns: 2
 
-Pass 1: Matrix Slot Allocation
-For each widget in configured order:
-  - If colSpan == 2 (Wide, Large):
-      Find earliest row r where both (r, 0) and (r, 1) are unoccupied.
-      Reserve (r + dr, 0..1) for all dr in 0..<rowSpan.
-  - If colSpan == 1 (Small, Tall):
-      Find earliest slot (r, c) checking row-by-row, column 0 then column 1.
-      Reserve (r + dr, c) for all dr in 0..<rowSpan.
+Cell Sizing Formulations:
+  - Small (1x1): W_col x 155 pt (~169 x 155 pt on iPhone 16 Pro)
+  - Wide  (2x1): W_full x 155 pt (~353 x 155 pt)
+  - Tall  (1x2): W_col x (2 * 155 + 14) = W_col x 324 pt (~169 x 324 pt)
+  - Large (2x2): W_full x (2 * 155 + 14) = W_full x 324 pt (~353 x 324 pt)
 
-Pass 2: Dynamic Row Height Measurement
-  - Wide (2x1) rows: Row height is dynamically measured from subview intrinsic content height
-    via sizeThatFits(ProposedViewSize(width: fullWidth, height: nil)), eliminating all dead whitespace.
-  - Small (1x1) / Tall (1x2) rows: Row height is anchored to defaultUnitHeight (150 pt).
-  - Multi-row spans: Total height = rowHeights[r0] + spacing + rowHeights[r1].
+Row Height Formula for Row r:
+  rowHeight[r] = 155 pt (constant across all rows)
 
-Pass 3: Exact Geometry Placement
-  - Calculate y coordinates by accumulating previous row heights + inter-row spacing (14 pt).
-  - Position views with exact computed frames, enabling pixel-perfect card alignment.
+Total Content Height Formula:
+  TotalHeight = (TotalRows * 155) + max(0, TotalRows - 1) * 14
 ```
 
-### 2.2 ProMotion 120 FPS Performance & Jitter Elimination
-- **Custom `Layout.Cache` Mechanism**: To guarantee buttery-smooth 120Hz scrolling on Apple ProMotion displays without micro-stutters or jitter, `ModularDashboardLayout` implements SwiftUI's `makeCache(subviews:)` and `updateCache(_:subviews:)`.
-- **Layout Pass Optimization**: During scroll events, `bounds.width` remains constant. By caching the computed placement rectangles (`[PlacedItem]`) and total height in the cache struct, subsequent calls to `sizeThatFits` and `placeSubviews` skip all recalculations and subview queries (0 microseconds CPU time).
-- **Subpixel Anti-Aliasing Alignment**: Coordinates and dimensions are pixel-aligned with `floor` and `ceil` routines (`floor(colWidth)`, `floor(rowY)`), completely eliminating fractional coordinate rounding shimmer across high-density retina displays.
-- **Card Subtree Optimization**: Internal progress bars in cards (e.g. `HealthDashboardCard`) utilize lightweight `.scaleEffect(x: progress, anchor: .leading)` capsules instead of greedy nested `GeometryReader` blocks, ensuring stable intrinsic content heights when proposed with unconstrained heights.
-- Animations utilize GPU-accelerated spring curves (`.animation(.spring(response: 0.35, dampingFraction: 0.8))`).
+### 2.2 Why Dynamic Subview Measurement was Eliminated (Root Cause of 120Hz Jitter)
+- **The Issue**: Earlier iterations queried `subviews.sizeThatFits(ProposedViewSize(width: w, height: nil))` on subviews during layout. When cards contained flexible containers (such as `Spacer()` or `.frame(maxHeight: .infinity)`), SwiftUI measured them collapsed in the measurement pass, then expanded them in the placement pass.
+- **The Oscillation Loop**: At 120Hz Apple ProMotion scrolling, SwiftUI re-triggered layout passes. Spacers that had expanded were re-measured with unconstrained heights, causing `rowHeights` and `totalHeight` to bounce back and forth by 1–4 points on alternate animation frames. `UIScrollView` continuously adjusted its content offset to compensate, resulting in visible vertical jitter/tremor.
+- **The Solution**: Eliminating all `sizeThatFits(height: nil)` subview queries. Grid cell bounds are computed in closed form directly from `(columnSpan, rowSpan)` and `bounds.width`. Views are placed with exact concrete dimensions `ProposedViewSize(width: itemWidth, height: itemHeight)`.
+- **Card View Architecture**: All widget cards (`WeatherDashboardCard`, `NewsDashboardCard`, `HealthDashboardCard`, `HabitsDashboardCard`, `FinancesDashboardCard`) use `.frame(maxWidth: .infinity, maxHeight: .infinity)` to fill their allocated grid cell cleanly.
+
+### 2.3 ProMotion 120 FPS Performance & Deterministic Caching
+- **Layout.Cache Protocol**: Caches the matrix slot assignments (`[PlacedItem]`) and total height. The cache is updated only when `subviews.count` changes or when the container width changes (e.g. orientation rotation).
+- **Zero Scroll Overhead**: During scroll events, `sizeThatFits` and `placeSubviews` execute in $O(N)$ with zero subview measuring calls, zero dynamic allocations, and zero fractional coordinate rounding issues.
+- Coordinates and dimensions are pixel-aligned with `floor` and `ceil` routines, preventing subpixel rasterization shimmer.
 
 ---
 
@@ -107,6 +106,12 @@ Each widget implements dedicated UI representations tailored for all 4 aspect ra
 - **Wide ($2 \times 1$)**: Dual full circular progress rings (Bubbles cyan ring + Smokes color-coded allowance ring) and 5 quick intake chips (`300`, `150`, `100 Coffee`, `Cig`, `Heat`).
 - **Tall ($1 \times 2$)**: Vertical tower with full 36pt Bubbles ring and quick `+300` / `+150` chips, separated by divider from Smokes ring with `+Cig` / `+Heat` log buttons.
 - **Large ($2 \times 2$)**: Extended habits management hub: 44pt hero progress rings with volume/baseline targets, plus full 6-button quick intake grid (`+500 Bottle`, `+300 Water`, `+150 Water`, `+100 Coffee`, `+1 Cigarette`, `+1 Heated`).
+
+### 4.5 Smart Ledger & Finances (`FinancesDashboardCard.swift`)
+- **Small ($1 \times 1$)**: Compact Net Worth & Cash pill glance with total net worth figure, primary incoming/cash metrics, and balance indicator.
+- **Wide ($2 \times 1$)**: Classic 3-column finance glance showing Net Worth, Monthly In/Out flow, and Cash & Deposits overview with tap-to-open Smart Ledger.
+- **Tall ($1 \times 2$)**: Vertical finance tower displaying hero Net Worth, categorized incoming/outgoing breakdown list, and bottom cash status.
+- **Large ($2 \times 2$)**: Comprehensive financial cockpit: hero Net Worth badge, categorized incoming/outgoing progress breakdown, cash & card liquidity cards, and direct adjust pills.
 
 ---
 

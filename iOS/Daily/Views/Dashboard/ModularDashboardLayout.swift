@@ -31,24 +31,16 @@ extension View {
 /// Features high-performance Layout.Cache to eliminate frame drops and layout oscillation on 120Hz ProMotion displays.
 public struct ModularDashboardLayout: Layout {
     public var spacing: CGFloat
-    public var defaultUnitHeight: CGFloat
+    public var unitHeight: CGFloat
     
-    public init(spacing: CGFloat = 14, defaultUnitHeight: CGFloat = 150) {
+    public init(spacing: CGFloat = 14, unitHeight: CGFloat = 155) {
         self.spacing = spacing
-        self.defaultUnitHeight = defaultUnitHeight
+        self.unitHeight = unitHeight
     }
     
     struct GridCoord: Hashable {
         let row: Int
         let col: Int
-    }
-    
-    struct PlacementPlan {
-        let index: Int
-        let startRow: Int
-        let col: Int
-        let colSpan: Int
-        let rowSpan: Int
     }
     
     public struct PlacedItem: Sendable {
@@ -67,8 +59,9 @@ public struct ModularDashboardLayout: Layout {
     }
     
     public func updateCache(_ cache: inout Cache, subviews: Subviews) {
-        // Invalidate on data/subview change so fresh measurements are computed
-        cache.lastWidth = -1
+        if cache.items.count != subviews.count {
+            cache.lastWidth = -1
+        }
     }
     
     private func computePlacements(
@@ -79,157 +72,90 @@ public struct ModularDashboardLayout: Layout {
         
         let colWidth = floor(max((width - spacing) / 2.0, 80.0))
         var occupied = Set<GridCoord>()
-        var plans: [PlacementPlan] = []
+        var items: [PlacedItem] = []
+        var maxRow = -1
         
-        // 1. Assign grid coordinates using deterministic 2-column bin-packing
+        // Pure closed-form 2-column mathematical bin-packing (0 subview size queries)
         for index in subviews.indices {
             let span = subviews[index][WidgetSpanKey.self]
             let colSpan = min(max(span.colSpan, 1), 2)
             let rowSpan = min(max(span.rowSpan, 1), 2)
             
+            let targetRow: Int
+            let targetCol: Int
+            
             if colSpan == 2 {
-                var targetRow = 0
+                var r = 0
                 while true {
                     var canFit = true
                     for dr in 0..<rowSpan {
-                        let r = targetRow + dr
-                        if occupied.contains(GridCoord(row: r, col: 0)) || occupied.contains(GridCoord(row: r, col: 1)) {
+                        let rowToCheck = r + dr
+                        if occupied.contains(GridCoord(row: rowToCheck, col: 0)) || occupied.contains(GridCoord(row: rowToCheck, col: 1)) {
                             canFit = false
                             break
                         }
                     }
-                    if canFit { break }
-                    targetRow += 1
+                    if canFit {
+                        targetRow = r
+                        targetCol = 0
+                        break
+                    }
+                    r += 1
                 }
                 
                 for dr in 0..<rowSpan {
-                    let r = targetRow + dr
-                    occupied.insert(GridCoord(row: r, col: 0))
-                    occupied.insert(GridCoord(row: r, col: 1))
+                    let rowToOccupy = targetRow + dr
+                    occupied.insert(GridCoord(row: rowToOccupy, col: 0))
+                    occupied.insert(GridCoord(row: rowToOccupy, col: 1))
+                    if rowToOccupy > maxRow { maxRow = rowToOccupy }
                 }
-                
-                plans.append(PlacementPlan(index: index, startRow: targetRow, col: 0, colSpan: 2, rowSpan: rowSpan))
             } else {
-                var targetRow = 0
-                var targetCol = 0
+                var r = 0
+                var c = 0
                 var found = false
                 
                 while !found {
-                    for c in 0..<2 {
+                    for colCandidate in 0..<2 {
                         var canFit = true
                         for dr in 0..<rowSpan {
-                            let r = targetRow + dr
-                            if occupied.contains(GridCoord(row: r, col: c)) {
+                            let rowToCheck = r + dr
+                            if occupied.contains(GridCoord(row: rowToCheck, col: colCandidate)) {
                                 canFit = false
                                 break
                             }
                         }
                         if canFit {
-                            targetCol = c
+                            c = colCandidate
                             found = true
                             break
                         }
                     }
                     if !found {
-                        targetRow += 1
+                        r += 1
                     }
                 }
+                targetRow = r
+                targetCol = c
                 
                 for dr in 0..<rowSpan {
-                    let r = targetRow + dr
-                    occupied.insert(GridCoord(row: r, col: targetCol))
-                }
-                
-                plans.append(PlacementPlan(index: index, startRow: targetRow, col: targetCol, colSpan: 1, rowSpan: rowSpan))
-            }
-        }
-        
-        let maxRow = occupied.map(\.row).max() ?? -1
-        guard maxRow >= 0 else { return ([], 0) }
-        let totalRows = maxRow + 1
-        
-        // 2. Measure dynamic row heights based on subview contents
-        var rowHeights = [CGFloat](repeating: 0, count: totalRows)
-        
-        // Pass A: Single-row items (colSpan == 2 for Wide, colSpan == 1 for Small)
-        for plan in plans where plan.rowSpan == 1 {
-            let itemWidth = (plan.colSpan == 2) ? width : colWidth
-            let measured = subviews[plan.index].sizeThatFits(ProposedViewSize(width: itemWidth, height: nil))
-            if plan.colSpan == 2 {
-                // Wide items span both columns: height is exactly their natural content height
-                rowHeights[plan.startRow] = ceil(max(rowHeights[plan.startRow], max(measured.height, 80)))
-            } else {
-                // Small items: use at least defaultUnitHeight (150)
-                rowHeights[plan.startRow] = ceil(max(rowHeights[plan.startRow], max(measured.height, defaultUnitHeight)))
-            }
-        }
-        
-        // Pass B: Multi-row items (Tall and Large, rowSpan == 2)
-        for plan in plans where plan.rowSpan == 2 {
-            let r0 = plan.startRow
-            let r1 = r0 + 1
-            if r1 < totalRows {
-                let itemWidth = (plan.colSpan == 2) ? width : colWidth
-                let measured = subviews[plan.index].sizeThatFits(ProposedViewSize(width: itemWidth, height: nil))
-                
-                if rowHeights[r0] == 0 && rowHeights[r1] == 0 {
-                    let half = ceil(max((measured.height - spacing) / 2.0, defaultUnitHeight))
-                    rowHeights[r0] = half
-                    rowHeights[r1] = half
-                } else if rowHeights[r0] == 0 {
-                    rowHeights[r0] = ceil(max(measured.height - spacing - rowHeights[r1], defaultUnitHeight))
-                } else if rowHeights[r1] == 0 {
-                    rowHeights[r1] = ceil(max(measured.height - spacing - rowHeights[r0], defaultUnitHeight))
-                } else {
-                    let currentSum = rowHeights[r0] + spacing + rowHeights[r1]
-                    if measured.height > currentSum {
-                        let diff = ceil((measured.height - currentSum) / 2.0)
-                        rowHeights[r0] += diff
-                        rowHeights[r1] += diff
-                    }
+                    let rowToOccupy = targetRow + dr
+                    occupied.insert(GridCoord(row: rowToOccupy, col: targetCol))
+                    if rowToOccupy > maxRow { maxRow = rowToOccupy }
                 }
             }
-        }
-        
-        // Fallback for any unmeasured rows
-        for r in 0..<totalRows {
-            if rowHeights[r] <= 0 {
-                rowHeights[r] = defaultUnitHeight
-            }
-        }
-        
-        // 3. Compute row cumulative Y positions
-        var rowY = [CGFloat](repeating: 0, count: totalRows)
-        var currentY: CGFloat = 0
-        for r in 0..<totalRows {
-            rowY[r] = currentY
-            currentY += rowHeights[r] + spacing
-        }
-        let totalHeight = currentY > 0 ? ceil(currentY - spacing) : 0
-        
-        // 4. Compute exact frame rectangles for each placed item (pixel-aligned)
-        var items: [PlacedItem] = []
-        for plan in plans {
-            let x = floor((plan.col == 0) ? 0 : colWidth + spacing)
-            let y = floor(rowY[plan.startRow])
-            let w = floor((plan.colSpan == 2) ? width : colWidth)
             
-            let h: CGFloat
-            if plan.rowSpan == 1 {
-                h = floor(rowHeights[plan.startRow])
-            } else {
-                let r1 = plan.startRow + 1
-                if r1 < totalRows {
-                    h = floor(rowHeights[plan.startRow] + spacing + rowHeights[r1])
-                } else {
-                    h = floor(rowHeights[plan.startRow])
-                }
-            }
+            // Deterministic closed-form geometry: zero layout recursion, zero subpixel oscillation
+            let x = floor((targetCol == 0) ? 0 : colWidth + spacing)
+            let y = floor(CGFloat(targetRow) * (unitHeight + spacing))
+            let w = floor((colSpan == 2) ? width : colWidth)
+            let h = floor(CGFloat(rowSpan) * unitHeight + CGFloat(rowSpan - 1) * spacing)
             
             let rect = CGRect(x: x, y: y, width: w, height: h)
-            items.append(PlacedItem(index: plan.index, rect: rect))
+            items.append(PlacedItem(index: index, rect: rect))
         }
         
+        let totalRows = maxRow + 1
+        let totalHeight = totalRows > 0 ? floor(CGFloat(totalRows) * unitHeight + CGFloat(totalRows - 1) * spacing) : 0
         return (items, totalHeight)
     }
     
@@ -259,7 +185,7 @@ public struct ModularDashboardLayout: Layout {
         
         for item in cache.items {
             guard item.index < subviews.count else { continue }
-            let origin = CGPoint(x: floor(bounds.origin.x + item.rect.origin.x), y: floor(bounds.origin.y + item.rect.origin.y))
+            let origin = CGPoint(x: bounds.origin.x + item.rect.origin.x, y: bounds.origin.y + item.rect.origin.y)
             subviews[item.index].place(
                 at: origin,
                 proposal: ProposedViewSize(item.rect.size)

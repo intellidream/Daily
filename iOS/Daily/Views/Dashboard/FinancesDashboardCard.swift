@@ -28,7 +28,7 @@ public struct FinancesDashboardCard: View {
                     largeContent
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: size == .wide ? nil : .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .buttonStyle(.plain)
     }

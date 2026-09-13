@@ -51,7 +51,7 @@ public struct DashboardView: View {
                 
                 // Modular 2-Column Mathematical Bin-Packing Dashboard
                 let visibleWidgets = settingsService.settings.dashboardWidgets.filter(\.isVisible)
-                ModularDashboardLayout(spacing: 14, defaultUnitHeight: 150) {
+                ModularDashboardLayout(spacing: 14, unitHeight: 155) {
                     ForEach(Array(visibleWidgets.enumerated()), id: \.element.id) { index, config in
                         widgetView(for: config)
                             .widgetSpan(config.size)
