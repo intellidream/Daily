@@ -11,7 +11,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
     case health = "Health"
     case habits = "Habits"
     case settings = "Settings"
-    case finances = "Finances"
+    case finances = "Money"
     
     public var id: String { rawValue }
     
@@ -23,11 +23,11 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .health: return "heart.fill"
         case .habits: return "drop.fill"
         case .settings: return "gearshape.fill"
-        case .finances: return "chart.line.uptrend.xyaxis"
+        case .finances: return "wallet.bifold.fill"
         }
     }
     
-    public static let primaryTabs: [NavigationTab] = [.dashboard, .health, .habits]
+    public static let primaryTabs: [NavigationTab] = [.dashboard, .finances, .health, .habits]
 }
 
 /// Floating Liquid Glass navigation capsule anchored at the bottom of the viewport.

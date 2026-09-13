@@ -190,4 +190,84 @@ final class SmartLedgerParserTests: XCTestCase {
         XCTAssertEqual(result.balanceTotal, 12000.0, accuracy: 0.01)
         XCTAssertEqual(result.netWorth, 52000.0, accuracy: 0.01)
     }
+    
+    // MARK: - Mutation Engine Tests
+    
+    func testAdjustItemAmountIncrementAndRecalculate() {
+        let parser = SmartLedgerParser()
+        let parsed = parser.parse(sampleLedger)
+        
+        // Find Tigari item
+        let outgoing = parsed.sections.first { $0.name == "Outgoing" }
+        guard let tigari = outgoing?.items.first(where: { $0.key.contains("Tigari") }) else {
+            XCTFail("Tigari item not found")
+            return
+        }
+        
+        XCTAssertEqual(tigari.rawAmount, 10.0)
+        XCTAssertTrue(tigari.lineIndex >= 0)
+        
+        // Increment Tigari by +1
+        let updatedText = parser.adjustItemAmount(in: sampleLedger, lineIndex: tigari.lineIndex, deltaRaw: 1)
+        
+        // Tigari line must have value 11
+        XCTAssertTrue(updatedText.contains("Tigari (40/45) = 11"))
+        
+        // Re-parse and verify totals
+        let reParsed = parser.parse(updatedText)
+        let newOutgoing = reParsed.sections.first { $0.name == "Outgoing" }
+        let newTigari = newOutgoing?.items.first(where: { $0.key.contains("Tigari") })
+        
+        XCTAssertEqual(newTigari?.rawAmount, 11.0)
+        XCTAssertEqual(reParsed.outgoingTotal, 16100.0, accuracy: 0.01)
+        // Balance was 160 - 161 = -1
+        XCTAssertTrue(updatedText.contains("Total = -1"))
+    }
+    
+    func testAdjustItemPreservesNotesAndComments() {
+        let parser = SmartLedgerParser()
+        let parsed = parser.parse(sampleLedger)
+        
+        let incoming = parsed.sections.first { $0.name == "Incoming" }
+        guard let card = incoming?.items.first(where: { $0.key == "Card" }) else {
+            XCTFail("Card item not found")
+            return
+        }
+        
+        // Increment Card by +1
+        let updatedText = parser.adjustItemAmount(in: sampleLedger, lineIndex: card.lineIndex, deltaRaw: 1)
+        
+        // Check that the parenthesized note was fully preserved
+        XCTAssertTrue(updatedText.contains("Card = 152 (Rz/141/Ing/10/Rev/0/Mom/9/!!!!/9)"))
+        
+        let reParsed = parser.parse(updatedText)
+        XCTAssertEqual(reParsed.incomingTotal, 16100.0, accuracy: 0.01)
+    }
+    
+    func testAddItemAndRecalculate() {
+        let parser = SmartLedgerParser()
+        let updatedText = parser.addItem(to: sampleLedger, sectionName: "Outgoing", key: "Sala", rawAmount: 4, note: "Gym")
+        
+        XCTAssertTrue(updatedText.contains("Sala = 4 (Gym)"))
+        
+        let reParsed = parser.parse(updatedText)
+        XCTAssertEqual(reParsed.outgoingTotal, 16400.0, accuracy: 0.01)
+    }
+    
+    func testDeleteItemAndRecalculate() {
+        let parser = SmartLedgerParser()
+        let parsed = parser.parse(sampleLedger)
+        
+        let outgoing = parsed.sections.first { $0.name == "Outgoing" }
+        guard let tigari = outgoing?.items.first(where: { $0.key.contains("Tigari") }) else {
+            XCTFail("Tigari item not found")
+            return
+        }
+        
+        let updatedText = parser.deleteItem(from: sampleLedger, lineIndex: tigari.lineIndex)
+        XCTAssertFalse(updatedText.contains("Tigari (40/45) = 10"))
+        
+        let reParsed = parser.parse(updatedText)
+        XCTAssertEqual(reParsed.outgoingTotal, 15000.0, accuracy: 0.01)
+    }
 }

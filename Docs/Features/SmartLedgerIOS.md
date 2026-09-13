@@ -53,28 +53,37 @@ It mirrors the Double-Entry DSL architecture established in WinUI (`Daily.Servic
 - Falls back to baseline starter template on clean installs.
 - Publishes reactive updates upon saving or resetting.
 
-### 4. SwiftUI Presentation Layer (`iOS/Daily/Views/Finances`)
-- **`FinancesMainView.swift` (Money Sub-tab)**:
-  - Header: Integrated capsule switcher (`World | Stocks | Money`).
-  - `netWorthHeroCard`:
-    - Large Net Worth in Lei (`127.156,47 Lei`) and EUR (`~25.431 €`).
-    - Metric badges: `DEPOZITE`, `SOLD`, `INCOMING`, `DENTIST`.
-    - "Edit Ledger" button.
-  - Categorized Section Cards:
-    - `Incoming` (Venituri & Card/Cash breakdown with purple progress bars).
-    - `Outgoing` (Cheltuieli with category weights & progress bars).
-    - `Balance` (Zero-Based Budget status caption).
-    - `Dentist` (Tracked liability caption & total).
-    - `Deposits & Savings` (Bank deposit cards with EUR estimates and note pills).
-- **`SmartLedgerEditorSheet.swift`**:
-  - Live preview header showing recalculated Net Worth and totals in real-time.
-  - "Paste from Clipboard" one-tap paste action.
-  - "Reset Default" template restoration.
-  - Monospaced dark `TextEditor` with line counter.
+### 4. Two-Way DSL Mutation Engine (`DailyCore/Services/SmartLedgerParser.swift` & `SmartLedgerStore.swift`)
+- **Deterministic Line Tracking**: `SmartLedgerItem` retains `sectionName`, `lineIndex`, and `rawLine` from AST tokenization.
+- **`adjustItemAmount(in:lineIndex:deltaRaw:)`**: Increments/decrements numeric tokens while preserving keys, parentheses notes, and comments.
+- **`setItemAmount(in:lineIndex:newRaw:)`**: Sets exact numeric values preserving number formatting, currency suffixes (`€`, `L`, `$`), and trailing notes.
+- **`addItem(to:sectionName:key:rawAmount:note:)`**: Injects new category lines before section total markers.
+- **`deleteItem(from:lineIndex:)`**: Prunes line entries cleanly and cleans consecutive empty lines.
+- **`recalculateTotalsInLines(_:)`**: Automatically balances section `Total = ...` expressions and updates `**Balance**` `Total = Incoming - Outgoing`.
+
+### 5. SwiftUI Presentation Layer (`iOS/Daily/Views/Finances`)
+- **Navigation Architecture**:
+  - `FloatingGlassCapsule`: Anchored bottom capsule configured with `[Dashboard, Money, Health, Habits]`, displaying the `wallet.bifold.fill` icon for Money.
+  - `FinancesMainView`: Sub-tab order updated to `[Money | Stocks | World]`, opening `Money` by default.
+- **Interactive Pill Steppers**:
+  - Each non-note item row features inline Liquid Glass `[ − ]` and `[ + ]` steppers with spring haptics.
+  - Pre-Deposit scaled items step by 1 unit (= 100 Lei).
+  - Unscaled items step by 100 Lei.
+- **Quick Adjust Sheet (`SmartLedgerQuickAdjustSheet.swift`)**:
+  - Tapping any category pill or note chip opens the quick adjustment modal.
+  - Preset delta chips:
+    - Scaled: `-500L (-5)`, `-200L (-2)`, `-100L (-1)`, `+100L (+1)`, `+200L (+2)`, `+500L (+5)`, `+1.000L (+10)`.
+    - Unscaled: `-1.000`, `-500`, `+500`, `+1.000`, `+5.000`.
+    - Real-time conversion preview, exact amount input, note editor, and category deletion with confirmation.
+- **Add Category Modal (`AddLedgerItemSheet.swift`)**:
+  - "+ Adaugă" button on section headers to create new items on the fly.
+  - Live preview of scaled amounts into full Lei.
+- **Backup Raw Editor (`SmartLedgerEditorSheet.swift`)**:
+  - Retained as a robust fallback editor for directly modifying the raw DSL code.
 
 ---
 
 ## Verification & Testing
-- **Unit Tests**: `DailyCoreTests/SmartLedgerParserTests.swift` passes 100% (4/4 tests: totals, breakdown, percentage, positive balance).
-- **Simulator Inspection (SimulaPhone)**: Verified visual layout, colors, badges, and editor sheet.
-- **Physical Device Deployment**: Installed on iPhone 16 Pro ("Schmitz").
+- **Unit Tests**: `DailyCoreTests/SmartLedgerParserTests.swift` passes 8/8 tests (including AST parsing, positive balance, increment adjustment with total balancing, comment/note preservation, category addition, and deletion). All 55 test cases in `DailyCore` passing cleanly.
+- **Simulator Inspection (SimulaPhone)**: Verified interactive `[ - ]` and `[ + ]` steppers, subtab ordering, floating capsule order `[Dashboard, Money, Health, Habits]`, and screenshot captures.
+- **Physical Device Deployment**: Built, signed, installed, and launched on iPhone 16 Pro ("Schmitz").

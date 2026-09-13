@@ -9,10 +9,29 @@ public struct SmartLedgerItem: Identifiable, Codable, Equatable, Sendable {
     public var isScaled: Bool
     public var notes: [String]
     public var isPureNote: Bool
+    public var sectionName: String
+    public var lineIndex: Int
+    public var rawLine: String
     public var percentageOfSection: Double
+    
+    /// Clean display title for UI pills (e.g. "Tigari" for "Tigari (40/45)").
+    public var displayName: String {
+        var clean = key
+        // If key ends with a parenthesized suffix like "(40/45)", strip it for clean pill title display
+        if let lastOpen = clean.lastIndex(of: "("), clean.hasSuffix(")") {
+            let candidate = String(clean[..<lastOpen]).trimmingCharacters(in: .whitespaces)
+            if !candidate.isEmpty {
+                return candidate
+            }
+        }
+        return key
+    }
     
     public init(
         id: UUID = UUID(),
+        sectionName: String = "",
+        lineIndex: Int = -1,
+        rawLine: String = "",
         key: String,
         rawAmount: Double = 0.0,
         calculatedAmount: Double = 0.0,
@@ -22,6 +41,9 @@ public struct SmartLedgerItem: Identifiable, Codable, Equatable, Sendable {
         percentageOfSection: Double = 0.0
     ) {
         self.id = id
+        self.sectionName = sectionName
+        self.lineIndex = lineIndex
+        self.rawLine = rawLine
         self.key = key
         self.rawAmount = rawAmount
         self.calculatedAmount = calculatedAmount

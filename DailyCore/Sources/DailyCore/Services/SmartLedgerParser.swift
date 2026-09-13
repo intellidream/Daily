@@ -57,7 +57,7 @@ public final class SmartLedgerParser: Sendable {
             currentSectionRawTotal = nil
         }
         
-        for rawLine in lines {
+        for (lineIndex, rawLine) in lines.enumerated() {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             
             // Skip empty lines and divider hyphens
@@ -96,6 +96,9 @@ public final class SmartLedgerParser: Sendable {
                 } else {
                     // Pure informative note line
                     let item = SmartLedgerItem(
+                        sectionName: currentSectionName,
+                        lineIndex: lineIndex,
+                        rawLine: rawLine,
                         key: inner,
                         rawAmount: 0,
                         calculatedAmount: 0,
@@ -132,6 +135,9 @@ public final class SmartLedgerParser: Sendable {
                 let cleanKey = cleanKeyName(keyPart)
                 
                 let item = SmartLedgerItem(
+                    sectionName: currentSectionName,
+                    lineIndex: lineIndex,
+                    rawLine: rawLine,
                     key: cleanKey,
                     rawAmount: parsedVal.raw,
                     calculatedAmount: parsedVal.calculated,
@@ -143,6 +149,9 @@ public final class SmartLedgerParser: Sendable {
             } else {
                 // Standalone note or comment line
                 let item = SmartLedgerItem(
+                    sectionName: currentSectionName,
+                    lineIndex: lineIndex,
+                    rawLine: rawLine,
                     key: line,
                     rawAmount: 0,
                     calculatedAmount: 0,
@@ -259,5 +268,223 @@ public final class SmartLedgerParser: Sendable {
             k = String(k[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
         }
         return k
+    }
+    
+    // MARK: - Two-Way DSL Mutation Engine
+    
+    /// Adjusts an existing item's raw amount by deltaRaw (e.g. +1 or -1 in scaled sections, or +100/-100 in unscaled).
+    /// Preserves keys, parentheses notes, and comments, and automatically recalculates section totals and balance.
+    public func adjustItemAmount(in text: String, lineIndex: Int, deltaRaw: Double) -> String {
+        let lines = text.components(separatedBy: "\n")
+        guard lineIndex >= 0 && lineIndex < lines.count else { return text }
+        let line = lines[lineIndex]
+        guard line.contains("=") else { return text }
+        let parts = line.components(separatedBy: "=")
+        let valuePart = parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespaces)
+        let parsed = parseNumericString(valuePart, isScaled: false)
+        let newRaw = max(0, parsed.raw + deltaRaw)
+        return setItemAmount(in: text, lineIndex: lineIndex, newRaw: newRaw)
+    }
+    
+    /// Sets an item's raw amount directly to newRaw at lineIndex.
+    public func setItemAmount(in text: String, lineIndex: Int, newRaw: Double) -> String {
+        var lines = text.components(separatedBy: "\n")
+        guard lineIndex >= 0 && lineIndex < lines.count else { return text }
+        
+        let oldLine = lines[lineIndex]
+        guard let eqRange = oldLine.range(of: "=") else { return text }
+        
+        let keyPart = String(oldLine[..<eqRange.upperBound]) // e.g. "Card =" or "Tigari (40/45) ="
+        let afterEq = String(oldLine[eqRange.upperBound...])
+        
+        // Find where notes `(` or comments `//` begin
+        var noteOrCommentIndex = afterEq.endIndex
+        if let parenIndex = afterEq.firstIndex(of: "(") {
+            noteOrCommentIndex = min(noteOrCommentIndex, parenIndex)
+        }
+        if let slashRange = afterEq.range(of: "//") {
+            noteOrCommentIndex = min(noteOrCommentIndex, slashRange.lowerBound)
+        }
+        
+        let numRegion = String(afterEq[..<noteOrCommentIndex])
+        let restOfLine = String(afterEq[noteOrCommentIndex...])
+        
+        // Preserve currency / units suffix if present
+        var suffix = ""
+        if numRegion.contains("€") {
+            suffix = "€"
+        } else if numRegion.contains("L") {
+            suffix = "L"
+        } else if numRegion.contains("$") {
+            suffix = "$"
+        }
+        
+        let formattedNum = formatNumberForDsl(value: newRaw, originalString: numRegion)
+        let spaceBeforeRest = (restOfLine.isEmpty || restOfLine.hasPrefix(" ")) ? "" : " "
+        
+        lines[lineIndex] = "\(keyPart) \(formattedNum)\(suffix)\(spaceBeforeRest)\(restOfLine)"
+        lines = recalculateTotalsInLines(lines)
+        return lines.joined(separator: "\n")
+    }
+    
+    /// Adds a new category/item to a designated section.
+    public func addItem(to text: String, sectionName: String, key: String, rawAmount: Double, note: String?) -> String {
+        var lines = text.components(separatedBy: "\n")
+        
+        // Find section header index
+        var sectionHeaderIndex = -1
+        for (idx, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("**") && trimmed.hasSuffix("**") {
+                let name = String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
+                if name.caseInsensitiveCompare(sectionName) == .orderedSame {
+                    sectionHeaderIndex = idx
+                    break
+                }
+            }
+        }
+        
+        guard sectionHeaderIndex >= 0 else { return text }
+        
+        // Find insertion point before next section or before Total =
+        var insertIndex = lines.count
+        for idx in (sectionHeaderIndex + 1)..<lines.count {
+            let trimmed = lines[idx].trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("**") && trimmed.hasSuffix("**") {
+                insertIndex = idx
+                break
+            }
+            if trimmed == "---" {
+                // Look ahead to check if Total = follows
+                var isBeforeTotal = false
+                for nextIdx in (idx + 1)..<min(idx + 5, lines.count) {
+                    let nextTrimmed = lines[nextIdx].trimmingCharacters(in: .whitespaces)
+                    if nextTrimmed.hasPrefix("Total =") || nextTrimmed.hasPrefix("Total=") {
+                        isBeforeTotal = true
+                        break
+                    }
+                }
+                if isBeforeTotal {
+                    insertIndex = idx
+                    break
+                }
+            }
+        }
+        
+        let formattedNum = rawAmount.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(rawAmount))" : String(format: "%.2f", rawAmount)
+        let trimmedNote = (note ?? "").trimmingCharacters(in: .whitespaces)
+        let notePart = trimmedNote.isEmpty ? "" : " (\(trimmedNote))"
+        let newLine = "\(key) = \(formattedNum)\(notePart)"
+        
+        lines.insert(newLine, at: insertIndex)
+        lines.insert("", at: insertIndex + 1)
+        
+        lines = recalculateTotalsInLines(lines)
+        return lines.joined(separator: "\n")
+    }
+    
+    /// Deletes an item from the text at lineIndex.
+    public func deleteItem(from text: String, lineIndex: Int) -> String {
+        var lines = text.components(separatedBy: "\n")
+        guard lineIndex >= 0 && lineIndex < lines.count else { return text }
+        
+        lines.remove(at: lineIndex)
+        
+        // Clean up double blank lines
+        if lineIndex < lines.count && lines[lineIndex].trimmingCharacters(in: .whitespaces).isEmpty {
+            if lineIndex - 1 >= 0 && lines[lineIndex - 1].trimmingCharacters(in: .whitespaces).isEmpty {
+                lines.remove(at: lineIndex)
+            }
+        }
+        
+        lines = recalculateTotalsInLines(lines)
+        return lines.joined(separator: "\n")
+    }
+    
+    /// Recalculates `Total = ...` for Incoming, Outgoing, and Balance sections across lines.
+    public func recalculateTotalsInLines(_ lines: [String]) -> [String] {
+        var updated = lines
+        var currentSection = ""
+        var incomingSum: Double = 0
+        var outgoingSum: Double = 0
+        
+        var incomingTotalLineIndex = -1
+        var outgoingTotalLineIndex = -1
+        var balanceTotalLineIndex = -1
+        
+        for (idx, line) in updated.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("**") && trimmed.hasSuffix("**") && trimmed.count > 4 {
+                currentSection = String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
+                continue
+            }
+            
+            if trimmed.contains("=") {
+                let parts = trimmed.components(separatedBy: "=")
+                let key = parts[0].trimmingCharacters(in: .whitespaces)
+                let valStr = parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespaces)
+                
+                if key.caseInsensitiveCompare("Total") == .orderedSame {
+                    if currentSection.caseInsensitiveCompare("Incoming") == .orderedSame {
+                        incomingTotalLineIndex = idx
+                    } else if currentSection.caseInsensitiveCompare("Outgoing") == .orderedSame {
+                        outgoingTotalLineIndex = idx
+                    } else if currentSection.caseInsensitiveCompare("Balance") == .orderedSame {
+                        balanceTotalLineIndex = idx
+                    }
+                    continue
+                }
+                
+                let parsed = parseNumericString(valStr, isScaled: false)
+                if currentSection.caseInsensitiveCompare("Incoming") == .orderedSame {
+                    incomingSum += parsed.raw
+                } else if currentSection.caseInsensitiveCompare("Outgoing") == .orderedSame {
+                    outgoingSum += parsed.raw
+                }
+            }
+        }
+        
+        if incomingTotalLineIndex >= 0 {
+            let formatted = incomingSum.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(incomingSum))" : String(format: "%.2f", incomingSum)
+            updated[incomingTotalLineIndex] = "Total = \(formatted)"
+        }
+        
+        if outgoingTotalLineIndex >= 0 {
+            let formatted = outgoingSum.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(outgoingSum))" : String(format: "%.2f", outgoingSum)
+            updated[outgoingTotalLineIndex] = "Total = \(formatted)"
+        }
+        
+        if balanceTotalLineIndex >= 0 {
+            let bal = incomingSum - outgoingSum
+            let formatted = bal.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(bal))" : String(format: "%.2f", bal)
+            updated[balanceTotalLineIndex] = "Total = \(formatted)"
+        }
+        
+        return updated
+    }
+    
+    private func formatNumberForDsl(value: Double, originalString: String) -> String {
+        if originalString.contains(",") {
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.groupingSeparator = "."
+            formatter.decimalSeparator = ","
+            formatter.maximumFractionDigits = 2
+            formatter.minimumFractionDigits = value.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 2
+            return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        } else if originalString.contains(".") {
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.groupingSeparator = "."
+            formatter.decimalSeparator = ","
+            formatter.maximumFractionDigits = 0
+            return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        } else {
+            if value.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int(value))"
+            } else {
+                return String(format: "%.2f", value)
+            }
+        }
     }
 }

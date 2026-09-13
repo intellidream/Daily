@@ -130,4 +130,30 @@ public final class SmartLedgerStore: ObservableObject {
     public func recalculate(eurRate: Double = 5.0) {
         self.parsedLedger = SmartLedgerParser.shared.parse(rawText, eurRate: eurRate)
     }
+    
+    // MARK: - Mutation Actions
+    
+    /// Increments or decrements an item's raw value in the DSL text document.
+    public func adjustItem(item: SmartLedgerItem, deltaRaw: Double) {
+        let updatedText = SmartLedgerParser.shared.adjustItemAmount(in: rawText, lineIndex: item.lineIndex, deltaRaw: deltaRaw)
+        saveLedgerText(updatedText)
+    }
+    
+    /// Updates an item's raw value directly in the DSL text document.
+    public func setItemAmount(item: SmartLedgerItem, newRaw: Double) {
+        let updatedText = SmartLedgerParser.shared.setItemAmount(in: rawText, lineIndex: item.lineIndex, newRaw: newRaw)
+        saveLedgerText(updatedText)
+    }
+    
+    /// Appends a new item into a designated section and recalculates totals.
+    public func addItem(sectionName: String, key: String, rawAmount: Double, note: String?) {
+        let updatedText = SmartLedgerParser.shared.addItem(to: rawText, sectionName: sectionName, key: key, rawAmount: rawAmount, note: note)
+        saveLedgerText(updatedText)
+    }
+    
+    /// Removes an item line completely and recalculates totals.
+    public func deleteItem(item: SmartLedgerItem) {
+        let updatedText = SmartLedgerParser.shared.deleteItem(from: rawText, lineIndex: item.lineIndex)
+        saveLedgerText(updatedText)
+    }
 }

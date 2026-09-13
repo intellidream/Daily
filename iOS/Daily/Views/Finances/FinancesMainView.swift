@@ -2,17 +2,17 @@ import SwiftUI
 import DailyCore
 
 public enum FinanceSubTab: String, CaseIterable, Identifiable {
-    case world = "World"
-    case stocks = "Stocks"
     case money = "Money"
+    case stocks = "Stocks"
+    case world = "World"
     
     public var id: String { rawValue }
     
     public var iconName: String {
         switch self {
-        case .world: return "globe.americas.fill"
+        case .money: return "wallet.bifold.fill"
         case .stocks: return "chart.line.uptrend.xyaxis"
-        case .money: return "banknote.fill"
+        case .world: return "globe.americas.fill"
         }
     }
 }
@@ -22,11 +22,14 @@ public enum FinanceSubTab: String, CaseIterable, Identifiable {
 public struct FinancesMainView: View {
     @ObservedObject private var financeService = FinanceService.shared
     @ObservedObject private var ledgerStore = SmartLedgerStore.shared
-    @State private var activeSubTab: FinanceSubTab = .world
+    @State private var activeSubTab: FinanceSubTab = .money
     @State private var selectedMarketType: MarketType? = nil // nil = All
     @State private var showingAddTransactionSheet: Bool = false
     @State private var showingAddAccountSheet: Bool = false
     @State private var showingLedgerEditorSheet: Bool = false
+    @State private var selectedAdjustItem: SmartLedgerItem? = nil
+    @State private var showingAddItemSheet: Bool = false
+    @State private var targetSectionForNewItem: String = "Outgoing"
     
     public var onNavigateBack: (() -> Void)? = nil
 
@@ -35,10 +38,10 @@ public struct FinancesMainView: View {
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-financeSubTabStocks") {
             self._activeSubTab = State(initialValue: .stocks)
-        } else if args.contains("-financeSubTabMoney") {
-            self._activeSubTab = State(initialValue: .money)
         } else if args.contains("-financeSubTabWorld") {
             self._activeSubTab = State(initialValue: .world)
+        } else {
+            self._activeSubTab = State(initialValue: .money)
         }
     }
 
@@ -83,6 +86,12 @@ public struct FinancesMainView: View {
         }
         .sheet(isPresented: $showingLedgerEditorSheet) {
             SmartLedgerEditorSheet()
+        }
+        .sheet(item: $selectedAdjustItem) { item in
+            SmartLedgerQuickAdjustSheet(item: item)
+        }
+        .sheet(isPresented: $showingAddItemSheet) {
+            AddLedgerItemSheet(defaultSectionName: targetSectionForNewItem)
         }
         .task {
             if financeService.macroIndicators.isEmpty || financeService.watchlistQuotes.isEmpty {
@@ -625,10 +634,32 @@ public struct FinancesMainView: View {
         GlassCard(cornerRadius: 20, padding: 18) {
             VStack(alignment: .leading, spacing: 14) {
                 // Section Header
-                HStack {
+                HStack(alignment: .center) {
                     Label(title, systemImage: icon)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(color)
+                    
+                    if section.name.lowercased() != "balance" && section.name.lowercased() != "dentist" {
+                        Button {
+                            triggerHaptic()
+                            targetSectionForNewItem = section.name
+                            showingAddItemSheet = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 11, weight: .bold))
+                                Text("Adaugă")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .foregroundColor(color)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(color.opacity(0.12))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().strokeBorder(color.opacity(0.25), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
                     
                     Spacer()
                     
@@ -689,16 +720,29 @@ public struct FinancesMainView: View {
             .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 8))
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .center) {
-                    Text(item.key)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 10) {
+                    // Tappable Key Name -> opens Quick Adjust Sheet
+                    Button {
+                        selectedAdjustItem = item
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(item.displayName)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                            
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(ThemeColors.fgMutedDark.opacity(0.6))
+                        }
+                    }
+                    .buttonStyle(.plain)
                     
                     Spacer()
                     
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    // Amount badges
+                    VStack(alignment: .trailing, spacing: 1) {
                         Text(item.formattedCalculatedAmount)
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
@@ -708,6 +752,37 @@ public struct FinancesMainView: View {
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundColor(ThemeColors.fgMutedDark)
                         }
+                    }
+                    
+                    // Inline Glass Stepper Controls [ - ] [ + ]
+                    HStack(spacing: 4) {
+                        Button {
+                            triggerHaptic()
+                            ledgerStore.adjustItem(item: item, deltaRaw: item.isScaled ? -1 : -100)
+                        } label: {
+                            Image(systemName: "minus")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 26, height: 26)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Circle())
+                                .overlay(Circle().strokeBorder(Color.white.opacity(0.20), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Button {
+                            triggerHaptic()
+                            ledgerStore.adjustItem(item: item, deltaRaw: item.isScaled ? 1 : 100)
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 26, height: 26)
+                                .background(sectionColor.opacity(0.25))
+                                .clipShape(Circle())
+                                .overlay(Circle().strokeBorder(sectionColor.opacity(0.45), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 
@@ -741,13 +816,18 @@ public struct FinancesMainView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(item.notes, id: \.self) { note in
-                                Text(note)
-                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(Color.white.opacity(0.06))
-                                    .clipShape(Capsule())
+                                Button {
+                                    selectedAdjustItem = item
+                                } label: {
+                                    Text(note)
+                                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(Color.white.opacity(0.06))
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -757,6 +837,12 @@ public struct FinancesMainView: View {
             .background(Color.white.opacity(0.03))
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
+    }
+    
+    private func triggerHaptic() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        #endif
     }
     
     // MARK: - Section Styling Helper
