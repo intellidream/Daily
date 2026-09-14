@@ -564,56 +564,59 @@ public final class HabitsService: ObservableObject {
             }
         }
         
-        // 3. Fetch Logs for this selected day
+        // 3. Fetch Logs for this selected day (including deleted ones to sync tombstones across devices)
         do {
             var query = supabase.from("habits_logs")
                 .select()
                 .gte("logged_at", value: startIso)
                 .lt("logged_at", value: endIso)
-                .eq("is_deleted", value: false)
             if let uid = userId {
                 query = query.eq("user_id", value: uid)
             }
-            let remoteLogs: [HabitLogRecord] = try await query
+            let allDayRemoteLogs: [HabitLogRecord] = try await query
                 .order("logged_at", ascending: false)
                 .execute()
                 .value
             
-            let deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
-            let remoteIds = Set(remoteLogs.map(\.id))
-            let dateKey = isoDateFormatter.string(from: selectedDate)
-            
-            var existingWater = self.todaysWaterLogs.filter { !deletedIds.contains($0.id.uuidString) }
-            var existingSmokes = self.todaysSmokesLogs.filter { !deletedIds.contains($0.id.uuidString) }
-            
-            if let wData = userDefaults.data(forKey: "local_water_logs_\(dateKey)"),
-               let wLogs = try? JSONDecoder().decode([HabitLogRecord].self, from: wData) {
-                for l in wLogs where !deletedIds.contains(l.id.uuidString) && !existingWater.contains(where: { $0.id == l.id }) {
-                    existingWater.append(l)
+            // Sync remote tombstones (records deleted on any other device/instance)
+            let remoteDeletedIds = Set(allDayRemoteLogs.filter { $0.isDeleted }.map { $0.id.uuidString })
+            var deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+            if !remoteDeletedIds.isEmpty {
+                deletedIds.formUnion(remoteDeletedIds)
+                if deletedIds.count > 1000 {
+                    deletedIds = Set(deletedIds.suffix(1000))
                 }
-            }
-            if let sData = userDefaults.data(forKey: "local_smokes_logs_\(dateKey)"),
-               let sLogs = try? JSONDecoder().decode([HabitLogRecord].self, from: sData) {
-                for l in sLogs where !deletedIds.contains(l.id.uuidString) && !existingSmokes.contains(where: { $0.id == l.id }) {
-                    existingSmokes.append(l)
+                userDefaults.set(Array(deletedIds), forKey: "deleted_habit_log_ids")
+                
+                // Purge remote-deleted items from offlineLogQueue if present
+                self.offlineLogQueue.removeAll { deletedIds.contains($0.id.uuidString) }
+                if let data = try? JSONEncoder().encode(self.offlineLogQueue) {
+                    userDefaults.set(data, forKey: "offline_habits_queue")
                 }
             }
             
-            // Include pending logs from offlineLogQueue for this date
-            for qItem in offlineLogQueue where !qItem.isDeleted && !deletedIds.contains(qItem.id.uuidString) && cal.isDate(qItem.loggedAt, inSameDayAs: selectedDate) {
-                if qItem.habitType == "water" {
-                    if !existingWater.contains(where: { $0.id == qItem.id }) { existingWater.append(qItem) }
-                } else if qItem.habitType == "smokes" {
-                    if !existingSmokes.contains(where: { $0.id == qItem.id }) { existingSmokes.append(qItem) }
-                }
+            let activeRemoteLogs = allDayRemoteLogs.filter { !$0.isDeleted && !deletedIds.contains($0.id.uuidString) }
+            let remoteIds = Set(activeRemoteLogs.map(\.id))
+            
+            // Only genuinely un-synced offline logs from offlineLogQueue are candidates to be preserved
+            let pendingOfflineWater = offlineLogQueue.filter {
+                $0.habitType == "water" &&
+                !$0.isDeleted &&
+                !deletedIds.contains($0.id.uuidString) &&
+                cal.isDate($0.loggedAt, inSameDayAs: selectedDate) &&
+                !remoteIds.contains($0.id)
+            }
+            let pendingOfflineSmokes = offlineLogQueue.filter {
+                $0.habitType == "smokes" &&
+                !$0.isDeleted &&
+                !deletedIds.contains($0.id.uuidString) &&
+                cal.isDate($0.loggedAt, inSameDayAs: selectedDate) &&
+                !remoteIds.contains($0.id)
             }
             
-            let pendingWater = existingWater.filter { !remoteIds.contains($0.id) && !$0.isDeleted && !deletedIds.contains($0.id.uuidString) }
-            let pendingSmokes = existingSmokes.filter { !remoteIds.contains($0.id) && !$0.isDeleted && !deletedIds.contains($0.id.uuidString) }
-            
-            self.todaysWaterLogs = (pendingWater + remoteLogs.filter { $0.habitType == "water" && !deletedIds.contains($0.id.uuidString) })
+            self.todaysWaterLogs = (pendingOfflineWater + activeRemoteLogs.filter { $0.habitType == "water" })
                 .sorted { $0.loggedAt > $1.loggedAt }
-            self.todaysSmokesLogs = (pendingSmokes + remoteLogs.filter { $0.habitType == "smokes" && !deletedIds.contains($0.id.uuidString) })
+            self.todaysSmokesLogs = (pendingOfflineSmokes + activeRemoteLogs.filter { $0.habitType == "smokes" })
                 .sorted { $0.loggedAt > $1.loggedAt }
             saveLocalLogs()
         } catch {
