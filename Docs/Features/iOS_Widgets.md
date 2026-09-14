@@ -14,8 +14,9 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 - **Visuals**:
   - Header text ("Bubbles") removed; sleek icon-centric presentation.
   - **Small (1x1)**:
-    - Top-right header: percentage on the left with Bubbles icon (`drop.fill`) to its right.
-    - Large progress circle maximized with minimal spacing, displaying `[actual/total] ml` inside.
+    - Progress ring starts from top-left, maximized with minimal margins (`82pt`, `lineWidth: 7.5`).
+    - Inside the ring: large bold current volume (`[actual]`) with smaller `/ [total] ml` underneath.
+    - Top-right header: percentage value on the left with Bubbles icon (`drop.fill`) to its right.
     - 3 bottom action buttons in order: **`100`** (Coffee amber), **`150`** (Water cyan), **`300`** (Water cyan).
   - **Medium (2x1)**:
     - Multi-liquid circular arc gauge (`BubblesMultiDrinkArcRing`) on the left spanning vertically top-to-bottom.

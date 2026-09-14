@@ -130,10 +130,37 @@ public struct BubblesWidgetView: View {
 
     // MARK: - Small (1x1)
     private var smallView: some View {
-        VStack(spacing: 0) {
-            // Top Section: Percentage in top-right with Bubbles icon to its right
-            HStack {
-                Spacer()
+        VStack(spacing: 6) {
+            // Top Section: Progress ring starting from Top-Left, Percentage and Icon on Top-Right
+            HStack(alignment: .top, spacing: 6) {
+                // Circle Hero starting from Top-Left
+                ZStack {
+                    BubblesMultiDrinkArcRing(
+                        todayMl: entry.snapshot.todayMl,
+                        goalMl: entry.snapshot.goalMl,
+                        breakdown: entry.snapshot.drinkBreakdown,
+                        lineWidth: 7.5
+                    )
+
+                    VStack(spacing: 0.5) {
+                        Text("\(Int(entry.snapshot.todayMl))")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+
+                        Text("/ \(Int(entry.snapshot.goalMl)) ml")
+                            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(Color.white.opacity(0.6))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                }
+                .frame(width: 82, height: 82)
+
+                Spacer(minLength: 2)
+
+                // Top-Right: Percentage on left with Bubbles icon to its right
                 HStack(spacing: 3.5) {
                     Text("\(Int(entry.snapshot.progressPercent * 100))%")
                         .font(.system(size: 11.5, weight: .bold, design: .rounded))
@@ -143,31 +170,8 @@ public struct BubblesWidgetView: View {
                         .font(.system(size: 10.5, weight: .bold))
                         .foregroundColor(WidgetColors.accentCyan)
                 }
+                .padding(.top, 2)
             }
-
-            Spacer(minLength: 0)
-
-            // Center: Large Progress Circle with [actual/total] ml
-            ZStack {
-                BubblesMultiDrinkArcRing(
-                    todayMl: entry.snapshot.todayMl,
-                    goalMl: entry.snapshot.goalMl,
-                    breakdown: entry.snapshot.drinkBreakdown,
-                    lineWidth: 8
-                )
-
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text("\(Int(entry.snapshot.todayMl))/\(Int(entry.snapshot.goalMl))")
-                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    Text("ml")
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.6))
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            }
-            .frame(width: 86, height: 86)
 
             Spacer(minLength: 0)
 
