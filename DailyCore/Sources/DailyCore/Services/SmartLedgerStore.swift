@@ -1,5 +1,8 @@
 import Foundation
 import Combine
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 /// Manages local persistence, reactive publishing, and live re-calculation of the user's Smart Ledger text document.
 @MainActor
@@ -14,7 +17,7 @@ public final class SmartLedgerStore: ObservableObject {
     private let storageKey = "daily_smart_ledger_raw_text_v1"
     
     // MARK: - Default Starter Ledger Template
-    public static let defaultLedgerText: String = """
+    nonisolated public static let defaultLedgerText: String = """
     **Incoming**
 
     ---
@@ -104,8 +107,12 @@ public final class SmartLedgerStore: ObservableObject {
     (Mașini x8y~(x7-27.000€)+(x8+-27.000€)$
     """
     
+    private var groupDefaults: UserDefaults {
+        UserDefaults(suiteName: GroupDefaults.suiteName) ?? UserDefaults.standard
+    }
+
     public init() {
-        let savedText = UserDefaults.standard.string(forKey: storageKey)
+        let savedText = UserDefaults(suiteName: GroupDefaults.suiteName)?.string(forKey: storageKey) ?? UserDefaults.standard.string(forKey: storageKey)
         let textToUse = (savedText != nil && !savedText!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? savedText! : Self.defaultLedgerText
         self.rawText = textToUse
         self.parsedLedger = SmartLedgerParser.shared.parse(textToUse)
@@ -117,8 +124,12 @@ public final class SmartLedgerStore: ObservableObject {
         let textToSave = trimmed.isEmpty ? Self.defaultLedgerText : newText
         
         self.rawText = textToSave
+        groupDefaults.set(textToSave, forKey: storageKey)
         UserDefaults.standard.set(textToSave, forKey: storageKey)
         self.parsedLedger = SmartLedgerParser.shared.parse(textToSave)
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
     }
     
     /// Resets the ledger text to the baseline template.

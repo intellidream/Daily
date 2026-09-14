@@ -1,5 +1,8 @@
 import Foundation
 import Supabase
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 @MainActor
 public final class HabitsService: ObservableObject {
@@ -671,6 +674,9 @@ public final class HabitsService: ObservableObject {
         if let sData = try? JSONEncoder().encode(smokesDailyTotals) {
             userDefaults.set(sData, forKey: "habits_smokes_daily_totals")
         }
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
     }
     
     public func saveWeekCachesForWatch() {
