@@ -109,7 +109,7 @@ public final class NewsService: ObservableObject {
         }
         
         // Cache check
-        if !forceRefresh, let cached = feedCache[feed.url], Date().timeIntervalSince(cached.timestamp) < cacheDuration {
+        if !forceRefresh, let cached = feedCache[feed.url], !cached.articles.isEmpty, Date().timeIntervalSince(cached.timestamp) < cacheDuration {
             self.articles = cached.articles
             self.topHeadline = cached.articles.first
             return
@@ -118,22 +118,37 @@ public final class NewsService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        do {
-            let fetched = try await fetchFeedItems(feed)
-            feedCache[feed.url] = (articles: fetched, timestamp: Date())
-            self.articles = fetched
-            self.topHeadline = fetched.first
-        } catch {
-            print("[NewsService] Error loading feed \(feed.name): \(error)")
+        let session = self.urlSession
+        let mediumUser = SettingsService.shared.settings.newsMediumUsername
+        let mediumUrl = SettingsService.shared.settings.newsMediumReadingListUrl
+        
+        let fetchedArticles: [NewsArticle] = await Task.detached(priority: .userInitiated) {
+            do {
+                return try await Self.fetchFeedItems(
+                    feed,
+                    mediumUsername: mediumUser,
+                    mediumReadingListUrl: mediumUrl,
+                    session: session
+                )
+            } catch {
+                print("[NewsService] Error loading feed \(feed.name): \(error)")
+                return []
+            }
+        }.value
+        
+        if !fetchedArticles.isEmpty {
+            feedCache[feed.url] = (articles: fetchedArticles, timestamp: Date())
+            self.articles = fetchedArticles
+            self.topHeadline = fetchedArticles.first
+        } else if self.articles.isEmpty {
             self.errorMessage = "Failed to load \(feed.name)."
-            // Keep existing articles if available
         }
         
         isLoading = false
     }
     
     public func loadAllNews(forceRefresh: Bool = false) async {
-        if !forceRefresh, let cached = feedCache["all_news"], Date().timeIntervalSince(cached.timestamp) < cacheDuration {
+        if !forceRefresh, let cached = feedCache["all_news"], !cached.articles.isEmpty, Date().timeIntervalSince(cached.timestamp) < cacheDuration {
             self.articles = cached.articles
             self.topHeadline = cached.articles.first
             return
@@ -142,33 +157,55 @@ public final class NewsService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        var aggregated: [NewsArticle] = []
-        let activeFeeds = feeds
+        var activeFeeds = feeds
+        if activeFeeds.isEmpty {
+            activeFeeds = Self.defaultFeeds
+            self.feeds = Self.defaultFeeds
+            saveFeeds()
+        }
         
-        await withTaskGroup(of: [NewsArticle].self) { group in
-            for f in activeFeeds {
-                group.addTask {
-                    do {
-                        return try await self.fetchFeedItems(f)
-                    } catch {
-                        return []
+        let session = self.urlSession
+        let mediumUser = SettingsService.shared.settings.newsMediumUsername
+        let mediumUrl = SettingsService.shared.settings.newsMediumReadingListUrl
+        
+        let fetchedArticles: [NewsArticle] = await Task.detached(priority: .userInitiated) {
+            var aggregated: [NewsArticle] = []
+            await withTaskGroup(of: [NewsArticle].self) { group in
+                for f in activeFeeds {
+                    group.addTask {
+                        do {
+                            return try await Self.fetchFeedItems(
+                                f,
+                                mediumUsername: mediumUser,
+                                mediumReadingListUrl: mediumUrl,
+                                session: session
+                            )
+                        } catch {
+                            return []
+                        }
                     }
+                }
+                
+                for await items in group {
+                    // Take top 3 from each feed for a rich, balanced briefing
+                    let sample = items.prefix(3)
+                    aggregated.append(contentsOf: sample)
                 }
             }
             
-            for await items in group {
-                // Take top 2 from each feed (WinUI fairness rule)
-                let sample = items.prefix(2)
-                aggregated.append(contentsOf: sample)
-            }
+            // Sort chronologically descending
+            aggregated.sort { $0.publishDate > $1.publishDate }
+            return aggregated
+        }.value
+        
+        if !fetchedArticles.isEmpty {
+            feedCache["all_news"] = (articles: fetchedArticles, timestamp: Date())
+            self.articles = fetchedArticles
+            self.topHeadline = fetchedArticles.first
+        } else if self.articles.isEmpty {
+            self.errorMessage = "Unable to load latest news briefings."
         }
         
-        // Sort chronologically descending
-        aggregated.sort { $0.publishDate > $1.publishDate }
-        
-        feedCache["all_news"] = (articles: aggregated, timestamp: Date())
-        self.articles = aggregated
-        self.topHeadline = aggregated.first
         isLoading = false
     }
     
@@ -204,10 +241,14 @@ public final class NewsService: ObservableObject {
         return feeds.contains(where: { $0.url == feedUrl })
     }
     
-    private func fetchFeedItems(_ feed: FeedSource) async throws -> [NewsArticle] {
+    nonisolated private static func fetchFeedItems(
+        _ feed: FeedSource,
+        mediumUsername: String?,
+        mediumReadingListUrl: String?,
+        session: URLSession
+    ) async throws -> [NewsArticle] {
         if feed.id == "medium_reading_list" {
-            let settings = SettingsService.shared.settings
-            let username = settings.newsMediumUsername ?? ""
+            let username = mediumUsername ?? ""
             
             var targetUrl = feed.url
             if !targetUrl.contains("/feed/") && !username.isEmpty {
@@ -216,7 +257,7 @@ public final class NewsService: ObservableObject {
             
             if let url = URL(string: targetUrl) {
                 do {
-                    let (data, response) = try await urlSession.data(from: url)
+                    let (data, response) = try await session.data(from: url)
                     if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
                         let parser = FeedParser(feed: feed)
                         let parsed = parser.parse(xmlData: data)
@@ -234,7 +275,7 @@ public final class NewsService: ObservableObject {
             throw URLError(.badURL)
         }
         
-        let (data, response) = try await urlSession.data(from: url)
+        let (data, response) = try await session.data(from: url)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
         }
@@ -419,8 +460,10 @@ public final class NewsService: ObservableObject {
                 // Deduplicate by URL
                 var seen = Set<String>()
                 remoteFeeds = remoteFeeds.filter { seen.insert($0.url).inserted }
-                self.feeds = remoteFeeds
-                saveFeeds()
+                if !remoteFeeds.isEmpty {
+                    self.feeds = remoteFeeds
+                    saveFeeds()
+                }
             }
         } catch {
             print("[NewsService] Supabase subscriptions pull error: \(error)")

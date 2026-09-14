@@ -114,6 +114,9 @@ public struct NewsFeedView: View {
             NewsFeedsManagementSheet()
         }
         .task {
+            if newsService.articles.isEmpty {
+                await newsService.loadFeed(newsService.selectedFeed)
+            }
             await savedService.syncWithSupabase()
         }
     }
@@ -381,6 +384,31 @@ public struct NewsFeedView: View {
                     .font(.system(size: 13))
                     .foregroundColor(ThemeColors.fgMutedDark)
                     .multilineTextAlignment(.center)
+                
+                if activeSubTab == .live {
+                    Button {
+                        Task {
+                            await newsService.loadFeed(newsService.selectedFeed, forceRefresh: true)
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Refresh Feed")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(ThemeColors.accentCyan)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(ThemeColors.accentCyan.opacity(0.12))
+                                .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.25), lineWidth: 1))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
             }
             .frame(maxWidth: .infinity)
         }

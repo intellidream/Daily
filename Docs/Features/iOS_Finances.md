@@ -80,33 +80,35 @@ graph TD
 
 ## 4. Modular Dashboard Widget (`FinancesDashboardCard.swift`)
 
-The Finances dashboard widget dynamically adjusts layout and content density based on its assigned `WidgetSize`:
+The Finances dashboard widget dynamically grounds in real user financial data via `SmartLedgerStore.shared.parsedLedger` and live market data via `FinanceService.shared`:
 
 ```
 ┌─────────────────────────┬─────────────────────────┐
 │       Small (1x1)       │       Wide (2x1)        │
 │ ┌─────────────────────┐ │ ┌─────────────────────┐ │
-│ │ 📈 Finances         │ │ │ 📈 Finances & Mkts  │ │
-│ │ 140.730 $           │ │ │ 140.730 $ 47.250 $  │ │
-│ │ +0.00% today        │ │ │ +0.00%    95.330 $  │ │
+│ │ 💰 Money     [EUR]  │ │ │ 💰 Finances & Money > │ │
+│ │ NET WORTH           │ │ │ NET WORTH | FLOW | RES│ │
+│ │ 127.2K Lei          │ │ │ 127.156 Lei 16K/16K   │ │
+│ │ Crd 15.1K · Csh 900 │ │ │ Crd 15.1K · Csh 900   │ │
 │ └─────────────────────┘ │ └─────────────────────┘ │
 ├─────────────────────────┼─────────────────────────┤
 │       Tall (1x2)        │       Large (2x2)       │
 │ ┌─────────────────────┐ │ ┌─────────────────────┐ │
-│ │ 📈 Finances       > │ │ │ 📈 Finances & Mkts  │ │
-│ │ NET WORTH           │ │ │ NET WORTH  Cash/Inv │ │
-│ │ 140.730 $           │ │ │ 140.730 $ 47.2K/95K │ │
-│ │ Cash/Inv breakdown  │ │ │                     │ │
-│ │ TOP WATCHLIST       │ │ │ WATCHLIST | GLOBAL  │ │
-│ │ AAPL, NVDA, MSFT    │ │ │ AAPL/NVDA | Oil/Gold│ │
+│ │ 💰 Finances       > │ │ │ 📈 Finances & Mkts  > │ │
+│ │ NET WORTH + EUR     │ │ │ NET WORTH   Dep/Flow  │ │
+│ │ Dep / Card Reserves │ │ │ 127.156,47  127K/16K  │ │
+│ │ TOP OUTGOING        │ │ │ KEY OUTGOING PILLS    │ │
+│ │ GLOBAL PULSE (3)    │ │ │ WATCHLIST | GLOBAL    │ │
 │ └─────────────────────┘ │ └─────────────────────┘ │
 └─────────────────────────┴─────────────────────────┘
 ```
 
-1. **Small (`1x1`)**: Compact net worth display with 24h percentage badge and instant tap-to-hub gesture.
-2. **Wide (`2x1`)**: Net worth alongside cash and investment breakdowns with account/asset counters.
-3. **Tall (`1x2`)**: Vertical stack featuring net worth hero, cash/investment metrics, and the top 3 securities watchlist with live price changes.
-4. **Large (`2x2`)**: Comprehensive 2x2 dashboard featuring net worth, full cash/investment/debt metrics, the top 3 watchlist quotes, and the Global Pulse macroeconomic feed side-by-side.
+1. **Small (`1x1`)**: Real Net Worth (`127.2K Lei`), live EUR conversion badge (`25.431 €`), and liquid accounts (`Crd 15.1K · Csh 900`).
+2. **Wide (`2x1`)**: 3-column split presenting Net Worth (`127.156 Lei` / `~25.4K €`), Monthly Flow (`In 16K / Out 16K`), and Reserves (`Dep 127.2K`, Card/Cash).
+3. **Tall (`1x2`)**: Vertical stack featuring Net Worth hero with EUR badge, Deposits & Card liquidity, Top 2 real outgoing expenses (e.g. Vacante, Rata), and Global Macro Pulse (Crude Oil, Gold, USD).
+4. **Large (`2x2`)**: Multi-panel executive hub combining Net Worth hero + EUR badge, liquid & flow metrics (Deposits, In/Out flow, Liquid card & cash), top 3 real outgoing expense capsules (Vacante 6.8K, Rata 4.9K, Cora 1K), live 3-ticker Watchlist (AAPL, NVDA, MSFT), and Global Macro Pulse side-by-side.
+
+Zero imaginary investments or mock numbers are rendered; all metrics dynamically bind to `SmartLedgerStore` and `FinanceService`. Equatable conformance guarantees buttery-smooth 120 FPS scrolling without redundant re-renders.
 
 ---
 

@@ -4,6 +4,7 @@ import DailyCore
 /// Liquid Glass Finances Card on the main Dashboard.
 /// Adaptively renders across Small (1x1), Wide (2x1), Tall (1x2), and Large (2x2) modular sizes.
 public struct FinancesDashboardCard: View {
+    @ObservedObject private var ledgerStore = SmartLedgerStore.shared
     @ObservedObject private var financeService = FinanceService.shared
     
     public let size: DashboardWidgetSize
@@ -12,6 +13,35 @@ public struct FinancesDashboardCard: View {
     public init(size: DashboardWidgetSize = .wide, onTap: @escaping () -> Void = {}) {
         self.size = size
         self.onTap = onTap
+    }
+
+    private var ledger: ParsedSmartLedger {
+        ledgerStore.parsedLedger
+    }
+    
+    private var cardAmount: Double {
+        if let inc = ledger.sections.first(where: { $0.name.caseInsensitiveCompare("Incoming") == .orderedSame }),
+           let card = inc.items.first(where: { $0.key.caseInsensitiveCompare("Card") == .orderedSame }) {
+            return card.calculatedAmount
+        }
+        return 0
+    }
+    
+    private var cashAmount: Double {
+        if let inc = ledger.sections.first(where: { $0.name.caseInsensitiveCompare("Incoming") == .orderedSame }),
+           let cash = inc.items.first(where: { $0.key.caseInsensitiveCompare("Cash") == .orderedSame }) {
+            return cash.calculatedAmount
+        }
+        return 0
+    }
+    
+    private var topOutgoingItems: [SmartLedgerItem] {
+        guard let out = ledger.sections.first(where: { $0.name.caseInsensitiveCompare("Outgoing") == .orderedSame }) else {
+            return []
+        }
+        return out.items
+            .filter { !$0.isPureNote && $0.calculatedAmount > 0 }
+            .sorted { $0.calculatedAmount > $1.calculatedAmount }
     }
 
     public var body: some View {
@@ -36,29 +66,26 @@ public struct FinancesDashboardCard: View {
     // MARK: - Small (1x1) Compact Net Worth Glance
     @ViewBuilder
     private var smallContent: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
             // Header
             HStack {
-                Label("Finances", systemImage: "chart.line.uptrend.xyaxis")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(ThemeColors.accentGreen)
+                HStack(spacing: 4) {
+                    Image(systemName: "wallet.bifold.fill")
+                    Text("Money")
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(ThemeColors.accentGreen)
                 
                 Spacer()
                 
-                // 24h Change Pill
-                HStack(spacing: 2) {
-                    Image(systemName: financeService.summary.dayChangePercent >= 0 ? "arrow.up.right" : "arrow.down.right")
-                        .font(.system(size: 9, weight: .bold))
-                    Text(String(format: "%.1f%%", abs(financeService.summary.dayChangePercent)))
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                }
-                .foregroundColor(financeService.summary.dayChangePercent >= 0 ? ThemeColors.accentGreen : ThemeColors.accentPink)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    (financeService.summary.dayChangePercent >= 0 ? ThemeColors.accentGreen : ThemeColors.accentPink).opacity(0.16)
-                )
-                .clipShape(Capsule())
+                // EUR Equivalent Pill
+                Text(ledger.formattedNetWorthEUR)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(ThemeColors.accentCyan.opacity(0.14))
+                    .clipShape(Capsule())
             }
             
             Spacer(minLength: 2)
@@ -69,34 +96,39 @@ public struct FinancesDashboardCard: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(ThemeColors.fgMutedDark)
                 
-                Text(compactCurrency(financeService.summary.netWorth))
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                Text(formatCompactLei(ledger.netWorth))
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             
             Spacer(minLength: 2)
 
-            // Cash & Invested Footer
-            HStack(spacing: 6) {
-                HStack(spacing: 3) {
+            // Liquidity Footer (Card & Cash)
+            HStack(spacing: 4) {
+                HStack(spacing: 2) {
                     Circle()
                         .fill(ThemeColors.accentCyan)
-                        .frame(width: 5, height: 5)
-                    Text(compactCurrency(financeService.summary.cashTotal))
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .frame(width: 4, height: 4)
+                    Text("Crd \(formatCompactNumber(cardAmount))")
+                        .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                         .foregroundColor(ThemeColors.accentCyan)
+                        .lineLimit(1)
                 }
                 
                 Text("·")
+                    .font(.system(size: 9))
                     .foregroundColor(Color.white.opacity(0.3))
                 
-                HStack(spacing: 3) {
+                HStack(spacing: 2) {
                     Circle()
-                        .fill(ThemeColors.accentPurple)
-                        .frame(width: 5, height: 5)
-                    Text(compactCurrency(financeService.summary.investmentsTotal))
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundColor(ThemeColors.accentPurple)
+                        .fill(Color(red: 0.35, green: 0.85, blue: 0.55))
+                        .frame(width: 4, height: 4)
+                    Text("Csh \(formatCompactNumber(cashAmount))")
+                        .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                        .foregroundColor(Color(red: 0.35, green: 0.85, blue: 0.55))
+                        .lineLimit(1)
                 }
             }
         }
@@ -109,7 +141,7 @@ public struct FinancesDashboardCard: View {
         VStack(alignment: .leading, spacing: 14) {
             // Header
             HStack {
-                Label("Finances & Markets", systemImage: "chart.line.uptrend.xyaxis")
+                Label("Finances & Money", systemImage: "wallet.bifold.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(ThemeColors.accentGreen)
                 Spacer()
@@ -123,58 +155,77 @@ public struct FinancesDashboardCard: View {
                 }
             }
             
-            // 3 Columns: Net Worth | Cash | Investments
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
+            // 3 Columns: Net Worth | Monthly Flow | Reserves
+            HStack(spacing: 14) {
+                // Column 1: Net Worth
+                VStack(alignment: .leading, spacing: 3) {
                     Text("NET WORTH")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(ThemeColors.fgMutedDark)
-                    Text(financeService.summary.formattedNetWorth)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                    Text(ledger.formattedBadge(ledger.netWorth))
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     
-                    HStack(spacing: 2) {
-                        Image(systemName: financeService.summary.dayChangePercent >= 0 ? "arrow.up.right" : "arrow.down.right")
-                            .font(.system(size: 9, weight: .bold))
-                        Text(String(format: "%@%.2f%% today", financeService.summary.dayChangePercent >= 0 ? "+" : "", financeService.summary.dayChangePercent))
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundColor(financeService.summary.dayChangePercent >= 0 ? ThemeColors.accentGreen : ThemeColors.accentPink)
-                }
-                
-                Divider()
-                    .frame(height: 38)
-                    .background(Color.white.opacity(0.15))
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("CASH")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
-                    Text(financeService.summary.formattedCash)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                    Text(ledger.formattedNetWorthEUR)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundColor(ThemeColors.accentCyan)
-                    
-                    Text("\(financeService.accounts.filter { $0.type == .checking || $0.type == .savings }.count) accounts")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(ThemeColors.fgMutedDark)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
                 Divider()
                     .frame(height: 38)
                     .background(Color.white.opacity(0.15))
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("INVESTMENTS")
+                // Column 2: Monthly Flow
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("MONTHLY FLOW")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(ThemeColors.fgMutedDark)
-                    Text(financeService.summary.formattedInvestments)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(ThemeColors.accentPurple)
                     
-                    Text("\(financeService.watchlistQuotes.count) tracked assets")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Text("In")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Text(formatCompactLei(ledger.incomingTotal))
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentGreen)
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Text("Out")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Text(formatCompactLei(ledger.outgoingTotal))
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentPink)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Divider()
+                    .frame(height: 38)
+                    .background(Color.white.opacity(0.15))
+                
+                // Column 3: Deposits & Liquid
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("DEPOSITS & LIQUID")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                    
+                    Text(ledger.formattedBadge(ledger.depositTotal))
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundColor(ThemeColors.accentPurple)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    
+                    Text("Crd \(formatCompactNumber(cardAmount)) · Csh \(formatCompactNumber(cashAmount))")
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -182,10 +233,10 @@ public struct FinancesDashboardCard: View {
     // MARK: - Tall (1x2) Vertical 50/50 Split
     @ViewBuilder
     private var tallContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             // Header
             HStack {
-                Label("Finances", systemImage: "chart.line.uptrend.xyaxis")
+                Label("Finances", systemImage: "wallet.bifold.fill")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(ThemeColors.accentGreen)
                 Spacer()
@@ -200,27 +251,61 @@ public struct FinancesDashboardCard: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(ThemeColors.fgMutedDark)
                 
-                Text(financeService.summary.formattedNetWorth)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                Text(ledger.formattedBadge(ledger.netWorth))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                
+                Text(ledger.formattedNetWorthEUR)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(ThemeColors.accentCyan)
                 
                 HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Text("Cash")
-                            .font(.system(size: 10, weight: .medium))
+                    HStack(spacing: 3) {
+                        Text("Dep")
+                            .font(.system(size: 9, weight: .medium))
                             .foregroundColor(ThemeColors.fgMutedDark)
-                        Text(compactCurrency(financeService.summary.cashTotal))
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundColor(ThemeColors.accentCyan)
+                        Text(formatCompactLei(ledger.depositTotal))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentPurple)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                     }
                     
-                    HStack(spacing: 4) {
-                        Text("Inv")
-                            .font(.system(size: 10, weight: .medium))
+                    HStack(spacing: 3) {
+                        Text("Crd")
+                            .font(.system(size: 9, weight: .medium))
                             .foregroundColor(ThemeColors.fgMutedDark)
-                        Text(compactCurrency(financeService.summary.investmentsTotal))
+                        Text(formatCompactLei(cardAmount))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                    }
+                }
+                .padding(.top, 2)
+            }
+
+            Divider()
+                .background(Color.white.opacity(0.12))
+
+            // Middle: Top Outgoing Allocations
+            VStack(alignment: .leading, spacing: 4) {
+                Text("TOP OUTGOING")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(ThemeColors.fgMutedDark)
+                
+                ForEach(topOutgoingItems.prefix(2)) { item in
+                    HStack {
+                        Text(item.displayName)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(formatCompactLei(item.calculatedAmount))
                             .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundColor(ThemeColors.accentPurple)
+                            .foregroundColor(ThemeColors.accentPink)
                     }
                 }
             }
@@ -228,37 +313,27 @@ public struct FinancesDashboardCard: View {
             Divider()
                 .background(Color.white.opacity(0.12))
 
-            // Bottom: Top Watchlist Items
-            VStack(alignment: .leading, spacing: 6) {
-                Text("TOP WATCHLIST")
+            // Bottom: Global Macro Pulse (Gold, Dollar, BTC)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("GLOBAL PULSE")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(ThemeColors.fgMutedDark)
                 
-                ForEach(financeService.watchlistQuotes.prefix(3)) { quote in
+                ForEach(financeService.macroIndicators.prefix(3)) { indicator in
                     HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(quote.symbol)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.white)
-                            Text(quote.companyName)
-                                .font(.system(size: 9))
-                                .foregroundColor(ThemeColors.fgMutedDark)
-                                .lineLimit(1)
-                        }
+                        Text(indicator.emoji)
+                            .font(.system(size: 10))
+                        Text(indicator.name)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
                         
                         Spacer()
                         
-                        VStack(alignment: .trailing, spacing: 1) {
-                            Text(quote.formattedPrice)
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                            
-                            Text(quote.formattedChangePercent)
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                .foregroundColor(quote.isPositive ? ThemeColors.accentGreen : ThemeColors.accentPink)
-                        }
+                        Text(indicator.formattedChangePercent)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundColor(indicator.isPositive ? ThemeColors.accentGreen : ThemeColors.accentPink)
                     }
-                    .padding(.vertical, 3)
                 }
             }
 
@@ -270,7 +345,7 @@ public struct FinancesDashboardCard: View {
     // MARK: - Large (2x2) Multi-Panel Executive Hub
     @ViewBuilder
     private var largeContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
                 Label("Finances & Markets", systemImage: "chart.line.uptrend.xyaxis")
@@ -287,48 +362,91 @@ public struct FinancesDashboardCard: View {
                 }
             }
 
-            // Upper Panel: Net Worth + Cash + Investments
+            // Upper Panel: Net Worth + Liquid Breakdown
             HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("NET WORTH")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(ThemeColors.fgMutedDark)
-                    Text(financeService.summary.formattedNetWorth)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                    Text(ledger.formattedNetWorth)
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     
-                    HStack(spacing: 3) {
-                        Image(systemName: financeService.summary.dayChangePercent >= 0 ? "arrow.up.right" : "arrow.down.right")
-                            .font(.system(size: 9, weight: .bold))
-                        Text(String(format: "%@%.2f%% today", financeService.summary.dayChangePercent >= 0 ? "+" : "", financeService.summary.dayChangePercent))
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                    }
-                    .foregroundColor(financeService.summary.dayChangePercent >= 0 ? ThemeColors.accentGreen : ThemeColors.accentPink)
+                    Text(ledger.formattedNetWorthEUR)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundColor(ThemeColors.accentCyan)
                 }
                 
                 Spacer()
                 
-                VStack(alignment: .trailing, spacing: 6) {
+                VStack(alignment: .trailing, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text("Cash")
+                        Text("Deposits")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(ThemeColors.fgMutedDark)
-                        Text(financeService.summary.formattedCash)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundColor(ThemeColors.accentCyan)
+                        Text(ledger.formattedBadge(ledger.depositTotal))
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentPurple)
                     }
                     
                     HStack(spacing: 6) {
-                        Text("Investments")
+                        Text("Flow")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(ThemeColors.fgMutedDark)
-                        Text(financeService.summary.formattedInvestments)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundColor(ThemeColors.accentPurple)
+                        Text("\(formatCompactNumber(ledger.incomingTotal)) / \(formatCompactNumber(ledger.outgoingTotal)) Lei")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+                    
+                    HStack(spacing: 6) {
+                        Text("Liquid")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Text("\(formatCompactNumber(cardAmount)) / \(formatCompactNumber(cashAmount)) Lei")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentCyan)
                     }
                 }
             }
-            .padding(.bottom, 2)
+
+            Divider()
+                .background(Color.white.opacity(0.12))
+
+            // Middle Section: Outgoing Allocations
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("KEY OUTGOING ALLOCATIONS")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                    Spacer()
+                    Text("Total \(ledger.formattedBadge(ledger.outgoingTotal))")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(ThemeColors.accentPink)
+                }
+                
+                HStack(spacing: 6) {
+                    ForEach(topOutgoingItems.prefix(3)) { item in
+                        HStack(spacing: 4) {
+                            Text(cleanPillName(item.displayName))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                            Text(formatCompactNumber(item.calculatedAmount))
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundColor(ThemeColors.accentPink)
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(Color.white.opacity(0.06))
+                                .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                        )
+                    }
+                }
+            }
 
             Divider()
                 .background(Color.white.opacity(0.12))
@@ -336,7 +454,7 @@ public struct FinancesDashboardCard: View {
             // Lower Section: 2 Columns (Top Watchlist on Left | Global Macro Pulse on Right)
             HStack(alignment: .top, spacing: 14) {
                 // Watchlist column
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text("WATCHLIST")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(ThemeColors.fgMutedDark)
@@ -356,17 +474,17 @@ public struct FinancesDashboardCard: View {
                                     .foregroundColor(quote.isPositive ? ThemeColors.accentGreen : ThemeColors.accentPink)
                             }
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
                 Divider()
-                    .frame(height: 90)
+                    .frame(height: 80)
                     .background(Color.white.opacity(0.12))
 
                 // Macro Pulse column
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text("GLOBAL PULSE")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(ThemeColors.fgMutedDark)
@@ -374,9 +492,9 @@ public struct FinancesDashboardCard: View {
                     ForEach(financeService.macroIndicators.prefix(3)) { indicator in
                         HStack {
                             Text(indicator.emoji)
-                                .font(.system(size: 12))
+                                .font(.system(size: 11))
                             Text(indicator.name)
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
                             Spacer()
@@ -384,7 +502,7 @@ public struct FinancesDashboardCard: View {
                                 .font(.system(size: 9, weight: .bold, design: .rounded))
                                 .foregroundColor(indicator.isPositive ? ThemeColors.accentGreen : ThemeColors.accentPink)
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -394,21 +512,51 @@ public struct FinancesDashboardCard: View {
     }
 
     // MARK: - Helpers
-    private func compactCurrency(_ value: Double) -> String {
-        if value >= 1_000_000 {
-            return String(format: "$%.1fM", value / 1_000_000)
-        } else if value >= 1_000 {
-            return String(format: "$%.1fK", value / 1_000)
+    private func formatCompactLei(_ amount: Double) -> String {
+        if amount >= 1_000_000 {
+            return String(format: "%.1fM Lei", amount / 1_000_000)
+        } else if amount >= 1_000 {
+            let thousands = amount / 1_000
+            if thousands.truncatingRemainder(dividingBy: 1) == 0 {
+                return String(format: "%.0fK Lei", thousands)
+            } else {
+                return String(format: "%.1fK Lei", thousands)
+            }
+        } else if amount == 0 {
+            return "0 Lei"
         } else {
-            return String(format: "$%.0f", value)
+            return String(format: "%.0f Lei", amount)
         }
+    }
+
+    private func formatCompactNumber(_ amount: Double) -> String {
+        if amount >= 1_000_000 {
+            return String(format: "%.1fM", amount / 1_000_000)
+        } else if amount >= 1_000 {
+            let thousands = amount / 1_000
+            if thousands.truncatingRemainder(dividingBy: 1) == 0 {
+                return String(format: "%.0fK", thousands)
+            } else {
+                return String(format: "%.1fK", thousands)
+            }
+        } else if amount == 0 {
+            return "0"
+        } else {
+            return String(format: "%.0f", amount)
+        }
+    }
+
+    private func cleanPillName(_ name: String) -> String {
+        let firstPart = name.split(separator: "/").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? name
+        return firstPart.isEmpty ? name : firstPart
     }
 }
 
 extension FinancesDashboardCard: Equatable {
     public static func == (lhs: FinancesDashboardCard, rhs: FinancesDashboardCard) -> Bool {
         lhs.size == rhs.size &&
-        lhs.financeService.summary == rhs.financeService.summary &&
-        lhs.financeService.watchlistQuotes == rhs.financeService.watchlistQuotes
+        lhs.ledgerStore.rawText == rhs.ledgerStore.rawText &&
+        lhs.financeService.watchlistQuotes == rhs.financeService.watchlistQuotes &&
+        lhs.financeService.macroIndicators == rhs.financeService.macroIndicators
     }
 }
