@@ -135,10 +135,12 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         var coffeeMl = 0.0
         var lastLogged: Date? = nil
         
+        let deletedIds = Set(groupDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
         if let logsData = groupDefaults.data(forKey: "local_water_logs_\(key)"),
            let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
-            lastLogged = logs.first?.loggedAt
-            for log in logs {
+            let activeLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
+            lastLogged = activeLogs.first?.loggedAt
+            for log in activeLogs {
                 let drink = (log.parsedDrink ?? "").lowercased()
                 if drink.contains("coffee") {
                     coffeeMl += log.value
@@ -250,10 +252,12 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         var heatedCount = 0
         var lastSmokeDate: Date? = nil
         
+        let deletedIds = Set(groupDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
         if let logsData = groupDefaults.data(forKey: "local_smokes_logs_\(key)"),
            let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
-            lastSmokeDate = logs.first?.loggedAt
-            for log in logs {
+            let activeLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
+            lastSmokeDate = activeLogs.first?.loggedAt
+            for log in activeLogs {
                 let type = (log.smokeType).lowercased()
                 if type.contains("heat") {
                     heatedCount += Int(log.value)

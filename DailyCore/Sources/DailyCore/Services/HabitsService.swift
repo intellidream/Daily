@@ -324,24 +324,54 @@ public final class HabitsService: ObservableObject {
     }
     
     public func deleteLog(id: UUID) async {
-        var deletedRecord: HabitLogRecord?
-        if activeHabit == .water {
-            if let idx = todaysWaterLogs.firstIndex(where: { $0.id == id }) {
-                deletedRecord = todaysWaterLogs.remove(at: idx)
-            }
-        } else {
-            if let idx = todaysSmokesLogs.firstIndex(where: { $0.id == id }) {
-                deletedRecord = todaysSmokesLogs.remove(at: idx)
-            }
+        let idString = id.uuidString
+        
+        // 1. Record persistent tombstone in App Group storage
+        var deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+        deletedIds.insert(idString)
+        if deletedIds.count > 1000 {
+            deletedIds = Set(deletedIds.suffix(1000))
+        }
+        userDefaults.set(Array(deletedIds), forKey: "deleted_habit_log_ids")
+        
+        // 2. Immediately purge from offlineLogQueue in memory & storage
+        offlineLogQueue.removeAll { $0.id == id || deletedIds.contains($0.id.uuidString) }
+        if let data = try? JSONEncoder().encode(offlineLogQueue) {
+            userDefaults.set(data, forKey: "offline_habits_queue")
         }
         
+        // 3. Remove from in-memory arrays
+        var deletedRecord: HabitLogRecord?
+        if let idx = todaysWaterLogs.firstIndex(where: { $0.id == id }) {
+            deletedRecord = todaysWaterLogs.remove(at: idx)
+        } else if let idx = todaysSmokesLogs.firstIndex(where: { $0.id == id }) {
+            deletedRecord = todaysSmokesLogs.remove(at: idx)
+        }
+        
+        // 4. Recalculate daily totals and clean local cache
         if let rec = deletedRecord {
             let dateKey = isoDateFormatter.string(from: rec.loggedAt)
             if rec.habitType == "water" {
                 waterDailyTotals[dateKey] = max(0, (waterDailyTotals[dateKey] ?? rec.value) - rec.value)
+                if let wData = userDefaults.data(forKey: "local_water_logs_\(dateKey)"),
+                   var logs = try? JSONDecoder().decode([HabitLogRecord].self, from: wData) {
+                    logs.removeAll { $0.id == id || deletedIds.contains($0.id.uuidString) }
+                    if let encoded = try? JSONEncoder().encode(logs) {
+                        userDefaults.set(encoded, forKey: "local_water_logs_\(dateKey)")
+                    }
+                }
             } else {
                 smokesDailyTotals[dateKey] = max(0, (smokesDailyTotals[dateKey] ?? Int(rec.value)) - Int(rec.value))
+                if let sData = userDefaults.data(forKey: "local_smokes_logs_\(dateKey)"),
+                   var logs = try? JSONDecoder().decode([HabitLogRecord].self, from: sData) {
+                    logs.removeAll { $0.id == id || deletedIds.contains($0.id.uuidString) }
+                    if let encoded = try? JSONEncoder().encode(logs) {
+                        userDefaults.set(encoded, forKey: "local_smokes_logs_\(dateKey)")
+                    }
+                }
             }
+            saveDailyTotals()
+        } else {
             saveDailyTotals()
         }
         
@@ -354,14 +384,19 @@ public final class HabitsService: ObservableObject {
             await fetchSmokesFinancials(userId: session?.user.id.uuidString.lowercased())
         }
         
-        // Asynchronously mark deleted in Supabase
+        // 5. Asynchronously mark deleted in Supabase (with offline fallback queue)
         do {
             try await supabase.from("habits_logs")
                 .update(["is_deleted": true])
-                .eq("id", value: id.uuidString.lowercased())
+                .eq("id", value: idString.lowercased())
                 .execute()
         } catch {
-            print("[HabitsService] Note: Offline soft-delete queued for \(id): \(error.localizedDescription)")
+            print("[HabitsService] Offline soft-delete queued for \(idString): \(error.localizedDescription)")
+            var pendingDeletes = userDefaults.stringArray(forKey: "offline_deleted_habits_queue") ?? []
+            if !pendingDeletes.contains(idString) {
+                pendingDeletes.append(idString)
+                userDefaults.set(pendingDeletes, forKey: "offline_deleted_habits_queue")
+            }
         }
     }
     
@@ -544,27 +579,28 @@ public final class HabitsService: ObservableObject {
                 .execute()
                 .value
             
+            let deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
             let remoteIds = Set(remoteLogs.map(\.id))
             let dateKey = isoDateFormatter.string(from: selectedDate)
             
-            var existingWater = self.todaysWaterLogs
-            var existingSmokes = self.todaysSmokesLogs
+            var existingWater = self.todaysWaterLogs.filter { !deletedIds.contains($0.id.uuidString) }
+            var existingSmokes = self.todaysSmokesLogs.filter { !deletedIds.contains($0.id.uuidString) }
             
             if let wData = userDefaults.data(forKey: "local_water_logs_\(dateKey)"),
                let wLogs = try? JSONDecoder().decode([HabitLogRecord].self, from: wData) {
-                for l in wLogs where !existingWater.contains(where: { $0.id == l.id }) {
+                for l in wLogs where !deletedIds.contains(l.id.uuidString) && !existingWater.contains(where: { $0.id == l.id }) {
                     existingWater.append(l)
                 }
             }
             if let sData = userDefaults.data(forKey: "local_smokes_logs_\(dateKey)"),
                let sLogs = try? JSONDecoder().decode([HabitLogRecord].self, from: sData) {
-                for l in sLogs where !existingSmokes.contains(where: { $0.id == l.id }) {
+                for l in sLogs where !deletedIds.contains(l.id.uuidString) && !existingSmokes.contains(where: { $0.id == l.id }) {
                     existingSmokes.append(l)
                 }
             }
             
             // Include pending logs from offlineLogQueue for this date
-            for qItem in offlineLogQueue where !qItem.isDeleted && cal.isDate(qItem.loggedAt, inSameDayAs: selectedDate) {
+            for qItem in offlineLogQueue where !qItem.isDeleted && !deletedIds.contains(qItem.id.uuidString) && cal.isDate(qItem.loggedAt, inSameDayAs: selectedDate) {
                 if qItem.habitType == "water" {
                     if !existingWater.contains(where: { $0.id == qItem.id }) { existingWater.append(qItem) }
                 } else if qItem.habitType == "smokes" {
@@ -572,12 +608,12 @@ public final class HabitsService: ObservableObject {
                 }
             }
             
-            let pendingWater = existingWater.filter { !remoteIds.contains($0.id) && !$0.isDeleted }
-            let pendingSmokes = existingSmokes.filter { !remoteIds.contains($0.id) && !$0.isDeleted }
+            let pendingWater = existingWater.filter { !remoteIds.contains($0.id) && !$0.isDeleted && !deletedIds.contains($0.id.uuidString) }
+            let pendingSmokes = existingSmokes.filter { !remoteIds.contains($0.id) && !$0.isDeleted && !deletedIds.contains($0.id.uuidString) }
             
-            self.todaysWaterLogs = (pendingWater + remoteLogs.filter { $0.habitType == "water" })
+            self.todaysWaterLogs = (pendingWater + remoteLogs.filter { $0.habitType == "water" && !deletedIds.contains($0.id.uuidString) })
                 .sorted { $0.loggedAt > $1.loggedAt }
-            self.todaysSmokesLogs = (pendingSmokes + remoteLogs.filter { $0.habitType == "smokes" })
+            self.todaysSmokesLogs = (pendingSmokes + remoteLogs.filter { $0.habitType == "smokes" && !deletedIds.contains($0.id.uuidString) })
                 .sorted { $0.loggedAt > $1.loggedAt }
             saveLocalLogs()
         } catch {
@@ -748,6 +784,9 @@ public final class HabitsService: ObservableObject {
         if let sData = try? JSONEncoder().encode(smokesDailyTotals) {
             userDefaults.set(sData, forKey: "habits_smokes_daily_totals")
         }
+        let todayKey = isoDateFormatter.string(from: Date())
+        userDefaults.set(Int(waterDailyTotals[todayKey] ?? 0), forKey: "cached_water_total")
+        userDefaults.set(smokesDailyTotals[todayKey] ?? 0, forKey: "cached_smokes_total")
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
@@ -794,18 +833,22 @@ public final class HabitsService: ObservableObject {
     }
     
     private func loadLocalLogsForSelectedDate() {
+        let deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
         let dateKey = isoDateFormatter.string(from: selectedDate)
         if let wData = userDefaults.data(forKey: "local_water_logs_\(dateKey)"),
            let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: wData) {
-            self.todaysWaterLogs = logs
+            self.todaysWaterLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
         }
         if let sData = userDefaults.data(forKey: "local_smokes_logs_\(dateKey)"),
            let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: sData) {
-            self.todaysSmokesLogs = logs
+            self.todaysSmokesLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
         }
     }
     
     private func pushLogToSupabase(_ record: HabitLogRecord) async {
+        let deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+        guard !deletedIds.contains(record.id.uuidString) else { return }
+        
         var toInsert = record
         if toInsert.userId == nil {
             let session = try? await supabase.auth.session
@@ -825,11 +868,37 @@ public final class HabitsService: ObservableObject {
     }
     
     public func flushOfflineQueue() async {
+        let deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+        
         // 1. Reload latest queue from userDefaults in case widget added items
         if let queueData = userDefaults.data(forKey: "offline_habits_queue"),
            let queue = try? JSONDecoder().decode([HabitLogRecord].self, from: queueData) {
             self.offlineLogQueue = queue
         }
+        
+        // Purge any deleted items from memory & persistent offline queue
+        self.offlineLogQueue.removeAll { deletedIds.contains($0.id.uuidString) }
+        if let data = try? JSONEncoder().encode(self.offlineLogQueue) {
+            userDefaults.set(data, forKey: "offline_habits_queue")
+        }
+        
+        // 2. Flush pending deletions queue
+        let pendingDeletes = userDefaults.stringArray(forKey: "offline_deleted_habits_queue") ?? []
+        if !pendingDeletes.isEmpty {
+            var remainingDeletes: [String] = []
+            for delId in pendingDeletes {
+                do {
+                    try await supabase.from("habits_logs")
+                        .update(["is_deleted": true])
+                        .eq("id", value: delId.lowercased())
+                        .execute()
+                } catch {
+                    remainingDeletes.append(delId)
+                }
+            }
+            userDefaults.set(remainingDeletes, forKey: "offline_deleted_habits_queue")
+        }
+        
         guard !offlineLogQueue.isEmpty else { return }
         
         let session = try? await supabase.auth.session
@@ -837,14 +906,23 @@ public final class HabitsService: ObservableObject {
         
         var remaining: [HabitLogRecord] = []
         for var record in offlineLogQueue {
+            if deletedIds.contains(record.id.uuidString) {
+                continue
+            }
             if record.userId == nil, let uid = currentUserId {
                 record.userId = uid
             }
             do {
                 try await supabase.from("habits_logs").insert(record).execute()
             } catch {
-                print("[HabitsService] flushOfflineQueue error (\(error.localizedDescription)). Retaining in queue.")
-                remaining.append(record)
+                let errStr = error.localizedDescription.lowercased()
+                if errStr.contains("duplicate") || errStr.contains("already exists") || errStr.contains("23505") || errStr.contains("unique") {
+                    // Already in database, do not retry
+                    print("[HabitsService] flushOfflineQueue: record \(record.id) already exists in Supabase.")
+                } else {
+                    print("[HabitsService] flushOfflineQueue error (\(error.localizedDescription)). Retaining in queue.")
+                    remaining.append(record)
+                }
             }
         }
         self.offlineLogQueue = remaining
