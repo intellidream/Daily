@@ -179,11 +179,13 @@ public func widgetSmokeRingColor(countToday: Int, baseline: Int) -> Color {
     let base = max(baseline, 1)
     let ratio = Double(countToday) / Double(base)
     if countToday == 0 {
-        return WidgetColors.accentMint
-    } else if ratio < 0.6 {
-        return WidgetColors.accentCyan
-    } else if ratio <= 1.0 {
+        return WidgetColors.accentGreen
+    } else if ratio < 0.4 {
+        return WidgetColors.accentGreen
+    } else if ratio < 0.75 {
         return WidgetColors.accentAmber
+    } else if ratio <= 1.0 {
+        return WidgetColors.accentOrange
     } else {
         return WidgetColors.accentRed
     }

@@ -14,9 +14,10 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 - **Visuals**:
   - Header text ("Bubbles") removed; sleek icon-centric presentation.
   - **Small (1x1)**:
+    - Stylized watermark drop icon (`drop.fill`, ~115pt height, ~3/4 widget height) positioned on the right, bleeding ~35% outside widget bounds with `.clipped()` and 50% opacity in cyan.
     - Progress ring starts from top-left, maximized with minimal margins (`82pt`, `lineWidth: 7.5`).
     - Inside the ring: large bold current volume (`[actual]`) with smaller `/ [total] ml` underneath.
-    - Top-right corner: percentage in a compact single-line cyan pill (aligned flush top with progress ring), with Bubbles icon (`drop.fill`) positioned neatly underneath it.
+    - Top-right corner: percentage in a compact single-line cyan pill (`.lineLimit(1)`, `.fixedSize`), aligned flush top with the progress ring.
     - 3 bottom action buttons in order: **`100`** (Coffee amber), **`150`** (Water cyan), **`300`** (Water cyan).
   - **Medium (2x1)**:
     - Multi-liquid circular arc gauge (`BubblesMultiDrinkArcRing`) on the left spanning vertically top-to-bottom.
@@ -37,19 +38,24 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 - **Deep Linking**:
   - Tapping opens the app directly into Habits Hub with Smokes selected (`daily://habits/smokes`).
 - **Visuals**:
-  - Header text ("Smokes") removed.
-  - Custom vector anatomical lungs silhouette (`WidgetVectorLungsShape` + `WidgetVectorLungsBronchiShape`) centered within an outer progress ring.
-  - Dynamic lung health color transitioning based on logged smokes today:
-    - **Healthy Pink (`#FF6B8B`)**: 0 smokes.
-    - **Dusky Rose (`#D45D79`)**: 1–5 smokes.
-    - **Sickly Ashen Gray (`#8A7D7D`)**: 6–10 smokes.
-    - **Dark Charcoal (`#3A3A3C`)**: 11+ smokes.
-  - Total count displayed cleanly under the lungs inside the hero circle.
-  - Right section displays `flame.fill` icon, compact daily baseline (e.g. `40 base`), and compact elapsed time (`XXs`/`YYm`/`ZZh`).
+  - Header text ("Smokes") removed across all widgets.
+  - **Small (1x1)**:
+    - Stylized watermark flame icon (`flame.fill`, ~115pt height, ~3/4 widget height) on the right, bleeding ~35% outside widget bounds with `.clipped()` and 50% opacity tinted with the dynamic ring color.
+    - Outer progress ring starts from top-left, with a clean gradient strictly from green to red (`accentGreen` -> `accentAmber` -> `accentOrange` -> `accentRed`), with cyan completely removed.
+    - Anatomical lungs removed from the small widget for maximum numerical readability.
+    - Dual-tier numbers inside ring: large bold current count (`[todayTotal]`) with `/ [baseline]` smaller underneath.
+    - Top-right corner: elapsed time since last smoke (`formattedTime`, e.g. `2h`, `45m`, `30s`) in a compact single-line frosted capsule pill, aligned flush top with the ring.
+    - 2 bottom action buttons: **`Cig`** (red) and **`Heat`** (blue).
+  - **Medium (2x1)** & **Large (2x2)**:
+    - Custom vector anatomical lungs silhouette (`WidgetVectorLungsShape` + `WidgetVectorLungsBronchiShape`) centered within an outer progress ring.
+    - Dynamic lung health color transitioning based on logged smokes today (Healthy Pink -> Dusky Rose -> Sickly Ashen Gray -> Dark Charcoal).
+    - Total count displayed cleanly under the lungs inside the hero circle.
+    - Right section displays `flame.fill` icon, compact daily baseline (e.g. `40 base`), and compact elapsed time.
 - **Interactive Quick-Logging**:
   - Zero-app-open instant logging via `LogSmokeIntent`:
     - **Small (1x1)**: 2 compact buttons: **`Cig`** (red) and **`Heat`** (blue).
     - **Medium (2x1)**: 2x2 grid of 4 buttons: **`Cgr`** (purple), **`Rol`** (orange), **`Cig`** (red), **`Heat`** (blue).
+    - **Bug Fix**: `LogSmokeIntent` matching logic disambiguated to ensure `"cigarette"` / `"cig"` is never incorrectly parsed as `"cigarillo"`.
   - *Abstinence logging is explicitly excluded to keep tracking focused, streamlined, and friction-free.*
 
 ---

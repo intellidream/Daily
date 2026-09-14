@@ -48,9 +48,9 @@ public struct LogSmokeIntent: AppIntent {
         let preset: SmokePreset
         if lower.contains("heat") {
             preset = .heated
-        } else if lower.contains("cgr") || lower.contains("cigar") {
+        } else if lower.contains("cigarillo") || lower == "cgr" || (lower.contains("cigar") && !lower.contains("cigarette")) {
             preset = .cigarillo
-        } else if lower.contains("rol") {
+        } else if lower.contains("roll") || lower == "rol" {
             preset = .rolled
         } else {
             preset = .cigarette
