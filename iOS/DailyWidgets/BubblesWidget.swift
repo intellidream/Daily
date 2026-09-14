@@ -130,62 +130,59 @@ public struct BubblesWidgetView: View {
 
     // MARK: - Small (1x1)
     private var smallView: some View {
-        VStack(spacing: 8) {
-            // Top Section: Left Circle Hero + Right Icon & Percentage
-            HStack(alignment: .center, spacing: 10) {
-                // Circle Hero on Left
-                ZStack {
-                    BubblesMultiDrinkArcRing(
-                        todayMl: entry.snapshot.todayMl,
-                        goalMl: entry.snapshot.goalMl,
-                        breakdown: entry.snapshot.drinkBreakdown,
-                        lineWidth: 7
-                    )
-                    VStack(spacing: 0) {
-                        Text("\(Int(entry.snapshot.todayMl))")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                        Text("ml")
-                            .font(.system(size: 8.5, weight: .medium))
-                            .foregroundColor(Color.white.opacity(0.5))
-                    }
-                }
-                .frame(width: 66, height: 66)
-
-                Spacer(minLength: 2)
-
-                // Right: Icon + Percentage Pill
-                VStack(alignment: .trailing, spacing: 6) {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(WidgetColors.accentCyan)
-
+        VStack(spacing: 0) {
+            // Top Section: Percentage in top-right with Bubbles icon to its right
+            HStack {
+                Spacer()
+                HStack(spacing: 3.5) {
                     Text("\(Int(entry.snapshot.progressPercent * 100))%")
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                        .font(.system(size: 11.5, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentCyan)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(WidgetColors.accentCyan.opacity(0.14))
-                        .clipShape(Capsule())
+
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundColor(WidgetColors.accentCyan)
                 }
             }
 
             Spacer(minLength: 0)
 
-            // Bottom 3 Quick Action Buttons: 300 (Water), 150 (Water), 100 (Coffee)
+            // Center: Large Progress Circle with [actual/total] ml
+            ZStack {
+                BubblesMultiDrinkArcRing(
+                    todayMl: entry.snapshot.todayMl,
+                    goalMl: entry.snapshot.goalMl,
+                    breakdown: entry.snapshot.drinkBreakdown,
+                    lineWidth: 8
+                )
+
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text("\(Int(entry.snapshot.todayMl))/\(Int(entry.snapshot.goalMl))")
+                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("ml")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.6))
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            }
+            .frame(width: 86, height: 86)
+
+            Spacer(minLength: 0)
+
+            // Bottom 3 Quick Action Buttons: 100 (Coffee), 150 (Water), 300 (Water)
             HStack(spacing: 4) {
-                Button(intent: LogWaterIntent(amountMl: 300, drinkType: "Water")) {
-                    Text("300")
+                Button(intent: LogWaterIntent(amountMl: 100, drinkType: "Coffee")) {
+                    Text("100")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 26)
-                        .foregroundColor(WidgetColors.accentCyan)
+                        .foregroundColor(WidgetColors.coffeeYellow)
                         .background(
                             Capsule()
-                                .fill(WidgetColors.accentCyan.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.28), lineWidth: 1))
+                                .fill(WidgetColors.coffeeYellow.opacity(0.14))
+                                .overlay(Capsule().strokeBorder(WidgetColors.coffeeYellow.opacity(0.28), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)
@@ -204,16 +201,16 @@ public struct BubblesWidgetView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(intent: LogWaterIntent(amountMl: 100, drinkType: "Coffee")) {
-                    Text("100")
+                Button(intent: LogWaterIntent(amountMl: 300, drinkType: "Water")) {
+                    Text("300")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 26)
-                        .foregroundColor(WidgetColors.coffeeYellow)
+                        .foregroundColor(WidgetColors.accentCyan)
                         .background(
                             Capsule()
-                                .fill(WidgetColors.coffeeYellow.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(WidgetColors.coffeeYellow.opacity(0.28), lineWidth: 1))
+                                .fill(WidgetColors.accentCyan.opacity(0.14))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.28), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)

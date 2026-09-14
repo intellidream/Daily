@@ -13,17 +13,18 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
   - Tapping opens the app directly into Habits Hub with Bubbles selected (`daily://habits/bubbles`).
 - **Visuals**:
   - Header text ("Bubbles") removed; sleek icon-centric presentation.
-  - Multi-liquid circular arc gauge (`BubblesMultiDrinkArcRing`) on the left spanning vertically top-to-bottom, rendering proportional colored segments:
-    - Water: Cyan (`#00E5FF`)
-    - Coffee: Amber (`#FF9F0A`)
-    - Tea: Lime (`#30D158`)
-  - Total ml displayed prominently inside the circle.
-  - Right section shows water drop icon and completion percentage.
-  - Medium widget includes a colored breakdown list by drink type without repetitive icons.
+  - **Small (1x1)**:
+    - Top-right header: percentage on the left with Bubbles icon (`drop.fill`) to its right.
+    - Large progress circle maximized with minimal spacing, displaying `[actual/total] ml` inside.
+    - 3 bottom action buttons in order: **`100`** (Coffee amber), **`150`** (Water cyan), **`300`** (Water cyan).
+  - **Medium (2x1)**:
+    - Multi-liquid circular arc gauge (`BubblesMultiDrinkArcRing`) on the left spanning vertically top-to-bottom.
+    - Colored breakdown list by drink type without repetitive icons.
+    - 2x2 grid of 4 buttons: **`300`**, **`150`**, **`100`**, **`200`** (tea).
 - **Interactive Quick-Logging**:
   - Zero-app-open instant logging via `LogWaterIntent`:
-    - **Small (1x1)**: 3 compact buttons strictly showing numbers: **`300`** (water), **`150`** (water), **`100`** (coffee).
-    - **Medium (2x1)**: 2x2 grid of 4 buttons: **`300`**, **`150`**, **`100`**, **`200`** (tea).
+    - **Small (1x1)**: **`100`** (Coffee), **`150`** (Water), **`300`** (Water).
+    - **Medium (2x1)**: **`300`**, **`150`**, **`100`**, **`200`** (tea).
   - Updates local App Group aggregates in 0ms and triggers timeline reload via `WidgetCenter`.
 
 ---
