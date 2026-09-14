@@ -297,7 +297,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             for log in activeLogs {
                 let type = (log.smokeType).lowercased()
                 let count = Int(log.value)
-                if type.contains("heat") {
+                if type.contains("cigarette") || type == "cig" || type.contains("standard") {
+                    cigsCount += count
+                } else if type.contains("heat") || type.contains("iqos") {
                     heatedCount += count
                 } else if type.contains("cigarillo") || (type.contains("cigar") && !type.contains("cigarette")) {
                     cigarilloCount += count

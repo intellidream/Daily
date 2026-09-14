@@ -86,100 +86,103 @@ public struct SmokesWidgetView: View {
 
     // MARK: - Small (1x1)
     private var smallView: some View {
-        ZStack(alignment: .trailing) {
-            // Large Stylized Watermark Flame Icon on the Right (3/4 widget height, bleeding 35% outside, 50% opacity)
+        VStack(spacing: 6) {
+            // Top Section: Progress circle on Left, Elapsed Time in Top-Right
+            HStack(alignment: .top, spacing: 6) {
+                // Circle Hero starting from Top-Left (inset with padding so ring is never clipped)
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.08), lineWidth: 7.0)
+
+                    let progress = entry.snapshot.baseline > 0 ? min(Double(entry.snapshot.todayTotal) / Double(entry.snapshot.baseline), 1.0) : 0.0
+                    Circle()
+                        .trim(from: 0, to: max(0.03, progress))
+                        .stroke(
+                            LinearGradient(
+                                colors: [WidgetColors.accentGreen, ringColor],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 7.0, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+
+                    VStack(spacing: 0.5) {
+                        Text("\(entry.snapshot.todayTotal)")
+                            .font(.system(size: 17, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+
+                        Text("/ \(entry.snapshot.baseline)")
+                            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(Color.white.opacity(0.6))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                }
+                .frame(width: 72, height: 72)
+                .padding(.top, 4)
+                .padding(.leading, 4)
+
+                Spacer(minLength: 2)
+
+                // Top-Right: Elapsed time in a pill (aligned flush top with circle)
+                Text(formattedTime)
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundColor(Color.white.opacity(0.9))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2.5)
+                    .background(Color.white.opacity(0.12))
+                    .clipShape(Capsule())
+                    .padding(.top, 4)
+            }
+
+            Spacer(minLength: 0)
+
+            // Bottom 2 Quick Action Buttons: Cig (Red, dedicated LogCigaretteIntent) & Heat (Blue, dedicated LogHeatedIntent)
+            HStack(spacing: 4) {
+                Button(intent: LogCigaretteIntent()) {
+                    Text("Cig")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 26)
+                        .foregroundColor(WidgetColors.accentRed)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentRed.opacity(0.15))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentRed.opacity(0.3), lineWidth: 1))
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Button(intent: LogHeatedIntent()) {
+                    Text("Heat")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 26)
+                        .foregroundColor(WidgetColors.accentBlue)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentBlue.opacity(0.15))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentBlue.opacity(0.3), lineWidth: 1))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(alignment: .trailing) {
+            // Stylized Watermark Flame (20% smaller: 92pt, 50% more transparent: 0.25 opacity, ~35% bleed outside)
             Image(systemName: "flame.fill")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(height: 115)
+                .frame(height: 92)
                 .foregroundColor(ringColor)
-                .opacity(0.50)
-                .offset(x: 35)
-
-            VStack(spacing: 6) {
-                // Top Section: Progress circle starting from Top-Left, Elapsed Time in Top-Right
-                HStack(alignment: .top, spacing: 6) {
-                    // Circle Hero starting from Top-Left (green to red ring, 22 mare, /40 mai mic, no lungs)
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white.opacity(0.08), lineWidth: 7.5)
-
-                        let progress = entry.snapshot.baseline > 0 ? min(Double(entry.snapshot.todayTotal) / Double(entry.snapshot.baseline), 1.0) : 0.0
-                        Circle()
-                            .trim(from: 0, to: max(0.03, progress))
-                            .stroke(
-                                LinearGradient(
-                                    colors: [WidgetColors.accentGreen, ringColor],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                style: StrokeStyle(lineWidth: 7.5, lineCap: .round)
-                            )
-                            .rotationEffect(.degrees(-90))
-
-                        VStack(spacing: 0.5) {
-                            Text("\(entry.snapshot.todayTotal)")
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-
-                            Text("/ \(entry.snapshot.baseline)")
-                                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                                .foregroundColor(Color.white.opacity(0.6))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                        }
-                    }
-                    .frame(width: 82, height: 82)
-
-                    Spacer(minLength: 2)
-
-                    // Top-Right: Elapsed time in a pill (aligned flush top with circle)
-                    Text(formattedTime)
-                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                        .foregroundColor(Color.white.opacity(0.9))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2.5)
-                        .background(Color.white.opacity(0.12))
-                        .clipShape(Capsule())
-                }
-
-                Spacer(minLength: 0)
-
-                // Bottom 2 Quick Action Buttons: Cig (Red) & Heat (Blue)
-                HStack(spacing: 4) {
-                    Button(intent: LogSmokeIntent(smokeType: "Cigarette")) {
-                        Text("Cig")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 26)
-                            .foregroundColor(WidgetColors.accentRed)
-                            .background(
-                                Capsule()
-                                    .fill(WidgetColors.accentRed.opacity(0.15))
-                                    .overlay(Capsule().strokeBorder(WidgetColors.accentRed.opacity(0.3), lineWidth: 1))
-                            )
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(intent: LogSmokeIntent(smokeType: "Heated")) {
-                        Text("Heat")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 26)
-                            .foregroundColor(WidgetColors.accentBlue)
-                            .background(
-                                Capsule()
-                                    .fill(WidgetColors.accentBlue.opacity(0.15))
-                                    .overlay(Capsule().strokeBorder(WidgetColors.accentBlue.opacity(0.3), lineWidth: 1))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+                .opacity(0.25)
+                .offset(x: 26)
+                .allowsHitTesting(false)
         }
         .clipped()
     }

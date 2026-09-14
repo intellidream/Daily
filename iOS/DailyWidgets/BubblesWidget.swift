@@ -130,59 +130,52 @@ public struct BubblesWidgetView: View {
 
     // MARK: - Small (1x1)
     private var smallView: some View {
-        ZStack(alignment: .trailing) {
-            // Large Stylized Watermark Icon on the Right (3/4 widget height, bleeding 35% outside, 50% opacity)
-            Image(systemName: "drop.fill")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(height: 115)
-                .foregroundColor(WidgetColors.accentCyan)
-                .opacity(0.50)
-                .offset(x: 35)
+        VStack(spacing: 6) {
+            // Top Section: Progress ring on Left, Percentage in Top-Right
+            HStack(alignment: .top, spacing: 6) {
+                // Circle Hero starting from Top-Left (inset with padding so ring is never clipped)
+                ZStack {
+                    BubblesMultiDrinkArcRing(
+                        todayMl: entry.snapshot.todayMl,
+                        goalMl: entry.snapshot.goalMl,
+                        breakdown: entry.snapshot.drinkBreakdown,
+                        lineWidth: 7.0
+                    )
 
-            VStack(spacing: 6) {
-                // Top Section: Progress ring starting from Top-Left, Percentage in Top-Right
-                HStack(alignment: .top, spacing: 6) {
-                    // Circle Hero starting from Top-Left
-                    ZStack {
-                        BubblesMultiDrinkArcRing(
-                            todayMl: entry.snapshot.todayMl,
-                            goalMl: entry.snapshot.goalMl,
-                            breakdown: entry.snapshot.drinkBreakdown,
-                            lineWidth: 7.5
-                        )
+                    VStack(spacing: 0.5) {
+                        Text("\(Int(entry.snapshot.todayMl))")
+                            .font(.system(size: 17, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
 
-                        VStack(spacing: 0.5) {
-                            Text("\(Int(entry.snapshot.todayMl))")
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-
-                            Text("/ \(Int(entry.snapshot.goalMl)) ml")
-                                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                                .foregroundColor(Color.white.opacity(0.6))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                        }
+                        Text("/ \(Int(entry.snapshot.goalMl)) ml")
+                            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(Color.white.opacity(0.6))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
-                    .frame(width: 82, height: 82)
-
-                    Spacer(minLength: 2)
-
-                    // Top-Right: Percentage in a pill (aligned flush top with progress ring)
-                    Text("\(Int(entry.snapshot.progressPercent * 100))%")
-                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                        .foregroundColor(WidgetColors.accentCyan)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 5.5)
-                        .padding(.vertical, 2.5)
-                        .background(WidgetColors.accentCyan.opacity(0.18))
-                        .clipShape(Capsule())
                 }
+                .frame(width: 72, height: 72)
+                .padding(.top, 4)
+                .padding(.leading, 4)
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 2)
+
+                // Top-Right: Percentage in a pill (aligned flush top with progress ring)
+                Text("\(Int(entry.snapshot.progressPercent * 100))%")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundColor(WidgetColors.accentCyan)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 5.5)
+                    .padding(.vertical, 2.5)
+                    .background(WidgetColors.accentCyan.opacity(0.18))
+                    .clipShape(Capsule())
+                    .padding(.top, 4)
+            }
+
+            Spacer(minLength: 0)
 
             // Bottom 3 Quick Action Buttons: 100 (Coffee), 150 (Water), 300 (Water)
             HStack(spacing: 4) {
@@ -229,6 +222,16 @@ public struct BubblesWidgetView: View {
                 .buttonStyle(.plain)
             }
         }
+        .background(alignment: .trailing) {
+            // Stylized Watermark Icon (20% smaller: 92pt, 50% more transparent: 0.25 opacity, ~35% bleed outside)
+            Image(systemName: "drop.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 92)
+                .foregroundColor(WidgetColors.accentCyan)
+                .opacity(0.25)
+                .offset(x: 26)
+                .allowsHitTesting(false)
         }
         .clipped()
     }

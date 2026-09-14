@@ -28,6 +28,30 @@ public struct LogWaterIntent: AppIntent {
     }
 }
 
+public struct LogCigaretteIntent: AppIntent {
+    public static var title: LocalizedStringResource = "Log Cigarette"
+    public static var description = IntentDescription("Logs 1 combustible cigarette directly to Smokes.")
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        WidgetDataCoordinator.shared.logSmoke(preset: .cigarette)
+        return .result()
+    }
+}
+
+public struct LogHeatedIntent: AppIntent {
+    public static var title: LocalizedStringResource = "Log Heated Tobacco"
+    public static var description = IntentDescription("Logs 1 heated tobacco stick directly to Smokes.")
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        WidgetDataCoordinator.shared.logSmoke(preset: .heated)
+        return .result()
+    }
+}
+
 public struct LogSmokeIntent: AppIntent {
     public static var title: LocalizedStringResource = "Log Smoke"
     public static var description = IntentDescription("Logs a cigarette or heated tobacco stick directly to Smokes.")
@@ -46,7 +70,9 @@ public struct LogSmokeIntent: AppIntent {
     public func perform() async throws -> some IntentResult {
         let lower = smokeType.lowercased()
         let preset: SmokePreset
-        if lower.contains("heat") {
+        if lower.contains("cigarette") || lower == "cig" || lower.contains("standard") {
+            preset = .cigarette
+        } else if lower.contains("heat") || lower.contains("iqos") {
             preset = .heated
         } else if lower.contains("cigarillo") || lower == "cgr" || (lower.contains("cigar") && !lower.contains("cigarette")) {
             preset = .cigarillo
