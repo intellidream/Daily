@@ -14,7 +14,7 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 - **Visuals**:
   - Header text ("Bubbles") removed; sleek icon-centric presentation.
   - **Small (1x1)**:
-    - Stylized watermark drop icon (`drop.fill`, 92pt height, 0.25 opacity) positioned on the right, bleeding ~35% outside widget bounds with `.clipped()`.
+    - Stylized watermark drop icon (`drop.fill`, 74pt height, 0.18 opacity) positioned on the right, bleeding ~35% outside widget bounds with `.clipped()`.
     - Progress ring on top-left comfortably inset (`72x72pt`, `lineWidth: 7.0`, `padding(.top, 4).padding(.leading, 4)`) ensuring the stroke is never clipped or pushed outside the widget boundaries.
     - Inside the ring: large bold current volume (`[actual]`) with smaller `/ [total] ml` underneath.
     - Top-right corner: percentage in a compact single-line cyan pill (`.lineLimit(1)`, `.fixedSize`, `padding(.top, 4)`), aligned flush top with the progress ring.
@@ -40,7 +40,7 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 - **Visuals**:
   - Header text ("Smokes") removed across all widgets.
   - **Small (1x1)**:
-    - Stylized watermark flame icon (`flame.fill`, 92pt height, 0.25 opacity) on the right, bleeding ~35% outside widget bounds with `.clipped()`.
+    - Stylized watermark flame icon (`flame.fill`, 74pt height, 0.18 opacity) on the right, bleeding ~35% outside widget bounds with `.clipped()`.
     - Outer progress ring starts from top-left, comfortably inset (`72x72pt`, `lineWidth: 7.0`, `padding(.top, 4).padding(.leading, 4)`) with zero clipping and clean gradient strictly from green to red (`accentGreen` -> `accentAmber` -> `accentOrange` -> `accentRed`).
     - Anatomical lungs removed from the small widget for maximum clarity and numerical readability.
     - Dual-tier numbers inside ring: large bold current count (`[todayTotal]`) with `/ [baseline]` smaller underneath.
