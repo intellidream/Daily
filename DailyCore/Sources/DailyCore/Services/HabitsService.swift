@@ -3,6 +3,9 @@ import Supabase
 #if canImport(WidgetKit)
 import WidgetKit
 #endif
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
 public final class HabitsService: ObservableObject {
@@ -145,6 +148,20 @@ public final class HabitsService: ObservableObject {
     public init() {
         self.userDefaults = UserDefaults(suiteName: groupSuiteName) ?? UserDefaults.standard
         loadLocalSettingsAndQueue()
+        #if canImport(UIKit)
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.reloadFromLocalStorage()
+                await self.flushOfflineQueue()
+                await self.loadDataForSelectedDate()
+            }
+        }
+        #endif
         Task {
             await loadDataForSelectedDate()
         }
@@ -441,10 +458,16 @@ public final class HabitsService: ObservableObject {
         let startIso = isoUtcFormatter.string(from: startOfDay)
         let endIso = isoUtcFormatter.string(from: endOfDay)
         
+        // 0. Flush any pending offline or widget logs first so remote database is up-to-date
+        await flushOfflineQueue()
+        
         let session = try? await supabase.auth.session
         let userId = session?.user.id.uuidString.lowercased()
         
         if let uid = userId {
+            userDefaults.set(uid, forKey: "current_user_id")
+            userDefaults.set(uid, forKey: "authenticated_user_id")
+            
             // 1. Fetch user_preferences (smokes configuration & water target)
             do {
                 let prefs: [UserPreferencesRecord] = try await supabase.from("user_preferences")
@@ -516,13 +539,46 @@ public final class HabitsService: ObservableObject {
             if let uid = userId {
                 query = query.eq("user_id", value: uid)
             }
-            let logs: [HabitLogRecord] = try await query
+            let remoteLogs: [HabitLogRecord] = try await query
                 .order("logged_at", ascending: false)
                 .execute()
                 .value
             
-            self.todaysWaterLogs = logs.filter { $0.habitType == "water" }
-            self.todaysSmokesLogs = logs.filter { $0.habitType == "smokes" }
+            let remoteIds = Set(remoteLogs.map(\.id))
+            let dateKey = isoDateFormatter.string(from: selectedDate)
+            
+            var existingWater = self.todaysWaterLogs
+            var existingSmokes = self.todaysSmokesLogs
+            
+            if let wData = userDefaults.data(forKey: "local_water_logs_\(dateKey)"),
+               let wLogs = try? JSONDecoder().decode([HabitLogRecord].self, from: wData) {
+                for l in wLogs where !existingWater.contains(where: { $0.id == l.id }) {
+                    existingWater.append(l)
+                }
+            }
+            if let sData = userDefaults.data(forKey: "local_smokes_logs_\(dateKey)"),
+               let sLogs = try? JSONDecoder().decode([HabitLogRecord].self, from: sData) {
+                for l in sLogs where !existingSmokes.contains(where: { $0.id == l.id }) {
+                    existingSmokes.append(l)
+                }
+            }
+            
+            // Include pending logs from offlineLogQueue for this date
+            for qItem in offlineLogQueue where !qItem.isDeleted && cal.isDate(qItem.loggedAt, inSameDayAs: selectedDate) {
+                if qItem.habitType == "water" {
+                    if !existingWater.contains(where: { $0.id == qItem.id }) { existingWater.append(qItem) }
+                } else if qItem.habitType == "smokes" {
+                    if !existingSmokes.contains(where: { $0.id == qItem.id }) { existingSmokes.append(qItem) }
+                }
+            }
+            
+            let pendingWater = existingWater.filter { !remoteIds.contains($0.id) && !$0.isDeleted }
+            let pendingSmokes = existingSmokes.filter { !remoteIds.contains($0.id) && !$0.isDeleted }
+            
+            self.todaysWaterLogs = (pendingWater + remoteLogs.filter { $0.habitType == "water" })
+                .sorted { $0.loggedAt > $1.loggedAt }
+            self.todaysSmokesLogs = (pendingSmokes + remoteLogs.filter { $0.habitType == "smokes" })
+                .sorted { $0.loggedAt > $1.loggedAt }
             saveLocalLogs()
         } catch {
             print("[HabitsService] Note: Could not fetch habits_logs: \(error.localizedDescription)")
@@ -636,6 +692,24 @@ public final class HabitsService: ObservableObject {
     
     // MARK: - Offline Storage & Queue
     
+    public func reloadFromLocalStorage() {
+        if let queueData = userDefaults.data(forKey: "offline_habits_queue"),
+           let queue = try? JSONDecoder().decode([HabitLogRecord].self, from: queueData) {
+            self.offlineLogQueue = queue
+        }
+        if let wData = userDefaults.data(forKey: "habits_water_daily_totals"),
+           let wDict = try? JSONDecoder().decode([String: Double].self, from: wData) {
+            self.waterDailyTotals = wDict
+        }
+        if let sData = userDefaults.data(forKey: "habits_smokes_daily_totals"),
+           let sDict = try? JSONDecoder().decode([String: Int].self, from: sData) {
+            self.smokesDailyTotals = sDict
+        }
+        loadLocalLogsForSelectedDate()
+        recalculateDailyAggregates()
+        recomputeAllHistoriesAndHeatmaps()
+    }
+    
     private func loadLocalSettingsAndQueue() {
         if let g = userDefaults.value(forKey: "water_goal") as? Double {
             self.waterGoal = g
@@ -732,11 +806,18 @@ public final class HabitsService: ObservableObject {
     }
     
     private func pushLogToSupabase(_ record: HabitLogRecord) async {
+        var toInsert = record
+        if toInsert.userId == nil {
+            let session = try? await supabase.auth.session
+            let currentUserId = session?.user.id ?? userDefaults.string(forKey: "current_user_id").flatMap { UUID(uuidString: $0) }
+            toInsert.userId = currentUserId
+        }
+        
         do {
-            try await supabase.from("habits_logs").insert(record).execute()
+            try await supabase.from("habits_logs").insert(toInsert).execute()
         } catch {
             print("[HabitsService] Supabase insert failed (\(error.localizedDescription)). Queuing offline...")
-            offlineLogQueue.append(record)
+            offlineLogQueue.append(toInsert)
             if let data = try? JSONEncoder().encode(offlineLogQueue) {
                 userDefaults.set(data, forKey: "offline_habits_queue")
             }
@@ -744,12 +825,25 @@ public final class HabitsService: ObservableObject {
     }
     
     public func flushOfflineQueue() async {
+        // 1. Reload latest queue from userDefaults in case widget added items
+        if let queueData = userDefaults.data(forKey: "offline_habits_queue"),
+           let queue = try? JSONDecoder().decode([HabitLogRecord].self, from: queueData) {
+            self.offlineLogQueue = queue
+        }
         guard !offlineLogQueue.isEmpty else { return }
+        
+        let session = try? await supabase.auth.session
+        let currentUserId = session?.user.id ?? userDefaults.string(forKey: "current_user_id").flatMap { UUID(uuidString: $0) }
+        
         var remaining: [HabitLogRecord] = []
-        for record in offlineLogQueue {
+        for var record in offlineLogQueue {
+            if record.userId == nil, let uid = currentUserId {
+                record.userId = uid
+            }
             do {
                 try await supabase.from("habits_logs").insert(record).execute()
             } catch {
+                print("[HabitsService] flushOfflineQueue error (\(error.localizedDescription)). Retaining in queue.")
                 remaining.append(record)
             }
         }

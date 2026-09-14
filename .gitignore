@@ -291,7 +291,7 @@ WatchOS/DailyWatch/DailyWatch.xcodeproj/project.xcworkspace/xcuserdata/mihai.xcu
 
 # Swift Package Manager & Xcode Build
 DailyCore/.build/
-DerivedData/
+DerivedData*/
 .build_cache/
 *.xcuserstate
 

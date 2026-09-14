@@ -3,6 +3,9 @@ import Combine
 #if canImport(WidgetKit)
 import WidgetKit
 #endif
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Manages local persistence, reactive publishing, and live re-calculation of the user's Smart Ledger text document.
 @MainActor
@@ -116,6 +119,28 @@ public final class SmartLedgerStore: ObservableObject {
         let textToUse = (savedText != nil && !savedText!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? savedText! : Self.defaultLedgerText
         self.rawText = textToUse
         self.parsedLedger = SmartLedgerParser.shared.parse(textToUse)
+        
+        #if canImport(UIKit)
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.reloadFromStorage()
+            }
+        }
+        #endif
+    }
+    
+    /// Reloads raw ledger text from shared App Group storage if changed externally (e.g. by widget extension).
+    public func reloadFromStorage() {
+        let savedText = groupDefaults.string(forKey: storageKey) ?? UserDefaults.standard.string(forKey: storageKey)
+        let textToUse = (savedText != nil && !savedText!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? savedText! : Self.defaultLedgerText
+        if textToUse != self.rawText {
+            self.rawText = textToUse
+            self.parsedLedger = SmartLedgerParser.shared.parse(textToUse)
+        }
     }
     
     /// Updates the raw ledger text, saves to UserDefaults, and triggers live re-parsing.

@@ -75,6 +75,23 @@ public struct MoneyWidgetView: View {
             return String(format: "%.0f", amount)
         }
     }
+    
+    private func formatCompactEUR(_ amount: Double) -> String {
+        if amount >= 1_000_000 {
+            return String(format: "%.1fM €", amount / 1_000_000)
+        } else if amount >= 10_000 {
+            let thousands = amount / 1_000
+            if thousands.truncatingRemainder(dividingBy: 1) == 0 {
+                return String(format: "%.0fK €", thousands)
+            } else {
+                return String(format: "%.1fK €", thousands)
+            }
+        } else if amount >= 1_000 {
+            return String(format: "%.1fK €", amount / 1_000)
+        } else {
+            return String(format: "%.0f €", amount)
+        }
+    }
 
     public var body: some View {
         Group {
@@ -97,20 +114,25 @@ public struct MoneyWidgetView: View {
     // MARK: - Small (1x1)
     private var smallView: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack {
+            HStack(alignment: .center) {
                 HStack(spacing: 4) {
                     Image(systemName: "wallet.bifold.fill")
+                        .font(.system(size: 11, weight: .bold))
                     Text("Money")
+                        .font(.system(size: 12, weight: .bold))
                 }
-                .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(accentGreen)
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
 
-                Spacer()
+                Spacer(minLength: 4)
 
-                Text(entry.snapshot.formattedNetWorthEUR)
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                Text(formatCompactEUR(entry.snapshot.netWorthEUR))
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
                     .foregroundColor(accentCyan)
-                    .padding(.horizontal, 6)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .padding(.horizontal, 5)
                     .padding(.vertical, 2)
                     .background(accentCyan.opacity(0.14))
                     .clipShape(Capsule())

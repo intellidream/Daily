@@ -161,6 +161,13 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         )
     }
     
+    private var cachedUserId: UUID? {
+        if let idStr = groupDefaults.string(forKey: "authenticated_user_id") ?? groupDefaults.string(forKey: "current_user_id") {
+            return UUID(uuidString: idStr)
+        }
+        return nil
+    }
+    
     public func logWater(amountMl: Double, drinkType: String = "Water") {
         let key = todayKey
         let now = Date()
@@ -184,7 +191,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         
         let newRecord = HabitLogRecord(
             id: UUID(),
-            userId: nil,
+            userId: cachedUserId,
             habitType: "water",
             value: amountMl,
             unit: "ml",
@@ -294,7 +301,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         
         let newRecord = HabitLogRecord(
             id: UUID(),
-            userId: nil,
+            userId: cachedUserId,
             habitType: "smokes",
             value: 1.0,
             unit: "cigs",
