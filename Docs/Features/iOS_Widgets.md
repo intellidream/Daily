@@ -66,16 +66,49 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 - **Deep Linking**:
   - Tapping opens the app directly into Finances Hub with Money selected (`daily://finances/money`).
 - **Visuals**:
-  - Top header: **`NET WORTH`** caption in upper left, green wallet icon in upper right.
-  - Prominent Net Worth in Lei in large white typography with live EUR conversion badge below (synced with BNR rates).
-  - Compact liquidity breakdown (`Crd 15.1K · Csh 900`).
-  - Medium widget displays three structured columns: Net Worth, Flow In/Out, and Liquid breakdown.
-  - Large widget includes ranked capsules of the top outgoing budget allocations and full ledger summary.
+  - **Small (1x1)**:
+    - Stylized watermark wallet icon (`wallet.bifold.fill`, 59pt height, 0.14 opacity, offset x: 16) in `WidgetColors.accentGreen`.
+    - Net Worth in Lei positioned on the top-left in bold typography (`16pt`, `.minimumScaleFactor(0.65)`) with zero truncation.
+    - Live EUR conversion badge (`25.4K €`) positioned flush in the top-right corner inside a frosted cyan capsule.
+    - Compact liquidity breakdown (`Crd 15.1K · Csh 900`).
+    - 2 quick adjustment buttons at bottom: **`-50 Crd`** and **`+100 Crd`**.
+  - **Medium (2x1)**:
+    - Displays three structured columns: Net Worth, Flow In/Out, and Liquid breakdown.
+    - 3 quick adjust buttons: **`-50 Crd`**, **`-50 Csh`**, and **`+100 Crd`**.
+  - **Large (2x2)**:
+    - Full financial executive cockpit with ranked capsules of top outgoing budget allocations and full ledger summary.
 - **Interactive Quick Adjustments**:
-  - Zero-app-open ledger balance adjustment via `AdjustLedgerIntent`:
-    - **Small (1x1)**: **`-50 Crd`** and **`+100 Crd`**.
-    - **Medium (2x1)**: **`-50 Crd`**, **`-50 Csh`**, and **`+100 Crd`**.
-  - Adjusts raw SmartLedger syntax in App Group storage, recalculates balances, and broadcasts widget timeline reload.
+  - Zero-app-open ledger balance adjustment via `AdjustLedgerIntent`. Adjusts raw SmartLedger syntax in App Group storage, recalculates balances, and broadcasts widget timeline reload.
+
+---
+
+### D. Sleep Studio Widget (Health Hub & Nocturnal Telemetry)
+- **Supported Families**:
+  - Home Screen: Small (1x1), Medium (2x1), Large (2x2)
+  - Lock Screen: Accessory Circular, Accessory Rectangular, Accessory Inline
+- **Deep Linking**:
+  - Tapping opens the app directly into Health Hub with Sleep Studio selected (`daily://health/sleep`), triggering `HealthDataService.shared.activeSubTab = .sleep`.
+- **Visuals**:
+  - **Small (1x1)**:
+    - Radial Sleep Score ring on top-left (`72x72pt`, `lineWidth: 7.0`, `padding(.top, 4).padding(.leading, 4)`): cyan-blue-purple angular gradient with bold score (`71 / 100`).
+    - Sleep duration pill (`4h 28m`) in top-right corner aligned flush top with the progress ring in `WidgetColors.accentPurple`.
+    - Stylized watermark moon/stars icon (`moon.stars.fill`, 59pt height, 0.14 opacity, offset x: 16) in `WidgetColors.accentPurple`.
+    - 2 bottom capsules: Bedtime-Wake schedule (`04:46-09:38`) and Efficiency (`92% Eff`).
+  - **Medium (2x1)**:
+    - Radial score hero on left (`78x78pt`) with total asleep duration (`4h 28m`) and score pill (`71 pts`).
+    - Schedule and efficiency pill (`04:46 ➔ 09:38`, `92% Eff · 31% Rest`).
+    - Multi-stage proportional color bar (Deep `#6366F1`, REM `#8B5CF6`, Light `#00E5FF`, Awake `#EF4444`).
+    - 4 mini stage pills (`D 39m`, `R 43m`, `L 3h 6m`, `A 12m`) and device footer (`4h 52m in bed • Zepp OS Watch`).
+  - **Large (2x2)**:
+    - Header with `SLEEP STUDIO`, source device chip, and quality rating pill (`Fair`/`Optimal`).
+    - Left radial gauge (`82x82pt`) with score and `SCORE` caption.
+    - Right summary: total asleep duration (`4h 28m`), time in bed, bedtime and wake time.
+    - Full-width proportional stage bar and 4-column breakdown grid with duration and percentage.
+    - Nocturnal vitals cards: Resting Heart Rate (`81 bpm`), HRV SDNN, and Restorative ratio (`31%`).
+  - **Lock Screen Accessories**:
+    - Accessory Circular: Radial score ring with score.
+    - Accessory Rectangular: Sleep duration, score, efficiency %, and bedtime/wake schedule.
+    - Accessory Inline: `Sleep: 4h 28m (71)`.
 
 ---
 

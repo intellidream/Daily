@@ -108,6 +108,125 @@ public struct MoneyWidgetSnapshot: Sendable {
     }
 }
 
+/// Snapshot model for Sleep Studio Widget
+public struct SleepWidgetSnapshot: Sendable, Codable {
+    public let sleepScore: Int
+    public let sleepQualityRating: String
+    public let totalAsleepFormatted: String
+    public let asleepSeconds: Double
+    public let durationSeconds: Double
+    public let timeInBedFormatted: String
+    public let efficiencyPercent: Int
+    public let deepSeconds: Double
+    public let remSeconds: Double
+    public let lightSeconds: Double
+    public let awakeSeconds: Double
+    public let deepPercent: Int
+    public let remPercent: Int
+    public let lightPercent: Int
+    public let awakePercent: Int
+    public let deepFormatted: String
+    public let remFormatted: String
+    public let lightFormatted: String
+    public let awakeFormatted: String
+    public let bedtimeFormatted: String
+    public let wakeTimeFormatted: String
+    public let restorativePercent: Int
+    public let restingHeartRate: Double?
+    public let hrvMs: Double?
+    public let sourceDevice: String
+    public let lastUpdated: Date
+    
+    public init(
+        sleepScore: Int,
+        sleepQualityRating: String,
+        totalAsleepFormatted: String,
+        asleepSeconds: Double,
+        durationSeconds: Double,
+        timeInBedFormatted: String,
+        efficiencyPercent: Int,
+        deepSeconds: Double,
+        remSeconds: Double,
+        lightSeconds: Double,
+        awakeSeconds: Double,
+        deepPercent: Int,
+        remPercent: Int,
+        lightPercent: Int,
+        awakePercent: Int,
+        deepFormatted: String,
+        remFormatted: String,
+        lightFormatted: String,
+        awakeFormatted: String,
+        bedtimeFormatted: String,
+        wakeTimeFormatted: String,
+        restorativePercent: Int,
+        restingHeartRate: Double? = nil,
+        hrvMs: Double? = nil,
+        sourceDevice: String = "Apple Watch",
+        lastUpdated: Date = Date()
+    ) {
+        self.sleepScore = sleepScore
+        self.sleepQualityRating = sleepQualityRating
+        self.totalAsleepFormatted = totalAsleepFormatted
+        self.asleepSeconds = asleepSeconds
+        self.durationSeconds = durationSeconds
+        self.timeInBedFormatted = timeInBedFormatted
+        self.efficiencyPercent = efficiencyPercent
+        self.deepSeconds = deepSeconds
+        self.remSeconds = remSeconds
+        self.lightSeconds = lightSeconds
+        self.awakeSeconds = awakeSeconds
+        self.deepPercent = deepPercent
+        self.remPercent = remPercent
+        self.lightPercent = lightPercent
+        self.awakePercent = awakePercent
+        self.deepFormatted = deepFormatted
+        self.remFormatted = remFormatted
+        self.lightFormatted = lightFormatted
+        self.awakeFormatted = awakeFormatted
+        self.bedtimeFormatted = bedtimeFormatted
+        self.wakeTimeFormatted = wakeTimeFormatted
+        self.restorativePercent = restorativePercent
+        self.restingHeartRate = restingHeartRate
+        self.hrvMs = hrvMs
+        self.sourceDevice = sourceDevice
+        self.lastUpdated = lastUpdated
+    }
+}
+
+extension SleepWidgetSnapshot {
+    public static var placeholder: SleepWidgetSnapshot {
+        SleepWidgetSnapshot(
+            sleepScore: 84,
+            sleepQualityRating: "Good",
+            totalAsleepFormatted: "7h 38m",
+            asleepSeconds: 7 * 3600 + 38 * 60,
+            durationSeconds: 8 * 3600 + 12 * 60,
+            timeInBedFormatted: "8h 12m",
+            efficiencyPercent: 93,
+            deepSeconds: 1 * 3600 + 42 * 60,
+            remSeconds: 1 * 3600 + 56 * 60,
+            lightSeconds: 4 * 3600,
+            awakeSeconds: 34 * 60,
+            deepPercent: 22,
+            remPercent: 25,
+            lightPercent: 53,
+            awakePercent: 7,
+            deepFormatted: "1h 42m",
+            remFormatted: "1h 56m",
+            lightFormatted: "4h 00m",
+            awakeFormatted: "34m",
+            bedtimeFormatted: "23:14",
+            wakeTimeFormatted: "07:26",
+            restorativePercent: 47,
+            restingHeartRate: 58,
+            hrvMs: 46,
+            sourceDevice: "Apple Watch",
+            lastUpdated: Date()
+        )
+    }
+}
+
 /// Central data coordinator managing 0ms read/write between the Main App and WidgetKit Extension.
 public final class WidgetDataCoordinator: @unchecked Sendable {
     public static let shared = WidgetDataCoordinator()
@@ -458,4 +577,62 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         WidgetCenter.shared.reloadAllTimelines()
         #endif
     }
+    
+    // MARK: - Sleep (Sleep Studio)
+    
+    private let sleepSnapshotKey = "daily_sleep_widget_snapshot_v1"
+    
+    public func updateSleepSnapshot(from session: SleepSession?, restingHeartRate: Double? = nil, hrvMs: Double? = nil) {
+        let snapshot: SleepWidgetSnapshot
+        if let session = session {
+            snapshot = SleepWidgetSnapshot(
+                sleepScore: session.sleepScore,
+                sleepQualityRating: session.sleepQualityRating,
+                totalAsleepFormatted: session.totalAsleepFormatted,
+                asleepSeconds: session.asleepSeconds,
+                durationSeconds: session.durationSeconds,
+                timeInBedFormatted: session.timeInBedFormatted,
+                efficiencyPercent: session.efficiencyPercent,
+                deepSeconds: session.deepSeconds,
+                remSeconds: session.remSeconds,
+                lightSeconds: session.lightSeconds,
+                awakeSeconds: session.awakeSeconds,
+                deepPercent: session.deepPercent,
+                remPercent: session.remPercent,
+                lightPercent: session.lightPercent,
+                awakePercent: session.awakePercent,
+                deepFormatted: session.deepFormatted,
+                remFormatted: session.remFormatted,
+                lightFormatted: session.lightFormatted,
+                awakeFormatted: session.awakeFormatted,
+                bedtimeFormatted: session.bedtimeFormatted,
+                wakeTimeFormatted: session.wakeTimeFormatted,
+                restorativePercent: session.restorativePercent,
+                restingHeartRate: restingHeartRate,
+                hrvMs: hrvMs,
+                sourceDevice: session.sourceDevice,
+                lastUpdated: Date()
+            )
+        } else {
+            snapshot = SleepWidgetSnapshot.placeholder
+        }
+        
+        if let data = try? JSONEncoder().encode(snapshot) {
+            groupDefaults.set(data, forKey: sleepSnapshotKey)
+            UserDefaults.standard.set(data, forKey: sleepSnapshotKey)
+        }
+        
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+    }
+    
+    public func fetchSleepSnapshot() -> SleepWidgetSnapshot {
+        if let data = groupDefaults.data(forKey: sleepSnapshotKey),
+           let snapshot = try? JSONDecoder().decode(SleepWidgetSnapshot.self, from: data) {
+            return snapshot
+        }
+        return SleepWidgetSnapshot.placeholder
+    }
 }
+

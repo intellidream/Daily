@@ -1,5 +1,16 @@
 import Foundation
 
+// MARK: - Health Sub Tabs
+
+public enum HealthSubTab: String, CaseIterable, Identifiable, Sendable {
+    case overview = "Overview"
+    case sleep = "Sleep Studio"
+    case vitals = "Heart & Vitals"
+    case trends = "Trends"
+    
+    public var id: String { rawValue }
+}
+
 // MARK: - Health Metric Types
 
 /// Comprehensive metric taxonomy matching Supabase vitals and health_telemetry tables.

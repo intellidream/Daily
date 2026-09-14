@@ -19,6 +19,7 @@ public final class HealthDataService: ObservableObject {
     
     // MARK: - Published State
     
+    @Published public var activeSubTab: HealthSubTab = .overview
     @Published public var selectedDate: Date = Date()
     @Published public var selectedDeviceSource: DeviceSource? = nil
     @Published public var availableSources: [DeviceSource] = []
@@ -326,6 +327,12 @@ public final class HealthDataService: ObservableObject {
         self.primarySleepSession = sleepResult.primarySession
         self.allSleepSessions = sleepResult.allSessions
         self.daytimeNaps = sleepResult.naps
+        
+        WidgetDataCoordinator.shared.updateSleepSnapshot(
+            from: sleepResult.primarySession,
+            restingHeartRate: vitalsValues[.restingHeartRate] ?? (self.restingBpm > 0 ? self.restingBpm : nil),
+            hrvMs: vitalsValues[.hrvSdnn]
+        )
         
         // 2. Process Heart Rate
         let cal = Calendar.current

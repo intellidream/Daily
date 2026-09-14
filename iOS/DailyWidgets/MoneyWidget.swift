@@ -94,48 +94,43 @@ public struct MoneyWidgetView: View {
 
     // MARK: - Small (1x1)
     private var smallView: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            // Header: NET WORTH in upper left, wallet icon in upper right
-            HStack(alignment: .center) {
-                Text("NET WORTH")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(Color.white.opacity(0.45))
+        VStack(alignment: .leading, spacing: 6) {
+            // Top Section: Net Worth on Left, EUR pill in Top-Right
+            HStack(alignment: .top, spacing: 4) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(formatCompactLei(entry.snapshot.netWorthLei)) Lei")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                }
 
-                Spacer()
+                Spacer(minLength: 4)
 
-                Image(systemName: "wallet.bifold.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(WidgetColors.accentGreen)
+                // Top-Right: EUR conversion badge in a pill
+                Text(formatCompactEUR(entry.snapshot.netWorthEUR))
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundColor(WidgetColors.accentCyan)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 5.5)
+                    .padding(.vertical, 2.5)
+                    .background(WidgetColors.accentCyan.opacity(0.18))
+                    .clipShape(Capsule())
             }
-
-            // Hero Value in Lei
-            Text("\(formatCompactLei(entry.snapshot.netWorthLei)) Lei")
-                .font(.system(size: 19, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-
-            // EUR conversion badge
-            Text(formatCompactEUR(entry.snapshot.netWorthEUR))
-                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                .foregroundColor(WidgetColors.accentCyan)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(WidgetColors.accentCyan.opacity(0.14))
-                .clipShape(Capsule())
 
             Spacer(minLength: 1)
 
             // Liquid balances: Crd & Csh
             HStack(spacing: 3) {
                 Text("Crd \(formatCompactLei(entry.snapshot.cardAmount))")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                     .foregroundColor(WidgetColors.accentCyan)
                 Text("·")
                     .font(.system(size: 8))
                     .foregroundColor(Color.white.opacity(0.3))
                 Text("Csh \(formatCompactLei(entry.snapshot.cashAmount))")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                     .foregroundColor(WidgetColors.accentGreen)
             }
 
@@ -145,9 +140,9 @@ public struct MoneyWidgetView: View {
             HStack(spacing: 4) {
                 Button(intent: AdjustLedgerIntent(accountName: "Card", deltaRaw: -50)) {
                     Text("-50 Crd")
-                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 22)
+                        .frame(height: 24)
                         .foregroundColor(WidgetColors.accentPink)
                         .background(
                             Capsule()
@@ -159,9 +154,9 @@ public struct MoneyWidgetView: View {
 
                 Button(intent: AdjustLedgerIntent(accountName: "Card", deltaRaw: 100)) {
                     Text("+100 Crd")
-                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 22)
+                        .frame(height: 24)
                         .foregroundColor(WidgetColors.accentGreen)
                         .background(
                             Capsule()
@@ -172,6 +167,18 @@ public struct MoneyWidgetView: View {
                 .buttonStyle(.plain)
             }
         }
+        .background(alignment: .trailing) {
+            // Stylized Watermark Wallet Icon (scaled down: 59pt, opacity: 0.14, inward offset x: 16)
+            Image(systemName: "wallet.bifold.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 59)
+                .foregroundColor(WidgetColors.accentGreen)
+                .opacity(0.14)
+                .offset(x: 16)
+                .allowsHitTesting(false)
+        }
+        .clipped()
     }
 
     // MARK: - Medium (2x1)

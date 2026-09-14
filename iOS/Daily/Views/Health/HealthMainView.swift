@@ -1,30 +1,20 @@
 import SwiftUI
 import DailyCore
 
-public enum HealthSubTab: String, CaseIterable, Identifiable {
-    case overview = "Overview"
-    case sleep = "Sleep Studio"
-    case vitals = "Heart & Vitals"
-    case trends = "Trends"
-    
-    public var id: String { rawValue }
-}
-
 /// Master Health & Vitals screen integrating multi-device telemetry, clinical sleep studio, and evolution trends.
 public struct HealthMainView: View {
     @ObservedObject private var healthService = HealthDataService.shared
-    @State private var activeSubTab: HealthSubTab = .overview
     public var onNavigateBack: (() -> Void)? = nil
     
     public init(onNavigateBack: (() -> Void)? = nil) {
         self.onNavigateBack = onNavigateBack
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-healthSubTabSleep") || args.contains("-testSleepStudio") {
-            self._activeSubTab = State(initialValue: .sleep)
+            healthService.activeSubTab = .sleep
         } else if args.contains("-healthSubTabTrends") {
-            self._activeSubTab = State(initialValue: .trends)
+            healthService.activeSubTab = .trends
         } else if args.contains("-healthSubTabVitals") {
-            self._activeSubTab = State(initialValue: .vitals)
+            healthService.activeSubTab = .vitals
         }
         if args.contains("-healthPrevDay") {
             healthService.prevDay()
@@ -46,7 +36,7 @@ public struct HealthMainView: View {
                         subTabSwitcher
                         
                         // Main Content Based on Active Sub-Tab
-                        switch activeSubTab {
+                        switch healthService.activeSubTab {
                         case .overview:
                             overviewSection
                         case .sleep:
@@ -234,10 +224,10 @@ public struct HealthMainView: View {
     private var subTabSwitcher: some View {
         HStack(spacing: 6) {
             ForEach(HealthSubTab.allCases) { tab in
-                let isSelected = activeSubTab == tab
+                let isSelected = healthService.activeSubTab == tab
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        activeSubTab = tab
+                        healthService.activeSubTab = tab
                     }
                 } label: {
                     Text(tab.rawValue)
@@ -353,7 +343,7 @@ public struct HealthMainView: View {
     private func sleepOverviewPreviewCard(session: SleepSession) -> some View {
         Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                activeSubTab = .sleep
+                healthService.activeSubTab = .sleep
             }
         } label: {
             GlassCard(cornerRadius: 18, padding: 16) {

@@ -223,14 +223,14 @@ public struct BubblesWidgetView: View {
             }
         }
         .background(alignment: .trailing) {
-            // Stylized Watermark Icon (scaled further down: 74pt, opacity: 0.18, ~35% bleed outside)
+            // Stylized Watermark Icon (scaled down: 59pt, opacity: 0.14, inward offset x: 16)
             Image(systemName: "drop.fill")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(height: 74)
+                .frame(height: 59)
                 .foregroundColor(WidgetColors.accentCyan)
-                .opacity(0.18)
-                .offset(x: 20)
+                .opacity(0.14)
+                .offset(x: 16)
                 .allowsHitTesting(false)
         }
         .clipped()

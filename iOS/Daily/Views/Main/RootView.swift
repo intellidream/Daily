@@ -200,6 +200,9 @@ public struct RootView: View {
                 } else if fullPath.contains("world") {
                     selectedTab = .finances
                     FinanceService.shared.activeSubTab = .world
+                } else if fullPath.contains("sleep") {
+                    selectedTab = .health
+                    HealthDataService.shared.activeSubTab = .sleep
                 } else {
                     switch fullPath {
                     case "dashboard": selectedTab = .dashboard
