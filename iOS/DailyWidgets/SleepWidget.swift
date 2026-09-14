@@ -46,11 +46,23 @@ public struct SleepWidgetView: View {
         Group {
             switch family {
             case .systemSmall:
-                smallView
+                if entry.snapshot.hasData {
+                    smallView
+                } else {
+                    smallNoDataView
+                }
             case .systemMedium:
-                mediumView
+                if entry.snapshot.hasData {
+                    mediumView
+                } else {
+                    mediumNoDataView
+                }
             case .systemLarge:
-                largeView
+                if entry.snapshot.hasData {
+                    largeView
+                } else {
+                    largeNoDataView
+                }
             case .accessoryCircular:
                 accessoryCircularView
             case .accessoryRectangular:
@@ -58,7 +70,11 @@ public struct SleepWidgetView: View {
             case .accessoryInline:
                 accessoryInlineView
             default:
-                mediumView
+                if entry.snapshot.hasData {
+                    mediumView
+                } else {
+                    mediumNoDataView
+                }
             }
         }
         .containerBackground(WidgetColors.bgGradient, for: .widget)
@@ -420,6 +436,284 @@ public struct SleepWidgetView: View {
         .clipped()
     }
 
+    // MARK: - Small (1x1) No Data
+    private var smallNoDataView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Top row: Sleep icon badge on Left, SLEEP pill on Right
+            HStack(alignment: .top) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.08), lineWidth: 4)
+                        .frame(width: 40, height: 40)
+                    Circle()
+                        .fill(WidgetColors.accentPurple.opacity(0.15))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: "moon.zzz.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(WidgetColors.accentPurple)
+                }
+
+                Spacer(minLength: 4)
+
+                Text("SLEEP")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundColor(WidgetColors.accentPurple)
+                    .padding(.horizontal, 5.5)
+                    .padding(.vertical, 2.5)
+                    .background(WidgetColors.accentPurple.opacity(0.18))
+                    .clipShape(Capsule())
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("No Sleep Data")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                Text("No sleep tracked today")
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.55))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            // Bottom CTA pill: Open Studio
+            HStack(spacing: 3) {
+                Text("Open Studio")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .foregroundColor(WidgetColors.accentCyan)
+            .frame(maxWidth: .infinity)
+            .frame(height: 24)
+            .background(
+                Capsule()
+                    .fill(WidgetColors.accentCyan.opacity(0.14))
+                    .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.25), lineWidth: 1))
+            )
+        }
+        .background(alignment: .trailing) {
+            Image(systemName: "moon.stars.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 59)
+                .foregroundColor(WidgetColors.accentPurple)
+                .opacity(0.10)
+                .offset(x: 16)
+                .allowsHitTesting(false)
+        }
+        .clipped()
+    }
+
+    // MARK: - Medium (2x1) No Data
+    private var mediumNoDataView: some View {
+        HStack(spacing: 14) {
+            // Left: Clean empty gauge circle with moon icon
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.08), lineWidth: 6)
+                    .frame(width: 76, height: 76)
+
+                Circle()
+                    .fill(WidgetColors.accentPurple.opacity(0.14))
+                    .frame(width: 56, height: 56)
+
+                Image(systemName: "moon.zzz.fill")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(WidgetColors.accentPurple)
+            }
+
+            // Right: Content and action
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .center) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "moon.stars.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(WidgetColors.accentPurple)
+                        Text("SLEEP STUDIO")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentPurple)
+                    }
+
+                    Spacer()
+
+                    Text("No Data Today")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.5))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                }
+
+                Text("No Sleep Tracked")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+
+                Text("Wear your watch to bed or log sleep in Health Hub to see hypnogram stages and recovery.")
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.55))
+                    .lineLimit(2)
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 4) {
+                    Text("Open Sleep Studio")
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                }
+                .foregroundColor(WidgetColors.accentCyan)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3.5)
+                .background(
+                    Capsule()
+                        .fill(WidgetColors.accentCyan.opacity(0.14))
+                        .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.25), lineWidth: 1))
+                )
+            }
+        }
+        .background(alignment: .trailing) {
+            Image(systemName: "moon.stars.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 80)
+                .foregroundColor(WidgetColors.accentPurple)
+                .opacity(0.08)
+                .offset(x: 20)
+                .allowsHitTesting(false)
+        }
+        .clipped()
+    }
+
+    // MARK: - Large (2x2) No Data
+    private var largeNoDataView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header: Title & Status
+            HStack(alignment: .center) {
+                HStack(spacing: 6) {
+                    Image(systemName: "moon.zzz.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(WidgetColors.accentPurple)
+                    Text("SLEEP STUDIO")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(WidgetColors.accentPurple)
+                }
+
+                Spacer()
+
+                Text("No Data Today")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundColor(Color.white.opacity(0.5))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2.5)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+
+            Spacer(minLength: 4)
+
+            // Center Hero Graphic
+            VStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.06), lineWidth: 8)
+                        .frame(width: 80, height: 80)
+
+                    Circle()
+                        .fill(WidgetColors.accentPurple.opacity(0.14))
+                        .frame(width: 60, height: 60)
+
+                    Image(systemName: "moon.zzz.fill")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(WidgetColors.accentPurple)
+                }
+
+                Text("No Sleep Session Logged")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+
+                Text("Wear your Apple Watch to bed or log sleep in Health to view hypnogram architecture, restorative sleep, and nocturnal vitals.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.55))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+            }
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 4)
+
+            // Empty Stage Cards row (Deep, REM, Light, Awake placeholders)
+            HStack(spacing: 6) {
+                emptyStageCard(label: "Deep", color: deepColor)
+                emptyStageCard(label: "REM", color: remColor)
+                emptyStageCard(label: "Light", color: lightColor)
+                emptyStageCard(label: "Awake", color: awakeColor)
+            }
+
+            // Bottom CTA button
+            HStack {
+                Spacer()
+                HStack(spacing: 5) {
+                    Text("Open Sleep Studio")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundColor(WidgetColors.accentCyan)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(WidgetColors.accentCyan.opacity(0.14))
+                        .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.25), lineWidth: 1))
+                )
+                Spacer()
+            }
+        }
+        .background(alignment: .trailing) {
+            Image(systemName: "moon.stars.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 110)
+                .foregroundColor(WidgetColors.accentPurple)
+                .opacity(0.06)
+                .offset(x: 30, y: -20)
+                .allowsHitTesting(false)
+        }
+        .clipped()
+    }
+
+    private func emptyStageCard(label: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 3) {
+                Circle()
+                    .fill(color.opacity(0.5))
+                    .frame(width: 5, height: 5)
+                Text(label)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            Text("--")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.4))
+            Text("0%")
+                .font(.system(size: 8.5, weight: .medium))
+                .foregroundColor(.white.opacity(0.3))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.white.opacity(0.03))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.05), lineWidth: 1))
+        )
+    }
+
     // MARK: - Lock Screen Accessories
     private var accessoryCircularView: some View {
         ZStack {
@@ -427,8 +721,13 @@ public struct SleepWidgetView: View {
             VStack(spacing: 0) {
                 Image(systemName: "moon.stars.fill")
                     .font(.system(size: 11))
-                Text("\(entry.snapshot.sleepScore)")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                if entry.snapshot.hasData {
+                    Text("\(entry.snapshot.sleepScore)")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                } else {
+                    Text("--")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                }
             }
         }
     }
@@ -438,21 +737,30 @@ public struct SleepWidgetView: View {
             HStack(spacing: 4) {
                 Image(systemName: "moon.stars.fill")
                     .font(.system(size: 10))
-                Text("Sleep: \(entry.snapshot.totalAsleepFormatted)")
+                Text(entry.snapshot.hasData ? "Sleep: \(entry.snapshot.totalAsleepFormatted)" : "Sleep: No Data")
                     .font(.system(size: 12, weight: .bold))
             }
-            Text("Score \(entry.snapshot.sleepScore) • \(entry.snapshot.efficiencyPercent)% Eff")
-                .font(.system(size: 10, weight: .medium))
-            Text("\(entry.snapshot.bedtimeFormatted) - \(entry.snapshot.wakeTimeFormatted)")
-                .font(.system(size: 9))
-                .foregroundColor(.secondary)
+            if entry.snapshot.hasData {
+                Text("Score \(entry.snapshot.sleepScore) • \(entry.snapshot.efficiencyPercent)% Eff")
+                    .font(.system(size: 10, weight: .medium))
+                Text("\(entry.snapshot.bedtimeFormatted) - \(entry.snapshot.wakeTimeFormatted)")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            } else {
+                Text("No sleep tracked today")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
+                Text("Tap to open Sleep Studio")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
         }
     }
 
     private var accessoryInlineView: some View {
         HStack(spacing: 3) {
             Image(systemName: "moon.stars.fill")
-            Text("Sleep: \(entry.snapshot.totalAsleepFormatted) (\(entry.snapshot.sleepScore))")
+            Text(entry.snapshot.hasData ? "Sleep: \(entry.snapshot.totalAsleepFormatted) (\(entry.snapshot.sleepScore))" : "Sleep: No Data")
         }
     }
 

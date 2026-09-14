@@ -353,7 +353,7 @@ public struct FinancesDashboardCard: View {
                     .foregroundColor(ThemeColors.accentGreen)
                 Spacer()
                 HStack(spacing: 4) {
-                    Text("Finance Hub")
+                    Text("Open Hub")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(ThemeColors.accentGreen)
                     Image(systemName: "chevron.right")

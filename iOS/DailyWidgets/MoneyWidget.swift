@@ -94,7 +94,7 @@ public struct MoneyWidgetView: View {
 
     // MARK: - Small (1x1)
     private var smallView: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             // Top Section: Net Worth on Left, EUR pill in Top-Right
             HStack(alignment: .top, spacing: 4) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -103,6 +103,10 @@ public struct MoneyWidgetView: View {
                         .foregroundColor(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
+
+                    Text("NET WORTH")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.45))
                 }
 
                 Spacer(minLength: 4)
@@ -119,22 +123,19 @@ public struct MoneyWidgetView: View {
                     .clipShape(Capsule())
             }
 
-            Spacer(minLength: 1)
+            Spacer(minLength: 2)
 
-            // Liquid balances: Crd & Csh
-            HStack(spacing: 3) {
-                Text("Crd \(formatCompactLei(entry.snapshot.cardAmount))")
-                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+            // Liquid balances: Card and Cash one below the other, centered between top and buttons
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Card \(formatCompactLei(entry.snapshot.cardAmount))")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundColor(WidgetColors.accentCyan)
-                Text("·")
-                    .font(.system(size: 8))
-                    .foregroundColor(Color.white.opacity(0.3))
-                Text("Csh \(formatCompactLei(entry.snapshot.cashAmount))")
-                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                Text("Cash \(formatCompactLei(entry.snapshot.cashAmount))")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundColor(WidgetColors.accentGreen)
             }
 
-            Spacer(minLength: 1)
+            Spacer(minLength: 2)
 
             // 2 Compact Adjust Buttons: -50 Crd & +100 Crd
             HStack(spacing: 4) {

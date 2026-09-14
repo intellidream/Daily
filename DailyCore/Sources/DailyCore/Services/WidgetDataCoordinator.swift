@@ -110,6 +110,7 @@ public struct MoneyWidgetSnapshot: Sendable {
 
 /// Snapshot model for Sleep Studio Widget
 public struct SleepWidgetSnapshot: Sendable, Codable {
+    public let hasData: Bool
     public let sleepScore: Int
     public let sleepQualityRating: String
     public let totalAsleepFormatted: String
@@ -137,7 +138,38 @@ public struct SleepWidgetSnapshot: Sendable, Codable {
     public let sourceDevice: String
     public let lastUpdated: Date
     
+    private enum CodingKeys: String, CodingKey {
+        case hasData
+        case sleepScore
+        case sleepQualityRating
+        case totalAsleepFormatted
+        case asleepSeconds
+        case durationSeconds
+        case timeInBedFormatted
+        case efficiencyPercent
+        case deepSeconds
+        case remSeconds
+        case lightSeconds
+        case awakeSeconds
+        case deepPercent
+        case remPercent
+        case lightPercent
+        case awakePercent
+        case deepFormatted
+        case remFormatted
+        case lightFormatted
+        case awakeFormatted
+        case bedtimeFormatted
+        case wakeTimeFormatted
+        case restorativePercent
+        case restingHeartRate
+        case hrvMs
+        case sourceDevice
+        case lastUpdated
+    }
+
     public init(
+        hasData: Bool = true,
         sleepScore: Int,
         sleepQualityRating: String,
         totalAsleepFormatted: String,
@@ -165,6 +197,7 @@ public struct SleepWidgetSnapshot: Sendable, Codable {
         sourceDevice: String = "Apple Watch",
         lastUpdated: Date = Date()
     ) {
+        self.hasData = hasData
         self.sleepScore = sleepScore
         self.sleepQualityRating = sleepQualityRating
         self.totalAsleepFormatted = totalAsleepFormatted
@@ -192,38 +225,118 @@ public struct SleepWidgetSnapshot: Sendable, Codable {
         self.sourceDevice = sourceDevice
         self.lastUpdated = lastUpdated
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let sleepScore = try container.decode(Int.self, forKey: .sleepScore)
+        let bedtimeFormatted = try container.decode(String.self, forKey: .bedtimeFormatted)
+        let wakeTimeFormatted = try container.decode(String.self, forKey: .wakeTimeFormatted)
+        let asleepSeconds = try container.decode(Double.self, forKey: .asleepSeconds)
+
+        let decodedHasData = try container.decodeIfPresent(Bool.self, forKey: .hasData)
+        if let explicit = decodedHasData {
+            self.hasData = explicit
+        } else {
+            // Old snapshot migration: exclude legacy hardcoded mock placeholder
+            let isOldHardcodedMock = (sleepScore == 84 && bedtimeFormatted == "23:14" && wakeTimeFormatted == "07:26")
+            self.hasData = !isOldHardcodedMock && (asleepSeconds > 0)
+        }
+
+        self.sleepScore = sleepScore
+        self.sleepQualityRating = try container.decode(String.self, forKey: .sleepQualityRating)
+        self.totalAsleepFormatted = try container.decode(String.self, forKey: .totalAsleepFormatted)
+        self.asleepSeconds = asleepSeconds
+        self.durationSeconds = try container.decode(Double.self, forKey: .durationSeconds)
+        self.timeInBedFormatted = try container.decode(String.self, forKey: .timeInBedFormatted)
+        self.efficiencyPercent = try container.decode(Int.self, forKey: .efficiencyPercent)
+        self.deepSeconds = try container.decode(Double.self, forKey: .deepSeconds)
+        self.remSeconds = try container.decode(Double.self, forKey: .remSeconds)
+        self.lightSeconds = try container.decode(Double.self, forKey: .lightSeconds)
+        self.awakeSeconds = try container.decode(Double.self, forKey: .awakeSeconds)
+        self.deepPercent = try container.decode(Int.self, forKey: .deepPercent)
+        self.remPercent = try container.decode(Int.self, forKey: .remPercent)
+        self.lightPercent = try container.decode(Int.self, forKey: .lightPercent)
+        self.awakePercent = try container.decode(Int.self, forKey: .awakePercent)
+        self.deepFormatted = try container.decode(String.self, forKey: .deepFormatted)
+        self.remFormatted = try container.decode(String.self, forKey: .remFormatted)
+        self.lightFormatted = try container.decode(String.self, forKey: .lightFormatted)
+        self.awakeFormatted = try container.decode(String.self, forKey: .awakeFormatted)
+        self.bedtimeFormatted = bedtimeFormatted
+        self.wakeTimeFormatted = wakeTimeFormatted
+        self.restorativePercent = try container.decode(Int.self, forKey: .restorativePercent)
+        self.restingHeartRate = try container.decodeIfPresent(Double.self, forKey: .restingHeartRate)
+        self.hrvMs = try container.decodeIfPresent(Double.self, forKey: .hrvMs)
+        self.sourceDevice = try container.decodeIfPresent(String.self, forKey: .sourceDevice) ?? "Apple Watch"
+        self.lastUpdated = try container.decodeIfPresent(Date.self, forKey: .lastUpdated) ?? Date()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(hasData, forKey: .hasData)
+        try container.encode(sleepScore, forKey: .sleepScore)
+        try container.encode(sleepQualityRating, forKey: .sleepQualityRating)
+        try container.encode(totalAsleepFormatted, forKey: .totalAsleepFormatted)
+        try container.encode(asleepSeconds, forKey: .asleepSeconds)
+        try container.encode(durationSeconds, forKey: .durationSeconds)
+        try container.encode(timeInBedFormatted, forKey: .timeInBedFormatted)
+        try container.encode(efficiencyPercent, forKey: .efficiencyPercent)
+        try container.encode(deepSeconds, forKey: .deepSeconds)
+        try container.encode(remSeconds, forKey: .remSeconds)
+        try container.encode(lightSeconds, forKey: .lightSeconds)
+        try container.encode(awakeSeconds, forKey: .awakeSeconds)
+        try container.encode(deepPercent, forKey: .deepPercent)
+        try container.encode(remPercent, forKey: .remPercent)
+        try container.encode(lightPercent, forKey: .lightPercent)
+        try container.encode(awakePercent, forKey: .awakePercent)
+        try container.encode(deepFormatted, forKey: .deepFormatted)
+        try container.encode(remFormatted, forKey: .remFormatted)
+        try container.encode(lightFormatted, forKey: .lightFormatted)
+        try container.encode(awakeFormatted, forKey: .awakeFormatted)
+        try container.encode(bedtimeFormatted, forKey: .bedtimeFormatted)
+        try container.encode(wakeTimeFormatted, forKey: .wakeTimeFormatted)
+        try container.encode(restorativePercent, forKey: .restorativePercent)
+        try container.encodeIfPresent(restingHeartRate, forKey: .restingHeartRate)
+        try container.encodeIfPresent(hrvMs, forKey: .hrvMs)
+        try container.encode(sourceDevice, forKey: .sourceDevice)
+        try container.encode(lastUpdated, forKey: .lastUpdated)
+    }
 }
 
 extension SleepWidgetSnapshot {
-    public static var placeholder: SleepWidgetSnapshot {
+    public static var empty: SleepWidgetSnapshot {
         SleepWidgetSnapshot(
-            sleepScore: 84,
-            sleepQualityRating: "Good",
-            totalAsleepFormatted: "7h 38m",
-            asleepSeconds: 7 * 3600 + 38 * 60,
-            durationSeconds: 8 * 3600 + 12 * 60,
-            timeInBedFormatted: "8h 12m",
-            efficiencyPercent: 93,
-            deepSeconds: 1 * 3600 + 42 * 60,
-            remSeconds: 1 * 3600 + 56 * 60,
-            lightSeconds: 4 * 3600,
-            awakeSeconds: 34 * 60,
-            deepPercent: 22,
-            remPercent: 25,
-            lightPercent: 53,
-            awakePercent: 7,
-            deepFormatted: "1h 42m",
-            remFormatted: "1h 56m",
-            lightFormatted: "4h 00m",
-            awakeFormatted: "34m",
-            bedtimeFormatted: "23:14",
-            wakeTimeFormatted: "07:26",
-            restorativePercent: 47,
-            restingHeartRate: 58,
-            hrvMs: 46,
+            hasData: false,
+            sleepScore: 0,
+            sleepQualityRating: "No Data",
+            totalAsleepFormatted: "--",
+            asleepSeconds: 0,
+            durationSeconds: 0,
+            timeInBedFormatted: "--",
+            efficiencyPercent: 0,
+            deepSeconds: 0,
+            remSeconds: 0,
+            lightSeconds: 0,
+            awakeSeconds: 0,
+            deepPercent: 0,
+            remPercent: 0,
+            lightPercent: 0,
+            awakePercent: 0,
+            deepFormatted: "--",
+            remFormatted: "--",
+            lightFormatted: "--",
+            awakeFormatted: "--",
+            bedtimeFormatted: "--:--",
+            wakeTimeFormatted: "--:--",
+            restorativePercent: 0,
+            restingHeartRate: nil,
+            hrvMs: nil,
             sourceDevice: "Apple Watch",
             lastUpdated: Date()
         )
+    }
+
+    public static var placeholder: SleepWidgetSnapshot {
+        empty
     }
 }
 
@@ -584,8 +697,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     
     public func updateSleepSnapshot(from session: SleepSession?, restingHeartRate: Double? = nil, hrvMs: Double? = nil) {
         let snapshot: SleepWidgetSnapshot
-        if let session = session {
+        if let session = session, session.asleepSeconds > 0 {
             snapshot = SleepWidgetSnapshot(
+                hasData: true,
                 sleepScore: session.sleepScore,
                 sleepQualityRating: session.sleepQualityRating,
                 totalAsleepFormatted: session.totalAsleepFormatted,
@@ -614,7 +728,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
                 lastUpdated: Date()
             )
         } else {
-            snapshot = SleepWidgetSnapshot.placeholder
+            snapshot = SleepWidgetSnapshot.empty
         }
         
         if let data = try? JSONEncoder().encode(snapshot) {
@@ -632,7 +746,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
            let snapshot = try? JSONDecoder().decode(SleepWidgetSnapshot.self, from: data) {
             return snapshot
         }
-        return SleepWidgetSnapshot.placeholder
+        return SleepWidgetSnapshot.empty
     }
 }
 
