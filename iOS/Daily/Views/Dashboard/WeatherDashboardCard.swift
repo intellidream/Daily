@@ -476,3 +476,14 @@ public struct WeatherDashboardCard: View {
         return "Now"
     }
 }
+
+extension WeatherDashboardCard: Equatable {
+    public static func == (lhs: WeatherDashboardCard, rhs: WeatherDashboardCard) -> Bool {
+        lhs.size == rhs.size &&
+        lhs.weatherService.currentWeather?.dt == rhs.weatherService.currentWeather?.dt &&
+        lhs.weatherService.currentWeather?.main.temp == rhs.weatherService.currentWeather?.main.temp &&
+        lhs.weatherService.isLoading == rhs.weatherService.isLoading &&
+        lhs.settingsService.settings.weatherUnitSystem == rhs.settingsService.settings.weatherUnitSystem &&
+        lhs.settingsService.settings.glassIntensity == rhs.settingsService.settings.glassIntensity
+    }
+}

@@ -368,3 +368,12 @@ public struct HealthDashboardCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
+
+extension HealthDashboardCard: Equatable {
+    public static func == (lhs: HealthDashboardCard, rhs: HealthDashboardCard) -> Bool {
+        lhs.size == rhs.size &&
+        lhs.healthService.totalStepsToday == rhs.healthService.totalStepsToday &&
+        lhs.healthService.averageBpm == rhs.healthService.averageBpm &&
+        lhs.healthService.primarySleepSession?.id == rhs.healthService.primarySleepSession?.id
+    }
+}

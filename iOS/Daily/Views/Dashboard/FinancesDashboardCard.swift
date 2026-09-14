@@ -404,3 +404,11 @@ public struct FinancesDashboardCard: View {
         }
     }
 }
+
+extension FinancesDashboardCard: Equatable {
+    public static func == (lhs: FinancesDashboardCard, rhs: FinancesDashboardCard) -> Bool {
+        lhs.size == rhs.size &&
+        lhs.financeService.summary == rhs.financeService.summary &&
+        lhs.financeService.watchlistQuotes == rhs.financeService.watchlistQuotes
+    }
+}

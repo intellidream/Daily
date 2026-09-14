@@ -119,16 +119,13 @@ public struct NewsDashboardCard: View {
                     Spacer()
                     
                     if let imgStr = top.imageUrl, let url = URL(string: imgStr) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let img):
-                                img.resizable()
-                                    .scaledToFill()
-                                    .frame(width: 58, height: 58)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                            default:
-                                EmptyView()
-                            }
+                        CachedAsyncImage(url: url) { img in
+                            img.resizable()
+                                .scaledToFill()
+                                .frame(width: 58, height: 58)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        } placeholder: {
+                            EmptyView()
                         }
                     }
                 }
@@ -171,13 +168,13 @@ public struct NewsDashboardCard: View {
             if let top = newsService.topHeadline {
                 // Top Story with Image
                 if let imgStr = top.imageUrl, let url = URL(string: imgStr) {
-                    AsyncImage(url: url) { phase in
-                        if let img = phase.image {
-                            img.resizable()
-                                .scaledToFill()
-                                .frame(height: 75)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
+                    CachedAsyncImage(url: url) { img in
+                        img.resizable()
+                            .scaledToFill()
+                            .frame(height: 75)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    } placeholder: {
+                        EmptyView()
                     }
                 }
 
@@ -274,13 +271,13 @@ public struct NewsDashboardCard: View {
                     Spacer()
                     
                     if let imgStr = top.imageUrl, let url = URL(string: imgStr) {
-                        AsyncImage(url: url) { phase in
-                            if let img = phase.image {
-                                img.resizable()
-                                    .scaledToFill()
-                                    .frame(width: 70, height: 70)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                            }
+                        CachedAsyncImage(url: url) { img in
+                            img.resizable()
+                                .scaledToFill()
+                                .frame(width: 70, height: 70)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        } placeholder: {
+                            EmptyView()
                         }
                     }
                 }
@@ -316,13 +313,13 @@ public struct NewsDashboardCard: View {
                             Spacer()
                             
                             if let imgStr = story.imageUrl, let url = URL(string: imgStr) {
-                                AsyncImage(url: url) { phase in
-                                    if let img = phase.image {
-                                        img.resizable()
-                                            .scaledToFill()
-                                            .frame(width: 44, height: 44)
-                                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    }
+                                CachedAsyncImage(url: url) { img in
+                                    img.resizable()
+                                        .scaledToFill()
+                                        .frame(width: 44, height: 44)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                } placeholder: {
+                                    EmptyView()
                                 }
                             }
                         }
@@ -339,5 +336,14 @@ public struct NewsDashboardCard: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+extension NewsDashboardCard: Equatable {
+    public static func == (lhs: NewsDashboardCard, rhs: NewsDashboardCard) -> Bool {
+        lhs.size == rhs.size &&
+        lhs.newsService.topHeadline?.id == rhs.newsService.topHeadline?.id &&
+        lhs.newsService.topHeadline?.title == rhs.newsService.topHeadline?.title &&
+        lhs.newsService.isLoading == rhs.newsService.isLoading
     }
 }

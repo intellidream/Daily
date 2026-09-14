@@ -644,3 +644,12 @@ public struct HabitsDashboardCard: View {
         .buttonStyle(.plain)
     }
 }
+
+extension HabitsDashboardCard: Equatable {
+    public static func == (lhs: HabitsDashboardCard, rhs: HabitsDashboardCard) -> Bool {
+        lhs.size == rhs.size &&
+        lhs.habitsService.totalWaterMlToday == rhs.habitsService.totalWaterMlToday &&
+        lhs.habitsService.smokesTotalToday == rhs.habitsService.smokesTotalToday &&
+        lhs.habitsService.waterGoalMl == rhs.habitsService.waterGoalMl
+    }
+}

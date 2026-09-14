@@ -16,10 +16,14 @@ public struct HeaderGreetingView: View {
         self.onCustomizeTapped = onCustomizeTapped
     }
     
-    private var formattedDate: String {
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d"
-        return formatter.string(from: Date())
+        return formatter
+    }()
+    
+    private var formattedDate: String {
+        Self.dateFormatter.string(from: Date())
     }
     
     public var body: some View {
@@ -43,16 +47,13 @@ public struct HeaderGreetingView: View {
                             .frame(width: 48, height: 48)
                         
                         if let avatarUrl = authService.currentUser?.avatarUrl, let url = URL(string: avatarUrl) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable()
-                                        .scaledToFill()
-                                        .frame(width: 44, height: 44)
-                                        .clipShape(Circle())
-                                default:
-                                    defaultAvatarGlyph
-                                }
+                            CachedAsyncImage(url: url) { image in
+                                image.resizable()
+                                    .scaledToFill()
+                                    .frame(width: 44, height: 44)
+                                    .clipShape(Circle())
+                            } placeholder: {
+                                defaultAvatarGlyph
                             }
                         } else {
                             defaultAvatarGlyph
@@ -118,8 +119,8 @@ public struct HeaderGreetingView: View {
                             .frame(width: 40, height: 40)
                             .background(
                                 Circle()
-                                    .fill(Color.white.opacity(0.1))
-                                    .background(.ultraThinMaterial, in: Circle())
+                                    .fill(Color(hex: "080F1E").opacity(0.72))
+                                    .overlay(Circle().fill(Color.white.opacity(0.08)))
                             )
                             .overlay(
                                 Circle()
@@ -132,7 +133,7 @@ public struct HeaderGreetingView: View {
                                         lineWidth: 1
                                     )
                             )
-                            .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
+                            .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
                     }
                     .buttonStyle(.plain)
                 }
@@ -148,8 +149,8 @@ public struct HeaderGreetingView: View {
                         .frame(width: 40, height: 40)
                         .background(
                             Circle()
-                                .fill(Color.white.opacity(0.1))
-                                .background(.ultraThinMaterial, in: Circle())
+                                .fill(Color(hex: "080F1E").opacity(0.72))
+                                .overlay(Circle().fill(Color.white.opacity(0.08)))
                         )
                         .overlay(
                             Circle()
@@ -162,7 +163,7 @@ public struct HeaderGreetingView: View {
                                     lineWidth: 1
                                 )
                         )
-                        .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
+                        .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
             }
@@ -176,13 +177,9 @@ public struct HeaderGreetingView: View {
     
     private var heroGlassBackdrop: some View {
         ZStack {
-            // 1. Frosted ultra-thin glass material base
+            // 1. Acrylic dark glass base
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white.opacity(0.06))
-                .background(
-                    .ultraThinMaterial,
-                    in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-                )
+                .fill(Color(hex: "080F1E").opacity(0.75))
             
             // 2. Translucent aurora mesh wash (cyan to indigo to violet aura)
             RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -231,8 +228,8 @@ public struct HeaderGreetingView: View {
                     lineWidth: 1.2
                 )
         }
-        .shadow(color: Color.black.opacity(0.35), radius: 14, x: 0, y: 6)
-        .shadow(color: ThemeColors.accentCyan.opacity(0.15), radius: 24, x: 0, y: 8)
+        .shadow(color: Color.black.opacity(0.28), radius: 10, x: 0, y: 5)
+        .shadow(color: ThemeColors.accentCyan.opacity(0.10), radius: 16, x: 0, y: 6)
     }
     
     private func triggerHaptic() {

@@ -139,14 +139,19 @@ public struct DashboardView: View {
         switch config.id {
         case DashboardWidgetType.weather.rawValue:
             WeatherDashboardCard(size: config.size, onTap: onNavigateToWeather)
+                .equatable()
         case DashboardWidgetType.news.rawValue:
             NewsDashboardCard(size: config.size, onTap: onNavigateToNews)
+                .equatable()
         case DashboardWidgetType.health.rawValue:
             HealthDashboardCard(size: config.size, onTap: onNavigateToHealth)
+                .equatable()
         case DashboardWidgetType.habits.rawValue:
             HabitsDashboardCard(size: config.size, onTap: onNavigateToHabits)
+                .equatable()
         case DashboardWidgetType.finances.rawValue:
             FinancesDashboardCard(size: config.size, onTap: onNavigateToFinances)
+                .equatable()
         default:
             EmptyView()
         }
