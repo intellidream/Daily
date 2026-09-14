@@ -183,17 +183,34 @@ public struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: authService.sessionState.isAuthenticatedOrGuest)
         .onOpenURL { url in
-            let target = (url.host ?? url.path).trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let fullPath = "\(url.host ?? "")/\(url.path)".trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
             withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                switch target {
-                case "dashboard": selectedTab = .dashboard
-                case "weather": selectedTab = .weather
-                case "news": selectedTab = .news
-                case "health": selectedTab = .health
-                case "habits": selectedTab = .habits
-                case "finances": selectedTab = .finances
-                case "settings": selectedTab = .settings
-                default: break
+                if fullPath.contains("bubble") || fullPath.contains("water") {
+                    selectedTab = .habits
+                    HabitsService.shared.activeHabit = .water
+                } else if fullPath.contains("smoke") {
+                    selectedTab = .habits
+                    HabitsService.shared.activeHabit = .smokes
+                } else if fullPath.contains("money") {
+                    selectedTab = .finances
+                    FinanceService.shared.activeSubTab = .money
+                } else if fullPath.contains("stock") {
+                    selectedTab = .finances
+                    FinanceService.shared.activeSubTab = .stocks
+                } else if fullPath.contains("world") {
+                    selectedTab = .finances
+                    FinanceService.shared.activeSubTab = .world
+                } else {
+                    switch fullPath {
+                    case "dashboard": selectedTab = .dashboard
+                    case "weather": selectedTab = .weather
+                    case "news": selectedTab = .news
+                    case "health": selectedTab = .health
+                    case "habits": selectedTab = .habits
+                    case "finances": selectedTab = .finances
+                    case "settings": selectedTab = .settings
+                    default: break
+                    }
                 }
             }
         }

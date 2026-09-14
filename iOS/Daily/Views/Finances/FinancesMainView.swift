@@ -1,28 +1,11 @@
 import SwiftUI
 import DailyCore
 
-public enum FinanceSubTab: String, CaseIterable, Identifiable {
-    case money = "Money"
-    case stocks = "Stocks"
-    case world = "World"
-    
-    public var id: String { rawValue }
-    
-    public var iconName: String {
-        switch self {
-        case .money: return "wallet.bifold.fill"
-        case .stocks: return "chart.line.uptrend.xyaxis"
-        case .world: return "globe.americas.fill"
-        }
-    }
-}
-
 /// Comprehensive Finance Hub screen mirroring the WinUI FinancesDetailPage architecture.
 /// Delivers real-time macroeconomic indicators, multi-asset security watchlists, and Smart Ledger account analytics.
 public struct FinancesMainView: View {
     @ObservedObject private var financeService = FinanceService.shared
     @ObservedObject private var ledgerStore = SmartLedgerStore.shared
-    @State private var activeSubTab: FinanceSubTab = .money
     @State private var selectedMarketType: MarketType? = nil // nil = All
     @State private var showingAddTransactionSheet: Bool = false
     @State private var showingAddAccountSheet: Bool = false
@@ -31,17 +14,22 @@ public struct FinancesMainView: View {
     @State private var showingAddItemSheet: Bool = false
     @State private var targetSectionForNewItem: String = "Outgoing"
     
+    private var activeSubTab: FinanceSubTab {
+        get { financeService.activeSubTab }
+        nonmutating set { financeService.activeSubTab = newValue }
+    }
+    
     public var onNavigateBack: (() -> Void)? = nil
 
     public init(onNavigateBack: (() -> Void)? = nil) {
         self.onNavigateBack = onNavigateBack
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-financeSubTabStocks") {
-            self._activeSubTab = State(initialValue: .stocks)
+            FinanceService.shared.activeSubTab = .stocks
         } else if args.contains("-financeSubTabWorld") {
-            self._activeSubTab = State(initialValue: .world)
-        } else {
-            self._activeSubTab = State(initialValue: .money)
+            FinanceService.shared.activeSubTab = .world
+        } else if args.contains("-financeSubTabMoney") {
+            FinanceService.shared.activeSubTab = .money
         }
         
         if args.contains("-testOpenItpAdjust") {

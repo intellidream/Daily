@@ -10,6 +10,8 @@ public struct BubblesWidgetSnapshot: Sendable {
     public let progressPercent: Double
     public let waterMl: Double
     public let coffeeMl: Double
+    public let teaMl: Double
+    public let drinkBreakdown: [(name: String, amount: Double, hexColor: String)]
     public let lastLoggedAt: Date?
     
     public init(
@@ -18,6 +20,8 @@ public struct BubblesWidgetSnapshot: Sendable {
         progressPercent: Double,
         waterMl: Double,
         coffeeMl: Double,
+        teaMl: Double = 0.0,
+        drinkBreakdown: [(name: String, amount: Double, hexColor: String)] = [],
         lastLoggedAt: Date? = nil
     ) {
         self.todayMl = todayMl
@@ -25,6 +29,8 @@ public struct BubblesWidgetSnapshot: Sendable {
         self.progressPercent = progressPercent
         self.waterMl = waterMl
         self.coffeeMl = coffeeMl
+        self.teaMl = teaMl
+        self.drinkBreakdown = drinkBreakdown
         self.lastLoggedAt = lastLoggedAt
     }
 }
@@ -35,6 +41,9 @@ public struct SmokesWidgetSnapshot: Sendable {
     public let baseline: Int
     public let cigsCount: Int
     public let heatedCount: Int
+    public let rolledCount: Int
+    public let cigarilloCount: Int
+    public let smokeBreakdown: [(name: String, count: Int, hexColor: String)]
     public let lastSmokeDate: Date?
     public let spentTodayLei: Double
     
@@ -43,6 +52,9 @@ public struct SmokesWidgetSnapshot: Sendable {
         baseline: Int,
         cigsCount: Int,
         heatedCount: Int,
+        rolledCount: Int = 0,
+        cigarilloCount: Int = 0,
+        smokeBreakdown: [(name: String, count: Int, hexColor: String)] = [],
         lastSmokeDate: Date? = nil,
         spentTodayLei: Double = 0.0
     ) {
@@ -50,6 +62,9 @@ public struct SmokesWidgetSnapshot: Sendable {
         self.baseline = baseline
         self.cigsCount = cigsCount
         self.heatedCount = heatedCount
+        self.rolledCount = rolledCount
+        self.cigarilloCount = cigarilloCount
+        self.smokeBreakdown = smokeBreakdown
         self.lastSmokeDate = lastSmokeDate
         self.spentTodayLei = spentTodayLei
     }
@@ -133,6 +148,8 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         // 3. Breakdown from local logs
         var waterMl = 0.0
         var coffeeMl = 0.0
+        var teaMl = 0.0
+        var otherDrinks: [String: Double] = [:]
         var lastLogged: Date? = nil
         
         let deletedIds = Set(groupDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
@@ -142,14 +159,30 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             lastLogged = activeLogs.first?.loggedAt
             for log in activeLogs {
                 let drink = (log.parsedDrink ?? "").lowercased()
-                if drink.contains("coffee") {
+                if drink.contains("coffee") || drink.contains("espresso") || drink.contains("latte") {
                     coffeeMl += log.value
-                } else {
+                } else if drink.contains("tea") || drink.contains("matcha") || drink.contains("infusion") {
+                    teaMl += log.value
+                } else if drink.contains("water") || drink.contains("glass") || drink.contains("bottle") || drink.isEmpty {
                     waterMl += log.value
+                } else {
+                    let dName = log.parsedDrink ?? "Other"
+                    otherDrinks[dName, default: 0] += log.value
                 }
             }
         } else {
             waterMl = totalMl
+        }
+        
+        var breakdown: [(name: String, amount: Double, hexColor: String)] = []
+        if waterMl > 0 { breakdown.append(("Water", waterMl, "#00E5FF")) }
+        if coffeeMl > 0 { breakdown.append(("Coffee", coffeeMl, "#F59E0B")) }
+        if teaMl > 0 { breakdown.append(("Tea", teaMl, "#84CC16")) }
+        for (name, amt) in otherDrinks.sorted(by: { $0.value > $1.value }) {
+            breakdown.append((name, amt, "#EC4899"))
+        }
+        if breakdown.isEmpty && totalMl > 0 {
+            breakdown.append(("Water", totalMl, "#00E5FF"))
         }
         
         let progress = goal > 0 ? min(max(totalMl / goal, 0.0), 1.0) : 0.0
@@ -159,6 +192,8 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             progressPercent: progress,
             waterMl: waterMl,
             coffeeMl: coffeeMl,
+            teaMl: teaMl,
+            drinkBreakdown: breakdown,
             lastLoggedAt: lastLogged
         )
     }
@@ -247,9 +282,11 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             totalSmokes = dict[key] ?? 0
         }
         
-        // 3. Cigs vs Heat breakdown & last smoke date
+        // 3. Breakdown from local logs
         var cigsCount = 0
         var heatedCount = 0
+        var rolledCount = 0
+        var cigarilloCount = 0
         var lastSmokeDate: Date? = nil
         
         let deletedIds = Set(groupDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
@@ -259,14 +296,28 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             lastSmokeDate = activeLogs.first?.loggedAt
             for log in activeLogs {
                 let type = (log.smokeType).lowercased()
+                let count = Int(log.value)
                 if type.contains("heat") {
-                    heatedCount += Int(log.value)
+                    heatedCount += count
+                } else if type.contains("cigarillo") || (type.contains("cigar") && !type.contains("cigarette")) {
+                    cigarilloCount += count
+                } else if type.contains("roll") {
+                    rolledCount += count
                 } else {
-                    cigsCount += Int(log.value)
+                    cigsCount += count
                 }
             }
         } else {
             cigsCount = totalSmokes
+        }
+        
+        var breakdown: [(name: String, count: Int, hexColor: String)] = []
+        if cigsCount > 0 { breakdown.append(("Cigarette", cigsCount, "#EF4444")) }
+        if heatedCount > 0 { breakdown.append(("Heated", heatedCount, "#3B82F6")) }
+        if rolledCount > 0 { breakdown.append(("Rolled", rolledCount, "#F97316")) }
+        if cigarilloCount > 0 { breakdown.append(("Cigarillo", cigarilloCount, "#A855F7")) }
+        if breakdown.isEmpty && totalSmokes > 0 {
+            breakdown.append(("Cigarette", totalSmokes, "#EF4444"))
         }
         
         // Standard pack price ~25 Lei for 20 sticks = 1.25 Lei per smoke
@@ -277,6 +328,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             baseline: baseline,
             cigsCount: cigsCount,
             heatedCount: heatedCount,
+            rolledCount: rolledCount,
+            cigarilloCount: cigarilloCount,
+            smokeBreakdown: breakdown,
             lastSmokeDate: lastSmokeDate,
             spentTodayLei: spent
         )

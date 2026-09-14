@@ -8,6 +8,7 @@ public final class FinanceService: ObservableObject {
     public static let shared = FinanceService()
     
     // MARK: - Published State
+    @Published public var activeSubTab: FinanceSubTab = .money
     @Published public private(set) var accounts: [FinanceAccount] = []
     @Published public private(set) var transactions: [FinanceTransaction] = []
     @Published public private(set) var watchlistQuotes: [StockQuote] = []

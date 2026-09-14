@@ -22,6 +22,9 @@ public struct SmokesTimelineProvider: TimelineProvider {
                 baseline: 20,
                 cigsCount: 2,
                 heatedCount: 1,
+                rolledCount: 0,
+                cigarilloCount: 0,
+                smokeBreakdown: [("Cigarette", 2, "#EF4444"), ("Heated", 1, "#3B82F6")],
                 lastSmokeDate: Date().addingTimeInterval(-5400),
                 spentTodayLei: 3.75
             )
@@ -43,85 +46,21 @@ public struct SmokesTimelineProvider: TimelineProvider {
     }
 }
 
-/// Minimalist vector lungs silhouette for Widget display
-struct WidgetLungsShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let w = rect.width
-        let h = rect.height
-
-        // Trachea
-        path.move(to: CGPoint(x: w * 0.47, y: h * 0.08))
-        path.addLine(to: CGPoint(x: w * 0.53, y: h * 0.08))
-        path.addLine(to: CGPoint(x: w * 0.53, y: h * 0.30))
-        path.addLine(to: CGPoint(x: w * 0.47, y: h * 0.30))
-        path.closeSubpath()
-
-        // Left Lobe
-        path.move(to: CGPoint(x: w * 0.46, y: h * 0.30))
-        path.addCurve(to: CGPoint(x: w * 0.12, y: h * 0.54),
-                      control1: CGPoint(x: w * 0.28, y: h * 0.28),
-                      control2: CGPoint(x: w * 0.12, y: h * 0.40))
-        path.addCurve(to: CGPoint(x: w * 0.38, y: h * 0.90),
-                      control1: CGPoint(x: w * 0.12, y: h * 0.74),
-                      control2: CGPoint(x: w * 0.22, y: h * 0.88))
-        path.addCurve(to: CGPoint(x: w * 0.46, y: h * 0.40),
-                      control1: CGPoint(x: w * 0.42, y: h * 0.78),
-                      control2: CGPoint(x: w * 0.44, y: h * 0.52))
-        path.closeSubpath()
-
-        // Right Lobe
-        path.move(to: CGPoint(x: w * 0.54, y: h * 0.30))
-        path.addCurve(to: CGPoint(x: w * 0.88, y: h * 0.54),
-                      control1: CGPoint(x: w * 0.72, y: h * 0.28),
-                      control2: CGPoint(x: w * 0.88, y: h * 0.40))
-        path.addCurve(to: CGPoint(x: w * 0.62, y: h * 0.90),
-                      control1: CGPoint(x: w * 0.88, y: h * 0.74),
-                      control2: CGPoint(x: w * 0.78, y: h * 0.88))
-        path.addCurve(to: CGPoint(x: w * 0.54, y: h * 0.40),
-                      control1: CGPoint(x: w * 0.58, y: h * 0.78),
-                      control2: CGPoint(x: w * 0.56, y: h * 0.52))
-        path.closeSubpath()
-
-        return path
-    }
-}
-
+// MARK: - Smokes Widget View
 public struct SmokesWidgetView: View {
     public let entry: SmokesEntry
     @Environment(\.widgetFamily) var family
 
-    private let accentGreen = Color(red: 0.0, green: 0.9, blue: 0.46)
-    private let accentPink = Color(red: 1.0, green: 0.22, blue: 0.38)
-    private let accentCyan = Color(red: 0.0, green: 0.85, blue: 1.0)
-    private let bgGradient = LinearGradient(
-        colors: [Color(red: 0.05, green: 0.03, blue: 0.08), Color(red: 0.10, green: 0.07, blue: 0.16)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-
-    private var gaugeColor: Color {
-        if entry.snapshot.todayTotal == 0 {
-            return accentGreen
-        } else if entry.snapshot.todayTotal < entry.snapshot.baseline {
-            return accentCyan
-        } else {
-            return accentPink
-        }
+    private var lungColor: Color {
+        widgetLungHealthColor(countToday: entry.snapshot.todayTotal, baseline: entry.snapshot.baseline)
     }
 
-    private var formattedTimeSinceLastSmoke: String {
-        guard let last = entry.snapshot.lastSmokeDate else {
-            return "Clean today"
-        }
-        let diff = max(0, Int(Date().timeIntervalSince(last)))
-        let hours = diff / 3600
-        let minutes = (diff % 3600) / 60
-        if hours > 0 {
-            return "\(hours)h \(minutes)m ago"
-        } else {
-            return "\(minutes)m ago"
-        }
+    private var ringColor: Color {
+        widgetSmokeRingColor(countToday: entry.snapshot.todayTotal, baseline: entry.snapshot.baseline)
+    }
+
+    private var formattedTime: String {
+        widgetFormatCompactTimeAgo(entry.snapshot.lastSmokeDate)
     }
 
     public var body: some View {
@@ -141,87 +80,104 @@ public struct SmokesWidgetView: View {
                 mediumView
             }
         }
-        .containerBackground(bgGradient, for: .widget)
+        .containerBackground(WidgetColors.bgGradient, for: .widget)
+        .widgetURL(URL(string: "daily://habits/smokes"))
     }
 
     // MARK: - Small (1x1)
     private var smallView: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                HStack(spacing: 4) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(gaugeColor)
-                    Text("Smokes")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
+        VStack(spacing: 8) {
+            // Top: Left Circle Lungs Hero + Right Flame Icon, Base, and Compact Time
+            HStack(alignment: .center, spacing: 10) {
+                // Circle Hero on Left (spans top to bottom)
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.08), lineWidth: 6.5)
+                    
+                    let progress = entry.snapshot.baseline > 0 ? min(Double(entry.snapshot.todayTotal) / Double(entry.snapshot.baseline), 1.0) : 0.0
+                    Circle()
+                        .trim(from: 0, to: max(0.03, progress))
+                        .stroke(
+                            LinearGradient(
+                                colors: [ringColor, ringColor.opacity(0.85)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 6.5, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+
+                    VStack(spacing: 1) {
+                        ZStack {
+                            WidgetVectorLungsShape()
+                                .fill(lungColor.opacity(0.8))
+                            WidgetVectorLungsBronchiShape()
+                                .stroke(Color.white.opacity(0.7), lineWidth: 0.9)
+                        }
+                        .frame(width: 26, height: 26)
+
+                        Text("\(entry.snapshot.todayTotal)")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                    }
                 }
-                Spacer()
-                Text("\(entry.snapshot.todayTotal)")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(gaugeColor)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(gaugeColor.opacity(0.16))
-                    .clipShape(Capsule())
+                .frame(width: 66, height: 66)
+
+                Spacer(minLength: 2)
+
+                // Right: Flame Icon, Baseline, and Time Elapsed
+                VStack(alignment: .trailing, spacing: 4) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(ringColor)
+
+                    HStack(spacing: 2) {
+                        Text("\(entry.snapshot.baseline)")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("base")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.5))
+                    }
+
+                    Text(formattedTime)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                }
             }
 
             Spacer(minLength: 0)
 
-            // Lungs Icon inside Circular Ring
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.08), lineWidth: 7)
-                let progress = entry.snapshot.baseline > 0 ? min(Double(entry.snapshot.todayTotal) / Double(entry.snapshot.baseline), 1.0) : 0.0
-                Circle()
-                    .trim(from: 0, to: max(0.04, progress))
-                    .stroke(gaugeColor, style: StrokeStyle(lineWidth: 7, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-
-                WidgetLungsShape()
-                    .fill(gaugeColor.opacity(0.85))
-                    .frame(width: 28, height: 28)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 60)
-
-            HStack {
-                Spacer()
-                Text(formattedTimeSinceLastSmoke)
-                    .font(.system(size: 9.5, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.6))
-                    .lineLimit(1)
-                Spacer()
-            }
-
-            Spacer(minLength: 0)
-
-            // 2 Quick Buttons in Small Widget
+            // Bottom 2 Quick Action Buttons: Cig (Red) & Heat (Blue)
             HStack(spacing: 4) {
                 Button(intent: LogSmokeIntent(smokeType: "Cigarette")) {
-                    Text("+1 Cig")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                    Text("Cig")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 24)
-                        .foregroundColor(accentPink)
+                        .frame(height: 26)
+                        .foregroundColor(WidgetColors.accentRed)
                         .background(
                             Capsule()
-                                .fill(accentPink.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(accentPink.opacity(0.3), lineWidth: 1))
+                                .fill(WidgetColors.accentRed.opacity(0.15))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentRed.opacity(0.3), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)
 
                 Button(intent: LogSmokeIntent(smokeType: "Heated")) {
-                    Text("+1 Heat")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                    Text("Heat")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 24)
-                        .foregroundColor(accentCyan)
+                        .frame(height: 26)
+                        .foregroundColor(WidgetColors.accentBlue)
                         .background(
                             Capsule()
-                                .fill(accentCyan.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(accentCyan.opacity(0.3), lineWidth: 1))
+                                .fill(WidgetColors.accentBlue.opacity(0.15))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentBlue.opacity(0.3), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)
@@ -232,91 +188,131 @@ public struct SmokesWidgetView: View {
     // MARK: - Medium (2x1)
     private var mediumView: some View {
         HStack(spacing: 14) {
-            // Left: Circular Lungs Hero
+            // Left: Large Circle with Anatomical Lungs (top to bottom)
             ZStack {
                 Circle()
                     .stroke(Color.white.opacity(0.08), lineWidth: 8)
+                
                 let progress = entry.snapshot.baseline > 0 ? min(Double(entry.snapshot.todayTotal) / Double(entry.snapshot.baseline), 1.0) : 0.0
                 Circle()
-                    .trim(from: 0, to: max(0.04, progress))
-                    .stroke(gaugeColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .trim(from: 0, to: max(0.03, progress))
+                    .stroke(
+                        LinearGradient(
+                            colors: [ringColor, ringColor.opacity(0.85)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    )
                     .rotationEffect(.degrees(-90))
 
-                VStack(spacing: 1) {
-                    WidgetLungsShape()
-                        .fill(gaugeColor.opacity(0.85))
-                        .frame(width: 26, height: 26)
+                VStack(spacing: 2) {
+                    ZStack {
+                        WidgetVectorLungsShape()
+                            .fill(lungColor.opacity(0.85))
+                        WidgetVectorLungsBronchiShape()
+                            .stroke(Color.white.opacity(0.75), lineWidth: 1.0)
+                    }
+                    .frame(width: 32, height: 32)
+
                     Text("\(entry.snapshot.todayTotal)")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                 }
             }
-            .frame(width: 82, height: 82)
+            .frame(width: 86, height: 86)
 
-            // Right: Telemetry & 2 Interactive Action Buttons
+            // Right: Header (Base + Time + Flame Icon) & 2x2 Buttons Grid
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Smokes")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Text("Base: \(entry.snapshot.baseline)")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.55))
-                }
+                // Header on same line: Base and time on left, flame icon on right
+                HStack(alignment: .center, spacing: 6) {
+                    HStack(spacing: 2) {
+                        Text("\(entry.snapshot.baseline)")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("base")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundColor(Color.white.opacity(0.5))
+                    }
 
-                HStack(spacing: 6) {
-                    Text("🚬 \(entry.snapshot.cigsCount) Cig")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundColor(accentPink)
-                    Text("·").foregroundColor(Color.white.opacity(0.3))
-                    Text("💨 \(entry.snapshot.heatedCount) Heat")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundColor(accentCyan)
+                    Text("·")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color.white.opacity(0.3))
+
+                    Text(formattedTime)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.65))
+
                     Spacer()
-                    Text(formattedTimeSinceLastSmoke)
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundColor(Color.white.opacity(0.5))
+
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(ringColor)
                 }
 
                 Spacer(minLength: 2)
 
-                HStack(spacing: 8) {
-                    Button(intent: LogSmokeIntent(smokeType: "Cigarette")) {
-                        HStack(spacing: 3) {
-                            Text("🚬")
-                                .font(.system(size: 10))
-                            Text("+1 Cig")
+                // 2x2 Action Buttons Grid: Cgr & Rol (top), Cig & Heat (bottom)
+                VStack(spacing: 4) {
+                    HStack(spacing: 6) {
+                        Button(intent: LogSmokeIntent(smokeType: "Cgr")) {
+                            Text("Cgr")
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 24)
+                                .foregroundColor(WidgetColors.accentPurple)
+                                .background(
+                                    Capsule()
+                                        .fill(WidgetColors.accentPurple.opacity(0.15))
+                                        .overlay(Capsule().strokeBorder(WidgetColors.accentPurple.opacity(0.3), lineWidth: 1))
+                                )
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 28)
-                        .foregroundColor(accentPink)
-                        .background(
-                            Capsule()
-                                .fill(accentPink.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(accentPink.opacity(0.3), lineWidth: 1))
-                        )
-                    }
-                    .buttonStyle(.plain)
+                        .buttonStyle(.plain)
 
-                    Button(intent: LogSmokeIntent(smokeType: "Heated")) {
-                        HStack(spacing: 3) {
-                            Text("💨")
-                                .font(.system(size: 10))
-                            Text("+1 Heat")
+                        Button(intent: LogSmokeIntent(smokeType: "Rol")) {
+                            Text("Rol")
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 24)
+                                .foregroundColor(WidgetColors.accentOrange)
+                                .background(
+                                    Capsule()
+                                        .fill(WidgetColors.accentOrange.opacity(0.15))
+                                        .overlay(Capsule().strokeBorder(WidgetColors.accentOrange.opacity(0.3), lineWidth: 1))
+                                )
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 28)
-                        .foregroundColor(accentCyan)
-                        .background(
-                            Capsule()
-                                .fill(accentCyan.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(accentCyan.opacity(0.3), lineWidth: 1))
-                        )
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+
+                    HStack(spacing: 6) {
+                        Button(intent: LogSmokeIntent(smokeType: "Cigarette")) {
+                            Text("Cig")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 24)
+                                .foregroundColor(WidgetColors.accentRed)
+                                .background(
+                                    Capsule()
+                                        .fill(WidgetColors.accentRed.opacity(0.15))
+                                        .overlay(Capsule().strokeBorder(WidgetColors.accentRed.opacity(0.3), lineWidth: 1))
+                                )
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(intent: LogSmokeIntent(smokeType: "Heated")) {
+                            Text("Heat")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 24)
+                                .foregroundColor(WidgetColors.accentBlue)
+                                .background(
+                                    Capsule()
+                                        .fill(WidgetColors.accentBlue.opacity(0.15))
+                                        .overlay(Capsule().strokeBorder(WidgetColors.accentBlue.opacity(0.3), lineWidth: 1))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
@@ -325,15 +321,28 @@ public struct SmokesWidgetView: View {
     // MARK: - Large (2x2)
     private var largeView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header
+            // Header: Large Flame Icon + Baseline Badge
             HStack {
-                Label("Smokes & Tobacco", systemImage: "flame.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(gaugeColor)
+                if #available(iOS 17.0, *) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(ringColor)
+                        .symbolEffect(.pulse)
+                } else {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(ringColor)
+                }
+
                 Spacer()
+
                 Text("Base: \(entry.snapshot.baseline)")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(Color.white.opacity(0.6))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundColor(Color.white.opacity(0.65))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
             }
 
             // Hero Lungs & Key Telemetry
@@ -341,96 +350,143 @@ public struct SmokesWidgetView: View {
                 ZStack {
                     Circle()
                         .stroke(Color.white.opacity(0.08), lineWidth: 10)
+                    
                     let progress = entry.snapshot.baseline > 0 ? min(Double(entry.snapshot.todayTotal) / Double(entry.snapshot.baseline), 1.0) : 0.0
                     Circle()
-                        .trim(from: 0, to: max(0.04, progress))
-                        .stroke(gaugeColor, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .trim(from: 0, to: max(0.03, progress))
+                        .stroke(
+                            LinearGradient(
+                                colors: [ringColor, ringColor.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                        )
                         .rotationEffect(.degrees(-90))
 
-                    VStack(spacing: 2) {
-                        WidgetLungsShape()
-                            .fill(gaugeColor.opacity(0.85))
-                            .frame(width: 36, height: 36)
+                    VStack(spacing: 3) {
+                        ZStack {
+                            WidgetVectorLungsShape()
+                                .fill(lungColor.opacity(0.85))
+                            WidgetVectorLungsBronchiShape()
+                                .stroke(Color.white.opacity(0.75), lineWidth: 1.2)
+                        }
+                        .frame(width: 44, height: 44)
+
                         Text("\(entry.snapshot.todayTotal)")
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                     }
                 }
                 .frame(width: 108, height: 108)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("CIGARETTES")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(Color.white.opacity(0.45))
-                        Text("\(entry.snapshot.cigsCount) 🚬")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundColor(accentPink)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("CIG")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(Color.white.opacity(0.45))
+                            Text("\(entry.snapshot.cigsCount)")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.accentRed)
+                        }
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("HEAT")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(Color.white.opacity(0.45))
+                            Text("\(entry.snapshot.heatedCount)")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.accentBlue)
+                        }
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("ROL")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(Color.white.opacity(0.45))
+                            Text("\(entry.snapshot.rolledCount)")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.accentOrange)
+                        }
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("CGR")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(Color.white.opacity(0.45))
+                            Text("\(entry.snapshot.cigarilloCount)")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.accentPurple)
+                        }
                     }
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("HEATED TOBACCO")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(Color.white.opacity(0.45))
-                        Text("\(entry.snapshot.heatedCount) 💨")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundColor(accentCyan)
-                    }
-
-                    Text("Last: \(formattedTimeSinceLastSmoke)")
+                    Text("Last smoke: \(formattedTime)")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(Color.white.opacity(0.7))
+
+                    Text(String(format: "Spent: %.2f Lei", entry.snapshot.spentTodayLei))
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.9))
                 }
             }
 
             Divider()
                 .background(Color.white.opacity(0.12))
 
-            HStack {
-                Text("ESTIMATED SPENT TODAY")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(Color.white.opacity(0.45))
-                Spacer()
-                Text(String(format: "%.2f Lei", entry.snapshot.spentTodayLei))
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(Color.white)
-            }
-
-            // Interactive Action Buttons
+            // 4-Button Action Grid (Row)
             HStack(spacing: 8) {
+                Button(intent: LogSmokeIntent(smokeType: "Cgr")) {
+                    Text("Cgr")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .foregroundColor(WidgetColors.accentPurple)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentPurple.opacity(0.15))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentPurple.opacity(0.3), lineWidth: 1))
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Button(intent: LogSmokeIntent(smokeType: "Rol")) {
+                    Text("Rol")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .foregroundColor(WidgetColors.accentOrange)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentOrange.opacity(0.15))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentOrange.opacity(0.3), lineWidth: 1))
+                        )
+                }
+                .buttonStyle(.plain)
+
                 Button(intent: LogSmokeIntent(smokeType: "Cigarette")) {
-                    HStack(spacing: 4) {
-                        Text("🚬")
-                            .font(.system(size: 12))
-                        Text("+1 Cigarette")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 36)
-                    .foregroundColor(accentPink)
-                    .background(
-                        Capsule()
-                            .fill(accentPink.opacity(0.14))
-                            .overlay(Capsule().strokeBorder(accentPink.opacity(0.3), lineWidth: 1))
-                    )
+                    Text("Cig")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .foregroundColor(WidgetColors.accentRed)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentRed.opacity(0.15))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentRed.opacity(0.3), lineWidth: 1))
+                        )
                 }
                 .buttonStyle(.plain)
 
                 Button(intent: LogSmokeIntent(smokeType: "Heated")) {
-                    HStack(spacing: 4) {
-                        Text("💨")
-                            .font(.system(size: 12))
-                        Text("+1 Heated")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 36)
-                    .foregroundColor(accentCyan)
-                    .background(
-                        Capsule()
-                            .fill(accentCyan.opacity(0.14))
-                            .overlay(Capsule().strokeBorder(accentCyan.opacity(0.3), lineWidth: 1))
-                    )
+                    Text("Heat")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .foregroundColor(WidgetColors.accentBlue)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentBlue.opacity(0.15))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentBlue.opacity(0.3), lineWidth: 1))
+                        )
                 }
                 .buttonStyle(.plain)
             }
@@ -441,7 +497,7 @@ public struct SmokesWidgetView: View {
     private var accessoryCircularView: some View {
         ZStack {
             AccessoryWidgetBackground()
-            WidgetLungsShape()
+            WidgetVectorLungsShape()
                 .fill(Color.white)
                 .frame(width: 20, height: 20)
             VStack {
@@ -470,7 +526,7 @@ public struct SmokesWidget: Widget {
             SmokesWidgetView(entry: entry)
         }
         .configurationDisplayName("Smokes (Lungs & Intake)")
-        .description("Track daily cigarettes and heated tobacco with instant quick logging.")
+        .description("Track daily cigarettes, heated tobacco, rolled and cigarillos with instant quick logging.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryCircular, .accessoryInline])
     }
 }

@@ -22,7 +22,9 @@ public struct BubblesTimelineProvider: TimelineProvider {
                 goalMl: 2000,
                 progressPercent: 0.625,
                 waterMl: 1150,
-                coffeeMl: 100
+                coffeeMl: 100,
+                teaMl: 0,
+                drinkBreakdown: [("Water", 1150, "#00E5FF"), ("Coffee", 100, "#F59E0B")]
             )
         )
     }
@@ -42,18 +44,68 @@ public struct BubblesTimelineProvider: TimelineProvider {
     }
 }
 
+// MARK: - Multi-Drink Stratified Arc Ring
+struct BubblesMultiDrinkArcRing: View {
+    let todayMl: Double
+    let goalMl: Double
+    let breakdown: [(name: String, amount: Double, hexColor: String)]
+    let lineWidth: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.08), lineWidth: lineWidth)
+            
+            let safeGoal = max(goalMl, 1.0)
+            if breakdown.isEmpty {
+                let progress = min(max(todayMl / safeGoal, 0.0), 1.0)
+                Circle()
+                    .trim(from: 0, to: max(0.03, progress))
+                    .stroke(
+                        LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentGreen], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+            } else {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
+                    Circle()
+                        .trim(from: seg.start, to: seg.end)
+                        .stroke(
+                            seg.color,
+                            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                }
+            }
+        }
+    }
+
+    private struct Segment {
+        let start: CGFloat
+        let end: CGFloat
+        let color: Color
+    }
+
+    private var segments: [Segment] {
+        let safeGoal = max(goalMl, 1.0)
+        var running = 0.0
+        var res: [Segment] = []
+        for item in breakdown {
+            let start = running / safeGoal
+            let end = min((running + item.amount) / safeGoal, 1.0)
+            if end > start {
+                res.append(Segment(start: CGFloat(start), end: CGFloat(end), color: Color(hex: item.hexColor)))
+                running += item.amount
+            }
+        }
+        return res
+    }
+}
+
+// MARK: - Main Bubbles Widget View
 public struct BubblesWidgetView: View {
     public let entry: BubblesEntry
     @Environment(\.widgetFamily) var family
-
-    private let accentCyan = Color(red: 0.0, green: 0.9, blue: 1.0)
-    private let accentGreen = Color(red: 0.0, green: 0.9, blue: 0.46)
-    private let coffeeColor = Color(red: 0.84, green: 0.65, blue: 0.45)
-    private let bgGradient = LinearGradient(
-        colors: [Color(red: 0.05, green: 0.03, blue: 0.08), Color(red: 0.10, green: 0.07, blue: 0.16)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
 
     public var body: some View {
         Group {
@@ -72,182 +124,226 @@ public struct BubblesWidgetView: View {
                 mediumView
             }
         }
-        .containerBackground(bgGradient, for: .widget)
+        .containerBackground(WidgetColors.bgGradient, for: .widget)
+        .widgetURL(URL(string: "daily://habits/bubbles"))
     }
 
     // MARK: - Small (1x1)
     private var smallView: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                HStack(spacing: 4) {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(accentCyan)
-                    Text("Bubbles")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                Spacer()
-                Text("\(Int(entry.snapshot.progressPercent * 100))%")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundColor(accentCyan)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(accentCyan.opacity(0.16))
-                    .clipShape(Capsule())
-            }
-
-            Spacer(minLength: 0)
-
-            // Circular Ring with Center Amount
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.08), lineWidth: 8)
-                Circle()
-                    .trim(from: 0, to: max(0.02, min(entry.snapshot.progressPercent, 1.0)))
-                    .stroke(
-                        LinearGradient(colors: [accentCyan, accentGreen], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+        VStack(spacing: 8) {
+            // Top Section: Left Circle Hero + Right Icon & Percentage
+            HStack(alignment: .center, spacing: 10) {
+                // Circle Hero on Left
+                ZStack {
+                    BubblesMultiDrinkArcRing(
+                        todayMl: entry.snapshot.todayMl,
+                        goalMl: entry.snapshot.goalMl,
+                        breakdown: entry.snapshot.drinkBreakdown,
+                        lineWidth: 7
                     )
-                    .rotationEffect(.degrees(-90))
+                    VStack(spacing: 0) {
+                        Text("\(Int(entry.snapshot.todayMl))")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        Text("ml")
+                            .font(.system(size: 8.5, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.5))
+                    }
+                }
+                .frame(width: 66, height: 66)
 
-                VStack(spacing: 1) {
-                    Text("\(Int(entry.snapshot.todayMl))")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Text("ml")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.5))
+                Spacer(minLength: 2)
+
+                // Right: Icon + Percentage Pill
+                VStack(alignment: .trailing, spacing: 6) {
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(WidgetColors.accentCyan)
+
+                    Text("\(Int(entry.snapshot.progressPercent * 100))%")
+                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                        .foregroundColor(WidgetColors.accentCyan)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(WidgetColors.accentCyan.opacity(0.14))
+                        .clipShape(Capsule())
                 }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 64)
 
             Spacer(minLength: 0)
 
-            // Quick Interactive Button (+150ml)
-            Button(intent: LogWaterIntent(amountMl: 150, drinkType: "Water")) {
-                HStack(spacing: 3) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 9, weight: .bold))
-                    Text("150 ml")
+            // Bottom 3 Quick Action Buttons: 300 (Water), 150 (Water), 100 (Coffee)
+            HStack(spacing: 4) {
+                Button(intent: LogWaterIntent(amountMl: 300, drinkType: "Water")) {
+                    Text("300")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 26)
+                        .foregroundColor(WidgetColors.accentCyan)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentCyan.opacity(0.14))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.28), lineWidth: 1))
+                        )
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 26)
-                .foregroundColor(accentCyan)
-                .background(
-                    Capsule()
-                        .fill(accentCyan.opacity(0.14))
-                        .overlay(Capsule().strokeBorder(accentCyan.opacity(0.3), lineWidth: 1))
-                )
+                .buttonStyle(.plain)
+
+                Button(intent: LogWaterIntent(amountMl: 150, drinkType: "Water")) {
+                    Text("150")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 26)
+                        .foregroundColor(WidgetColors.accentCyan)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentCyan.opacity(0.14))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.28), lineWidth: 1))
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Button(intent: LogWaterIntent(amountMl: 100, drinkType: "Coffee")) {
+                    Text("100")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 26)
+                        .foregroundColor(WidgetColors.coffeeYellow)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.coffeeYellow.opacity(0.14))
+                                .overlay(Capsule().strokeBorder(WidgetColors.coffeeYellow.opacity(0.28), lineWidth: 1))
+                        )
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
     // MARK: - Medium (2x1)
     private var mediumView: some View {
         HStack(spacing: 14) {
-            // Left: Circular Ring Hero
+            // Left: Large Multi-Color Circle Hero (spans top to bottom)
             ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.08), lineWidth: 9)
-                Circle()
-                    .trim(from: 0, to: max(0.02, min(entry.snapshot.progressPercent, 1.0)))
-                    .stroke(
-                        LinearGradient(colors: [accentCyan, accentGreen], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        style: StrokeStyle(lineWidth: 9, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
+                BubblesMultiDrinkArcRing(
+                    todayMl: entry.snapshot.todayMl,
+                    goalMl: entry.snapshot.goalMl,
+                    breakdown: entry.snapshot.drinkBreakdown,
+                    lineWidth: 9
+                )
 
-                VStack(spacing: 2) {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(accentCyan)
-                    Text("\(Int(entry.snapshot.progressPercent * 100))%")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                VStack(spacing: 1) {
+                    Text("\(Int(entry.snapshot.todayMl))")
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text("of \(Int(entry.snapshot.goalMl)) ml")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.5))
                 }
             }
-            .frame(width: 82, height: 82)
+            .frame(width: 86, height: 86)
 
-            // Right: Telemetry & 3 Interactive Buttons
+            // Right: Header (Percent + Icon), Liquid Breakdown, and 2x2 Buttons Grid
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Bubbles")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
+                // Top Row: Percentage on left, Icon on right (No text title)
+                HStack(alignment: .center) {
+                    Text("\(Int(entry.snapshot.progressPercent * 100))%")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(WidgetColors.accentCyan)
+                    
                     Spacer()
-                    Text("\(Int(entry.snapshot.todayMl)) / \(Int(entry.snapshot.goalMl)) ml")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundColor(Color.white.opacity(0.65))
+
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(WidgetColors.accentCyan)
                 }
 
-                // Drink breakdown pills
-                HStack(spacing: 6) {
-                    HStack(spacing: 3) {
-                        Circle().fill(accentCyan).frame(width: 5, height: 5)
+                // Breakdown by liquid types (color-coded, no icons, in order of importance)
+                HStack(spacing: 8) {
+                    if !entry.snapshot.drinkBreakdown.isEmpty {
+                        ForEach(entry.snapshot.drinkBreakdown.prefix(3), id: \.name) { item in
+                            Text("\(Int(item.amount)) ml")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundColor(Color(hex: item.hexColor))
+                        }
+                    } else {
                         Text("\(Int(entry.snapshot.waterMl)) ml")
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .foregroundColor(accentCyan)
-                    }
-                    Text("·").foregroundColor(Color.white.opacity(0.3))
-                    HStack(spacing: 3) {
-                        Circle().fill(coffeeColor).frame(width: 5, height: 5)
-                        Text("\(Int(entry.snapshot.coffeeMl)) ml ☕")
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .foregroundColor(coffeeColor)
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentCyan)
+                        if entry.snapshot.coffeeMl > 0 {
+                            Text("\(Int(entry.snapshot.coffeeMl)) ml")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.coffeeYellow)
+                        }
                     }
                 }
 
                 Spacer(minLength: 2)
 
-                // 3 Interactive Buttons Row
-                HStack(spacing: 6) {
-                    Button(intent: LogWaterIntent(amountMl: 150, drinkType: "Water")) {
-                        Text("+150")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 28)
-                            .foregroundColor(accentCyan)
-                            .background(
-                                Capsule()
-                                    .fill(accentCyan.opacity(0.14))
-                                    .overlay(Capsule().strokeBorder(accentCyan.opacity(0.3), lineWidth: 1))
-                            )
-                    }
-                    .buttonStyle(.plain)
+                // 2x2 Interactive Action Buttons Grid (Simple numbers, color-coded)
+                VStack(spacing: 4) {
+                    HStack(spacing: 6) {
+                        Button(intent: LogWaterIntent(amountMl: 300, drinkType: "Water")) {
+                            Text("300")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 24)
+                                .foregroundColor(WidgetColors.accentCyan)
+                                .background(
+                                    Capsule()
+                                        .fill(WidgetColors.accentCyan.opacity(0.14))
+                                        .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.28), lineWidth: 1))
+                                )
+                        }
+                        .buttonStyle(.plain)
 
-                    Button(intent: LogWaterIntent(amountMl: 300, drinkType: "Water")) {
-                        Text("+300")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 28)
-                            .foregroundColor(accentGreen)
-                            .background(
-                                Capsule()
-                                    .fill(accentGreen.opacity(0.14))
-                                    .overlay(Capsule().strokeBorder(accentGreen.opacity(0.3), lineWidth: 1))
-                            )
+                        Button(intent: LogWaterIntent(amountMl: 150, drinkType: "Water")) {
+                            Text("150")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 24)
+                                .foregroundColor(WidgetColors.accentCyan)
+                                .background(
+                                    Capsule()
+                                        .fill(WidgetColors.accentCyan.opacity(0.14))
+                                        .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.28), lineWidth: 1))
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
 
-                    Button(intent: LogWaterIntent(amountMl: 100, drinkType: "Coffee")) {
-                        Text("+100 ☕")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 28)
-                            .foregroundColor(coffeeColor)
-                            .background(
-                                Capsule()
-                                    .fill(coffeeColor.opacity(0.14))
-                                    .overlay(Capsule().strokeBorder(coffeeColor.opacity(0.3), lineWidth: 1))
-                            )
+                    HStack(spacing: 6) {
+                        Button(intent: LogWaterIntent(amountMl: 100, drinkType: "Coffee")) {
+                            Text("100")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 24)
+                                .foregroundColor(WidgetColors.coffeeYellow)
+                                .background(
+                                    Capsule()
+                                        .fill(WidgetColors.coffeeYellow.opacity(0.14))
+                                        .overlay(Capsule().strokeBorder(WidgetColors.coffeeYellow.opacity(0.28), lineWidth: 1))
+                                )
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(intent: LogWaterIntent(amountMl: 200, drinkType: "Tea")) {
+                            Text("200")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 24)
+                                .foregroundColor(WidgetColors.teaLime)
+                                .background(
+                                    Capsule()
+                                        .fill(WidgetColors.teaLime.opacity(0.14))
+                                        .overlay(Capsule().strokeBorder(WidgetColors.teaLime.opacity(0.28), lineWidth: 1))
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -256,33 +352,39 @@ public struct BubblesWidgetView: View {
     // MARK: - Large (2x2)
     private var largeView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header
+            // Header: Large Icon + Percentage Badge
             HStack {
-                Label("Bubbles & Hydration", systemImage: "drop.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(accentCyan)
+                if #available(iOS 17.0, *) {
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(WidgetColors.accentCyan)
+                        .symbolEffect(.pulse)
+                } else {
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(WidgetColors.accentCyan)
+                }
+
                 Spacer()
-                Text("\(Int(entry.snapshot.progressPercent * 100))% Done")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(accentGreen)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(accentGreen.opacity(0.14))
+
+                Text("\(Int(entry.snapshot.progressPercent * 100))% Goal")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundColor(WidgetColors.accentGreen)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(WidgetColors.accentGreen.opacity(0.14))
                     .clipShape(Capsule())
             }
 
-            // Hero Gauge & Key Stats
+            // Hero Gauge & Detailed Breakdown
             HStack(spacing: 16) {
                 ZStack {
-                    Circle()
-                        .stroke(Color.white.opacity(0.08), lineWidth: 10)
-                    Circle()
-                        .trim(from: 0, to: max(0.02, min(entry.snapshot.progressPercent, 1.0)))
-                        .stroke(
-                            LinearGradient(colors: [accentCyan, accentGreen], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            style: StrokeStyle(lineWidth: 10, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
+                    BubblesMultiDrinkArcRing(
+                        todayMl: entry.snapshot.todayMl,
+                        goalMl: entry.snapshot.goalMl,
+                        breakdown: entry.snapshot.drinkBreakdown,
+                        lineWidth: 12
+                    )
 
                     VStack(spacing: 2) {
                         Text("\(Int(entry.snapshot.todayMl))")
@@ -296,91 +398,101 @@ public struct BubblesWidgetView: View {
                 .frame(width: 108, height: 108)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("WATER")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(Color.white.opacity(0.45))
-                        Text("\(Int(entry.snapshot.waterMl)) ml")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundColor(accentCyan)
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("COFFEE & LIQUIDS")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(Color.white.opacity(0.45))
-                        Text("\(Int(entry.snapshot.coffeeMl)) ml ☕")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundColor(coffeeColor)
+                    if !entry.snapshot.drinkBreakdown.isEmpty {
+                        ForEach(entry.snapshot.drinkBreakdown.prefix(3), id: \.name) { item in
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(item.name.uppercased())
+                                    .font(.system(size: 8.5, weight: .bold))
+                                    .foregroundColor(Color.white.opacity(0.45))
+                                Text("\(Int(item.amount)) ml")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundColor(Color(hex: item.hexColor))
+                            }
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("WATER")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(Color.white.opacity(0.45))
+                            Text("\(Int(entry.snapshot.waterMl)) ml")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.accentCyan)
+                        }
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("COFFEE")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(Color.white.opacity(0.45))
+                            Text("\(Int(entry.snapshot.coffeeMl)) ml")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.coffeeYellow)
+                        }
                     }
 
                     let remaining = max(0, entry.snapshot.goalMl - entry.snapshot.todayMl)
-                    Text(remaining > 0 ? "\(Int(remaining)) ml to goal" : "🎉 Goal completed!")
+                    Text(remaining > 0 ? "\(Int(remaining)) ml remaining" : "Goal completed 🎉")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(remaining > 0 ? Color.white.opacity(0.7) : accentGreen)
+                        .foregroundColor(remaining > 0 ? Color.white.opacity(0.65) : WidgetColors.accentGreen)
                 }
             }
 
             Divider()
                 .background(Color.white.opacity(0.12))
 
-            Text("QUICK LOG")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(Color.white.opacity(0.45))
-
-            // Full interactive action bar
+            // Quick Logging Grid (2x2 / Row)
             HStack(spacing: 8) {
-                Button(intent: LogWaterIntent(amountMl: 150, drinkType: "Water")) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "drop")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("150 ml")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 36)
-                    .foregroundColor(accentCyan)
-                    .background(
-                        Capsule()
-                            .fill(accentCyan.opacity(0.14))
-                            .overlay(Capsule().strokeBorder(accentCyan.opacity(0.3), lineWidth: 1))
-                    )
+                Button(intent: LogWaterIntent(amountMl: 300, drinkType: "Water")) {
+                    Text("300")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .foregroundColor(WidgetColors.accentCyan)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentCyan.opacity(0.14))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.28), lineWidth: 1))
+                        )
                 }
                 .buttonStyle(.plain)
 
-                Button(intent: LogWaterIntent(amountMl: 300, drinkType: "Water")) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "drop.fill")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("300 ml")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 36)
-                    .foregroundColor(accentGreen)
-                    .background(
-                        Capsule()
-                            .fill(accentGreen.opacity(0.14))
-                            .overlay(Capsule().strokeBorder(accentGreen.opacity(0.3), lineWidth: 1))
-                    )
+                Button(intent: LogWaterIntent(amountMl: 150, drinkType: "Water")) {
+                    Text("150")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .foregroundColor(WidgetColors.accentCyan)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.accentCyan.opacity(0.14))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentCyan.opacity(0.28), lineWidth: 1))
+                        )
                 }
                 .buttonStyle(.plain)
 
                 Button(intent: LogWaterIntent(amountMl: 100, drinkType: "Coffee")) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "cup.and.saucer.fill")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("100 ml ☕")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 36)
-                    .foregroundColor(coffeeColor)
-                    .background(
-                        Capsule()
-                            .fill(coffeeColor.opacity(0.14))
-                            .overlay(Capsule().strokeBorder(coffeeColor.opacity(0.3), lineWidth: 1))
-                    )
+                    Text("100")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .foregroundColor(WidgetColors.coffeeYellow)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.coffeeYellow.opacity(0.14))
+                                .overlay(Capsule().strokeBorder(WidgetColors.coffeeYellow.opacity(0.28), lineWidth: 1))
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Button(intent: LogWaterIntent(amountMl: 200, drinkType: "Tea")) {
+                    Text("200")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .foregroundColor(WidgetColors.teaLime)
+                        .background(
+                            Capsule()
+                                .fill(WidgetColors.teaLime.opacity(0.14))
+                                .overlay(Capsule().strokeBorder(WidgetColors.teaLime.opacity(0.28), lineWidth: 1))
+                        )
                 }
                 .buttonStyle(.plain)
             }
@@ -422,7 +534,7 @@ public struct BubblesWidget: Widget {
             BubblesWidgetView(entry: entry)
         }
         .configurationDisplayName("Bubbles (Hydration)")
-        .description("Track daily water and coffee with instant interactive logging.")
+        .description("Track daily water, coffee, and hydration with instant interactive logging.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryCircular, .accessoryInline])
     }
 }

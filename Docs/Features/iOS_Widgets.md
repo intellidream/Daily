@@ -9,14 +9,21 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 - **Supported Families**:
   - Home Screen: Small (1x1), Medium (2x1), Large (2x2)
   - Lock Screen: Accessory Circular, Accessory Inline
+- **Deep Linking**:
+  - Tapping opens the app directly into Habits Hub with Bubbles selected (`daily://habits/bubbles`).
 - **Visuals**:
-  - Gradient ring gauge (`#00E5FF` Cyan to `#00E676` Green) tracking daily ml intake against the user's custom daily water goal.
-  - Telemetry breakdown showing total water volume (`ml`) and coffee volume (`ml ☕`).
+  - Header text ("Bubbles") removed; sleek icon-centric presentation.
+  - Multi-liquid circular arc gauge (`BubblesMultiDrinkArcRing`) on the left spanning vertically top-to-bottom, rendering proportional colored segments:
+    - Water: Cyan (`#00E5FF`)
+    - Coffee: Amber (`#FF9F0A`)
+    - Tea: Lime (`#30D158`)
+  - Total ml displayed prominently inside the circle.
+  - Right section shows water drop icon and completion percentage.
+  - Medium widget includes a colored breakdown list by drink type without repetitive icons.
 - **Interactive Quick-Logging**:
   - Zero-app-open instant logging via `LogWaterIntent`:
-    - **`+150 ml`** (Water)
-    - **`+300 ml`** (Water)
-    - **`+100 ml`** (Coffee ☕)
+    - **Small (1x1)**: 3 compact buttons strictly showing numbers: **`300`** (water), **`150`** (water), **`100`** (coffee).
+    - **Medium (2x1)**: 2x2 grid of 4 buttons: **`300`**, **`150`**, **`100`**, **`200`** (tea).
   - Updates local App Group aggregates in 0ms and triggers timeline reload via `WidgetCenter`.
 
 ---
@@ -25,17 +32,22 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 - **Supported Families**:
   - Home Screen: Small (1x1), Medium (2x1), Large (2x2)
   - Lock Screen: Accessory Circular, Accessory Inline
+- **Deep Linking**:
+  - Tapping opens the app directly into Habits Hub with Smokes selected (`daily://habits/smokes`).
 - **Visuals**:
-  - Custom vector anatomical lungs silhouette (`WidgetLungsShape`) centered within a dynamic color ring.
-  - Adaptive color states:
-    - **Clean Green (`#00E676`)**: 0 smokes logged today.
-    - **Progress Cyan (`#00E5FF`)**: Smokes logged below daily baseline cap.
-    - **Warning Pink (`#FF2D55`)**: Smokes logged exceeding baseline limit.
-  - Telemetry: Current count, time elapsed since last logged smoke (e.g. `2h 15m ago`), daily financial expenditure estimation in Lei, and cigarettes vs. heated tobacco breakdown.
+  - Header text ("Smokes") removed.
+  - Custom vector anatomical lungs silhouette (`WidgetVectorLungsShape` + `WidgetVectorLungsBronchiShape`) centered within an outer progress ring.
+  - Dynamic lung health color transitioning based on logged smokes today:
+    - **Healthy Pink (`#FF6B8B`)**: 0 smokes.
+    - **Dusky Rose (`#D45D79`)**: 1–5 smokes.
+    - **Sickly Ashen Gray (`#8A7D7D`)**: 6–10 smokes.
+    - **Dark Charcoal (`#3A3A3C`)**: 11+ smokes.
+  - Total count displayed cleanly under the lungs inside the hero circle.
+  - Right section displays `flame.fill` icon, compact daily baseline (e.g. `40 base`), and compact elapsed time (`XXs`/`YYm`/`ZZh`).
 - **Interactive Quick-Logging**:
   - Zero-app-open instant logging via `LogSmokeIntent`:
-    - **`+1 Cig 🚬`** (Cigarette)
-    - **`+1 Heat 💨`** (Heated Tobacco)
+    - **Small (1x1)**: 2 compact buttons: **`Cig`** (red) and **`Heat`** (blue).
+    - **Medium (2x1)**: 2x2 grid of 4 buttons: **`Cgr`** (purple), **`Rol`** (orange), **`Cig`** (red), **`Heat`** (blue).
   - *Abstinence logging is explicitly excluded to keep tracking focused, streamlined, and friction-free.*
 
 ---
@@ -44,18 +56,18 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 - **Supported Families**:
   - Home Screen: Small (1x1), Medium (2x1), Large (2x2)
   - Lock Screen: Accessory Rectangular
+- **Deep Linking**:
+  - Tapping opens the app directly into Finances Hub with Money selected (`daily://finances/money`).
 - **Visuals**:
-  - Prominent Net Worth in Lei with currency conversion badge in EUR (live sync with BNR rates).
-  - Three-column financial overview:
-    - **Net Worth**: Total accumulated wealth.
-    - **Flow**: Monthly Incoming vs Outgoing totals.
-    - **Liquid**: Available card and cash liquidity breakdown (`Crd` & `Csh`).
-  - Large widget includes ranked capsules of the top outgoing budget allocations.
+  - Top header: **`NET WORTH`** caption in upper left, green wallet icon in upper right.
+  - Prominent Net Worth in Lei in large white typography with live EUR conversion badge below (synced with BNR rates).
+  - Compact liquidity breakdown (`Crd 15.1K · Csh 900`).
+  - Medium widget displays three structured columns: Net Worth, Flow In/Out, and Liquid breakdown.
+  - Large widget includes ranked capsules of the top outgoing budget allocations and full ledger summary.
 - **Interactive Quick Adjustments**:
   - Zero-app-open ledger balance adjustment via `AdjustLedgerIntent`:
-    - **`-50 Crd`** (Quick -50 on Card balance)
-    - **`-50 Csh`** (Quick -50 on Cash balance)
-    - **`+100 Crd`** (Quick +100 on Card balance)
+    - **Small (1x1)**: **`-50 Crd`** and **`+100 Crd`**.
+    - **Medium (2x1)**: **`-50 Crd`**, **`-50 Csh`**, and **`+100 Crd`**.
   - Adjusts raw SmartLedger syntax in App Group storage, recalculates balances, and broadcasts widget timeline reload.
 
 ---

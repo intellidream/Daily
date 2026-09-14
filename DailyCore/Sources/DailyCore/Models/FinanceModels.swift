@@ -1,5 +1,22 @@
 import Foundation
 
+/// Sub-tabs within the Finance Hub.
+public enum FinanceSubTab: String, CaseIterable, Codable, Sendable, Identifiable {
+    case money = "Money"
+    case stocks = "Stocks"
+    case world = "World"
+    
+    public var id: String { rawValue }
+    
+    public var iconName: String {
+        switch self {
+        case .money: return "wallet.bifold.fill"
+        case .stocks: return "chart.line.uptrend.xyaxis"
+        case .world: return "globe.americas.fill"
+        }
+    }
+}
+
 /// Type of financial ledger account.
 public enum AccountType: String, Codable, CaseIterable, Sendable {
     case checking

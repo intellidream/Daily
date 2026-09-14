@@ -44,7 +44,17 @@ public struct LogSmokeIntent: AppIntent {
     }
 
     public func perform() async throws -> some IntentResult {
-        let preset: SmokePreset = smokeType.lowercased().contains("heat") ? .heated : .cigarette
+        let lower = smokeType.lowercased()
+        let preset: SmokePreset
+        if lower.contains("heat") {
+            preset = .heated
+        } else if lower.contains("cgr") || lower.contains("cigar") {
+            preset = .cigarillo
+        } else if lower.contains("rol") {
+            preset = .rolled
+        } else {
+            preset = .cigarette
+        }
         WidgetDataCoordinator.shared.logSmoke(preset: preset)
         return .result()
     }
