@@ -151,23 +151,24 @@ public struct RootView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .simultaneousGesture(
-                            DragGesture(minimumDistance: 20, coordinateSpace: .global)
-                                .onEnded { value in
-                                    guard selectedTab != .dashboard else { return }
-                                    let startX = value.startLocation.x
-                                    let translationX = value.translation.width
-                                    let translationY = value.translation.height
-                                    
-                                    // Edge swipe right: started within 50pt of left edge, dragged right > 60pt, horizontally dominant
-                                    if startX <= 50 && translationX > 60 && abs(translationX) > abs(translationY) * 1.3 {
-                                        #if canImport(UIKit)
-                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                        #endif
-                                        navigateToDashboard()
+                        .applyIf(selectedTab != .dashboard) { view in
+                            view.simultaneousGesture(
+                                DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                                    .onEnded { value in
+                                        let startX = value.startLocation.x
+                                        let translationX = value.translation.width
+                                        let translationY = value.translation.height
+                                        
+                                        // Edge swipe right: started within 50pt of left edge, dragged right > 60pt, horizontally dominant
+                                        if startX <= 50 && translationX > 60 && abs(translationX) > abs(translationY) * 1.3 {
+                                            #if canImport(UIKit)
+                                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                            #endif
+                                            navigateToDashboard()
+                                        }
                                     }
-                                }
-                        )
+                            )
+                        }
                         
                         // Floating Liquid Glass Navigation Capsule
                         FloatingGlassCapsule(selectedTab: $selectedTab)
@@ -201,6 +202,17 @@ public struct RootView: View {
     private func navigateToDashboard() {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
             selectedTab = .dashboard
+        }
+    }
+}
+
+fileprivate extension View {
+    @ViewBuilder
+    func applyIf<T: View>(_ condition: Bool, transform: (Self) -> T) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
         }
     }
 }

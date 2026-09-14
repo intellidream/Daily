@@ -33,7 +33,7 @@ public struct WeatherDashboardCard: View {
                     largeContent
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .dashboardCardFrame(for: size)
         }
         .buttonStyle(.plain)
     }
@@ -84,9 +84,20 @@ public struct WeatherDashboardCard: View {
                     .foregroundColor(.white)
                     .lineLimit(1)
 
-                Text("H: \(tempMax)° · L: \(tempMin)°")
-                    .font(.system(size: 10, weight: .regular))
-                    .foregroundColor(ThemeColors.fgMutedDark)
+                HStack(spacing: 4) {
+                    Text("H: \(tempMax)° · L: \(tempMin)°")
+                        .font(.system(size: 10, weight: .regular))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                    Spacer()
+                    HStack(spacing: 2) {
+                        Image(systemName: "drop.fill")
+                            .font(.system(size: 7))
+                            .foregroundColor(ThemeColors.accentCyan)
+                        Text("\(weather.main.humidity)%")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                }
             } else if weatherService.isLoading {
                 ProgressView()
                     .tint(ThemeColors.accentCyan)
@@ -384,32 +395,31 @@ public struct WeatherDashboardCard: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(ThemeColors.fgMutedDark)
 
-                    let hourlyItems = Array(weatherService.hourlyForecasts.prefix(6))
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(hourlyItems) { item in
-                                let hour = formatHour(from: item.dtTxt ?? "")
-                                let icon = WeatherConditionHelper.sfSymbol(for: item.weather.first?.icon ?? "01d")
-                                let t = Int(round(item.main.temp))
+                    let hourlyItems = Array(weatherService.hourlyForecasts.prefix(5))
+                    HStack(spacing: 8) {
+                        ForEach(hourlyItems) { item in
+                            let hour = formatHour(from: item.dtTxt ?? "")
+                            let icon = WeatherConditionHelper.sfSymbol(for: item.weather.first?.icon ?? "01d")
+                            let t = Int(round(item.main.temp))
 
-                                VStack(spacing: 6) {
-                                    Text(hour)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(ThemeColors.fgMutedDark)
-                                    
-                                    Image(systemName: icon)
-                                        .renderingMode(.original)
-                                        .font(.system(size: 16))
-                                    
-                                    Text("\(t)°")
-                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                        .foregroundColor(.white)
-                                }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 10)
-                                .background(Color.white.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            VStack(spacing: 6) {
+                                Text(hour)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
+                                
+                                Image(systemName: icon)
+                                    .renderingMode(.original)
+                                    .font(.system(size: 16))
+                                
+                                Text("\(t)°")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white)
                             }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 4)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                     }
                 }

@@ -16,40 +16,47 @@ Prior to this implementation, the iOS dashboard presented a rigid, vertical stac
 
 ---
 
-## 2. Standardized Modular Grid Architecture (`ModularDashboardLayout`)
+## 2. Standardized Modular Grid Architecture & 120Hz ProMotion Engine
 
-Implemented as a custom SwiftUI `Layout` (`ModularDashboardLayout: Layout`), introduced natively in iOS 16+:
+### 2.1 The 4 Real Root Causes of 120Hz ProMotion Jitter
+A deep profiling analysis on iPhone 16 Pro (`D93AP`, 120Hz ProMotion display) identified four distinct issues that compounded into severe scrolling tremor and layout defects:
 
-### 2.1 Closed-Form Deterministic Sizing (Apple WidgetKit & WinUI 3 Model)
-Following Apple WidgetKit and WinUI 3 `VariableSizedWrapGrid` standards, the layout uses a closed-form geometric grid with a standardized unit height:
-```
-Standard Unit Height (H_unit): 155 pt
-Grid Spacing (S): 14 pt
-Columns: 2
+1. **Width Cache Thrashing Loop (`ModularDashboardLayout`)**:
+   - In `ModularDashboardLayout.swift`, the fallback width was hardcoded to `proposal.width ?? 353`.
+   - On the iPhone 16 Pro, the screen width is $402\text{ pt}$ ($1206\text{ px}$ @ 3x) and content width is $362\text{ pt}$ ($402 - 40$).
+   - When `ScrollView` called `sizeThatFits` with an unconstrained proposal, the layout computed row positions based on $353\text{ pt}$. During `placeSubviews`, it received $362\text{ pt}$. Because the delta ($9\text{ pt} > 0.5\text{ pt}$) invalidated the layout cache on every single scroll frame, SwiftUI was forced to reconstruct subviews 120 times per second during momentum scrolling.
 
-Cell Sizing Formulations:
-  - Small (1x1): W_col x 155 pt (~169 x 155 pt on iPhone 16 Pro)
-  - Wide  (2x1): W_full x 155 pt (~353 x 155 pt)
-  - Tall  (1x2): W_col x (2 * 155 + 14) = W_col x 324 pt (~169 x 324 pt)
-  - Large (2x2): W_full x (2 * 155 + 14) = W_full x 324 pt (~353 x 324 pt)
+2. **Custom `Layout` Protocol vs. Hardware CoreAnimation Stacks**:
+   - SwiftUI's `Layout` protocol performs CPU-side subview placement on every scroll tick when nested in `ScrollView`, preventing CoreAnimation from optimizing display layers into GPU compositing batches.
 
-Row Height Formula for Row r:
-  rowHeight[r] = 155 pt (constant across all rows)
+3. **Rigid 155pt Unit Height on Wide Cards (Dead Space)**:
+   - Forcing Wide cards (like Health & Vitals, Habits) to expand to $155\text{ pt}$ when their content naturally requires only $95\text{–}110\text{ pt}$ created huge 60–70pt empty black voids inside the cards.
+   - Because Wide cards span both columns and never share rows with other cards, they should hug their content naturally (`maxWidth: .infinity`), while Small ($155\text{ pt}$) and Tall/Large ($324\text{ pt}$) maintain geometric standardization.
 
-Total Content Height Formula:
-  TotalHeight = (TotalRows * 155) + max(0, TotalRows - 1) * 14
-```
+4. **Sequential Non-Coalesced Grid Allocation (Sparse Grid Holes)**:
+   - In sequential packing, placing a Small card followed by a Wide card caused the second column of that row to remain completely empty, producing awkward asymmetric gaps.
 
-### 2.2 Why Dynamic Subview Measurement was Eliminated (Root Cause of 120Hz Jitter)
-- **The Issue**: Earlier iterations queried `subviews.sizeThatFits(ProposedViewSize(width: w, height: nil))` on subviews during layout. When cards contained flexible containers (such as `Spacer()` or `.frame(maxHeight: .infinity)`), SwiftUI measured them collapsed in the measurement pass, then expanded them in the placement pass.
-- **The Oscillation Loop**: At 120Hz Apple ProMotion scrolling, SwiftUI re-triggered layout passes. Spacers that had expanded were re-measured with unconstrained heights, causing `rowHeights` and `totalHeight` to bounce back and forth by 1–4 points on alternate animation frames. `UIScrollView` continuously adjusted its content offset to compensate, resulting in visible vertical jitter/tremor.
-- **The Solution**: Eliminating all `sizeThatFits(height: nil)` subview queries. Grid cell bounds are computed in closed form directly from `(columnSpan, rowSpan)` and `bounds.width`. Views are placed with exact concrete dimensions `ProposedViewSize(width: itemWidth, height: itemHeight)`.
-- **Card View Architecture**: All widget cards (`WeatherDashboardCard`, `NewsDashboardCard`, `HealthDashboardCard`, `HabitsDashboardCard`, `FinancesDashboardCard`) use `.frame(maxWidth: .infinity, maxHeight: .infinity)` to fill their allocated grid cell cleanly.
+5. **Nested Gesture Recognizer Arbitration**:
+   - A nested horizontal `ScrollView` in Weather Large and a global `DragGesture` in `RootView` were conflicting with the parent vertical `ScrollView`, triggering touch cancellation hitches and frame drops.
 
-### 2.3 ProMotion 120 FPS Performance & Deterministic Caching
-- **Layout.Cache Protocol**: Caches the matrix slot assignments (`[PlacedItem]`) and total height. The cache is updated only when `subviews.count` changes or when the container width changes (e.g. orientation rotation).
-- **Zero Scroll Overhead**: During scroll events, `sizeThatFits` and `placeSubviews` execute in $O(N)$ with zero subview measuring calls, zero dynamic allocations, and zero fractional coordinate rounding issues.
-- Coordinates and dimensions are pixel-aligned with `floor` and `ceil` routines, preventing subpixel rasterization shimmer.
+---
+
+### 2.2 Native Coalesced Row-Grid Architecture (`DashboardRowBuilder`)
+
+To resolve all issues permanently, `DashboardView` adopts a native coalesced row-grid builder (`DashboardRowBuilder`):
+1. **Dynamic Row Coalescing (`DashboardRowBuilder.buildRows(from:)`)**:
+   - Resolves incoming widget configurations into structured row layouts:
+     - `.full(config)`: For Wide and Large cards spanning the full width.
+     - `.pair(left, right)`: For two Small cards side-by-side.
+     - `.tallWithSmalls(tall, smalls)`: Pairs a Tall card ($324\text{ pt}$) with up to two Small cards ($155\text{ pt} + 14\text{ pt} + 155\text{ pt} = 324\text{ pt}$), guaranteeing zero grid holes.
+     - `.singleSmall(config)`: Graceful fallback if an isolated Small card cannot be paired.
+2. **Native Stacks for 120 FPS Fluidity**:
+   - Uses native `VStack(spacing: 14)` and `HStack(spacing: 14)`, allowing CoreAnimation to render and composite scroll content at a rock-solid 120 FPS without CPU layout thrashing.
+3. **Natural Height for Wide Cards**:
+   - Cards use `.dashboardCardFrame(for: size)`. Wide cards hug content height (`maxWidth: .infinity`), eliminating all empty voids. Small cards lock to $155\text{ pt}$, and Tall/Large cards lock to $324\text{ pt}$.
+4. **Clean Non-Conflicting Gestures**:
+   - Replaced horizontal `ScrollView` in Weather Large with a crisp 5-item `HStack(spacing: 8)`.
+   - Constrained `RootView`'s edge-swipe `DragGesture` to only activate when `selectedTab != .dashboard`.
 
 ---
 

@@ -39,7 +39,7 @@ public struct HabitsDashboardCard: View {
                 largeContent
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .dashboardCardFrame(for: size)
     }
 
     // MARK: - Small (1x1) Compact Habits Glance

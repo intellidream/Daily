@@ -28,7 +28,7 @@ public struct NewsDashboardCard: View {
                     largeContent
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .dashboardCardFrame(for: size)
         }
         .buttonStyle(.plain)
     }

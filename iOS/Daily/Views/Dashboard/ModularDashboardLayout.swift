@@ -160,7 +160,12 @@ public struct ModularDashboardLayout: Layout {
     }
     
     public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
-        let width = floor(proposal.width ?? 353)
+        #if canImport(UIKit)
+        let defaultFallbackWidth = floor(UIScreen.main.bounds.width - 40)
+        #else
+        let defaultFallbackWidth: CGFloat = 353
+        #endif
+        let width = floor(proposal.width ?? defaultFallbackWidth)
         guard width > 0 else { return .zero }
         
         if abs(cache.lastWidth - width) > 0.5 || cache.items.isEmpty {
