@@ -160,17 +160,23 @@ public struct BubblesWidgetView: View {
 
                 Spacer(minLength: 2)
 
-                // Top-Right: Percentage on left with Bubbles icon to its right
-                HStack(spacing: 3.5) {
+                // Top-Right: Percentage in a pill, with Bubbles icon underneath it (aligned flush top with progress ring)
+                VStack(alignment: .trailing, spacing: 5) {
                     Text("\(Int(entry.snapshot.progressPercent * 100))%")
-                        .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentCyan)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 5.5)
+                        .padding(.vertical, 2.5)
+                        .background(WidgetColors.accentCyan.opacity(0.15))
+                        .clipShape(Capsule())
 
                     Image(systemName: "drop.fill")
-                        .font(.system(size: 10.5, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundColor(WidgetColors.accentCyan)
+                        .padding(.trailing, 6)
                 }
-                .padding(.top, 2)
             }
 
             Spacer(minLength: 0)
