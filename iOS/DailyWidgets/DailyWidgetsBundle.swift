@@ -8,5 +8,6 @@ struct DailyWidgetsBundle: WidgetBundle {
         SmokesWidget()
         MoneyWidget()
         SleepWidget()
+        TagdosWidget()
     }
 }

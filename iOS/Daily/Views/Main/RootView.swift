@@ -4,6 +4,7 @@ import DailyCore
 public struct RootView: View {
     @ObservedObject private var authService = AuthService.shared
     @State private var selectedTab: NavigationTab = .dashboard
+    @State private var showingTagdosSheet = false
     
     public init() {
         let args = ProcessInfo.processInfo.arguments
@@ -67,6 +68,18 @@ public struct RootView: View {
             AuthService.shared.continueAsGuest()
             SettingsService.shared.update { s in
                 s.dashboardWidgets = DashboardWidgetConfig.defaultLayout
+            }
+        } else if args.contains("-testTagdosTop") {
+            AuthService.shared.continueAsGuest()
+            SettingsService.shared.update { s in
+                s.dashboardWidgets = [
+                    DashboardWidgetConfig(id: "tagdos_notes", size: .wide),
+                    DashboardWidgetConfig(id: "weather", size: .small),
+                    DashboardWidgetConfig(id: "news", size: .small),
+                    DashboardWidgetConfig(id: "health", size: .wide),
+                    DashboardWidgetConfig(id: "habits", size: .wide),
+                    DashboardWidgetConfig(id: "finances", size: .wide)
+                ]
             }
         }
     }
@@ -203,6 +216,8 @@ public struct RootView: View {
                 } else if fullPath.contains("sleep") {
                     selectedTab = .health
                     HealthDataService.shared.activeSubTab = .sleep
+                } else if fullPath.contains("tagdos") {
+                    showingTagdosSheet = true
                 } else {
                     switch fullPath {
                     case "dashboard": selectedTab = .dashboard
@@ -216,6 +231,9 @@ public struct RootView: View {
                     }
                 }
             }
+        }
+        .fullScreenCover(isPresented: $showingTagdosSheet) {
+            TagdosNotesHubView()
         }
     }
     

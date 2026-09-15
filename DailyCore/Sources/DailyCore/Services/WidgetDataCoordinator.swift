@@ -748,5 +748,28 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         }
         return SleepWidgetSnapshot.empty
     }
+    
+    // MARK: - Tagdos & Notes
+    
+    private let tagdosSnapshotKey = "daily_tagdos_widget_snapshot_v1"
+    
+    public func updateTagdosSnapshot(_ snapshot: TagdosWidgetSnapshot) {
+        if let data = try? JSONEncoder().encode(snapshot) {
+            groupDefaults.set(data, forKey: tagdosSnapshotKey)
+            UserDefaults.standard.set(data, forKey: tagdosSnapshotKey)
+        }
+        
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+    }
+    
+    public func fetchTagdosSnapshot() -> TagdosWidgetSnapshot {
+        if let data = groupDefaults.data(forKey: tagdosSnapshotKey),
+           let snapshot = try? JSONDecoder().decode(TagdosWidgetSnapshot.self, from: data) {
+            return snapshot
+        }
+        return TagdosWidgetSnapshot.empty
+    }
 }
 

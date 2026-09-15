@@ -8,6 +8,7 @@ public struct DashboardView: View {
     @ObservedObject private var settingsService = SettingsService.shared
     
     @State private var showingCustomizeSheet = false
+    @State private var showingTagdosHub = false
     
     private let onNavigateToWeather: () -> Void
     private let onNavigateToNews: () -> Void
@@ -83,6 +84,9 @@ public struct DashboardView: View {
         .sheet(isPresented: $showingCustomizeSheet) {
             CustomizeDashboardSheet()
         }
+        .fullScreenCover(isPresented: $showingTagdosHub) {
+            TagdosNotesHubView()
+        }
     }
 
     // MARK: - Row Rendering
@@ -151,6 +155,9 @@ public struct DashboardView: View {
                 .equatable()
         case DashboardWidgetType.finances.rawValue:
             FinancesDashboardCard(size: config.size, onTap: onNavigateToFinances)
+                .equatable()
+        case DashboardWidgetType.tagdosNotes.rawValue:
+            TagdosNotesDashboardCard(size: config.size, onTap: { showingTagdosHub = true })
                 .equatable()
         default:
             EmptyView()

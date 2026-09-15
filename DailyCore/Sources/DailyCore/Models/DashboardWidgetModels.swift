@@ -51,6 +51,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
     case health  = "health"
     case habits  = "habits"
     case finances = "finances"
+    case tagdosNotes = "tagdos_notes"
     
     public var title: String {
         switch self {
@@ -59,6 +60,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
         case .health:  return "Health & Vitals"
         case .habits:  return "Habits & Cravings"
         case .finances: return "Finances & Markets"
+        case .tagdosNotes: return "Tagdos & Notes"
         }
     }
     
@@ -69,6 +71,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
         case .health:  return "heart.fill"
         case .habits:  return "drop.fill"
         case .finances: return "chart.line.uptrend.xyaxis"
+        case .tagdosNotes: return "checklist"
         }
     }
 }
@@ -96,7 +99,8 @@ public struct DashboardWidgetConfig: Codable, Identifiable, Equatable, Sendable 
             DashboardWidgetConfig(id: DashboardWidgetType.news.rawValue, size: .wide, isVisible: true),
             DashboardWidgetConfig(id: DashboardWidgetType.health.rawValue, size: .wide, isVisible: true),
             DashboardWidgetConfig(id: DashboardWidgetType.habits.rawValue, size: .wide, isVisible: true),
-            DashboardWidgetConfig(id: DashboardWidgetType.finances.rawValue, size: .wide, isVisible: true)
+            DashboardWidgetConfig(id: DashboardWidgetType.finances.rawValue, size: .wide, isVisible: true),
+            DashboardWidgetConfig(id: DashboardWidgetType.tagdosNotes.rawValue, size: .wide, isVisible: true)
         ]
     }
 }
