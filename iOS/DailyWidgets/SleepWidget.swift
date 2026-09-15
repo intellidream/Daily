@@ -86,12 +86,14 @@ public struct SleepWidgetView: View {
         VStack(spacing: 6) {
             // Top Section: Progress ring on Left, Sleep Duration in Top-Right
             HStack(alignment: .top, spacing: 6) {
-                // Circle Score Hero starting from Top-Left (inset 72x72pt with padding to avoid clipping)
+                // Circle Score Hero starting from Top-Left (inset to completely prevent stroke clipping)
                 ZStack {
                     Circle()
+                        .inset(by: 3.5)
                         .stroke(Color.white.opacity(0.08), lineWidth: 7.0)
 
                     Circle()
+                        .inset(by: 3.5)
                         .trim(from: 0, to: CGFloat(min(max(entry.snapshot.sleepScore, 0), 100)) / 100.0)
                         .stroke(
                             AngularGradient(
@@ -117,8 +119,8 @@ public struct SleepWidgetView: View {
                     }
                 }
                 .frame(width: 72, height: 72)
-                .padding(.top, 4)
-                .padding(.leading, 4)
+                .padding(.top, 2)
+                .padding(.leading, 2)
 
                 Spacer(minLength: 2)
 
@@ -193,12 +195,14 @@ public struct SleepWidgetView: View {
     // MARK: - Medium (2x1)
     private var mediumView: some View {
         HStack(spacing: 14) {
-            // Left: Large Radial Sleep Score Ring
+            // Left: Large Radial Sleep Score Ring (inset to prevent clipping)
             ZStack {
                 Circle()
+                    .inset(by: 3.75)
                     .stroke(Color.white.opacity(0.08), lineWidth: 7.5)
 
                 Circle()
+                    .inset(by: 3.75)
                     .trim(from: 0, to: CGFloat(min(max(entry.snapshot.sleepScore, 0), 100)) / 100.0)
                     .stroke(
                         AngularGradient(
@@ -211,7 +215,7 @@ public struct SleepWidgetView: View {
 
                 VStack(spacing: 1) {
                     Text(entry.snapshot.totalAsleepFormatted)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(.system(size: 14.5, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -226,6 +230,8 @@ public struct SleepWidgetView: View {
                 }
             }
             .frame(width: 78, height: 78)
+            .padding(.leading, 2)
+            .padding(.vertical, 2)
 
             // Right: Telemetry & Proportional Sleep Architecture
             VStack(alignment: .leading, spacing: 6) {
@@ -333,9 +339,11 @@ public struct SleepWidgetView: View {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
+                        .inset(by: 4.5)
                         .stroke(Color.white.opacity(0.08), lineWidth: 9)
 
                     Circle()
+                        .inset(by: 4.5)
                         .trim(from: 0, to: CGFloat(min(max(entry.snapshot.sleepScore, 0), 100)) / 100.0)
                         .stroke(
                             AngularGradient(
@@ -356,6 +364,7 @@ public struct SleepWidgetView: View {
                     }
                 }
                 .frame(width: 82, height: 82)
+                .padding(2)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(entry.snapshot.totalAsleepFormatted)
@@ -443,6 +452,7 @@ public struct SleepWidgetView: View {
             HStack(alignment: .top) {
                 ZStack {
                     Circle()
+                        .inset(by: 2.0)
                         .stroke(Color.white.opacity(0.08), lineWidth: 4)
                         .frame(width: 40, height: 40)
                     Circle()
@@ -452,6 +462,8 @@ public struct SleepWidgetView: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundColor(WidgetColors.accentPurple)
                 }
+                .padding(.top, 2)
+                .padding(.leading, 2)
 
                 Spacer(minLength: 4)
 
@@ -514,6 +526,7 @@ public struct SleepWidgetView: View {
             // Left: Clean empty gauge circle with moon icon
             ZStack {
                 Circle()
+                    .inset(by: 3.0)
                     .stroke(Color.white.opacity(0.08), lineWidth: 6)
                     .frame(width: 76, height: 76)
 
@@ -620,6 +633,7 @@ public struct SleepWidgetView: View {
             VStack(spacing: 10) {
                 ZStack {
                     Circle()
+                        .inset(by: 4.0)
                         .stroke(Color.white.opacity(0.06), lineWidth: 8)
                         .frame(width: 80, height: 80)
 
