@@ -24,6 +24,7 @@ public struct TagdosParser: Sendable {
             return TagDoStream(
                 id: id,
                 title: title,
+                customTitle: existingStream?.customTitle,
                 rawText: "",
                 clusters: [],
                 streamReminder: streamReminder,
@@ -69,6 +70,7 @@ public struct TagdosParser: Sendable {
         return TagDoStream(
             id: id,
             title: title,
+            customTitle: existingStream?.customTitle,
             rawText: trimmed,
             clusters: parsedClusters,
             streamReminder: streamReminder,
@@ -106,10 +108,14 @@ public struct TagdosParser: Sendable {
         return TagDoStream(
             id: stream.id,
             title: stream.title,
+            customTitle: stream.customTitle,
             rawText: newRawText,
             clusters: updatedClusters,
             streamReminder: stream.streamReminder,
-            orderIndex: stream.orderIndex
+            orderIndex: stream.orderIndex,
+            activeMemos: stream.activeMemos,
+            attachments: stream.attachments,
+            updatedAt: Date()
         )
     }
 
@@ -129,10 +135,14 @@ public struct TagdosParser: Sendable {
         return TagDoStream(
             id: stream.id,
             title: stream.title,
+            customTitle: stream.customTitle,
             rawText: stream.rawText,
             clusters: updatedClusters,
             streamReminder: stream.streamReminder,
-            orderIndex: stream.orderIndex
+            orderIndex: stream.orderIndex,
+            activeMemos: stream.activeMemos,
+            attachments: stream.attachments,
+            updatedAt: Date()
         )
     }
 
@@ -158,10 +168,14 @@ public struct TagdosParser: Sendable {
         return TagDoStream(
             id: stream.id,
             title: stream.title,
+            customTitle: stream.customTitle,
             rawText: newRawText,
             clusters: updatedClusters,
             streamReminder: stream.streamReminder,
-            orderIndex: stream.orderIndex
+            orderIndex: stream.orderIndex,
+            activeMemos: stream.activeMemos,
+            attachments: stream.attachments,
+            updatedAt: Date()
         )
     }
 
@@ -184,6 +198,7 @@ public struct TagdosParser: Sendable {
         return TagDoStream(
             id: stream.id,
             title: stream.title,
+            customTitle: stream.customTitle,
             rawText: newRawText,
             clusters: updatedClusters,
             streamReminder: stream.streamReminder,
@@ -223,6 +238,7 @@ public struct TagdosParser: Sendable {
         return TagDoStream(
             id: stream.id,
             title: stream.title,
+            customTitle: stream.customTitle,
             rawText: newRawText,
             clusters: updatedClusters,
             streamReminder: stream.streamReminder,

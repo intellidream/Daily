@@ -10,6 +10,7 @@ public struct TagdosActiveMemoView: View {
     public let streamNumber: Int
     @ObservedObject private var store = TagdosStore.shared
 
+    @State private var isCollapsed: Bool = true
     @State private var isEditingText: Bool = false
     @State private var memoDraft: String = ""
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
@@ -28,55 +29,106 @@ public struct TagdosActiveMemoView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // MARK: - Memo Header & Editor Toggle
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "note.text")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(ThemeColors.accentCyan)
-                    Text("Active Memos")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+        VStack(alignment: .leading, spacing: isCollapsed ? 0 : 14) {
+            // MARK: - Collapsible Header
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        isCollapsed.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                        Text("Active Memos")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+
+                        let hasMemos = currentStream?.activeMemos.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                        let attCount = currentStream?.attachments.count ?? 0
+
+                        if hasMemos || attCount > 0 {
+                            HStack(spacing: 4) {
+                                if hasMemos {
+                                    Text("Memo")
+                                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                        .foregroundColor(ThemeColors.accentCyan)
+                                }
+                                if attCount > 0 {
+                                    HStack(spacing: 2.5) {
+                                        Image(systemName: "paperclip")
+                                            .font(.system(size: 8, weight: .bold))
+                                        Text("\(attCount)")
+                                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                    }
+                                    .foregroundColor(ThemeColors.accentOrange)
+                                }
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2.5)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
 
                 Spacer()
 
+                if !isCollapsed {
+                    Button {
+                        if isEditingText {
+                            // Save edits
+                            store.updateStreamMemos(streamId: streamId, memos: memoDraft)
+                            isEditingText = false
+                        } else {
+                            memoDraft = currentStream?.activeMemos ?? ""
+                            isEditingText = true
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: isEditingText ? "checkmark" : "pencil")
+                                .font(.system(size: 10, weight: .bold))
+                            Text(isEditingText ? "Done" : "Edit")
+                                .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                        }
+                        .foregroundColor(isEditingText ? ThemeColors.accentGreen : ThemeColors.accentCyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background((isEditingText ? ThemeColors.accentGreen : ThemeColors.accentCyan).opacity(0.15))
+                        .clipShape(Capsule())
+                    }
+                }
+
                 Button {
-                    if isEditingText {
-                        // Save edits
-                        store.updateStreamMemos(streamId: streamId, memos: memoDraft)
-                        isEditingText = false
-                    } else {
-                        memoDraft = currentStream?.activeMemos ?? ""
-                        isEditingText = true
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        isCollapsed.toggle()
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: isEditingText ? "checkmark" : "pencil")
-                            .font(.system(size: 11, weight: .bold))
-                        Text(isEditingText ? "Done" : "Edit")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                    }
-                    .foregroundColor(isEditingText ? ThemeColors.accentGreen : ThemeColors.accentCyan)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4.5)
-                    .background((isEditingText ? ThemeColors.accentGreen : ThemeColors.accentCyan).opacity(0.15))
-                    .clipShape(Capsule())
+                    Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Color.white.opacity(0.45))
+                        .frame(width: 24, height: 24)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Circle())
                 }
+                .buttonStyle(.plain)
             }
 
-            // MARK: - Memo Body (View or Edit)
-            if isEditingText {
-                editingView
-            } else {
-                formattedViewer
-            }
+            if !isCollapsed {
+                // MARK: - Memo Body (View or Edit)
+                if isEditingText {
+                    editingView
+                } else {
+                    formattedViewer
+                }
 
-            // MARK: - Attachments Section
-            attachmentsSection
+                // MARK: - Attachments Section
+                attachmentsSection
+            }
         }
-        .padding(14)
+        .padding(isCollapsed ? 12 : 14)
         .background(
             RoundedRectangle(cornerRadius: 18)
                 .fill(Color.white.opacity(0.04))

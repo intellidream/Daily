@@ -228,7 +228,7 @@ public struct TagdosNotesDashboardCard: View {
             ForEach(store.streams.prefix(3)) { stream in
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
-                        Text(stream.title)
+                        Text(stream.displayTitle)
                             .font(.system(size: 9.5, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .lineLimit(1)
@@ -312,7 +312,7 @@ public struct TagdosNotesDashboardCard: View {
                 ForEach(store.streams.prefix(4)) { stream in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
-                            Text(stream.title)
+                            Text(stream.displayTitle)
                                 .font(.system(size: 10, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
                             Spacer()
@@ -375,7 +375,7 @@ public struct TagdosNotesDashboardCard: View {
     private func streamRow(stream: TagDoStream, maxPills: Int) -> some View {
         VStack(alignment: .leading, spacing: 2.5) {
             HStack {
-                Text(stream.title)
+                Text(stream.displayTitle)
                     .font(.system(size: 9.5, weight: .bold, design: .rounded))
                     .foregroundColor(Color.white.opacity(0.8))
                 Spacer()

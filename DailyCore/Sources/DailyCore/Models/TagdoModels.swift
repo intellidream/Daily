@@ -128,6 +128,7 @@ public struct TagDoAttachment: Identifiable, Codable, Equatable, Sendable {
 public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
     public var title: String
+    public var customTitle: String?
     public var rawText: String
     public var clusters: [TagDoCluster]
     public var streamReminder: Date?
@@ -137,12 +138,13 @@ public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
     public var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, title, rawText, clusters, streamReminder, orderIndex, activeMemos, attachments, updatedAt
+        case id, title, customTitle, rawText, clusters, streamReminder, orderIndex, activeMemos, attachments, updatedAt
     }
 
     public init(
         id: UUID = UUID(),
         title: String,
+        customTitle: String? = nil,
         rawText: String,
         clusters: [TagDoCluster] = [],
         streamReminder: Date? = nil,
@@ -153,6 +155,7 @@ public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
     ) {
         self.id = id
         self.title = title
+        self.customTitle = customTitle
         self.rawText = rawText
         self.clusters = clusters
         self.streamReminder = streamReminder
@@ -166,6 +169,7 @@ public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         self.title = try container.decode(String.self, forKey: .title)
+        self.customTitle = try container.decodeIfPresent(String.self, forKey: .customTitle)
         self.rawText = try container.decode(String.self, forKey: .rawText)
         self.clusters = try container.decodeIfPresent([TagDoCluster].self, forKey: .clusters) ?? []
         self.streamReminder = try container.decodeIfPresent(Date.self, forKey: .streamReminder)
@@ -173,6 +177,55 @@ public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
         self.activeMemos = try container.decodeIfPresent(String.self, forKey: .activeMemos) ?? ""
         self.attachments = try container.decodeIfPresent([TagDoAttachment].self, forKey: .attachments) ?? []
         self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    }
+
+    /// Resolved display title: uses explicit custom user title if set; otherwise falls back to auto-detected title.
+    public var displayTitle: String {
+        if let custom = customTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
+            return custom
+        }
+        if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return title
+        }
+        return autoDetectedTitle
+    }
+
+    /// Automatically detects a meaningful stream title from tags, keywords, and stream order.
+    public var autoDetectedTitle: String {
+        let streamNum = orderIndex + 1
+        let upperText = rawText.uppercased()
+
+        // 1. Domain detection from known keywords
+        if upperText.contains("WRK") || upperText.contains("PRJ") || upperText.contains("CODE") || upperText.contains("BUG") || upperText.contains("DEV") || upperText.contains("MET") {
+            return "Stream \(streamNum): Work & Code"
+        }
+        if upperText.contains("FIT") || upperText.contains("GYM") || upperText.contains("RUN") || upperText.contains("PROT") || upperText.contains("SLP") || upperText.contains("CREAT") {
+            return "Stream \(streamNum): Health & Fitness"
+        }
+        if upperText.contains("FIN") || upperText.contains("CARD") || upperText.contains("CASH") || upperText.contains("INV") || upperText.contains("STK") || upperText.contains("C$T") || upperText.contains("EUR") {
+            return "Stream \(streamNum): Finances & Bills"
+        }
+        if upperText.contains("HOM") || upperText.contains("ORD") || upperText.contains("CLN") || upperText.contains("BUY") || upperText.contains("MKT") || upperText.contains("GROC") {
+            return "Stream \(streamNum): Home & Life"
+        }
+        if upperText.contains("MG") || upperText.contains("GM") || upperText.contains("TG") || upperText.contains("FSH") || upperText.contains("LDL") {
+            return "Stream \(streamNum): Daily Ops"
+        }
+
+        // 2. Fallback to driving pill tag if present
+        if let driving = drivingPill?.rawText, !driving.isEmpty {
+            return "Stream \(streamNum): \(driving) Focus"
+        }
+
+        // 3. Slot default fallback
+        switch streamNum {
+        case 1: return "Stream 1: Daily Ops"
+        case 2: return "Stream 2: Work & Code"
+        case 3: return "Stream 3: Health & Fitness"
+        case 4: return "Stream 4: Finances & Bills"
+        case 5: return "Stream 5: Home & Life"
+        default: return "Stream \(streamNum)"
+        }
     }
 
     /// All pills flattened across all clusters in this stream.

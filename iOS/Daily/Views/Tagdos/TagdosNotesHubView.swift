@@ -24,6 +24,10 @@ public struct TagdosNotesHubView: View {
     @State private var showingReminderPicker: Bool = false
     @State private var reminderPickerDate: Date = Date()
 
+    // Stream Rename Sheet state
+    @State private var showingRenameSheet: Bool = false
+    @State private var editingStreamTitle: String = ""
+
     public init() {}
 
     private var currentStream: TagDoStream? {
@@ -80,6 +84,20 @@ public struct TagdosNotesHubView: View {
                 }
             }
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                .onEnded { value in
+                    let startX = value.startLocation.x
+                    let translationX = value.translation.width
+                    let translationY = value.translation.height
+
+                    // Edge swipe right: started within 75pt of left edge, dragged right > 50pt, horizontally dominant
+                    if startX <= 75 && translationX > 50 && abs(translationX) > abs(translationY) * 1.1 {
+                        triggerHaptic()
+                        dismiss()
+                    }
+                }
+        )
         .onAppear {
             if let stream = currentStream {
                 rawTextBuffer = stream.rawText
@@ -105,6 +123,11 @@ public struct TagdosNotesHubView: View {
                 .presentationDetents([.height(260)])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showingRenameSheet) {
+            renameStreamSheet
+                .presentationDetents([.height(240)])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     // MARK: - Navigation Bar
@@ -114,17 +137,12 @@ public struct TagdosNotesHubView: View {
                 triggerHaptic()
                 dismiss()
             } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .bold))
-                    Text("Dashboard")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                }
-                .foregroundColor(ThemeColors.accentCyan)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.08))
-                .clipShape(Capsule())
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .frame(width: 32, height: 32)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
             }
 
             Spacer()
@@ -200,13 +218,24 @@ public struct TagdosNotesHubView: View {
                             rawTextBuffer = stream.rawText
                         }
                     } label: {
-                        HStack(spacing: 5) {
+                        HStack(spacing: 6) {
                             Text("S\(index + 1)")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .font(.system(size: 9.5, weight: .heavy, design: .rounded))
+                                .foregroundColor(isSelected ? .white : ThemeColors.accentPurple)
+                                .frame(width: 20, height: 20)
+                                .background(
+                                    Circle()
+                                        .fill(isSelected ? ThemeColors.accentPurple : ThemeColors.accentPurple.opacity(0.18))
+                                        .overlay(
+                                            Circle()
+                                                .strokeBorder(ThemeColors.accentPurple.opacity(isSelected ? 0.8 : 0.4), lineWidth: 1)
+                                        )
+                                )
                             
                             if let driving = stream.drivingPill {
                                 Text(driving.rawText)
-                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundColor(isSelected ? .white : Color.white.opacity(0.85))
                                     .lineLimit(1)
                             }
 
@@ -217,8 +246,8 @@ public struct TagdosNotesHubView: View {
                             }
                         }
                         .foregroundColor(isSelected ? .white : Color.white.opacity(0.6))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
                         .background(
                             Capsule()
                                 .fill(isSelected ? ThemeColors.accentPurple.opacity(0.35) : Color.white.opacity(0.06))
@@ -241,7 +270,7 @@ public struct TagdosNotesHubView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "note.text")
                             .font(.system(size: 10, weight: .bold))
-                        Text("Notes 📝")
+                        Text("Notes")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
 
                         if !store.quickNotes.isEmpty {
@@ -290,15 +319,28 @@ public struct TagdosNotesHubView: View {
 
     private func streamHeaderView(stream: TagDoStream) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(stream.title)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+            Button {
+                triggerHaptic()
+                editingStreamTitle = stream.customTitle ?? stream.title
+                showingRenameSheet = true
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(stream.displayTitle)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        Image(systemName: "pencil")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Color.white.opacity(0.35))
+                    }
 
-                Text("\(stream.activePills.count) active tags • \(stream.clusters.count) clusters")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.55))
+                    Text("\(stream.activePills.count) active tags • \(stream.clusters.count) clusters")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.55))
+                }
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
@@ -619,6 +661,61 @@ public struct TagdosNotesHubView: View {
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
                 .background(ThemeColors.accentCyan.opacity(0.35))
+                .clipShape(Capsule())
+            }
+        }
+        .padding(20)
+        .background(Color(hex: "081426"))
+    }
+
+    // MARK: - Rename Stream Sheet
+    private var renameStreamSheet: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Redenumește Stream")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Spacer()
+                if let stream = currentStream, stream.customTitle != nil {
+                    Button("Auto-detect") {
+                        triggerHaptic()
+                        store.updateStreamTitle(streamId: stream.id, newTitle: nil)
+                        showingRenameSheet = false
+                    }
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .font(.system(size: 12, weight: .semibold))
+                }
+            }
+
+            TextField("Nume stream...", text: $editingStreamTitle)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.white)
+                .padding(12)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            HStack(spacing: 12) {
+                Button("Anulează") {
+                    showingRenameSheet = false
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white.opacity(0.6))
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+
+                Button("Salvează") {
+                    triggerHaptic()
+                    if let stream = currentStream {
+                        store.updateStreamTitle(streamId: stream.id, newTitle: editingStreamTitle)
+                    }
+                    showingRenameSheet = false
+                }
+                .foregroundColor(.white)
+                .font(.system(size: 13, weight: .bold))
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(ThemeColors.accentPurple.opacity(0.6))
                 .clipShape(Capsule())
             }
         }

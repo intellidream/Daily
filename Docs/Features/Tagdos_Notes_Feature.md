@@ -116,12 +116,20 @@ Adheres to DayOne's Liquid Glass design language with Title Case headers:
 
 ### 5.2 Dedicated Tagdos Hub (`TagdosNotesHubView.swift`)
 Accessible via Dashboard tap or `daily://tagdos` deep link:
-- **Stream Switcher Bar**: 6 segmented tabs: Streams 1–5 (`S1` to `S5`) plus dedicated `Notes 📝` tab with active note counters.
-- **Pipeline Visualizer**: Displays clusters linked by `&` connectors with interactive pills and color-coded badges.
-- **Per-Stream Active Memos & Attachments (`TagdosActiveMemoView.swift`)**:
-  - Rich memo cards supporting Markdown text formatting, bullet lists, code blocks, and interactive clickable URLs.
-  - Native photo picker (`PhotosPicker`) and file importer (`.fileImporter`) for instant stream attachments.
-  - Attachment carousel with local/cloud sync status indicators, on-demand download, and preview sheet (`QuickLook` / image modal).
+- **Navigation & Dismissal**:
+  - Replaced legacy text back button with a clean, circular Liquid Glass back button (`chevron.left` in 32x32 circle, no "Dashboard" label).
+  - Integrated interactive edge swipe-to-dismiss gesture (`startX <= 75 && translationX > 50`) for seamless natural navigation.
+- **Stream Switcher Bar**:
+  - 6 segmented tabs: Streams 1–5 (`S1` to `S5`) plus dedicated `Notes` tab.
+  - `S1`–`S5` are rendered inside distinct mini circular badges (`Circle()` with Purple glass accent) to stand out clearly beside the driving tag.
+  - Clean `Notes` tab label (`Image(systemName: "note.text")` + `Text("Notes")`), removing redundant trailing emojis.
+- **Dynamic & Custom Stream Naming**:
+  - Intelligent auto-detection of domain keywords (e.g. Work & Code, Health & Fitness, Finances & Bills, Home & Life, Daily Ops, or Driving Tag focus).
+  - Interactive stream rename sheet allowing custom naming.
+  - Re-detection fallback: if the user deletes or clears the custom name, the system automatically falls back to the auto-detected domain title.
+- **Collapsible Per-Stream Active Memos (`TagdosActiveMemoView.swift`)**:
+  - Compact collapsible header showing memo and attachment count badges, preserving vertical screen space for the cluster canvas.
+  - Smooth spring animation toggle to expand full Markdown editor, file carousel, and media previews.
 - **Dedicated Quick Notes Stream (`TagdosQuickNotesView.swift`)**:
   - Pinned notes and chronological notes listing with live search filtering.
   - Full-featured Markdown editor sheet (`MarkdownNoteEditorSheet`) with live preview toggle (Edit / Preview modes), formatting toolbar, and note pinning.
@@ -133,6 +141,7 @@ Accessible via Dashboard tap or `daily://tagdos` deep link:
 
 Registered in `DailyWidgetsBundle` under `com.intellidream.daily.TagdosWidget`:
 - Updated all widget titles and headers to Title Case (`Tagdos & Notes`, `Tagdos`).
+- **Dynamic Stream Titles**: Widget snapshot automatically reflects custom or auto-detected stream titles via `displayTitle`.
 - **Small**: Displays the driving focus pill, reminder time, upcoming pipeline queue, and total active count.
 - **Medium**: Two-column layout with left focus hero and right top-2 stream pipeline rows with colored pill badges.
 - **Large**: 5-stream overview showing all active clusters and count badges in dark glass aesthetic.
@@ -146,8 +155,8 @@ Registered in `DailyWidgetsBundle` under `com.intellidream.daily.TagdosWidget`:
 ## 7. Verification & Delivery
 - **SimulaPhone Simulator**:
   - Verified compilation and in-app dashboard layout at top position (`simulaphone_app_tagdos.png`).
-  - Verified interactive Hub view (`simulaphone_tagdos_hub.png`).
+  - Verified interactive Hub view with circular back button, `S1`..`S5` circular badges, clean `Notes` tab, and auto-detected stream names (`simulaphone_hub_verified.png`).
   - Verified Small, Medium, and Large widgets placed on Home Screen pages (`simulaphone_current_homescreen.png`).
-- **Physical Device**:
-  - Built arm64 debug package for iPhone 16 Pro ("Schmitz").
-  - Successfully installed via `devicectl device install app` and launched live.
+- **Physical Device ("Schmitz")**:
+  - Built arm64 debug package for iPhone 16 Pro ("Schmitz", ID `00008140-000E2C863EFB001C`).
+  - Successfully installed via `xcrun devicectl device install app` and launched live.

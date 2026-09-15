@@ -152,12 +152,16 @@ public final class TagdosStore: ObservableObject {
         let existing = streams[index]
         var updated = TagdosParser.shared.parseStream(
             rawText: newRawText,
-            title: existing.title,
+            title: existing.customTitle ?? existing.title,
             id: existing.id,
             streamReminder: existing.streamReminder,
             orderIndex: existing.orderIndex,
             existingStream: existing
         )
+        updated.customTitle = existing.customTitle
+        if existing.customTitle == nil || existing.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            updated.title = updated.autoDetectedTitle
+        }
         updated.activeMemos = existing.activeMemos
         updated.attachments = existing.attachments
         updated.updatedAt = Date()
@@ -165,9 +169,18 @@ public final class TagdosStore: ObservableObject {
         save()
     }
 
-    public func updateStreamTitle(streamId: UUID, newTitle: String) {
+    public func updateStreamTitle(streamId: UUID, newTitle: String?) {
         guard let index = streams.firstIndex(where: { $0.id == streamId }) else { return }
-        streams[index].title = newTitle
+        let clean = newTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let clean = clean, !clean.isEmpty {
+            // User explicitly set a custom title
+            streams[index].customTitle = clean
+            streams[index].title = clean
+        } else {
+            // User cleared the title -> re-detect title from stream content
+            streams[index].customTitle = nil
+            streams[index].title = streams[index].autoDetectedTitle
+        }
         streams[index].updatedAt = Date()
         save()
     }
@@ -639,7 +652,7 @@ public final class TagdosStore: ObservableObject {
 
             return TagdosWidgetSnapshotStream(
                 id: stream.id.uuidString,
-                title: stream.title,
+                title: stream.displayTitle,
                 drivingPillText: driving?.rawText,
                 drivingPillType: driving?.type.rawValue,
                 activePillsCount: stream.activePills.count,
