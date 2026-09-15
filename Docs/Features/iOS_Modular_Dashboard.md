@@ -176,3 +176,33 @@ To achieve buttery smooth scrolling on 120Hz ProMotion displays matching benchma
 4. **Equatable View-State Diffing**:
    - Added `Equatable` conformance across `WeatherDashboardCard`, `NewsDashboardCard`, `HealthDashboardCard`, `HabitsDashboardCard`, and `FinancesDashboardCard`.
    - Connected cards via `.equatable()` in `DashboardView`. SwiftUI bypasses 100% of card body re-evaluations during momentum scrolling when domain data is unchanged.
+
+---
+
+## 8. Interactive Floating Capsule Navigation & Health Card Iconography
+
+### 8.1 Floating Navigation Capsule Swipe & Scrub Gesture (`FloatingGlassCapsule.swift`)
+To allow effortless one-handed navigation without needing to tap individual pill targets:
+- **Interactive Horizontal Scrubbing**: As the user drags horizontally across the bottom capsule (`Dashboard`, `Money`, `Health`, `Habits`), the active tab tracks their thumb position smoothly across the capsule segments (`totalCapsuleWidth / tabCount`), updating `selectedTab` with a light spring animation and medium tactile feedback.
+- **Velocity Flick-Swipe Detection**: A quick horizontal flick across the capsule (evaluating `translation.width` and `predictedEndTranslation`) immediately advances to the next or previous tab.
+- **Simultaneous Gesture Arbitration**: Configured with `.simultaneousGesture(DragGesture(minimumDistance: 8))` ensuring stationary taps continue to fire button actions instantly with 0ms delay.
+
+### 8.2 Health Dashboard Card Suggestive Iconography (`HealthDashboardCard.swift`)
+Enriched biometric data across all 4 modular sizes (Small, Wide, Tall, Large) with tasteful, balanced SF Symbols and secondary metrics:
+- **Small (1x1)**:
+  - Added `figure.walk` icon to the `STEPS` header.
+  - Added secondary active calories indicator `flame.fill` (`420 kcal`) next to the sleep duration footer `moon.fill`.
+- **Wide (2x1)**:
+  - Added `figure.walk` icon to `STEPS` + active calories subtitle (`flame.fill`).
+  - Added `waveform.path.ecg` icon to `HEART RATE` + resting HR subtitle (`heart.fill`).
+  - Added `moon.fill` icon to `SLEEP` + sleep efficiency subtitle (`sparkles`).
+- **Tall (1x2)**:
+  - Enriched steps stack with `figure.walk` and active calories (`flame.fill`).
+  - Enriched heart rate stack with `waveform.path.ecg` and resting HR (`heart.fill`).
+  - Enriched sleep stack with `moon.fill`, sleep efficiency badge (`sparkles`), and bed time range (`bed.double.fill`).
+- **Large (2x2)**:
+  - Enriched the primary 3-metric row with respective SF Symbols (`figure.walk`, `waveform.path.ecg`, `moon.fill`) and secondary metric labels (`kcal`, `resting bpm`, `efficiency %`).
+  - Harmonized with the existing secondary biometrics grid (`HRV`, `SpO2`, `Resting HR`, `Sleep Score`).
+- **State Diffing (`Equatable`)**:
+  - Expanded `HealthDashboardCard: Equatable` to track `totalActiveCalories` and `restingBpm`, ensuring instantaneous updates when Apple Watch or wearable telemetry changes.
+

@@ -36,8 +36,19 @@ public struct FloatingGlassCapsule: View {
     @Namespace private var capsuleNamespace
     @ObservedObject private var settingsService = SettingsService.shared
     
+    @State private var dragStartTab: NavigationTab? = nil
+    @State private var totalCapsuleWidth: CGFloat = 0
+    
     public init(selectedTab: Binding<NavigationTab>) {
         self._selectedTab = selectedTab
+    }
+    
+    private func triggerHaptic() {
+        if settingsService.settings.hapticsEnabled {
+            #if canImport(UIKit)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            #endif
+        }
     }
     
     public var body: some View {
@@ -47,11 +58,7 @@ public struct FloatingGlassCapsule: View {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                         selectedTab = tab
                     }
-                    if settingsService.settings.hapticsEnabled {
-                        #if canImport(UIKit)
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        #endif
-                    }
+                    triggerHaptic()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: tab.iconName)
@@ -106,5 +113,77 @@ public struct FloatingGlassCapsule: View {
                 .strokeBorder(ThemeColors.glassDarkBorder, lineWidth: 1)
         }
         .shadow(color: Color.black.opacity(0.4), radius: 18, x: 0, y: 8)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: CapsuleWidthKey.self, value: geo.size.width)
+            }
+        )
+        .onPreferenceChange(CapsuleWidthKey.self) { newWidth in
+            totalCapsuleWidth = newWidth
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in
+                    if dragStartTab == nil {
+                        dragStartTab = selectedTab
+                    }
+                    
+                    let tabs = NavigationTab.primaryTabs
+                    let tabCount = tabs.count
+                    guard tabCount > 0 else { return }
+                    
+                    let targetIndex: Int
+                    if totalCapsuleWidth > 60 {
+                        let segmentWidth = totalCapsuleWidth / CGFloat(tabCount)
+                        let rawIndex = Int(value.location.x / segmentWidth)
+                        targetIndex = max(0, min(tabCount - 1, rawIndex))
+                    } else if let startTab = dragStartTab, let startIndex = tabs.firstIndex(of: startTab) {
+                        let step = Int(round(value.translation.width / 35.0))
+                        targetIndex = max(0, min(tabCount - 1, startIndex + step))
+                    } else {
+                        return
+                    }
+                    
+                    let newTab = tabs[targetIndex]
+                    if newTab != selectedTab {
+                        triggerHaptic()
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = newTab
+                        }
+                    }
+                }
+                .onEnded { value in
+                    let tabs = NavigationTab.primaryTabs
+                    let tabCount = tabs.count
+                    
+                    // Quick flick / swipe detection when scrub didn't change tab
+                    let flickVelocity = value.predictedEndTranslation.width - value.translation.width
+                    if let startTab = dragStartTab, let startIndex = tabs.firstIndex(of: startTab), selectedTab == startTab {
+                        var targetIndex = startIndex
+                        if value.translation.width > 20 || flickVelocity > 45 {
+                            targetIndex = min(tabCount - 1, startIndex + 1)
+                        } else if value.translation.width < -20 || flickVelocity < -45 {
+                            targetIndex = max(0, startIndex - 1)
+                        }
+                        
+                        let targetTab = tabs[targetIndex]
+                        if targetTab != selectedTab {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = targetTab
+                            }
+                        }
+                    }
+                    
+                    dragStartTab = nil
+                }
+        )
+    }
+}
+
+private struct CapsuleWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }

@@ -58,11 +58,16 @@ public struct HealthDashboardCard: View {
             
             Spacer(minLength: 2)
 
-            // Steps Glance
+            // Steps Glance with Walk Icon
             VStack(alignment: .leading, spacing: 1) {
-                Text("STEPS")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(ThemeColors.fgMutedDark)
+                HStack(spacing: 3.5) {
+                    Image(systemName: "figure.walk")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundColor(ThemeColors.accentPink)
+                    Text("STEPS")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                }
                 
                 Text("\(healthService.totalStepsToday)")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
@@ -82,7 +87,7 @@ public struct HealthDashboardCard: View {
             
             Spacer(minLength: 2)
 
-            // Sleep Duration Footer
+            // Sleep Duration & Active Calories Footer
             HStack {
                 Image(systemName: "moon.fill")
                     .font(.system(size: 10))
@@ -90,7 +95,19 @@ public struct HealthDashboardCard: View {
                 Text(healthService.primarySleepSession?.totalAsleepFormatted ?? "--")
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundColor(ThemeColors.accentCyan)
+                
                 Spacer()
+
+                if healthService.totalActiveCalories > 0 {
+                    HStack(spacing: 2.5) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(ThemeColors.accentOrange)
+                        Text("\(Int(healthService.totalActiveCalories)) kcal")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -116,39 +133,87 @@ public struct HealthDashboardCard: View {
             }
             
             HStack(spacing: 16) {
+                // Steps with walk & calories icons
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("STEPS")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Image(systemName: "figure.walk")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(ThemeColors.accentPink)
+                        Text("STEPS")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     Text("\(healthService.totalStepsToday)")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                    if healthService.totalActiveCalories > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(ThemeColors.accentOrange)
+                            Text("\(Int(healthService.totalActiveCalories)) kcal")
+                                .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
                 }
                 
                 Divider()
-                    .frame(height: 32)
+                    .frame(height: 36)
                     .background(Color.white.opacity(0.15))
                 
+                // Heart Rate with ECG & Resting HR icons
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("HEART RATE")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(ThemeColors.accentPink)
+                        Text("HEART RATE")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     Text(healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm)) bpm" : "--")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentPink)
+                    if healthService.restingBpm > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(ThemeColors.accentPink.opacity(0.85))
+                            Text("Rest \(Int(healthService.restingBpm))")
+                                .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
                 }
                 
                 Divider()
-                    .frame(height: 32)
+                    .frame(height: 36)
                     .background(Color.white.opacity(0.15))
                 
+                // Sleep with Moon & Efficiency icons
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("SLEEP")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Image(systemName: "moon.fill")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                        Text("SLEEP")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     Text(healthService.primarySleepSession?.totalAsleepFormatted ?? "--")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentCyan)
+                    if let session = healthService.primarySleepSession {
+                        HStack(spacing: 3) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 8))
+                                .foregroundColor(ThemeColors.accentCyan.opacity(0.85))
+                            Text("\(session.efficiencyPercent)% eff")
+                                .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
                 }
             }
         }
@@ -168,7 +233,7 @@ public struct HealthDashboardCard: View {
                     .foregroundColor(ThemeColors.accentPink)
             }
 
-            // Steps Tile with Ring
+            // Steps Tile with Ring & Calories
             HStack(spacing: 10) {
                 let stepProgress = min(Double(healthService.totalStepsToday) / 10000.0, 1.0)
                 ZStack {
@@ -187,29 +252,56 @@ public struct HealthDashboardCard: View {
                 }
                 .frame(width: 36, height: 36)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("STEPS")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "figure.walk")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(ThemeColors.accentPink)
+                        Text("STEPS")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     Text("\(healthService.totalStepsToday)")
                         .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                    if healthService.totalActiveCalories > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(ThemeColors.accentOrange)
+                            Text("\(Int(healthService.totalActiveCalories)) kcal")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
                 }
             }
 
             Divider()
                 .background(Color.white.opacity(0.12))
 
-            // Heart Rate Section
-            VStack(alignment: .leading, spacing: 4) {
+            // Heart Rate Section with ECG & Resting Icons
+            VStack(alignment: .leading, spacing: 3) {
                 HStack {
-                    Text("HEART RATE")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(ThemeColors.accentPink)
+                        Text("HEART RATE")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     Spacer()
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 9))
-                        .foregroundColor(ThemeColors.accentPink)
+                    if healthService.restingBpm > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 7.5))
+                                .foregroundColor(ThemeColors.accentPink.opacity(0.85))
+                            Text("Rest \(Int(healthService.restingBpm))")
+                                .font(.system(size: 8.5, weight: .semibold))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
                 }
                 Text(healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm)) bpm" : "--")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
@@ -219,25 +311,42 @@ public struct HealthDashboardCard: View {
             Divider()
                 .background(Color.white.opacity(0.12))
 
-            // Sleep Section
-            VStack(alignment: .leading, spacing: 4) {
+            // Sleep Section with Moon & Efficiency Icons
+            VStack(alignment: .leading, spacing: 3) {
                 HStack {
-                    Text("SLEEP")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Image(systemName: "moon.fill")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                        Text("SLEEP")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     Spacer()
-                    Image(systemName: "moon.fill")
-                        .font(.system(size: 9))
-                        .foregroundColor(ThemeColors.accentCyan)
+                    if let session = healthService.primarySleepSession {
+                        HStack(spacing: 2) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 7.5))
+                                .foregroundColor(ThemeColors.accentCyan.opacity(0.85))
+                            Text("\(session.efficiencyPercent)% eff")
+                                .font(.system(size: 8.5, weight: .semibold))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
                 }
                 Text(healthService.primarySleepSession?.totalAsleepFormatted ?? "--")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundColor(ThemeColors.accentCyan)
                 
                 if let session = healthService.primarySleepSession {
-                    Text("\(session.efficiencyPercent)% Efficiency")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 3) {
+                        Image(systemName: "bed.double.fill")
+                            .font(.system(size: 8.5))
+                            .foregroundColor(ThemeColors.accentCyan.opacity(0.7))
+                        Text("\(session.bedtimeFormatted) - \(session.wakeTimeFormatted)")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                 }
             }
 
@@ -265,37 +374,82 @@ public struct HealthDashboardCard: View {
                 }
             }
 
-            // Primary 3-Metric Row
+            // Primary 3-Metric Row with icons & secondary info
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("STEPS")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Image(systemName: "figure.walk")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundColor(ThemeColors.accentPink)
+                        Text("STEPS")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     Text("\(healthService.totalStepsToday)")
                         .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                    if healthService.totalActiveCalories > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 8.5))
+                                .foregroundColor(ThemeColors.accentOrange)
+                            Text("\(Int(healthService.totalActiveCalories)) kcal")
+                                .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
                 }
                 
                 Spacer()
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("AVG BPM")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundColor(ThemeColors.accentPink)
+                        Text("AVG BPM")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     Text(healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm)) bpm" : "--")
                         .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentPink)
+                    if healthService.restingBpm > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(ThemeColors.accentPink.opacity(0.85))
+                            Text("Rest \(Int(healthService.restingBpm))")
+                                .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
                 }
                 
                 Spacer()
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("SLEEP")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Image(systemName: "moon.fill")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                        Text("SLEEP")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     Text(healthService.primarySleepSession?.totalAsleepFormatted ?? "--")
                         .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentCyan)
+                    if let session = healthService.primarySleepSession {
+                        HStack(spacing: 3) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 8))
+                                .foregroundColor(ThemeColors.accentCyan.opacity(0.85))
+                            Text("\(session.efficiencyPercent)% eff")
+                                .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                    }
                 }
             }
 
@@ -373,7 +527,9 @@ extension HealthDashboardCard: Equatable {
     public static func == (lhs: HealthDashboardCard, rhs: HealthDashboardCard) -> Bool {
         lhs.size == rhs.size &&
         lhs.healthService.totalStepsToday == rhs.healthService.totalStepsToday &&
+        lhs.healthService.totalActiveCalories == rhs.healthService.totalActiveCalories &&
         lhs.healthService.averageBpm == rhs.healthService.averageBpm &&
+        lhs.healthService.restingBpm == rhs.healthService.restingBpm &&
         lhs.healthService.primarySleepSession?.id == rhs.healthService.primarySleepSession?.id
     }
 }
