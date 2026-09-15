@@ -130,7 +130,7 @@ public struct TagdosWidgetView: View {
                     Image(systemName: "checklist")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(WidgetColors.accentPurple)
-                    Text("TAGDOS")
+                    Text("Tagdos")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentPurple)
                 }
@@ -229,7 +229,7 @@ public struct TagdosWidgetView: View {
                     Image(systemName: "checklist")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(WidgetColors.accentPurple)
-                    Text("TAGDOS")
+                    Text("Tagdos")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentPurple)
                 }
@@ -307,7 +307,7 @@ public struct TagdosWidgetView: View {
                     Image(systemName: "checklist")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(WidgetColors.accentPurple)
-                    Text("TAGDOS & NOTES")
+                    Text("Tagdos & Notes")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentPurple)
                 }

@@ -70,7 +70,7 @@ public struct TagdosNotesDashboardCard: View {
                     Image(systemName: "checklist")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(ThemeColors.accentPurple)
-                    Text("TAGDOS")
+                    Text("Tagdos")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentPurple)
                 }
@@ -166,7 +166,7 @@ public struct TagdosNotesDashboardCard: View {
                     Image(systemName: "checklist")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(ThemeColors.accentPurple)
-                    Text("TAGDOS & NOTES")
+                    Text("Tagdos & Notes")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentPurple)
                 }
@@ -212,7 +212,7 @@ public struct TagdosNotesDashboardCard: View {
                     Image(systemName: "checklist")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(ThemeColors.accentPurple)
-                    Text("TAGDOS")
+                    Text("Tagdos")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentPurple)
                 }
@@ -258,7 +258,7 @@ public struct TagdosNotesDashboardCard: View {
                     Image(systemName: "note.text")
                         .font(.system(size: 9))
                         .foregroundColor(ThemeColors.accentOrange)
-                    Text(firstNote)
+                    Text(firstNote.title.isEmpty ? firstNote.content : firstNote.title)
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundColor(Color.white.opacity(0.65))
                         .lineLimit(1)
@@ -283,7 +283,7 @@ public struct TagdosNotesDashboardCard: View {
                     Image(systemName: "checklist")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(ThemeColors.accentPurple)
-                    Text("TAGDOS & NOTES COCKPIT")
+                    Text("Tagdos & Notes")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentPurple)
                 }
@@ -348,13 +348,13 @@ public struct TagdosNotesDashboardCard: View {
                         Image(systemName: "note.text")
                             .font(.system(size: 9))
                             .foregroundColor(ThemeColors.accentOrange)
-                        Text("ACTIVE MEMOS")
+                        Text("Quick Notes")
                             .font(.system(size: 8.5, weight: .bold))
                             .foregroundColor(Color.white.opacity(0.5))
                     }
                     HStack(spacing: 6) {
-                        ForEach(store.quickNotes.prefix(2), id: \.self) { note in
-                            Text(note)
+                        ForEach(store.quickNotes.prefix(2)) { note in
+                            Text(note.title.isEmpty ? note.content : note.title)
                                 .font(.system(size: 9.5, weight: .medium))
                                 .foregroundColor(Color.white.opacity(0.75))
                                 .lineLimit(1)

@@ -80,6 +80,50 @@ public struct TagDoCluster: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+/// Represents a file, document, or image attachment bound to a specific Tagdos stream.
+public struct TagDoAttachment: Identifiable, Codable, Equatable, Sendable {
+    public let id: UUID
+    public var streamNumber: Int
+    public var fileName: String
+    public var fileType: String // MIME type, e.g. "image/jpeg", "application/pdf"
+    public var fileSizeBytes: Int64
+    public var remotePath: String? // Supabase Storage path: "{userId}/stream_{streamNumber}/{id}_{fileName}"
+    public var localFileName: String? // Local cache filename inside TagdosAttachments cache
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        streamNumber: Int,
+        fileName: String,
+        fileType: String,
+        fileSizeBytes: Int64,
+        remotePath: String? = nil,
+        localFileName: String? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.streamNumber = streamNumber
+        self.fileName = fileName
+        self.fileType = fileType
+        self.fileSizeBytes = fileSizeBytes
+        self.remotePath = remotePath
+        self.localFileName = localFileName ?? "\(id.uuidString)_\(fileName)"
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public var isImage: Bool {
+        fileType.lowercased().contains("image") ||
+        ["jpg", "jpeg", "png", "heic", "webp", "gif"].contains((fileName as NSString).pathExtension.lowercased())
+    }
+
+    public var formattedSize: String {
+        ByteCountFormatter.string(fromByteCount: fileSizeBytes, countStyle: .file)
+    }
+}
+
 /// A single TagDoS line / stream representing a prioritized execution queue.
 public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
@@ -88,6 +132,13 @@ public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
     public var clusters: [TagDoCluster]
     public var streamReminder: Date?
     public var orderIndex: Int
+    public var activeMemos: String
+    public var attachments: [TagDoAttachment]
+    public var updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, rawText, clusters, streamReminder, orderIndex, activeMemos, attachments, updatedAt
+    }
 
     public init(
         id: UUID = UUID(),
@@ -95,7 +146,10 @@ public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
         rawText: String,
         clusters: [TagDoCluster] = [],
         streamReminder: Date? = nil,
-        orderIndex: Int = 0
+        orderIndex: Int = 0,
+        activeMemos: String = "",
+        attachments: [TagDoAttachment] = [],
+        updatedAt: Date = Date()
     ) {
         self.id = id
         self.title = title
@@ -103,6 +157,22 @@ public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
         self.clusters = clusters
         self.streamReminder = streamReminder
         self.orderIndex = orderIndex
+        self.activeMemos = activeMemos
+        self.attachments = attachments
+        self.updatedAt = updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.title = try container.decode(String.self, forKey: .title)
+        self.rawText = try container.decode(String.self, forKey: .rawText)
+        self.clusters = try container.decodeIfPresent([TagDoCluster].self, forKey: .clusters) ?? []
+        self.streamReminder = try container.decodeIfPresent(Date.self, forKey: .streamReminder)
+        self.orderIndex = try container.decodeIfPresent(Int.self, forKey: .orderIndex) ?? 0
+        self.activeMemos = try container.decodeIfPresent(String.self, forKey: .activeMemos) ?? ""
+        self.attachments = try container.decodeIfPresent([TagDoAttachment].self, forKey: .attachments) ?? []
+        self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
 
     /// All pills flattened across all clusters in this stream.
@@ -118,6 +188,66 @@ public struct TagDoStream: Identifiable, Codable, Equatable, Sendable {
     /// The primary pill currently leading this stream (drives current reminder).
     public var drivingPill: TagDoPill? {
         activePills.first
+    }
+}
+
+/// Standalone Quick Note with Markdown content, pinning, and tags.
+public struct TagDoQuickNote: Identifiable, Codable, Equatable, Sendable {
+    public let id: UUID
+    public var userId: String?
+    public var title: String
+    public var content: String
+    public var isPinned: Bool
+    public var tags: [String]
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, content, tags
+        case userId = "user_id"
+        case isPinned = "is_pinned"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    public init(
+        id: UUID = UUID(),
+        userId: String? = nil,
+        title: String = "",
+        content: String = "",
+        isPinned: Bool = false,
+        tags: [String] = [],
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.userId = userId
+        self.title = title
+        self.content = content
+        self.isPinned = isPinned
+        self.tags = tags
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public var displayTitle: String {
+        if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return title
+        }
+        let firstLine = content.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        if let line = firstLine {
+            let clean = line.replacingOccurrences(of: "#", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return clean.isEmpty ? "Untitled Note" : clean
+        }
+        return "Untitled Note"
+    }
+
+    public var previewSnippet: String {
+        let lines = content.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if lines.count > 1 {
+            return lines.dropFirst().joined(separator: " ")
+        }
+        return content
     }
 }
 
@@ -142,6 +272,7 @@ public struct TagdosWidgetSnapshotStream: Codable, Sendable {
     public let activePillsCount: Int
     public let reminderTimeFormatted: String?
     public let pills: [TagdosWidgetSnapshotPill]
+    public let activeMemosPreview: String?
 
     public init(
         id: String,
@@ -150,7 +281,8 @@ public struct TagdosWidgetSnapshotStream: Codable, Sendable {
         drivingPillType: String?,
         activePillsCount: Int,
         reminderTimeFormatted: String?,
-        pills: [TagdosWidgetSnapshotPill]
+        pills: [TagdosWidgetSnapshotPill],
+        activeMemosPreview: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -159,6 +291,7 @@ public struct TagdosWidgetSnapshotStream: Codable, Sendable {
         self.activePillsCount = activePillsCount
         self.reminderTimeFormatted = reminderTimeFormatted
         self.pills = pills
+        self.activeMemosPreview = activeMemosPreview
     }
 }
 

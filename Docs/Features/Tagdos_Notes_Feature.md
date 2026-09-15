@@ -69,33 +69,70 @@ A core requirement of Tagdos is **task reusability**:
 
 ---
 
-## 4. UI Implementation
+---
 
-### 4.1 In-App Modular Dashboard Card (`TagdosNotesDashboardCard.swift`)
-Adheres to DayOne's Liquid Glass design language with four responsive sizes:
-- **Small (1x1)**: Focus Tag Hero with glowing border, reminder capsule, next queue pill preview, and active tag count.
-- **Wide (2x1)**: Left Focus Hero with reminder + Right scrollable pipeline preview showing upcoming tags.
-- **Tall (1x2)**: Vertical stream progression showing active driving pills and reminder stamps.
-- **Large (2x2)**: Comprehensive multi-stream view displaying Stream 1 through Stream 3 with colored pill badges and deep link navigation.
+## 4. Supabase Cloud Sync & Cross-Device Reflection
 
-### 4.2 Dedicated Tagdos Hub (`TagdosNotesHubView.swift`)
-Accessible via Dashboard tap or `daily://tagdos` deep link:
-- **Stream Switcher**: Segmented tabs for Streams 1–5 with active pill counters and driving pill badges.
-- **Pipeline Visualizer**: Displays clusters linked by `&` connectors, wrapping pills via dynamic `FlowLayout`.
-- **Pill Context Action Sheet**:
-  - 🔄 *Recycle to Back* (for recurring items)
-  - ✅ *Mark as Done / Toggle*
-  - ⭐ *Prioritize to Front*
-  - 🗑️ *Delete Tag*
-- **Dual-Mode Raw Editor**: Toggle between interactive visual cards and raw shorthand text editor for rapid bulk editing.
-- **Reminder Time Configuration**: Native time picker per stream to control alert schedule.
-- **Quick Notes / Memos**: Scratchpad area below streams for unparsed scratch thoughts.
+### 4.1 Schema & Realtime Tables
+- **`public.tagdos_streams`**:
+  - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
+  - `user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE`
+  - `order_index INT NOT NULL`
+  - `title TEXT NOT NULL`
+  - `raw_text TEXT NOT NULL`
+  - `stream_reminder TIMESTAMPTZ`
+  - `active_memos JSONB DEFAULT '[]'::jsonb`
+  - `attachments JSONB DEFAULT '[]'::jsonb`
+  - `updated_at TIMESTAMPTZ DEFAULT now()`
+  - Unique constraint on `(user_id, order_index)`.
+- **`public.tagdos_quick_notes`**:
+  - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
+  - `user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE`
+  - `title TEXT NOT NULL`
+  - `content TEXT NOT NULL`
+  - `is_pinned BOOLEAN DEFAULT false`
+  - `created_at TIMESTAMPTZ DEFAULT now()`
+  - `updated_at TIMESTAMPTZ DEFAULT now()`
+- **Supabase Realtime Channel**:
+  - `TagdosStore` subscribes to `channel.postgresChange` for `tagdos_streams` and `tagdos_quick_notes` filtered by `user_id`.
+  - Immediate reflection across devices logged in with the same account (e.g. SimulaPhone and physical iPhone Schmitz).
+  - Debounced push mechanism (0.5s) to coalesce rapid user edits.
+
+### 4.2 Storage & Attachments Architecture (`tagdos-attachments`)
+- Dedicated storage bucket `tagdos-attachments` with authenticated user RLS policies.
+- **On-demand Download**: Attachment metadata and image thumbnails are synced; raw file data downloads on tap when opened from a secondary device (matching Microsoft To Do behavior).
+- **Local Disk Cache**: Managed by `TagdosAttachmentManager.shared` in `Caches/TagdosAttachments/` with cache eviction and offline fallback.
 
 ---
 
-## 5. iOS System OS Widgets (`TagdosWidget.swift`)
+## 5. UI Architecture & Components
+
+### 5.1 In-App Modular Dashboard Card (`TagdosNotesDashboardCard.swift`)
+Adheres to DayOne's Liquid Glass design language with Title Case headers:
+- **Small (1x1)**: Focus Tag Hero with glowing border, reminder capsule, next queue pill preview, and active tag count.
+- **Wide (2x1)**: Left Focus Hero with reminder + Right scrollable pipeline preview showing upcoming tags.
+- **Tall (1x2)**: Vertical stream progression showing active driving pills, reminder stamps, and Quick Notes preview.
+- **Large (2x2)**: Comprehensive multi-stream view displaying Stream 1 through Stream 4 with colored pill badges and Quick Notes preview strip.
+
+### 5.2 Dedicated Tagdos Hub (`TagdosNotesHubView.swift`)
+Accessible via Dashboard tap or `daily://tagdos` deep link:
+- **Stream Switcher Bar**: 6 segmented tabs: Streams 1–5 (`S1` to `S5`) plus dedicated `Notes 📝` tab with active note counters.
+- **Pipeline Visualizer**: Displays clusters linked by `&` connectors with interactive pills and color-coded badges.
+- **Per-Stream Active Memos & Attachments (`TagdosActiveMemoView.swift`)**:
+  - Rich memo cards supporting Markdown text formatting, bullet lists, code blocks, and interactive clickable URLs.
+  - Native photo picker (`PhotosPicker`) and file importer (`.fileImporter`) for instant stream attachments.
+  - Attachment carousel with local/cloud sync status indicators, on-demand download, and preview sheet (`QuickLook` / image modal).
+- **Dedicated Quick Notes Stream (`TagdosQuickNotesView.swift`)**:
+  - Pinned notes and chronological notes listing with live search filtering.
+  - Full-featured Markdown editor sheet (`MarkdownNoteEditorSheet`) with live preview toggle (Edit / Preview modes), formatting toolbar, and note pinning.
+- **Sync Status**: Real-time cloud icon in navigation bar (`icloud.fill` when synced, spinning indicator during upload/download).
+
+---
+
+## 6. iOS System OS Widgets (`TagdosWidget.swift`)
 
 Registered in `DailyWidgetsBundle` under `com.intellidream.daily.TagdosWidget`:
+- Updated all widget titles and headers to Title Case (`Tagdos & Notes`, `Tagdos`).
 - **Small**: Displays the driving focus pill, reminder time, upcoming pipeline queue, and total active count.
 - **Medium**: Two-column layout with left focus hero and right top-2 stream pipeline rows with colored pill badges.
 - **Large**: 5-stream overview showing all active clusters and count badges in dark glass aesthetic.
@@ -106,11 +143,11 @@ Registered in `DailyWidgetsBundle` under `com.intellidream.daily.TagdosWidget`:
 
 ---
 
-## 6. Verification & Delivery
+## 7. Verification & Delivery
 - **SimulaPhone Simulator**:
-  - Tested in-app dashboard layout at top position (`simulaphone_tagdos_top.png`).
-  - Tested interactive Hub sheet (`simulaphone_tagdos_hub.png`).
-  - Verified Small, Medium, and Large widgets placed on Home Screen pages (`simulaphone_tagdos_widgets_page0_v4.png`, `simulaphone_tagdos_large.png`).
+  - Verified compilation and in-app dashboard layout at top position (`simulaphone_app_tagdos.png`).
+  - Verified interactive Hub view (`simulaphone_tagdos_hub.png`).
+  - Verified Small, Medium, and Large widgets placed on Home Screen pages (`simulaphone_current_homescreen.png`).
 - **Physical Device**:
   - Built arm64 debug package for iPhone 16 Pro ("Schmitz").
-  - Successfully installed via `devicectl device install app`.
+  - Successfully installed via `devicectl device install app` and launched live.

@@ -13,7 +13,6 @@ public struct TagdosNotesHubView: View {
     @State private var selectedStreamIndex: Int = 0
     @State private var isRawEditMode: Bool = false
     @State private var rawTextBuffer: String = ""
-    @State private var newNoteText: String = ""
 
     // Pill Action Sheet / Dialog state
     @State private var activePillAction: TagDoPillAction? = nil
@@ -32,6 +31,10 @@ public struct TagdosNotesHubView: View {
         return store.streams[selectedStreamIndex]
     }
 
+    private var isNotesTab: Bool {
+        selectedStreamIndex >= store.streams.count
+    }
+
     private func triggerHaptic() {
         if settingsService.settings.hapticsEnabled {
             #if canImport(UIKit)
@@ -46,25 +49,34 @@ public struct TagdosNotesHubView: View {
                 // Top Navigation Bar
                 navigationBar
 
-                // Stream Selector Tabs (1 to 5)
+                // Stream Selector Tabs (1 to 5 + Notes)
                 streamSelectorBar
                     .padding(.top, 8)
                     .padding(.bottom, 12)
 
-                // Main Content Body: Interactive Canvas or Raw Text Editor
+                // Main Content Body: Interactive Canvas or Raw Text Editor or Quick Notes
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 16) {
-                        if isRawEditMode {
-                            rawEditorCard
+                        if isNotesTab {
+                            TagdosQuickNotesView()
                         } else {
-                            interactiveCanvasCard
-                        }
+                            if isRawEditMode {
+                                rawEditorCard
+                            } else {
+                                interactiveCanvasCard
+                            }
 
-                        // Bottom Memos & Notes Section
-                        notesSectionCard
+                            // Per-Stream Active Memos & Attachments
+                            if let stream = currentStream {
+                                TagdosActiveMemoView(streamId: stream.id, streamNumber: stream.orderIndex + 1)
+                            }
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 40)
+                }
+                .refreshable {
+                    await store.syncWithSupabase()
                 }
             }
         }
@@ -117,44 +129,58 @@ public struct TagdosNotesHubView: View {
 
             Spacer()
 
-            Text("TAGDOS & NOTES")
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
+            HStack(spacing: 6) {
+                Text("Tagdos & Notes")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+
+                if store.isSyncing {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                        .tint(ThemeColors.accentCyan)
+                } else if store.lastSyncedAt != nil {
+                    Image(systemName: "icloud.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(ThemeColors.accentGreen.opacity(0.85))
+                }
+            }
 
             Spacer()
 
-            // Dual Mode Toggle: Canvas vs Raw Edit
-            Button {
-                triggerHaptic()
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    if isRawEditMode {
-                        // Saving from raw text
-                        if let stream = currentStream {
-                            store.updateStreamRawText(streamId: stream.id, newRawText: rawTextBuffer)
+            if !isNotesTab {
+                // Dual Mode Toggle: Canvas vs Raw Edit
+                Button {
+                    triggerHaptic()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        if isRawEditMode {
+                            // Saving from raw text
+                            if let stream = currentStream {
+                                store.updateStreamRawText(streamId: stream.id, newRawText: rawTextBuffer)
+                            }
+                        } else {
+                            if let stream = currentStream {
+                                rawTextBuffer = stream.rawText
+                            }
                         }
-                    } else {
-                        if let stream = currentStream {
-                            rawTextBuffer = stream.rawText
-                        }
+                        isRawEditMode.toggle()
                     }
-                    isRawEditMode.toggle()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: isRawEditMode ? "square.grid.2x2.fill" : "text.cursor")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(isRawEditMode ? "Canvas" : "Raw Text")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background((isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple).opacity(0.18))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .strokeBorder((isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple).opacity(0.4), lineWidth: 1)
+                    )
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: isRawEditMode ? "square.grid.2x2.fill" : "text.cursor")
-                        .font(.system(size: 11, weight: .bold))
-                    Text(isRawEditMode ? "Canvas" : "Raw Text")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                }
-                .foregroundColor(isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background((isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple).opacity(0.18))
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .strokeBorder((isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple).opacity(0.4), lineWidth: 1)
-                )
             }
         }
         .padding(.horizontal, 16)
@@ -202,6 +228,42 @@ public struct TagdosNotesHubView: View {
                                 )
                         )
                     }
+                }
+
+                // 6th Tab: Dedicated Quick Notes stream
+                let isNotesSelected = selectedStreamIndex >= store.streams.count
+                Button {
+                    triggerHaptic()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedStreamIndex = store.streams.count
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Notes 📝")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+
+                        if !store.quickNotes.isEmpty {
+                            Text("\(store.quickNotes.count)")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.white.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .foregroundColor(isNotesSelected ? .white : Color.white.opacity(0.6))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule()
+                            .fill(isNotesSelected ? ThemeColors.accentCyan.opacity(0.35) : Color.white.opacity(0.06))
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(isNotesSelected ? ThemeColors.accentCyan : Color.white.opacity(0.12), lineWidth: 1)
+                            )
+                    )
                 }
             }
             .padding(.horizontal, 16)
@@ -414,81 +476,6 @@ public struct TagdosNotesHubView: View {
                 .background(Color.black.opacity(0.3))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color(hex: "081426").opacity(0.75))
-                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
-        )
-    }
-
-    // MARK: - Notes Section Card
-    private var notesSectionCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                HStack(spacing: 5) {
-                    Image(systemName: "note.text")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(ThemeColors.accentOrange)
-                    Text("ACTIVE MEMOS & QUICK NOTES")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
-                Spacer()
-                Text("\(store.quickNotes.count) notes")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.5))
-            }
-
-            // Add Note Field
-            HStack(spacing: 8) {
-                TextField("Add quick memo or decode...", text: $newNoteText)
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                Button {
-                    triggerHaptic()
-                    store.addQuickNote(newNoteText)
-                    newNoteText = ""
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(ThemeColors.accentCyan)
-                }
-                .disabled(newNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
-            // Notes List
-            VStack(spacing: 6) {
-                ForEach(Array(store.quickNotes.enumerated()), id: \.offset) { index, note in
-                    HStack {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 4))
-                            .foregroundColor(ThemeColors.accentOrange)
-                        Text(note)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.white.opacity(0.85))
-                        Spacer()
-                        Button {
-                            triggerHaptic()
-                            store.removeQuickNote(at: index)
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(Color.white.opacity(0.4))
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.04))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            }
         }
         .padding(16)
         .background(

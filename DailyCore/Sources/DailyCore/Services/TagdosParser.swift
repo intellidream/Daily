@@ -187,7 +187,49 @@ public struct TagdosParser: Sendable {
             rawText: newRawText,
             clusters: updatedClusters,
             streamReminder: stream.streamReminder,
-            orderIndex: stream.orderIndex
+            orderIndex: stream.orderIndex,
+            activeMemos: stream.activeMemos,
+            attachments: stream.attachments,
+            updatedAt: Date()
+        )
+    }
+
+    /// Adds a new pill into a specific cluster or creates a new one.
+    public func addPill(in stream: TagDoStream, clusterIndex: Int, text: String) -> TagDoStream {
+        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanText.isEmpty else { return stream }
+
+        var updatedClusters = stream.clusters
+        let newPill = TagDoPill(rawText: cleanText)
+
+        if updatedClusters.isEmpty {
+            updatedClusters.append(TagDoCluster(pills: [newPill], rawText: cleanText))
+        } else if clusterIndex >= 0 && clusterIndex < updatedClusters.count {
+            var cluster = updatedClusters[clusterIndex]
+            cluster.pills.append(newPill)
+            cluster.rawText = cluster.pills.map { $0.rawText }.joined(separator: "/")
+            updatedClusters[clusterIndex] = cluster
+        } else {
+            if var last = updatedClusters.last {
+                last.pills.append(newPill)
+                last.rawText = last.pills.map { $0.rawText }.joined(separator: "/")
+                updatedClusters[updatedClusters.count - 1] = last
+            } else {
+                updatedClusters.append(TagDoCluster(pills: [newPill], rawText: cleanText))
+            }
+        }
+
+        let newRawText = updatedClusters.map { $0.rawText }.joined(separator: " & ")
+        return TagDoStream(
+            id: stream.id,
+            title: stream.title,
+            rawText: newRawText,
+            clusters: updatedClusters,
+            streamReminder: stream.streamReminder,
+            orderIndex: stream.orderIndex,
+            activeMemos: stream.activeMemos,
+            attachments: stream.attachments,
+            updatedAt: Date()
         )
     }
 }
