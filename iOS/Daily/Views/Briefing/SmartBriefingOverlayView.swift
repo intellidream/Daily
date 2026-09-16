@@ -4,8 +4,9 @@ import DailyCore
 import UIKit
 #endif
 
-/// Signature Liquid Glass modal overlay presenting the unified Smart Briefing across Morning,
-/// Intra-day, Evening, and Nightly phases with Samsung-style fading text and Swift Charts metrics.
+/// Signature Liquid Glass modal overlay presenting the streamlined Smart Briefing across Morning,
+/// Intra-day, Evening, and Nightly phases with pre-arranged Samsung Galaxy AI-style progressive fading
+/// typography, contextual metric pills, and diurnal action buttons.
 public struct SmartBriefingOverlayView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var briefingService = SmartBriefingService.shared
@@ -13,7 +14,9 @@ public struct SmartBriefingOverlayView: View {
 
     @State private var record: SmartBriefingRecord? = nil
     @State private var isRefreshing: Bool = false
-    @State private var showingStructuredDetails: Bool = false
+    @State private var revealedGlobalWordIndex: Int = 0
+    @State private var isFinished: Bool = false
+    @State private var streamTask: Task<Void, Never>? = nil
 
     public init() {}
 
@@ -23,50 +26,102 @@ public struct SmartBriefingOverlayView: View {
             auroraBackdrop
                 .ignoresSafeArea()
 
-            // 2. Main Scrollable Content
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 20) {
-                    // Top Navigation Action Bar
-                    navigationActionBar
+            // 2. Main Content
+            VStack(spacing: 0) {
+                // Top Navigation Action Bar with integrated Diurnal Slot Status Pill
+                navigationActionBar
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
 
-                    // Hero Slot Title & Greeting
-                    heroHeaderSection
-
-                    if briefingService.isLoading || record == nil {
-                        loadingShimmerView
-                    } else if let rec = record {
-                        // Narrative Section with Samsung Galaxy AI Fading Typography
-                        narrativeGlassCard(for: rec)
-
-                        // Visual Mini-Charts & Telemetry Gauges
-                        metricsVisualCardsSection(for: rec.metrics)
-
-                        // Structured Hub Details Accordion
-                        structuredSectionsAccordion(for: rec.narrative)
+                if briefingService.isLoading || record == nil {
+                    Spacer()
+                    loadingShimmerView
+                        .padding(.horizontal, 20)
+                    Spacer()
+                } else if let rec = record {
+                    let items = buildCardItems(from: rec)
+                    let wordsPerCard = items.map {
+                        $0.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
                     }
+                    let offsets = calculateOffsets(wordsPerCard: wordsPerCard)
+                    let totalWords = wordsPerCard.reduce(0) { $0 + $1.count }
 
-                    // Bottom Dismiss Action Button
-                    bottomDoneButton
+                    ScrollViewReader { proxy in
+                        ScrollView(.vertical, showsIndicators: false) {
+                            VStack(spacing: 12) {
+                                // Pre-arranged Integrated Cards with Samsung-style Fading Words
+                                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                                    cardView(
+                                        item: item,
+                                        index: index,
+                                        words: wordsPerCard[index],
+                                        startIndex: offsets[index],
+                                        totalWords: totalWords
+                                    )
+                                }
+
+                                // Tap to skip helper indicator when active
+                                if !isFinished {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "sparkles")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(ThemeColors.accentCyan)
+
+                                        Text("Tap anywhere to reveal instantly")
+                                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                                            .foregroundColor(ThemeColors.textMuted)
+                                    }
+                                    .padding(.top, 4)
+                                }
+
+                                // Contextual Diurnal Bottom Action Button
+                                bottomDoneButton(for: rec.slot)
+                                    .id("bottom_button")
+                                    .padding(.top, 8)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 4)
+                            .padding(.bottom, 36)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            completeInstantly(totalWords: totalWords)
+                        }
+                        .onAppear {
+                            if ProcessInfo.processInfo.arguments.contains("-scrollToBottomBriefing") {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                    withAnimation {
+                                        proxy.scrollTo("bottom_button", anchor: .bottom)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 40)
             }
         }
         .task {
             if let cached = briefingService.activeBriefing {
                 self.record = cached
+                startStreaming(for: buildCardItems(from: cached))
             } else {
                 let rec = await briefingService.getOrGenerateBriefing()
                 self.record = rec
+                startStreaming(for: buildCardItems(from: rec))
             }
+        }
+        .onDisappear {
+            streamTask?.cancel()
         }
     }
 
-    // MARK: - Navigation Bar
+    // MARK: - Navigation Bar with Slot Status Pill
 
     private var navigationActionBar: some View {
-        HStack {
+        let slot = record?.slot ?? BriefingTimeSlot.current()
+
+        return HStack(alignment: .center) {
             // Refresh Button
             Button {
                 triggerHaptic()
@@ -74,13 +129,14 @@ public struct SmartBriefingOverlayView: View {
                     isRefreshing = true
                     let refreshed = await briefingService.getOrGenerateBriefing(forceRefresh: true)
                     self.record = refreshed
+                    startStreaming(for: buildCardItems(from: refreshed))
                     isRefreshing = false
                 }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white.opacity(0.85))
-                    .frame(width: 38, height: 38)
+                    .frame(width: 36, height: 36)
                     .background(Circle().fill(Color.white.opacity(0.12)))
                     .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
                     .rotationEffect(.degrees(isRefreshing ? 360 : 0))
@@ -90,28 +146,34 @@ public struct SmartBriefingOverlayView: View {
 
             Spacer()
 
-            // Engine Status Pill
-            if let rec = record {
-                HStack(spacing: 5) {
-                    Image(systemName: rec.isAiGenerated ? "sparkles" : "bolt.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(rec.isAiGenerated ? ThemeColors.accentCyan : ThemeColors.accentBlue)
+            // Diurnal Slot Status Pill (replacing "Instant Synthesis")
+            HStack(spacing: 6) {
+                Image(systemName: slot.systemImage)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(ThemeColors.accentCyan)
 
-                    Text(rec.isAiGenerated ? "Gemini Flash AI" : "Instant Synthesis")
-                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule()
-                        .fill(Color.black.opacity(0.35))
-                        .overlay(
-                            Capsule()
-                                .stroke(rec.isAiGenerated ? ThemeColors.accentCyan.opacity(0.4) : Color.white.opacity(0.2), lineWidth: 1)
-                        )
-                )
+                Text("\(slot.displayName) · \(slot.timeRangeString)")
+                    .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.95))
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6.5)
+            .background(
+                Capsule()
+                    .fill(Color(hex: "080F1E").opacity(0.82))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(
+                        LinearGradient(
+                            colors: [ThemeColors.accentCyan.opacity(0.45), Color.white.opacity(0.18)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
 
             Spacer()
 
@@ -121,9 +183,9 @@ public struct SmartBriefingOverlayView: View {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white.opacity(0.85))
-                    .frame(width: 38, height: 38)
+                    .frame(width: 36, height: 36)
                     .background(Circle().fill(Color.white.opacity(0.12)))
                     .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
             }
@@ -131,399 +193,136 @@ public struct SmartBriefingOverlayView: View {
         }
     }
 
-    // MARK: - Hero Header Section
+    // MARK: - Pre-arranged Card View
 
-    private var heroHeaderSection: some View {
-        let slot = record?.slot ?? BriefingTimeSlot.current()
-        let firstName = authService.currentUser?.firstName ?? "Friend"
+    private func cardView(
+        item: BriefingCardItem,
+        index: Int,
+        words: [String],
+        startIndex: Int,
+        totalWords: Int
+    ) -> some View {
+        let count = words.count
+        let isCompleted = isFinished || revealedGlobalWordIndex >= startIndex + count
+        let isCurrentlyTyping = !isFinished && revealedGlobalWordIndex >= startIndex && revealedGlobalWordIndex < startIndex + count
 
-        return VStack(spacing: 8) {
-            // Time Slot Badge
-            HStack(spacing: 6) {
-                Image(systemName: slot.systemImage)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(ThemeColors.accentCyan)
-
-                Text(slot.displayName.uppercased())
-                    .font(.system(size: 11.5, weight: .bold, design: .rounded))
-                    .foregroundColor(ThemeColors.accentCyan)
-                    .tracking(0.8)
-
-                Text("•")
-                    .foregroundColor(ThemeColors.textMuted)
-
-                Text(slot.timeRangeString)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundColor(ThemeColors.textSecondary)
+        let visibleText: String = {
+            if isCompleted {
+                return item.text
+            } else if isCurrentlyTyping {
+                let localCount = max(0, revealedGlobalWordIndex - startIndex)
+                return words.prefix(localCount).joined(separator: " ")
+            } else {
+                return ""
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(ThemeColors.accentCyan.opacity(0.12))
-            )
-            .overlay(
-                Capsule()
-                    .stroke(ThemeColors.accentCyan.opacity(0.3), lineWidth: 0.8)
-            )
+        }()
 
-            // Greeting
-            Text("\(slot.greetingPrefix), \(firstName)!")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-                .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 2)
-        }
-        .padding(.top, 6)
-    }
+        return VStack(alignment: .leading, spacing: 10) {
+            // Card Header: Category Icon + Title + Suggestive Contextual Metric Badge
+            HStack(alignment: .center, spacing: 9) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundColor(item.iconColor)
+                    .frame(width: 26, height: 26)
+                    .background(item.iconColor.opacity(0.16))
+                    .clipShape(Circle())
 
-    // MARK: - Narrative Card (Samsung Fading Typewriter Text)
-
-    private func narrativeGlassCard(for rec: SmartBriefingRecord) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("Daily Intelligence", systemImage: "sparkles")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundColor(ThemeColors.accentCyan)
+                Text(item.title)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
 
                 Spacer()
 
-                if let date = briefingService.lastGeneratedAt {
-                    Text(Self.timeFormatter.string(from: date))
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor(ThemeColors.textMuted)
+                if let badge = item.badgeText {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(item.badgeColor)
+                            .frame(width: 4, height: 4)
+
+                        Text(badge)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(item.badgeColor)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3.5)
+                    .background(
+                        Capsule()
+                            .fill(item.badgeColor.opacity(0.12))
+                    )
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(item.badgeColor.opacity(0.28), lineWidth: 0.8)
+                    )
                 }
             }
 
             Divider()
-                .background(Color.white.opacity(0.12))
+                .background(Color.white.opacity(0.08))
 
-            // Progressive Word-by-Word Reveal with smooth opacity & glow
-            FadingTypewriterText(
-                fullText: rec.narrative.fullConcatenatedText,
-                wordIntervalMs: 38
-            )
-        }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color(hex: "0A1124").opacity(0.78))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.45), ThemeColors.accentCyan.opacity(0.3), Color.white.opacity(0.1)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.2
-                )
-        )
-        .shadow(color: Color.black.opacity(0.3), radius: 12, x: 0, y: 6)
-    }
+            // Body: Progressive Word Fading with Pre-reserved Geometry
+            ZStack(alignment: .topLeading) {
+                // Invisible placeholder reserving exact typography layout
+                Text(item.text)
+                    .font(.system(size: 14.5, weight: .regular, design: .rounded))
+                    .lineSpacing(4)
+                    .foregroundColor(.clear)
+                    .accessibilityHidden(true)
 
-    // MARK: - Mini-Charts & Visual Telemetry Section
-
-    private func metricsVisualCardsSection(for metrics: SmartBriefingMetrics) -> some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                // 1. Recovery & Sleep Mini Card
-                sleepRecoveryCard(metrics: metrics)
-
-                // 2. Habits & Hydration Mini Card
-                habitsMiniCard(metrics: metrics)
-            }
-
-            HStack(spacing: 12) {
-                // 3. Finance Mini Card
-                financeMiniCard(metrics: metrics)
-
-                // 4. TagDoS Mental Streams Mini Card
-                tagdosMiniCard(metrics: metrics)
-            }
-        }
-    }
-
-    // Sleep Recovery Card
-    private func sleepRecoveryCard(metrics: SmartBriefingMetrics) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: "bed.double.fill")
-                    .foregroundColor(ThemeColors.accentPurple)
-                    .font(.system(size: 14))
-                Text("Recovery")
-                    .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.85))
-                Spacer()
-                if let score = metrics.sleepScore {
-                    Text("\(score)")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundColor(score >= 80 ? ThemeColors.success : ThemeColors.warning)
-                }
-            }
-
-            // Progress bar
-            let scoreProgress = Double(metrics.sleepScore ?? 75) / 100.0
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.12))
-                        .frame(height: 6)
-
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [ThemeColors.accentPurple, ThemeColors.accentCyan],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: geo.size.width * CGFloat(min(max(scoreProgress, 0.05), 1.0)), height: 6)
-                }
-            }
-            .frame(height: 6)
-
-            HStack {
-                if let hrs = metrics.sleepDurationHours {
-                    Text(String(format: "%.1fh sleep", hrs))
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor(ThemeColors.textSecondary)
-                }
-                Spacer()
-                Text("\(metrics.totalStepsToday) steps")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundColor(ThemeColors.textSecondary)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(hex: "080F1E").opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-        )
-    }
-
-    // Habits & Hydration Card (with smoking reduction support)
-    private func habitsMiniCard(metrics: SmartBriefingMetrics) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: "drop.fill")
-                    .foregroundColor(ThemeColors.accentCyan)
-                    .font(.system(size: 14))
-                Text("Habits")
-                    .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.85))
-                Spacer()
-                let waterLiters = String(format: "%.1fL", metrics.waterMlToday / 1000.0)
-                Text(waterLiters)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundColor(ThemeColors.accentCyan)
-            }
-
-            // Water Progress bar
-            let waterProgress = metrics.waterGoalMl > 0 ? min(metrics.waterMlToday / metrics.waterGoalMl, 1.0) : 0.0
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.12))
-                        .frame(height: 6)
-
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [ThemeColors.accentCyan, ThemeColors.accentBlue],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: geo.size.width * CGFloat(max(waterProgress, 0.05)), height: 6)
-                }
-            }
-            .frame(height: 6)
-
-            // Smoking reduction status
-            HStack {
-                Image(systemName: "smoke.fill")
-                    .font(.system(size: 10))
-                    .foregroundColor(metrics.smokesToday <= metrics.smokesBaseline ? ThemeColors.success : ThemeColors.warning)
-
-                Text("\(metrics.smokesToday) / \(metrics.smokesBaseline) baseline")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundColor(metrics.smokesToday <= metrics.smokesBaseline ? ThemeColors.success : ThemeColors.warning)
-
-                Spacer()
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(hex: "080F1E").opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-        )
-    }
-
-    // Finance Mini Card
-    private func financeMiniCard(metrics: SmartBriefingMetrics) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "creditcard.fill")
-                    .foregroundColor(ThemeColors.success)
-                    .font(.system(size: 13))
-                Text("Finance")
-                    .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.85))
-                Spacer()
-            }
-
-            Text(String(format: "$%.0f", metrics.netWorth))
-                .font(.system(size: 17, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-
-            let sign = metrics.daySpend >= 0 ? "+" : ""
-            Text("\(sign)$\(Int(metrics.daySpend)) flow today")
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundColor(metrics.daySpend >= 0 ? ThemeColors.success : ThemeColors.textSecondary)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(hex: "080F1E").opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-        )
-    }
-
-    // TagDoS Mini Card
-    private func tagdosMiniCard(metrics: SmartBriefingMetrics) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "tag.fill")
-                    .foregroundColor(ThemeColors.warning)
-                    .font(.system(size: 13))
-                Text("TagDoS")
-                    .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.85))
-                Spacer()
-            }
-
-            Text("\(metrics.activeStreamCount) Streams")
-                .font(.system(size: 17, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-
-            Text("\(metrics.activeMemoCount) active memos")
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundColor(ThemeColors.textSecondary)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(hex: "080F1E").opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-        )
-    }
-
-    // MARK: - Structured Sections Accordion
-
-    private func structuredSectionsAccordion(for narrative: SmartBriefingNarrative) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                triggerHaptic()
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    showingStructuredDetails.toggle()
-                }
-            } label: {
-                HStack {
-                    Label("Hub Breakdown & Recommendations", systemImage: "list.bullet.rectangle.portrait")
-                        .font(.system(size: 13.5, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
-
-                    Spacer()
-
-                    Image(systemName: showingStructuredDetails ? "chevron.up" : "chevron.down")
+                // Rendered animated progressive word text
+                (
+                    Text(visibleText)
+                        .font(.system(size: 14.5, weight: .regular, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.92))
+                    +
+                    Text(isCurrentlyTyping ? " ✨" : "")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(ThemeColors.textMuted)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(hex: "080F1E").opacity(0.7))
+                        .foregroundColor(ThemeColors.accentCyan)
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-
-            if showingStructuredDetails {
-                VStack(spacing: 10) {
-                    ForEach(narrative.structuredSections, id: \.title) { section in
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: section.icon)
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(ThemeColors.accentCyan)
-                                .frame(width: 24, height: 24)
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(section.title)
-                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
-
-                                Text(section.text)
-                                    .font(.system(size: 12.5, weight: .regular, design: .rounded))
-                                    .foregroundColor(ThemeColors.textSecondary)
-                                    .lineSpacing(3)
-                            }
-                            Spacer()
-                        }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
-                        )
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .lineSpacing(4)
+                .animation(.easeOut(duration: 0.12), value: revealedGlobalWordIndex)
             }
         }
+        .padding(15)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(hex: "080F1E").opacity(isCurrentlyTyping ? 0.88 : 0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(
+                    isCurrentlyTyping
+                        ? ThemeColors.accentCyan.opacity(0.5)
+                        : Color.white.opacity(0.12),
+                    lineWidth: isCurrentlyTyping ? 1.2 : 0.8
+                )
+        )
+        .shadow(
+            color: isCurrentlyTyping ? ThemeColors.accentCyan.opacity(0.15) : Color.black.opacity(0.15),
+            radius: isCurrentlyTyping ? 10 : 6,
+            x: 0,
+            y: 3
+        )
     }
 
-    // MARK: - Done Button
+    // MARK: - Contextual Diurnal Bottom Action Button
 
-    private var bottomDoneButton: some View {
-        Button {
+    private func bottomDoneButton(for slot: BriefingTimeSlot) -> some View {
+        let firstName = authService.currentUser?.firstName ?? "Friend"
+        let greeting = "\(slot.greetingPrefix), \(firstName)"
+        let icon = slot.actionButtonIcon
+
+        return Button {
             triggerHaptic()
             dismiss()
         } label: {
-            HStack(spacing: 8) {
-                Text("Ready for the Day")
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(ThemeColors.accentCyan)
+
+                Text(greeting)
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
-
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(ThemeColors.accentCyan)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 52)
@@ -531,7 +330,10 @@ public struct SmartBriefingOverlayView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [ThemeColors.accentBlue.opacity(0.7), ThemeColors.accentCyan.opacity(0.5)],
+                            colors: [
+                                ThemeColors.accentBlue.opacity(0.85),
+                                ThemeColors.accentCyan.opacity(0.65)
+                            ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -539,12 +341,211 @@ public struct SmartBriefingOverlayView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.white.opacity(0.4), lineWidth: 1.2)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.6), ThemeColors.accentCyan.opacity(0.4)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.2
+                    )
             )
-            .shadow(color: ThemeColors.accentCyan.opacity(0.35), radius: 12, x: 0, y: 4)
+            .shadow(color: ThemeColors.accentCyan.opacity(0.35), radius: 14, x: 0, y: 6)
         }
         .buttonStyle(.plain)
-        .padding(.top, 10)
+    }
+
+    // MARK: - Streaming Animation Controller
+
+    private func startStreaming(for items: [BriefingCardItem]) {
+        streamTask?.cancel()
+        revealedGlobalWordIndex = 0
+        isFinished = false
+
+        let wordsPerCard = items.map {
+            $0.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        }
+        let total = wordsPerCard.reduce(0) { $0 + $1.count }
+
+        guard total > 0 else {
+            isFinished = true
+            return
+        }
+
+        streamTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+
+            for idx in 1...total {
+                if Task.isCancelled { break }
+                revealedGlobalWordIndex = idx
+                try? await Task.sleep(nanoseconds: 32_000_000) // 32ms smooth word reveal
+            }
+            isFinished = true
+        }
+    }
+
+    private func completeInstantly(totalWords: Int) {
+        streamTask?.cancel()
+        revealedGlobalWordIndex = totalWords
+        isFinished = true
+    }
+
+    private func calculateOffsets(wordsPerCard: [[String]]) -> [Int] {
+        var offsets: [Int] = []
+        var running = 0
+        for list in wordsPerCard {
+            offsets.append(running)
+            running += list.count
+        }
+        return offsets
+    }
+
+    // MARK: - Card Items Builder
+
+    private func buildCardItems(from rec: SmartBriefingRecord) -> [BriefingCardItem] {
+        var items: [BriefingCardItem] = []
+        let n = rec.narrative
+        let m = rec.metrics
+
+        // 1. Weather
+        if !n.weatherText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let badge: String? = m.weatherTemp != nil ? "\(Int(round(m.weatherTemp!)))° · \(m.weatherCondition ?? "Clear")" : nil
+            items.append(
+                BriefingCardItem(
+                    id: "weather",
+                    icon: m.weatherIcon ?? "cloud.sun.fill",
+                    iconColor: ThemeColors.accentCyan,
+                    title: "Weather & Atmosphere",
+                    badgeText: badge,
+                    badgeColor: ThemeColors.accentCyan,
+                    text: n.weatherText
+                )
+            )
+        }
+
+        // 2. Health & Sleep
+        if !n.healthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let isSleepHour = rec.slot == .nightly || rec.slot == .morning
+            let badge: String? = {
+                if let score = m.sleepScore {
+                    return "\(score)% Sleep"
+                } else if let hr = m.restingBpm {
+                    return "\(Int(hr)) bpm Rest"
+                } else if m.totalStepsToday > 0 {
+                    return "\(m.totalStepsToday) steps"
+                }
+                return nil
+            }()
+
+            items.append(
+                BriefingCardItem(
+                    id: "health",
+                    icon: isSleepHour ? "bed.double.fill" : "heart.fill",
+                    iconColor: ThemeColors.accentPurple,
+                    title: isSleepHour ? "Sleep & Recovery" : "Health & Vitals",
+                    badgeText: badge,
+                    badgeColor: ThemeColors.accentPurple,
+                    text: n.healthText
+                )
+            )
+        }
+
+        // 3. Habits & Balance
+        if !n.habitsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let badge: String? = {
+                if m.waterMlToday > 0 && m.smokesToday > 0 {
+                    return "\(String(format: "%.1fL", m.waterMlToday / 1000.0)) · \(m.smokesToday) smokes"
+                } else if m.waterMlToday > 0 {
+                    return "\(String(format: "%.1fL", m.waterMlToday / 1000.0)) water"
+                } else if m.smokesToday > 0 {
+                    return "\(m.smokesToday)/\(m.smokesBaseline) smokes"
+                }
+                return nil
+            }()
+
+            items.append(
+                BriefingCardItem(
+                    id: "habits",
+                    icon: "drop.fill",
+                    iconColor: ThemeColors.accentBlue,
+                    title: "Habits & Balance",
+                    badgeText: badge,
+                    badgeColor: ThemeColors.accentBlue,
+                    text: n.habitsText
+                )
+            )
+        }
+
+        // 4. Financial Snapshot
+        if !n.financeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let badge: String = {
+                if m.daySpend != 0 {
+                    return "\(m.daySpend >= 0 ? "+" : "")$\(Int(m.daySpend)) today"
+                } else {
+                    return String(format: "$%.0f Net", m.netWorth)
+                }
+            }()
+
+            items.append(
+                BriefingCardItem(
+                    id: "finances",
+                    icon: "creditcard.fill",
+                    iconColor: ThemeColors.success,
+                    title: "Financial Snapshot",
+                    badgeText: badge,
+                    badgeColor: ThemeColors.success,
+                    text: n.financeText
+                )
+            )
+        }
+
+        // 5. TagDoS Focus
+        if !n.tagdosText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let badge = "\(m.activeStreamCount) Streams · \(m.activeMemoCount) Memos"
+            items.append(
+                BriefingCardItem(
+                    id: "tagdos",
+                    icon: "tag.fill",
+                    iconColor: ThemeColors.warning,
+                    title: "TagDoS Focus",
+                    badgeText: badge,
+                    badgeColor: ThemeColors.warning,
+                    text: n.tagdosText
+                )
+            )
+        }
+
+        // 6. World News Headlines
+        if !n.newsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            items.append(
+                BriefingCardItem(
+                    id: "news",
+                    icon: "newspaper.fill",
+                    iconColor: ThemeColors.accentCyan,
+                    title: "Headlines Radar",
+                    badgeText: "Daily Feed",
+                    badgeColor: ThemeColors.accentCyan,
+                    text: n.newsText
+                )
+            )
+        }
+
+        // 7. Mindful Focus / Actionable Coaching
+        if !n.outroText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            items.append(
+                BriefingCardItem(
+                    id: "outro",
+                    icon: "sparkles",
+                    iconColor: ThemeColors.accentCyan,
+                    title: "Mindful Focus",
+                    badgeText: "Suggestion",
+                    badgeColor: ThemeColors.accentCyan,
+                    text: n.outroText
+                )
+            )
+        }
+
+        return items
     }
 
     // MARK: - Loading Shimmer
@@ -591,7 +592,6 @@ public struct SmartBriefingOverlayView: View {
                 endRadius: 500
             )
 
-            // Ultra-thin blur material effect
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .opacity(0.65)
@@ -603,10 +603,16 @@ public struct SmartBriefingOverlayView: View {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         #endif
     }
+}
 
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
+// MARK: - Supporting Item Model
+
+public struct BriefingCardItem: Identifiable, Equatable {
+    public let id: String
+    public let icon: String
+    public let iconColor: Color
+    public let title: String
+    public let badgeText: String?
+    public let badgeColor: Color
+    public let text: String
 }

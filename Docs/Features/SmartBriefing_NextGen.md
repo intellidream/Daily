@@ -81,30 +81,30 @@ flowchart TD
 
 ---
 
-## 5. UI Presentation & Micro-Animations
+## 5. UI Presentation & Streamlined Card Architecture
 
-### Samsung Galaxy AI Fading Typography (`FadingTypewriterText.swift`)
-- Words are revealed sequentially with an opacity ramp:
-  - Currently revealed word: glowing accent cyan with subtle Gaussian blur transitioning to crisp white.
-  - Trailing lead cursor: `✨` sparkling indicator.
-  - Previous words: fully sharp with smooth settling animation.
-- Tap gesture immediately displays full narrative without waiting for the animation cycle.
+### Pre-arranged Samsung Galaxy AI-Style Fading Cards (`SmartBriefingOverlayView.swift`)
+- **Zero Layout Jitter**: All card frames, headers, icons, and metric badges are rendered and geometrically locked from millisecond 0 using transparent typography placeholders.
+- **Word-by-Word Progressive Reveal**: Words stream smoothly across the cards with an opacity ramp, subtle Gaussian blur, and a glowing `✨` lead cursor.
+- **Active Card Aura**: The active card being written displays an ambient cyan specular border glow.
+- **Tap-to-Complete**: Tapping anywhere instantly reveals all words across all cards.
 
-### Liquid Glass Modal Overlay (`SmartBriefingOverlayView.swift`)
-- Native `.sheet` presentation with full Liquid Glass styling.
-- Interactive slot badge (`BriefingTimeSlot.displayBadge`) with time range pill and AI model indicator (`✨ Gemini AI` or `⚡ Standard`).
-- Metric dashboard gauges:
-  - **Recovery & Vitals**: Circular progress gauge showing sleep score and resting HR.
-  - **Habits & Cravings**: Dual circular gauge tracking hydration vs goal and smoke count vs limit.
-  - **Finances**: Monthly cashflow and net position summary.
-  - **TagDoS**: Active streams and pending tasks chip preview.
-- Collapsible Hub Insights accordion for structured reading.
+### Integrated Visual Cards
+- **⛅ Weather & Atmosphere**: Local temperature and condition badge + concise atmospheric outlook.
+- **🛏️ Sleep & Recovery**: Sleep score / resting HR badge + restorative recovery narrative.
+- **💧 Habits & Balance**: Hydration volume and smoke reduction count badge + empathetic pacing coach.
+- **💳 Financial Snapshot**: Today's net cashflow or overall net worth badge + financial telemetry.
+- **🏷️ TagDoS Focus**: Active streams and pending memos badge + priority focus guidance.
+- **📰 Headlines Radar**: Top headline badge + curated world news radar.
+- **✨ Mindful Focus**: Slot-specific actionable suggestion and mindfulness guidance.
 
-### Dashboard Hero Trigger (`HeaderGreetingView.swift`)
-- Breathing radial aura with smooth scale and opacity pulsation.
-- Compact date pill (`WED, SEP 16`).
-- Dedicated `✨ Briefing` button + full-card tap gesture for direct access.
-- Non-intrusive automatic morning presentation (triggers once per day between 05:00 and 11:59 **strictly after all 6 hub data sources finish loading**).
+### Diurnal Navigation & Action Button
+- **Top Navigation Bar**: Features the centered Diurnal Slot Status Pill (e.g. `🌙 Nightly Wind-Down · 22:00 – 04:59`) with refresh and dismiss actions. Eliminates redundant timestamps and titles.
+- **Contextual Diurnal Bottom Button**: The personal greeting is integrated directly into the primary bottom action button:
+  - **Nightly**: `[ 🛏️ Peaceful night, Mihai ]` (`bed.double.fill`)
+  - **Morning**: `[ 🌅 Good morning, Mihai ]` (`sun.horizon.fill`)
+  - **Intra-day**: `[ ☀️ Good afternoon, Mihai ]` (`sun.max.fill`)
+  - **Evening**: `[ 🌆 Good evening, Mihai ]` (`sunset.fill`)
 
 ---
 

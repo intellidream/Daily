@@ -72,6 +72,15 @@ public enum BriefingTimeSlot: String, CaseIterable, Codable, Sendable, Identifia
         case .nightly: return "Peaceful night"
         }
     }
+
+    public var actionButtonIcon: String {
+        switch self {
+        case .morning: return "sun.horizon.fill"
+        case .intraday: return "sun.max.fill"
+        case .evening: return "sunset.fill"
+        case .nightly: return "bed.double.fill"
+        }
+    }
 }
 
 /// Structured multi-hub narrative text components forming the briefing body.
