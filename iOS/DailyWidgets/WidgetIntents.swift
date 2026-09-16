@@ -88,26 +88,31 @@ public struct LogSmokeIntent: AppIntent {
 
 public struct AdjustLedgerIntent: AppIntent {
     public static var title: LocalizedStringResource = "Adjust Ledger"
-    public static var description = IntentDescription("Quickly adds or subtracts amounts from Card or Cash accounts.")
+    public static var description = IntentDescription("Quickly adds or subtracts real amounts (in Lei) from Card or Cash accounts.")
 
     @Parameter(title: "Account Name")
     public var accountName: String
 
     @Parameter(title: "Delta (Lei)")
-    public var deltaRaw: Double
+    public var deltaReal: Double
 
     public init() {
         self.accountName = "Card"
-        self.deltaRaw = -50
+        self.deltaReal = 100
+    }
+
+    public init(accountName: String, deltaReal: Double) {
+        self.accountName = accountName
+        self.deltaReal = deltaReal
     }
 
     public init(accountName: String, deltaRaw: Double) {
         self.accountName = accountName
-        self.deltaRaw = deltaRaw
+        self.deltaReal = deltaRaw
     }
 
     public func perform() async throws -> some IntentResult {
-        WidgetDataCoordinator.shared.adjustLedgerAmount(accountName: accountName, deltaRaw: deltaRaw)
+        WidgetDataCoordinator.shared.adjustLedgerAmount(accountName: accountName, deltaReal: deltaReal)
         return .result()
     }
 }

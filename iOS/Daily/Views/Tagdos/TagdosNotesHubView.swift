@@ -28,7 +28,20 @@ public struct TagdosNotesHubView: View {
     @State private var showingRenameSheet: Bool = false
     @State private var editingStreamTitle: String = ""
 
-    public init() {}
+    public var onNavigateBack: (() -> Void)? = nil
+
+    public init(onNavigateBack: (() -> Void)? = nil) {
+        self.onNavigateBack = onNavigateBack
+    }
+
+    private func handleBack() {
+        triggerHaptic()
+        if let onNavigateBack = onNavigateBack {
+            onNavigateBack()
+        } else {
+            dismiss()
+        }
+    }
 
     private var currentStream: TagDoStream? {
         guard selectedStreamIndex < store.streams.count else { return nil }
@@ -93,8 +106,7 @@ public struct TagdosNotesHubView: View {
 
                     // Edge swipe right: started within 75pt of left edge, dragged right > 50pt, horizontally dominant
                     if startX <= 75 && translationX > 50 && abs(translationX) > abs(translationY) * 1.1 {
-                        triggerHaptic()
-                        dismiss()
+                        handleBack()
                     }
                 }
         )
@@ -134,8 +146,7 @@ public struct TagdosNotesHubView: View {
     private var navigationBar: some View {
         HStack {
             Button {
-                triggerHaptic()
-                dismiss()
+                handleBack()
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .bold))

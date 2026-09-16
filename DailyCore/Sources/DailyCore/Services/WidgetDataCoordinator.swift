@@ -673,6 +673,28 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         )
     }
     
+    /// Adjusts an account amount by a real currency amount (e.g. -100 Lei or +100 Lei).
+    /// Automatically converts to DSL units if the underlying section is scaled (1 unit = 100 Lei).
+    public func adjustLedgerAmount(accountName: String, deltaReal: Double) {
+        let rawText = groupDefaults.string(forKey: ledgerStorageKey) ?? SmartLedgerStore.defaultLedgerText
+        let ledger = SmartLedgerParser.shared.parse(rawText)
+        
+        guard let incoming = ledger.sections.first(where: { $0.name.caseInsensitiveCompare("Incoming") == .orderedSame }),
+              let item = incoming.items.first(where: { $0.key.caseInsensitiveCompare(accountName) == .orderedSame }) else {
+            return
+        }
+        
+        // In scaled sections (e.g. Incoming where 1 unit = 100 Lei), deltaRaw = deltaReal / 100.0
+        let deltaRaw = item.isScaled ? (deltaReal / 100.0) : deltaReal
+        let updatedText = SmartLedgerParser.shared.adjustItemAmount(in: rawText, lineIndex: item.lineIndex, deltaRaw: deltaRaw)
+        groupDefaults.set(updatedText, forKey: ledgerStorageKey)
+        UserDefaults.standard.set(updatedText, forKey: ledgerStorageKey)
+        
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+    }
+    
     public func adjustLedgerAmount(accountName: String, deltaRaw: Double) {
         let rawText = groupDefaults.string(forKey: ledgerStorageKey) ?? SmartLedgerStore.defaultLedgerText
         let ledger = SmartLedgerParser.shared.parse(rawText)

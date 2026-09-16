@@ -157,6 +157,15 @@ Registered in `DailyWidgetsBundle` under `com.intellidream.daily.TagdosWidget`:
   - Verified compilation and in-app dashboard layout at top position (`simulaphone_app_tagdos.png`).
   - Verified interactive Hub view with circular back button, `S1`..`S5` circular badges, clean `Notes` tab, and auto-detected stream names (`simulaphone_hub_verified.png`).
   - Verified Small, Medium, and Large widgets placed on Home Screen pages (`simulaphone_current_homescreen.png`).
+  - Verified 5-pill floating dock with active TagDoS pill (`simulaphone_5pills_dock.png`, `simulaphone_tagdos_tab.png`).
 - **Physical Device ("Schmitz")**:
   - Built arm64 debug package for iPhone 16 Pro ("Schmitz", ID `00008140-000E2C863EFB001C`).
   - Successfully installed via `xcrun devicectl device install app` and launched live.
+
+---
+
+## 8. Floating Navigation Dock Integration (5-Pill Dock)
+- **Positioning**: TagDoS is elevated to a first-class primary tab inside `FloatingGlassCapsule`: `[Dashboard, Money, TagDoS, Health, Habits]`.
+- **Dock Scrubbing & Flick Gestures**: The dynamic segment calculation seamlessly splits the floating capsule into 5 equal touch areas, preserving both instant single-tap switching and continuous horizontal scrubbing with tactile haptics.
+- **Root-Level Navigation**: Directly integrated into `RootView` with `onNavigateBack` fallback to Dashboard via top-left back button or edge swipe right.
+

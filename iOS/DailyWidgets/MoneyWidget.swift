@@ -137,10 +137,10 @@ public struct MoneyWidgetView: View {
 
             Spacer(minLength: 2)
 
-            // 2 Compact Adjust Buttons: -50 Crd & +100 Crd
+            // 2 Compact Adjust Buttons: -100 Crd & +100 Crd
             HStack(spacing: 4) {
-                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaRaw: -50)) {
-                    Text("-50 Crd")
+                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaReal: -100)) {
+                    Text("-100 Crd")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
@@ -153,7 +153,7 @@ public struct MoneyWidgetView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaRaw: 100)) {
+                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaReal: 100)) {
                     Text("+100 Crd")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
@@ -242,8 +242,8 @@ public struct MoneyWidgetView: View {
 
             // 3 Smart Interactive Adjust Buttons
             HStack(spacing: 6) {
-                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaRaw: -50)) {
-                    Text("-50 Crd")
+                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaReal: -100)) {
+                    Text("-100 Crd")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
@@ -256,8 +256,8 @@ public struct MoneyWidgetView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(intent: AdjustLedgerIntent(accountName: "Cash", deltaRaw: -50)) {
-                    Text("-50 Csh")
+                Button(intent: AdjustLedgerIntent(accountName: "Cash", deltaReal: -100)) {
+                    Text("-100 Csh")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
@@ -270,7 +270,7 @@ public struct MoneyWidgetView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaRaw: 100)) {
+                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaReal: 100)) {
                     Text("+100 Crd")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
@@ -379,8 +379,8 @@ public struct MoneyWidgetView: View {
 
             // Quick Adjust Action Grid
             HStack(spacing: 6) {
-                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaRaw: -50)) {
-                    Text("-50 Card")
+                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaReal: -100)) {
+                    Text("-100 Card")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 32)
@@ -393,8 +393,8 @@ public struct MoneyWidgetView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(intent: AdjustLedgerIntent(accountName: "Cash", deltaRaw: -50)) {
-                    Text("-50 Cash")
+                Button(intent: AdjustLedgerIntent(accountName: "Cash", deltaReal: -100)) {
+                    Text("-100 Cash")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 32)
@@ -407,7 +407,7 @@ public struct MoneyWidgetView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaRaw: 100)) {
+                Button(intent: AdjustLedgerIntent(accountName: "Card", deltaReal: 100)) {
                     Text("+100 Card")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)

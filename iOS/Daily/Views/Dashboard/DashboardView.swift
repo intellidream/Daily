@@ -8,7 +8,6 @@ public struct DashboardView: View {
     @ObservedObject private var settingsService = SettingsService.shared
     
     @State private var showingCustomizeSheet = false
-    @State private var showingTagdosHub = false
     
     private let onNavigateToWeather: () -> Void
     private let onNavigateToNews: () -> Void
@@ -16,6 +15,7 @@ public struct DashboardView: View {
     private let onNavigateToHabits: () -> Void
     private let onNavigateToFinances: () -> Void
     private let onNavigateToSettings: () -> Void
+    private let onNavigateToTagdos: () -> Void
     
     public init(
         onNavigateToWeather: @escaping () -> Void = {},
@@ -23,7 +23,8 @@ public struct DashboardView: View {
         onNavigateToHealth: @escaping () -> Void = {},
         onNavigateToHabits: @escaping () -> Void = {},
         onNavigateToFinances: @escaping () -> Void = {},
-        onNavigateToSettings: @escaping () -> Void = {}
+        onNavigateToSettings: @escaping () -> Void = {},
+        onNavigateToTagdos: @escaping () -> Void = {}
     ) {
         self.onNavigateToWeather = onNavigateToWeather
         self.onNavigateToNews = onNavigateToNews
@@ -31,6 +32,7 @@ public struct DashboardView: View {
         self.onNavigateToHabits = onNavigateToHabits
         self.onNavigateToFinances = onNavigateToFinances
         self.onNavigateToSettings = onNavigateToSettings
+        self.onNavigateToTagdos = onNavigateToTagdos
     }
 
     private func triggerHaptic() {
@@ -83,9 +85,6 @@ public struct DashboardView: View {
         }
         .sheet(isPresented: $showingCustomizeSheet) {
             CustomizeDashboardSheet()
-        }
-        .fullScreenCover(isPresented: $showingTagdosHub) {
-            TagdosNotesHubView()
         }
     }
 
@@ -157,7 +156,7 @@ public struct DashboardView: View {
             FinancesDashboardCard(size: config.size, onTap: onNavigateToFinances)
                 .equatable()
         case DashboardWidgetType.tagdosNotes.rawValue:
-            TagdosNotesDashboardCard(size: config.size, onTap: { showingTagdosHub = true })
+            TagdosNotesDashboardCard(size: config.size, onTap: onNavigateToTagdos)
                 .equatable()
         default:
             EmptyView()

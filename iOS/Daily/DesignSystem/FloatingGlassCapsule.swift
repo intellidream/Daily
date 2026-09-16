@@ -6,28 +6,30 @@ import UIKit
 
 public enum NavigationTab: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard"
-    case weather = "Weather"
-    case news = "News"
+    case finances = "Money"
+    case tagdos = "TagDoS"
     case health = "Health"
     case habits = "Habits"
+    case weather = "Weather"
+    case news = "News"
     case settings = "Settings"
-    case finances = "Money"
     
     public var id: String { rawValue }
     
     public var iconName: String {
         switch self {
         case .dashboard: return "square.grid.2x2.fill"
-        case .weather: return "cloud.sun.fill"
-        case .news: return "newspaper.fill"
+        case .finances: return "wallet.bifold.fill"
+        case .tagdos: return "checklist"
         case .health: return "heart.fill"
         case .habits: return "drop.fill"
+        case .weather: return "cloud.sun.fill"
+        case .news: return "newspaper.fill"
         case .settings: return "gearshape.fill"
-        case .finances: return "wallet.bifold.fill"
         }
     }
     
-    public static let primaryTabs: [NavigationTab] = [.dashboard, .finances, .health, .habits]
+    public static let primaryTabs: [NavigationTab] = [.dashboard, .finances, .tagdos, .health, .habits]
 }
 
 /// Floating Liquid Glass navigation capsule anchored at the bottom of the viewport.

@@ -4,7 +4,6 @@ import DailyCore
 public struct RootView: View {
     @ObservedObject private var authService = AuthService.shared
     @State private var selectedTab: NavigationTab = .dashboard
-    @State private var showingTagdosSheet = false
     
     public init() {
         let args = ProcessInfo.processInfo.arguments
@@ -18,6 +17,8 @@ public struct RootView: View {
             self._selectedTab = State(initialValue: .health)
         } else if args.contains("-startTabFinances") {
             self._selectedTab = State(initialValue: .finances)
+        } else if args.contains("-startTabTagdos") {
+            self._selectedTab = State(initialValue: .tagdos)
         }
         
         if args.contains("-testMixedDashboard") {
@@ -147,6 +148,11 @@ public struct RootView: View {
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                                             selectedTab = .settings
                                         }
+                                    },
+                                    onNavigateToTagdos: {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                            selectedTab = .tagdos
+                                        }
                                     }
                                 )
                             case .weather:
@@ -159,6 +165,8 @@ public struct RootView: View {
                                 HabitsMainView(onNavigateBack: navigateToDashboard)
                             case .finances:
                                 FinancesMainView(onNavigateBack: navigateToDashboard)
+                            case .tagdos:
+                                TagdosNotesHubView(onNavigateBack: navigateToDashboard)
                             case .settings:
                                 SettingsView(onNavigateBack: navigateToDashboard)
                             }
@@ -217,7 +225,7 @@ public struct RootView: View {
                     selectedTab = .health
                     HealthDataService.shared.activeSubTab = .sleep
                 } else if fullPath.contains("tagdos") {
-                    showingTagdosSheet = true
+                    selectedTab = .tagdos
                 } else {
                     switch fullPath {
                     case "dashboard": selectedTab = .dashboard
@@ -226,14 +234,12 @@ public struct RootView: View {
                     case "health": selectedTab = .health
                     case "habits": selectedTab = .habits
                     case "finances": selectedTab = .finances
+                    case "tagdos": selectedTab = .tagdos
                     case "settings": selectedTab = .settings
                     default: break
                     }
                 }
             }
-        }
-        .fullScreenCover(isPresented: $showingTagdosSheet) {
-            TagdosNotesHubView()
         }
     }
     

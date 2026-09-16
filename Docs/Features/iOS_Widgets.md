@@ -152,5 +152,14 @@ Daily provides native iOS Home Screen and Lock Screen widgets powered by Apple's
 9. **Small Money Widget Layout Polish**:
    - **Net Worth**: Compact Lei value displayed top-left with `"NET WORTH"` subtitle positioned neatly directly underneath.
    - **EUR Badge**: Cyan conversion badge (`25.4K €`) positioned in the top-right corner.
-   - **Centered Liquidity Stack**: `Card [value]` and `Cash [value]` stacked vertically one below the other, vertically centered between the Net Worth section and the bottom action buttons (`-50 Crd` & `+100 Crd`).
+   - **Centered Liquidity Stack**: `Card [value]` and `Cash [value]` stacked vertically one below the other, vertically centered between the Net Worth section and the bottom action buttons (`-100 Crd` & `+100 Crd`).
 10. **In-App Finances Large Card Navigation**: Standardized the header navigation link in the Large 2x2 modular dashboard card to `"Open Hub"` with chevron, aligning with the wide and habits cards.
+11. **Real-Currency Nominal Widget Adjustments & DSL Scaling Fix**:
+   - **Root Cause**: The Smart Ledger DSL scales sections like `**Incoming**` and `**Outgoing**` by 100 ($1\text{ unit} = 100\text{ Lei}$). Previously, passing raw deltas (`deltaRaw: -50` / `+100`) adjusted the DSL value by 50/100 units, inadvertently modifying accounts by 5,000 and 10,000 Lei.
+   - **Fix**: `AdjustLedgerIntent` and `WidgetDataCoordinator.adjustLedgerAmount` now accept real currency amounts (`deltaReal: Double`). In scaled sections (`item.isScaled == true`), `deltaRaw = deltaReal / 100.0` (so $-100\text{ Lei} \to -1.0$ DSL unit, $+100\text{ Lei} \to +1.0$ DSL unit). In unscaled sections, it applies `deltaReal` directly.
+   - **Updated Buttons**: All widget sizes (Small `-100 Crd` / `+100 Crd`; Medium `-100 Crd`, `-100 Csh`, `+100 Crd`; Large `-100 Card`, `-100 Cash`, `+100 Card`) adjust exact nominal amounts written on the buttons in real currency (Lei).
+12. **Monthly Flow Metric Definition**:
+   - The `Flow` / `Monthly Flow` readout in the Medium widget and in-app dashboard card computes `Total Incoming / Total Outgoing` in Lei.
+   - **Incoming (In)** represents the calculated sum of all accounts and income lines in `**Incoming**` (e.g. Card + Cash balances).
+   - **Outgoing (Out)** represents the calculated sum of all planned and budgeted expense allocations in `**Outgoing**`.
+
