@@ -58,6 +58,10 @@ public struct SettingsView: View {
                     FeaturesSettingsSection()
                         .id("features")
                     
+                    // DayOne Orbit Section (Smartwatch Cloud Link)
+                    OrbitSettingsSection()
+                        .id("orbit")
+                    
                     // Data & Cloud Sync Section
                     DataSyncSettingsSection()
                 
@@ -66,7 +70,7 @@ public struct SettingsView: View {
                     .id("about")
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, 110) // Leave space for FloatingGlassCapsule
+            .padding(.bottom, 140) // Leave space for FloatingGlassCapsule
         }
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("-scrollToAbout") {
@@ -85,6 +89,18 @@ public struct SettingsView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation {
                         proxy.scrollTo("features", anchor: .top)
+                    }
+                }
+            } else if ProcessInfo.processInfo.arguments.contains("-scrollToOrbitBottom") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation {
+                        proxy.scrollTo("orbit_bottom", anchor: .bottom)
+                    }
+                }
+            } else if ProcessInfo.processInfo.arguments.contains("-scrollToOrbit") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation {
+                        proxy.scrollTo("orbit", anchor: .top)
                     }
                 }
             }

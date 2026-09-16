@@ -19,6 +19,8 @@ public struct RootView: View {
             self._selectedTab = State(initialValue: .finances)
         } else if args.contains("-startTabTagdos") {
             self._selectedTab = State(initialValue: .tagdos)
+        } else if args.contains("-startTabSettings") || args.contains("-testOrbit") {
+            self._selectedTab = State(initialValue: .settings)
         }
         
         if args.contains("-testMixedDashboard") {

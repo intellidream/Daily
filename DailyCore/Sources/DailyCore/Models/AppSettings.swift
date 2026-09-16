@@ -33,6 +33,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     // MARK: - Cloud & Sync
     public var cloudSyncEnabled: Bool = true
     public var lastSyncTimestamp: Date? = nil
+    public var watchSyncFrequency: Int = 15
     
     // MARK: - Dashboard Layout
     public var dashboardWidgets: [DashboardWidgetConfig] = DashboardWidgetConfig.defaultLayout
@@ -45,7 +46,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case healthMockDataEnabled, healthSleepTargetHours
         case habitsWaterTargetLiters, habitsRemindersEnabled
         case newsAutoRefreshOnStartup, newsShowImages, newsMediumUsername, newsMediumReadingListUrl
-        case cloudSyncEnabled, lastSyncTimestamp
+        case cloudSyncEnabled, lastSyncTimestamp, watchSyncFrequency
         case dashboardWidgets
     }
     
@@ -70,6 +71,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.newsMediumReadingListUrl = try c.decodeIfPresent(String.self, forKey: .newsMediumReadingListUrl)
         self.cloudSyncEnabled = try c.decodeIfPresent(Bool.self, forKey: .cloudSyncEnabled) ?? true
         self.lastSyncTimestamp = try c.decodeIfPresent(Date.self, forKey: .lastSyncTimestamp)
+        self.watchSyncFrequency = try c.decodeIfPresent(Int.self, forKey: .watchSyncFrequency) ?? 15
         
         let loadedWidgets = try c.decodeIfPresent([DashboardWidgetConfig].self, forKey: .dashboardWidgets)
         if let loadedWidgets = loadedWidgets, !loadedWidgets.isEmpty {
@@ -106,6 +108,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try c.encodeIfPresent(newsMediumReadingListUrl, forKey: .newsMediumReadingListUrl)
         try c.encode(cloudSyncEnabled, forKey: .cloudSyncEnabled)
         try c.encodeIfPresent(lastSyncTimestamp, forKey: .lastSyncTimestamp)
+        try c.encode(watchSyncFrequency, forKey: .watchSyncFrequency)
         try c.encode(dashboardWidgets, forKey: .dashboardWidgets)
     }
 }
