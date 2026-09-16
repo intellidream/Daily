@@ -35,6 +35,11 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var lastSyncTimestamp: Date? = nil
     public var watchSyncFrequency: Int = 15
     
+    // MARK: - Smart Periodic Briefing & Summary
+    public var smartBriefingEnabled: Bool = true
+    public var smartBriefingAutoMorning: Bool = true
+    public var geminiApiKey: String? = nil
+    
     // MARK: - Dashboard Layout
     public var dashboardWidgets: [DashboardWidgetConfig] = DashboardWidgetConfig.defaultLayout
     
@@ -47,6 +52,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case habitsWaterTargetLiters, habitsRemindersEnabled
         case newsAutoRefreshOnStartup, newsShowImages, newsMediumUsername, newsMediumReadingListUrl
         case cloudSyncEnabled, lastSyncTimestamp, watchSyncFrequency
+        case smartBriefingEnabled, smartBriefingAutoMorning, geminiApiKey
         case dashboardWidgets
     }
     
@@ -72,6 +78,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.cloudSyncEnabled = try c.decodeIfPresent(Bool.self, forKey: .cloudSyncEnabled) ?? true
         self.lastSyncTimestamp = try c.decodeIfPresent(Date.self, forKey: .lastSyncTimestamp)
         self.watchSyncFrequency = try c.decodeIfPresent(Int.self, forKey: .watchSyncFrequency) ?? 15
+        self.smartBriefingEnabled = try c.decodeIfPresent(Bool.self, forKey: .smartBriefingEnabled) ?? true
+        self.smartBriefingAutoMorning = try c.decodeIfPresent(Bool.self, forKey: .smartBriefingAutoMorning) ?? true
+        self.geminiApiKey = try c.decodeIfPresent(String.self, forKey: .geminiApiKey)
         
         let loadedWidgets = try c.decodeIfPresent([DashboardWidgetConfig].self, forKey: .dashboardWidgets)
         if let loadedWidgets = loadedWidgets, !loadedWidgets.isEmpty {
@@ -109,6 +118,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try c.encode(cloudSyncEnabled, forKey: .cloudSyncEnabled)
         try c.encodeIfPresent(lastSyncTimestamp, forKey: .lastSyncTimestamp)
         try c.encode(watchSyncFrequency, forKey: .watchSyncFrequency)
+        try c.encode(smartBriefingEnabled, forKey: .smartBriefingEnabled)
+        try c.encode(smartBriefingAutoMorning, forKey: .smartBriefingAutoMorning)
+        try c.encodeIfPresent(geminiApiKey, forKey: .geminiApiKey)
         try c.encode(dashboardWidgets, forKey: .dashboardWidgets)
     }
 }

@@ -7,18 +7,23 @@ public struct HeaderGreetingView: View {
     @ObservedObject private var settingsService = SettingsService.shared
     private let onAvatarTapped: () -> Void
     private let onCustomizeTapped: (() -> Void)?
+    private let onBriefingTapped: (() -> Void)?
+    
+    @State private var isPulsingAura: Bool = false
     
     public init(
         onAvatarTapped: @escaping () -> Void = {},
-        onCustomizeTapped: (() -> Void)? = nil
+        onCustomizeTapped: (() -> Void)? = nil,
+        onBriefingTapped: (() -> Void)? = nil
     ) {
         self.onAvatarTapped = onAvatarTapped
         self.onCustomizeTapped = onCustomizeTapped
+        self.onBriefingTapped = onBriefingTapped
     }
     
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMMM d"
+        formatter.dateFormat = "EEE, MMM d"
         return formatter
     }()
     
@@ -27,7 +32,7 @@ public struct HeaderGreetingView: View {
     }
     
     public var body: some View {
-        HStack(alignment: .center, spacing: 14) {
+        HStack(alignment: .center, spacing: 12) {
             // Interactive Glass Avatar Button with glow and live status dot
             Button {
                 triggerHaptic()
@@ -72,36 +77,75 @@ public struct HeaderGreetingView: View {
             }
             .buttonStyle(.plain)
 
-            // Greeting & Calendar Context
+            // Greeting & Calendar Context (Tapping triggers Smart Briefing)
             VStack(alignment: .leading, spacing: 5) {
-                // Micro date badge pill
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(ThemeColors.accentCyan)
-                        .frame(width: 5, height: 5)
-                        .shadow(color: ThemeColors.accentCyan, radius: 3)
-                    
-                    Text(formattedDate.uppercased())
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                        .foregroundColor(ThemeColors.accentCyan)
-                        .tracking(0.6)
+                HStack(spacing: 6) {
+                    // Micro date badge pill
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(ThemeColors.accentCyan)
+                            .frame(width: 4.5, height: 4.5)
+                            .shadow(color: ThemeColors.accentCyan, radius: 2)
+                        
+                        Text(formattedDate.uppercased())
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule()
+                            .fill(ThemeColors.accentCyan.opacity(0.12))
+                    )
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(ThemeColors.accentCyan.opacity(0.25), lineWidth: 0.8)
+                    )
+
+                    // Interactive Briefing Aura Chip
+                    if let onBriefing = onBriefingTapped {
+                        Button {
+                            triggerHaptic()
+                            onBriefing()
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 9, weight: .bold))
+                                Text("Briefing")
+                                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule()
+                                    .fill(ThemeColors.accentCyan.opacity(0.18))
+                            )
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(ThemeColors.accentCyan.opacity(0.4), lineWidth: 0.8)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    Capsule()
-                        .fill(ThemeColors.accentCyan.opacity(0.12))
-                )
-                .overlay(
-                    Capsule()
-                        .strokeBorder(ThemeColors.accentCyan.opacity(0.25), lineWidth: 0.8)
-                )
                 
                 let firstName = authService.currentUser?.firstName ?? "Friend"
                 Text("Hi, \(firstName)!")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 1)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if let onBriefing = onBriefingTapped {
+                    triggerHaptic()
+                    onBriefing()
+                }
             }
             
             Spacer()
@@ -196,20 +240,24 @@ public struct HeaderGreetingView: View {
                     )
                 )
             
-            // 3. Subtle radial specular glow centered near avatar
+            // 3. Subtle radial specular glow centered near avatar with gentle ambient breathing
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(
                     RadialGradient(
                         colors: [
-                            ThemeColors.accentCyan.opacity(0.18),
-                            ThemeColors.accentBlue.opacity(0.05),
+                            ThemeColors.accentCyan.opacity(isPulsingAura ? 0.25 : 0.14),
+                            ThemeColors.accentBlue.opacity(isPulsingAura ? 0.09 : 0.03),
                             Color.clear
                         ],
                         center: .init(x: 0.15, y: 0.35),
                         startRadius: 10,
-                        endRadius: 140
+                        endRadius: 150
                     )
                 )
+                .animation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true), value: isPulsingAura)
+        }
+        .onAppear {
+            isPulsingAura = true
         }
         .overlay {
             // 4. Specular multi-stop glowing glass border

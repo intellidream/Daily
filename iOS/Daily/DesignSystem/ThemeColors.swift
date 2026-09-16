@@ -53,6 +53,8 @@ public struct ThemeColors {
     // Foreground
     public static let fgPrimaryDark = Color.white
     public static let fgMutedDark = Color.white.opacity(0.7)
+    public static let textSecondary = Color.white.opacity(0.7)
+    public static let textMuted = Color.white.opacity(0.45)
     public static let fgPrimaryLight = Color(hex: "1A1A1A")
     public static let fgMutedLight = Color(hex: "1A1A1A").opacity(0.65)
     

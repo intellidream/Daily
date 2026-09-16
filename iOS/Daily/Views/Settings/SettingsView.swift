@@ -62,6 +62,10 @@ public struct SettingsView: View {
                     OrbitSettingsSection()
                         .id("orbit")
                     
+                    // Smart Periodic Briefing & AI Section
+                    SmartBriefingSettingsSection()
+                        .id("smart_briefing")
+                    
                     // Data & Cloud Sync Section
                     DataSyncSettingsSection()
                 
@@ -101,6 +105,12 @@ public struct SettingsView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation {
                         proxy.scrollTo("orbit", anchor: .top)
+                    }
+                }
+            } else if ProcessInfo.processInfo.arguments.contains("-scrollToBriefing") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation {
+                        proxy.scrollTo("smart_briefing", anchor: .center)
                     }
                 }
             }

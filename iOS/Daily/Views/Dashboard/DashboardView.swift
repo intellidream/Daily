@@ -8,6 +8,7 @@ public struct DashboardView: View {
     @ObservedObject private var settingsService = SettingsService.shared
     
     @State private var showingCustomizeSheet = false
+    @State private var showingBriefingSheet = false
     
     private let onNavigateToWeather: () -> Void
     private let onNavigateToNews: () -> Void
@@ -46,10 +47,11 @@ public struct DashboardView: View {
     public var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 16) {
-                // Header Greeting with Customize & Settings shortcuts
+                // Header Greeting with Customize & Settings shortcuts & Briefing trigger
                 HeaderGreetingView(
                     onAvatarTapped: onNavigateToSettings,
-                    onCustomizeTapped: { showingCustomizeSheet = true }
+                    onCustomizeTapped: { showingCustomizeSheet = true },
+                    onBriefingTapped: { showingBriefingSheet = true }
                 )
                 
                 // Native Coalesced Row-Grid Architecture (100% 120 FPS ProMotion stability)
@@ -82,9 +84,25 @@ public struct DashboardView: View {
             async let n: () = NewsService.shared.articles.isEmpty ? NewsService.shared.loadFeed(NewsService.shared.selectedFeed) : ()
             async let f: () = FinanceService.shared.loadFinanceData()
             _ = await (w, h, hab, n, f)
+            
+            // Strictly after all 6 hub data sources finish loading, evaluate automatic morning presentation
+            if SmartBriefingService.shared.checkAutomaticMorningPresentation() {
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                showingBriefingSheet = true
+            }
         }
         .sheet(isPresented: $showingCustomizeSheet) {
             CustomizeDashboardSheet()
+        }
+        .sheet(isPresented: $showingBriefingSheet) {
+            SmartBriefingOverlayView()
+        }
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-openBriefingOnLaunch") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showingBriefingSheet = true
+                }
+            }
         }
     }
 
