@@ -5,8 +5,8 @@ import UIKit
 #endif
 
 /// Signature Liquid Glass modal overlay presenting the streamlined Smart Briefing across Morning,
-/// Intra-day, Evening, and Nightly phases with pre-arranged Samsung Galaxy AI-style progressive fading
-/// typography, contextual metric pills, and diurnal action buttons.
+/// Intra-day, Evening, and Nightly phases with progressive panel fading, dynamic luminous border focus,
+/// contextual metric pills, and diurnal action buttons.
 public struct SmartBriefingOverlayView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var briefingService = SmartBriefingService.shared
@@ -15,6 +15,7 @@ public struct SmartBriefingOverlayView: View {
     @State private var record: SmartBriefingRecord? = nil
     @State private var isRefreshing: Bool = false
     @State private var revealedGlobalWordIndex: Int = 0
+    @State private var activeCardIndex: Int = 0
     @State private var isFinished: Bool = false
     @State private var streamTask: Task<Void, Never>? = nil
 
@@ -50,15 +51,27 @@ public struct SmartBriefingOverlayView: View {
                     ScrollViewReader { proxy in
                         ScrollView(.vertical, showsIndicators: false) {
                             VStack(spacing: 12) {
-                                // Pre-arranged Integrated Cards with Samsung-style Fading Words
+                                // Sequential Card Reveal: Panels fade into view as active, luminous border follows
                                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                                    cardView(
-                                        item: item,
-                                        index: index,
-                                        words: wordsPerCard[index],
-                                        startIndex: offsets[index],
-                                        totalWords: totalWords
-                                    )
+                                    if isFinished || index <= activeCardIndex {
+                                        cardView(
+                                            item: item,
+                                            index: index,
+                                            words: wordsPerCard[index],
+                                            startIndex: offsets[index],
+                                            totalWords: totalWords,
+                                            cardCount: items.count
+                                        )
+                                        .id(item.id)
+                                        .transition(
+                                            .asymmetric(
+                                                insertion: .opacity
+                                                    .combined(with: .offset(y: 14))
+                                                    .combined(with: .scale(scale: 0.98)),
+                                                removal: .opacity
+                                            )
+                                        )
+                                    }
                                 }
 
                                 // Tap to skip helper indicator when active
@@ -73,12 +86,16 @@ public struct SmartBriefingOverlayView: View {
                                             .foregroundColor(ThemeColors.textMuted)
                                     }
                                     .padding(.top, 4)
+                                    .transition(.opacity)
                                 }
 
-                                // Contextual Diurnal Bottom Action Button
-                                bottomDoneButton(for: rec.slot)
-                                    .id("bottom_button")
-                                    .padding(.top, 8)
+                                // Contextual Diurnal Bottom Action Button (blooms in at the end)
+                                if isFinished || activeCardIndex >= items.count - 1 {
+                                    bottomDoneButton(for: rec.slot)
+                                        .id("bottom_button")
+                                        .transition(.opacity.combined(with: .offset(y: 12)))
+                                        .padding(.top, 8)
+                                }
                             }
                             .padding(.horizontal, 20)
                             .padding(.top, 4)
@@ -86,7 +103,21 @@ public struct SmartBriefingOverlayView: View {
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            completeInstantly(totalWords: totalWords)
+                            completeInstantly(totalWords: totalWords, cardCount: items.count)
+                        }
+                        .onChange(of: activeCardIndex) { _, newIdx in
+                            if newIdx > 0 && newIdx < items.count {
+                                withAnimation(.easeInOut(duration: 0.32)) {
+                                    proxy.scrollTo(items[newIdx].id, anchor: .bottom)
+                                }
+                            }
+                        }
+                        .onChange(of: isFinished) { _, finished in
+                            if finished {
+                                withAnimation(.easeInOut(duration: 0.35)) {
+                                    proxy.scrollTo("bottom_button", anchor: .bottom)
+                                }
+                            }
                         }
                         .onAppear {
                             if ProcessInfo.processInfo.arguments.contains("-scrollToBottomBriefing") {
@@ -146,7 +177,7 @@ public struct SmartBriefingOverlayView: View {
 
             Spacer()
 
-            // Diurnal Slot Status Pill (replacing "Instant Synthesis")
+            // Diurnal Slot Status Pill
             HStack(spacing: 6) {
                 Image(systemName: slot.systemImage)
                     .font(.system(size: 12, weight: .bold))
@@ -200,11 +231,12 @@ public struct SmartBriefingOverlayView: View {
         index: Int,
         words: [String],
         startIndex: Int,
-        totalWords: Int
+        totalWords: Int,
+        cardCount: Int
     ) -> some View {
         let count = words.count
-        let isCompleted = isFinished || revealedGlobalWordIndex >= startIndex + count
-        let isCurrentlyTyping = !isFinished && revealedGlobalWordIndex >= startIndex && revealedGlobalWordIndex < startIndex + count
+        let isCompleted = isFinished || (index < activeCardIndex) || (revealedGlobalWordIndex >= startIndex + count)
+        let isCurrentlyTyping = !isFinished && (index == activeCardIndex) && (revealedGlobalWordIndex >= startIndex && revealedGlobalWordIndex < startIndex + count)
 
         let visibleText: String = {
             if isCompleted {
@@ -291,17 +323,34 @@ public struct SmartBriefingOverlayView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(
                     isCurrentlyTyping
-                        ? ThemeColors.accentCyan.opacity(0.5)
-                        : Color.white.opacity(0.12),
-                    lineWidth: isCurrentlyTyping ? 1.2 : 0.8
+                        ? LinearGradient(
+                            colors: [
+                                ThemeColors.accentCyan,
+                                ThemeColors.accentBlue.opacity(0.85),
+                                ThemeColors.accentCyan
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        : LinearGradient(
+                            colors: [Color.white.opacity(0.16), Color.white.opacity(0.06)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                    lineWidth: isCurrentlyTyping ? 1.6 : 0.8
                 )
         )
         .shadow(
-            color: isCurrentlyTyping ? ThemeColors.accentCyan.opacity(0.15) : Color.black.opacity(0.15),
-            radius: isCurrentlyTyping ? 10 : 6,
+            color: isCurrentlyTyping ? ThemeColors.accentCyan.opacity(0.4) : Color.black.opacity(0.16),
+            radius: isCurrentlyTyping ? 12 : 6,
             x: 0,
-            y: 3
+            y: isCurrentlyTyping ? 2 : 3
         )
+        .animation(.easeInOut(duration: 0.25), value: isCurrentlyTyping)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            completeInstantly(totalWords: totalWords, cardCount: cardCount)
+        }
     }
 
     // MARK: - Contextual Diurnal Bottom Action Button
@@ -360,11 +409,13 @@ public struct SmartBriefingOverlayView: View {
     private func startStreaming(for items: [BriefingCardItem]) {
         streamTask?.cancel()
         revealedGlobalWordIndex = 0
+        activeCardIndex = 0
         isFinished = false
 
         let wordsPerCard = items.map {
             $0.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         }
+        let offsets = calculateOffsets(wordsPerCard: wordsPerCard)
         let total = wordsPerCard.reduce(0) { $0 + $1.count }
 
         guard total > 0 else {
@@ -373,21 +424,38 @@ public struct SmartBriefingOverlayView: View {
         }
 
         streamTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 120_000_000)
+            try? await Task.sleep(nanoseconds: 80_000_000)
 
             for idx in 1...total {
                 if Task.isCancelled { break }
                 revealedGlobalWordIndex = idx
-                try? await Task.sleep(nanoseconds: 32_000_000) // 32ms smooth word reveal
+
+                // Check if we crossed into a subsequent card
+                for (cardIdx, start) in offsets.enumerated() {
+                    if idx >= start && cardIdx > activeCardIndex {
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                            activeCardIndex = cardIdx
+                        }
+                    }
+                }
+
+                try? await Task.sleep(nanoseconds: 30_000_000) // Snappy 30ms per word
             }
-            isFinished = true
+
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                isFinished = true
+                activeCardIndex = max(0, items.count - 1)
+            }
         }
     }
 
-    private func completeInstantly(totalWords: Int) {
+    private func completeInstantly(totalWords: Int, cardCount: Int) {
         streamTask?.cancel()
-        revealedGlobalWordIndex = totalWords
-        isFinished = true
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            revealedGlobalWordIndex = totalWords
+            activeCardIndex = max(0, cardCount - 1)
+            isFinished = true
+        }
     }
 
     private func calculateOffsets(wordsPerCard: [[String]]) -> [Int] {
@@ -615,4 +683,23 @@ public struct BriefingCardItem: Identifiable, Equatable {
     public let badgeText: String?
     public let badgeColor: Color
     public let text: String
+
+    public init(
+        id: String,
+        icon: String,
+        iconColor: Color,
+        title: String,
+        badgeText: String?,
+        badgeColor: Color,
+        text: String
+    ) {
+        self.id = id
+        self.icon = icon
+        self.iconColor = iconColor
+        self.title = title
+        self.badgeText = badgeText
+        self.badgeColor = badgeColor
+        self.text = text
+    }
 }
+
