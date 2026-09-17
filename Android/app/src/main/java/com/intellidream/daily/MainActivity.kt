@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
     private val healthRepository by lazy { DailyApp.instance.healthRepository }
     private val smartLedgerRepository by lazy { DailyApp.instance.smartLedgerRepository }
     private val financeDataRepository by lazy { DailyApp.instance.financeDataRepository }
+    private val tagdosRepository by lazy { DailyApp.instance.tagdosRepository }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -155,6 +156,7 @@ class MainActivity : ComponentActivity() {
                                     healthRepository = healthRepository,
                                     smartLedgerRepository = smartLedgerRepository,
                                     financeDataRepository = financeDataRepository,
+                                    tagdosRepository = tagdosRepository,
                                     onRefreshWeather = {
                                         scope.launch {
                                             weatherRepository.refreshWeather(
@@ -209,6 +211,7 @@ fun DailyRootScreen(
     healthRepository: com.intellidream.daily.health.HealthDataRepository,
     smartLedgerRepository: com.intellidream.daily.database.SmartLedgerRepository,
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
+    tagdosRepository: com.intellidream.daily.database.TagdosRepository,
     onRefreshWeather: () -> Unit,
     onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -241,6 +244,7 @@ fun DailyRootScreen(
                         healthRepository = healthRepository,
                         smartLedgerRepository = smartLedgerRepository,
                         financeDataRepository = financeDataRepository,
+                        tagdosRepository = tagdosRepository,
                         onRefreshWeather = onRefreshWeather,
                         onOpenCustomize = onOpenCustomize,
                         onOpenSettings = onOpenSettings,
@@ -248,6 +252,7 @@ fun DailyRootScreen(
                         onNavigateToHabits = { selectedTab = NavigationTab.Habits },
                         onNavigateToHealth = { selectedTab = NavigationTab.Health },
                         onNavigateToFinances = { selectedTab = NavigationTab.Finances },
+                        onNavigateToTagdos = { selectedTab = NavigationTab.Tagdos },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                     )
                 }
@@ -267,6 +272,12 @@ fun DailyRootScreen(
                 NavigationTab.Health -> {
                     com.intellidream.daily.presentation.health.HealthMainView(
                         repository = healthRepository,
+                        onNavigateBack = { selectedTab = NavigationTab.Dashboard }
+                    )
+                }
+                NavigationTab.Tagdos -> {
+                    com.intellidream.daily.presentation.tagdos.TagdosNotesHubView(
+                        repository = tagdosRepository,
                         onNavigateBack = { selectedTab = NavigationTab.Dashboard }
                     )
                 }

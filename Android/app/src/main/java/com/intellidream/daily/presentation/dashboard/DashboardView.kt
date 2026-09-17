@@ -75,13 +75,15 @@ fun DashboardView(
     healthRepository: com.intellidream.daily.health.HealthDataRepository,
     smartLedgerRepository: com.intellidream.daily.database.SmartLedgerRepository,
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
+    tagdosRepository: com.intellidream.daily.database.TagdosRepository = com.intellidream.daily.DailyApp.instance.tagdosRepository,
     onRefreshWeather: () -> Unit,
-    onOpenSettings: () -> Unit,
     onOpenCustomize: () -> Unit,
+    onOpenSettings: () -> Unit,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit = {},
     onNavigateToHabits: () -> Unit = {},
     onNavigateToHealth: () -> Unit = {},
     onNavigateToFinances: () -> Unit = {},
+    onNavigateToTagdos: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val visibleWidgets = settings.dashboardWidgets.filter { it.isVisible }
@@ -150,10 +152,12 @@ fun DashboardView(
                     healthRepository = healthRepository,
                     smartLedgerRepository = smartLedgerRepository,
                     financeDataRepository = financeDataRepository,
+                    tagdosRepository = tagdosRepository,
                     onRefreshWeather = onRefreshWeather,
                     onNavigateToHabits = onNavigateToHabits,
                     onNavigateToHealth = onNavigateToHealth,
                     onNavigateToFinances = onNavigateToFinances,
+                    onNavigateToTagdos = onNavigateToTagdos,
                     onLongClick = onLongClick
                 )
             }
@@ -430,10 +434,12 @@ private fun DashboardWidgetRenderer(
     healthRepository: com.intellidream.daily.health.HealthDataRepository,
     smartLedgerRepository: com.intellidream.daily.database.SmartLedgerRepository,
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
+    tagdosRepository: com.intellidream.daily.database.TagdosRepository,
     onRefreshWeather: () -> Unit,
     onNavigateToHabits: () -> Unit,
     onNavigateToHealth: () -> Unit,
     onNavigateToFinances: () -> Unit,
+    onNavigateToTagdos: () -> Unit,
     onLongClick: () -> Unit
 ) {
     when (config.id) {
@@ -487,13 +493,10 @@ private fun DashboardWidgetRenderer(
             )
         }
         DashboardWidgetType.TagdosNotes.id -> {
-            PlaceholderHubCard(
-                title = "Tagdos & Tasks",
-                subtitle = "Active tasks · Today",
-                icon = Icons.Rounded.CheckCircle,
-                iconTint = ThemeColors.accentBlue,
+            TagdosNotesDashboardCard(
                 size = config.size,
-                settings = settings,
+                repository = tagdosRepository,
+                onNavigateToHub = onNavigateToTagdos,
                 onLongClick = onLongClick
             )
         }

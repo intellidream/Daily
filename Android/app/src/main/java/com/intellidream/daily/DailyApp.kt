@@ -33,6 +33,8 @@ class DailyApp : Application() {
         private set
     lateinit var financeRemoteService: com.intellidream.daily.network.FinanceRemoteService
         private set
+    lateinit var tagdosRepository: com.intellidream.daily.database.TagdosRepository
+        private set
 
     private val appScope = CoroutineScope(Dispatchers.IO)
 
@@ -54,6 +56,7 @@ class DailyApp : Application() {
         smartLedgerRepository = com.intellidream.daily.database.SmartLedgerRepository(dailyDatabase.smartLedgerDao())
         financeDataRepository = com.intellidream.daily.database.FinanceDataRepository()
         financeRemoteService = com.intellidream.daily.network.FinanceRemoteService()
+        tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao())
 
         habitsRepository.syncHandler = object : com.intellidream.daily.database.HabitSyncHandler {
             override suspend fun pushLog(log: com.intellidream.daily.model.HabitLogRecord): Boolean {
