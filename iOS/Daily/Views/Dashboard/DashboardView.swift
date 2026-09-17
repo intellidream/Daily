@@ -99,7 +99,7 @@ public struct DashboardView: View {
         }
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("-openBriefingOnLaunch") {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
                     showingBriefingSheet = true
                 }
             }

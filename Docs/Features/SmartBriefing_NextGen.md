@@ -119,6 +119,12 @@ flowchart TD
 - **Hero Card Sparkle**: Cleaned up the dashboard hero header by removing the heavy capsule outline around "Briefing", leaving an ambient pulsing `sparkles` icon with full card tap target.
 - **Sleep Studio Radial Score Scroll**: Tapping the Sleep Score radial ring triggers a smooth easeInOut scroll down directly to the clinical 4-stage hypnogram container.
 - **Habits Widget Water Quick-Add**: Order adjusted to ascending order: `[ 100 ]` (espresso/coffee), `[ 150 ]` (tea/cup), and `[ 300 ]` (glass/bottle).
+- **English Localization Standard**: All briefing narratives, diurnal greetings (`Good morning`, `Have a wonderful day`, `Good evening`, `Time to rest`), and closing button wishes are generated in natural English.
+- **Direct Sleep Duration Alignment**: The briefing's sleep metric reads directly from `HealthDataService.shared.primarySleepSession?.totalAsleepFormatted` (the primary large duration display, e.g. `7h 30m`), displayed in the badge (`95% Sleep · 7h 30m`) and narrative, preserving full integrity of Sleep Studio and Health models.
+- **Hero Card Briefing Indicator & Pulsing**:
+  - The hero greeting card features a `sparkles` icon indicating a briefing is ready.
+  - When a freshly generated briefing is available and unread (`hasUnreadBrief == true`), the sparkles icon and hero card border gently pulse with a specular cyan glow.
+  - Tapping anywhere on the hero card (or the icon, excluding avatar/shortcuts) opens the briefing sheet and marks it as read.
 
 ---
 
@@ -148,9 +154,8 @@ ALTER TABLE public.daily_smart_summaries ENABLE ROW LEVEL SECURITY;
 ---
 
 ## 7. Quality & Verification
-- **Unit Tests**: 41/41 unit tests in `DailyCore` passing 100% green, including diurnal greeting formatting, Tagdos pill resolution, and currency handling.
+- **Unit Tests**: 66/66 unit tests in `DailyCore` (25 package + 41 Swift Testing suites) passing 100% green, including diurnal greeting formatting, English assertions, Tagdos pill resolution, and currency handling.
 - **SimulaPhone Verification**: Tested and captured screenshots on iPhone 16 Pro simulator:
-  - `simulaphone_dashboard_v3.png`: Hero sparkle, `[ 100 ] [ 150 ] [ 300 ]` water buttons, Romanian `Lei` finances.
-  - `simulaphone_briefing_top_v3.png`: `☀️ O zi excelentă, Mihai!`, Tagdos active pills, `Lei` finances, `Have a productive day!` closing button.
-  - `simulaphone_sleep_studio_scrolled.png`: Sleep Studio radial ring tap smooth scroll to 4-stage hypnogram and nap breakdown.
-- **Physical Device Deployment**: Successfully built arm64 debug package and deployed live to iPhone 16 Pro "Schmitz" (`62990754-1EE9-5A95-A45E-F4A69DA6E591`).
+  - `simulaphone_dashboard_v4.png`: Hero sparkle indicator, water buttons, Lei finances.
+  - `simulaphone_briefing_v8_health_aligned.png`: Fully English briefing with aligned sleep duration `7h 30m` (`95% Sleep · 7h 30m`), Tagdos active pills (`MG, WRK, FIT`), and `Have a productive day!` closing button.
+- **Physical Device Deployment**: Successfully built arm64 debug package and installed to iPhone 16 Pro "Schmitz" (`62990754-1EE9-5A95-A45E-F4A69DA6E591`).

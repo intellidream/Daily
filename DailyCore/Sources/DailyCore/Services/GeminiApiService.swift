@@ -37,21 +37,22 @@ public final class GeminiApiService: @unchecked Sendable {
         Your task is to craft a dense, inspiring, and actionable \(slot.displayName) for \(userName).
 
         Guidelines:
-        1. Address \(userName) directly in natural, warm, second-person language.
+        1. Address \(userName) directly in natural, warm, second-person language. All narrative text MUST be in English.
         2. Synthesize all 6 life areas based on the provided JSON telemetry: Weather, Health/Sleep, Habits, Finances, Tagdos, and News.
         3. Habit Coaching Directive: Treat smoking/heaters as a habit to consciously reduce. If smokes count is low or below baseline, warmly congratulate the discipline. Never encourage smoking. Encourage hydration and mindful breathing during cravings.
-        4. Sleep & Health: Report sleep and recovery truthfully based on provided telemetry. If sleep data is not yet recorded for today, note that vitals are syncing or focus on current activity and resting heart rate without inventing numbers.
+        4. Sleep & Health: Report sleep and recovery truthfully based on provided telemetry. If sleep data is present, evaluate sleep quality and physical readiness using the actual sleep duration (e.g. "7h 30m asleep"). If sleep data is not yet recorded for today, note that vitals are syncing or focus on current activity and resting heart rate without inventing numbers.
         5. Finances: All currency is Romanian Lei ("Lei"). State net worth and flows in Lei with dot separators (e.g. "127.156 Lei"). Never output dollar signs ($).
-        6. Tagdos: Provide actionable focus on the driving pills to solve today (e.g. "Uite, asta ai de rezolvat azi: [key pills]"). Do not merely count streams.
+        6. Tagdos: Provide actionable focus on the driving pills to solve today (e.g. "Here's what needs your focus today: [key pills]"). Do not merely count streams.
         7. Tone: Calm, encouraging, succinct. Avoid conversational filler or mentioning prompt rules.
-        8. Return strictly a single JSON object matching this schema:
+        8. Language: Output strictly in natural, refined English (except keeping 'Lei' as currency).
+        9. Return strictly a single JSON object matching this schema:
         {
           "greeting": "A warm, personalized 1-line greeting with date context",
           "weatherText": "Concise atmosphere & outfit recommendation based on weather",
           "healthText": "Recovery analysis correlating sleep score, resting HR, and activity",
           "habitsText": "Empathetic hydration progress and supportive craving reduction advice",
           "financeText": "Summary of monthly flow, net worth in Lei, and financial clarity",
-          "tagdosText": "Focus priority for active Tagdos pills (e.g. 'Uite, asta ai de rezolvat azi: ...')",
+          "tagdosText": "Focus priority for active Tagdos pills (e.g. 'Here\\'s what needs your focus today: ...')",
           "newsText": "1-sentence perspective on the top headline, if present",
           "outroText": "1-line empowering closing sentence"
         }
@@ -61,7 +62,8 @@ public final class GeminiApiService: @unchecked Sendable {
             "stepsToday": metrics.totalStepsToday
         ]
         if let score = metrics.sleepScore { healthPayload["sleepScore"] = score }
-        if let hours = metrics.sleepDurationHours { healthPayload["sleepHours"] = hours }
+        if let formatted = metrics.sleepDurationFormatted { healthPayload["sleepFormatted"] = formatted }
+        else if let hours = metrics.sleepDurationHours { healthPayload["sleepHours"] = String(format: "%.1fh", hours) }
         if let bpm = metrics.restingBpm { healthPayload["restingBpm"] = bpm }
 
         let promptPayload: [String: Any] = [

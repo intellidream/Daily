@@ -83,13 +83,13 @@ struct SmartBriefingTests {
             topPills: ["MG/GM/TG", "WRK/PRJ"]
         )
 
-        #expect(narrative.greeting.contains("Bună dimineața, Mihai!"))
+        #expect(narrative.greeting.contains("Good morning, Mihai!"))
         #expect(narrative.weatherText.contains("Clear Sky"))
         #expect(narrative.healthText.contains("88/100"))
         // Check smoking reduction constructive empathy:
-        #expect(narrative.habitsText.contains("sub pragul tău zilnic"))
+        #expect(narrative.habitsText.contains("staying below your daily limit"))
         #expect(narrative.habitsText.contains("1.5L / 2.0L"))
-        #expect(narrative.tagdosText.contains("Uite, asta ai de rezolvat azi: MG/GM/TG, WRK/PRJ"))
+        #expect(narrative.tagdosText.contains("Here's what needs your focus today: MG/GM/TG, WRK/PRJ"))
         #expect(narrative.financeText.contains("Lei"))
         #expect(narrative.closingWish != nil)
     }

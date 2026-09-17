@@ -16,16 +16,29 @@ public final class SmartBriefingService: ObservableObject {
     @Published public private(set) var lastGeneratedAt: Date? = nil
     @Published public private(set) var isAiGenerated: Bool = false
     @Published public var shouldPresentMorningAutomatically: Bool = false
+    @Published public private(set) var hasUnreadBrief: Bool = false
 
     // MARK: - Storage Keys
-    private let cacheStorageKey = "daily_smart_summary_cache_v2"
+    private let cacheStorageKey = "daily_smart_summary_cache_v4"
     private let lastAutoShownDateKey = "daily_briefing_last_auto_shown_date_v2"
+    private let lastReadDataHashKey = "daily_briefing_last_read_hash_v2"
 
     private var inMemoryCache: [BriefingTimeSlot: SmartBriefingRecord] = [:]
     private let supabase = SupabaseService.shared.client
 
     private var groupDefaults: UserDefaults {
         UserDefaults(suiteName: GroupDefaults.suiteName) ?? UserDefaults.standard
+    }
+
+    public var hasBriefingAvailable: Bool {
+        activeBriefing != nil
+    }
+
+    public func markBriefingAsRead() {
+        if let current = activeBriefing {
+            groupDefaults.set(current.dataHash, forKey: lastReadDataHashKey)
+        }
+        self.hasUnreadBrief = false
     }
 
     private init() {
@@ -46,6 +59,8 @@ public final class SmartBriefingService: ObservableObject {
             self.activeBriefing = record
             self.isAiGenerated = record.isAiGenerated
             self.lastGeneratedAt = record.updatedAt
+            let lastRead = groupDefaults.string(forKey: lastReadDataHashKey)
+            self.hasUnreadBrief = (lastRead != record.dataHash)
         }
     }
 
@@ -54,6 +69,8 @@ public final class SmartBriefingService: ObservableObject {
         self.activeBriefing = record
         self.isAiGenerated = record.isAiGenerated
         self.lastGeneratedAt = record.updatedAt
+        let lastRead = groupDefaults.string(forKey: lastReadDataHashKey)
+        self.hasUnreadBrief = (lastRead != record.dataHash)
 
         if let data = try? JSONEncoder().encode(record) {
             groupDefaults.set(data, forKey: cacheStorageKey)
@@ -187,10 +204,12 @@ public final class SmartBriefingService: ObservableObject {
         let tagdos = TagdosStore.shared
         let news = NewsService.shared
 
+        let primarySession = health.primarySleepSession
         let sleepDurationHours: Double? = {
-            guard let session = health.primarySleepSession else { return nil }
-            return Double(session.durationSeconds) / 3600.0
+            guard let session = primarySession else { return nil }
+            return Double(session.asleepSeconds) / 3600.0
         }()
+        let sleepDurationFormatted: String? = primarySession?.totalAsleepFormatted
 
         let activeMemoCount = tagdos.streams.reduce(0) { count, stream in
             count + (stream.activeMemos.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 1)
@@ -211,8 +230,9 @@ public final class SmartBriefingService: ObservableObject {
             weatherCondition: weather?.weather.first?.description.capitalized,
             weatherIcon: weather?.weather.first?.icon,
             weatherCity: resolvedCity,
-            sleepScore: health.primarySleepSession?.sleepScore,
+            sleepScore: primarySession?.sleepScore,
             sleepDurationHours: sleepDurationHours,
+            sleepDurationFormatted: sleepDurationFormatted,
             restingBpm: health.restingBpm > 0 ? health.restingBpm : nil,
             totalStepsToday: health.totalStepsToday,
             waterMlToday: habits.totalWaterMlToday,
@@ -292,27 +312,27 @@ public final class SmartBriefingService: ObservableObject {
         topPills: [String] = []
     ) -> SmartBriefingNarrative {
         // Greeting
-        let greeting = "\(slot.diurnalGreeting(for: userName)) Iată sumarul tău integrat."
+        let greeting = "\(slot.diurnalGreeting(for: userName)) Here is your integrated daily briefing."
 
         // Weather & Rain Detection
-        let tempString = metrics.weatherTemp.map { "\(Int($0.rounded()))°C" } ?? "temperaturi plăcute"
-        let condition = metrics.weatherCondition ?? "cer senin"
+        let tempString = metrics.weatherTemp.map { "\(Int($0.rounded()))°C" } ?? "pleasant temperatures"
+        let condition = metrics.weatherCondition ?? "clear skies"
         let condLower = condition.lowercased()
         let isRaining = condLower.contains("rain") || condLower.contains("ploaie") || condLower.contains("drizzle") || condLower.contains("thunderstorm") || condLower.contains("averse")
 
         let weatherAdvice: String
         if isRaining {
-            weatherAdvice = "Afară sunt \(tempString) cu \(condition). Nu uita să iei o umbrelă dacă ieși azi."
+            weatherAdvice = "It's \(tempString) outside with \(condition). Don't forget an umbrella if you head out today."
         } else {
             switch slot {
             case .morning:
-                weatherAdvice = "Condiții de \(condition) cu \(tempString). O atmosferă excelentă pentru a-ți planifica ziua."
+                weatherAdvice = "Conditions show \(condition) at \(tempString). Great weather to plan your day."
             case .intraday:
-                weatherAdvice = "Vremea se menține cu \(condition) la \(tempString)."
+                weatherAdvice = "Weather holds steady with \(condition) around \(tempString)."
             case .evening:
-                weatherAdvice = "Ziua se încheie liniștit sub \(condition) la \(tempString)."
+                weatherAdvice = "The evening winds down peacefully with \(condition) at \(tempString)."
             case .nightly:
-                weatherAdvice = "Aerul nopții este constant în jurul a \(tempString)."
+                weatherAdvice = "Night air is calm around \(tempString)."
             }
         }
 
@@ -320,7 +340,7 @@ public final class SmartBriefingService: ObservableObject {
         let closingWish: String
         let closingIcon: String
         if isRaining {
-            closingWish = "Ia o umbrelă azi :))"
+            closingWish = "Grab an umbrella today! :))"
             closingIcon = "umbrella.fill"
         } else {
             closingWish = slot.defaultClosingWish
@@ -330,22 +350,34 @@ public final class SmartBriefingService: ObservableObject {
         // Health & Vitals
         let healthAdvice: String
         let steps = metrics.totalStepsToday
-        if let sleepScore = metrics.sleepScore, let sleepHrs = metrics.sleepDurationHours {
-            let formattedHrs = String(format: "%.1fh", sleepHrs)
+        let formattedAsleep: String? = {
+            if let f = metrics.sleepDurationFormatted, !f.isEmpty, f != "--" {
+                return f
+            }
+            if let h = metrics.sleepDurationHours, h > 0 {
+                let totalMin = Int(round(h * 60.0))
+                let hrs = totalMin / 60
+                let mins = totalMin % 60
+                return mins > 0 ? "\(hrs)h \(mins)m" : "\(hrs)h"
+            }
+            return nil
+        }()
+
+        if let sleepScore = metrics.sleepScore, let sleepText = formattedAsleep {
             if sleepScore >= 80 {
                 if steps > 500 {
-                    healthAdvice = "Recuperare excelentă cu \(formattedHrs) de somn (Scor \(sleepScore)/100). Ai acumulat deja \(steps) pași."
+                    healthAdvice = "Great recovery with \(sleepText) asleep (Score \(sleepScore)/100). You've already logged \(steps) steps."
                 } else {
-                    healthAdvice = "Recuperare excelentă cu \(formattedHrs) de somn (Scor \(sleepScore)/100). Ești gata pentru o zi plină de energie."
+                    healthAdvice = "Great recovery with \(sleepText) asleep (Score \(sleepScore)/100). Ready for a focused, high-energy day."
                 }
             } else {
-                healthAdvice = "Ai înregistrat \(formattedHrs) de somn (Scor \(sleepScore)/100). Menține un ritm echilibrat și hidratează-te corespunzător."
+                healthAdvice = "Logged \(sleepText) asleep (Score \(sleepScore)/100). Maintain a steady pace and stay well hydrated."
             }
         } else if steps > 500 {
-            let bpmInfo = (metrics.restingBpm ?? 0) > 0 ? ", cu pulsul în repaus la \(Int(metrics.restingBpm!)) bpm" : ""
-            healthAdvice = "Activitatea este în plină desfășurare, cu \(steps) pași înregistrați astăzi\(bpmInfo)."
+            let bpmInfo = (metrics.restingBpm ?? 0) > 0 ? ", with resting heart rate at \(Int(metrics.restingBpm!)) bpm" : ""
+            healthAdvice = "Activity in full stride with \(steps) steps logged today\(bpmInfo)."
         } else {
-            let bpmInfo = (metrics.restingBpm ?? 0) > 0 ? "Pulsul în repaus este la \(Int(metrics.restingBpm!)) bpm." : "Indicatorii de recuperare se sincronizează pe măsură ce începe ziua."
+            let bpmInfo = (metrics.restingBpm ?? 0) > 0 ? "Resting heart rate is at \(Int(metrics.restingBpm!)) bpm." : "Recovery vitals are syncing as your day gets underway."
             healthAdvice = bpmInfo
         }
 
@@ -359,18 +391,18 @@ public final class SmartBriefingService: ObservableObject {
         let smokesAdvice: String
         if smokes == 0 {
             if slot == .morning {
-                smokesAdvice = "Începe ziua cu un pahar de apă și ține poftele la zero."
+                smokesAdvice = "Start the day with a glass of water and keep cravings at zero."
             } else {
-                smokesAdvice = "Zero țigări consumate—disciplină excelentă pentru plămânii tăi."
+                smokesAdvice = "Zero cigarettes logged—excellent discipline for your health."
             }
         } else if smokes <= baseline {
-            smokesAdvice = "\(smokes) țigări înregistrate, menținându-te sub pragul tău zilnic (\(baseline)). Hidratează-te când simți poftă."
+            smokesAdvice = "\(smokes) cigarettes logged, staying below your daily limit (\(baseline)). Stay hydrated whenever a craving hits."
         } else {
-            smokesAdvice = "\(smokes) țigări înregistrate azi. Respiră adânc, ia o pauză și axează-te pe hidratare pentru restul zilei."
+            smokesAdvice = "\(smokes) cigarettes logged today. Take a deep breath, pause, and focus on clean hydration for the rest of the day."
         }
 
         if metrics.waterMlToday > 0 {
-            habitAdvice = "Hidratarea este la \(waterLiters) / \(waterGoalLiters). \(smokesAdvice)"
+            habitAdvice = "Hydration is at \(waterLiters) / \(waterGoalLiters). \(smokesAdvice)"
         } else {
             habitAdvice = smokesAdvice
         }
@@ -387,26 +419,26 @@ public final class SmartBriefingService: ObservableObject {
         if ledger.incomingTotal > 0 || ledger.outgoingTotal > 0 {
             let inK = String(format: "%.1fk", ledger.incomingTotal / 1000.0)
             let outK = String(format: "%.1fk", ledger.outgoingTotal / 1000.0)
-            financeAdvice = "Net worth-ul este de \(formattedNetWorth), cu un flux lunar de \(inK) / \(outK) Lei."
+            financeAdvice = "Net worth stands at \(formattedNetWorth), with monthly flow at \(inK) / \(outK) Lei."
         } else {
-            financeAdvice = "Disponibilitățile și portofoliul se mențin stabile la \(formattedNetWorth)."
+            financeAdvice = "Liquid reserves and portfolio hold steady at \(formattedNetWorth)."
         }
 
         // Tagdos Actionable Directive
         let tagdosAdvice: String
         let resolvedPills = topPills.isEmpty ? extractTopPills() : topPills
         if !resolvedPills.isEmpty {
-            tagdosAdvice = "Uite, asta ai de rezolvat azi: \(resolvedPills.prefix(3).joined(separator: ", "))."
+            tagdosAdvice = "Here's what needs your focus today: \(resolvedPills.prefix(3).joined(separator: ", "))."
         } else if activeStreams.count > 0 {
-            tagdosAdvice = "Toate stream-urile Tagdos sunt la zi, fără blocaje active."
+            tagdosAdvice = "All Tagdos streams are up to date with no active blockers."
         } else {
-            tagdosAdvice = "Stream-urile Tagdos sunt calme, fără sarcini active."
+            tagdosAdvice = "Tagdos streams are clear with no pending tasks."
         }
 
         // News
         let newsAdvice: String
         if let topHeadline = metrics.topNewsTitle, !topHeadline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            newsAdvice = "Știrea principală în radar: \"\(topHeadline)\"."
+            newsAdvice = "Top headline on your radar: \"\(topHeadline)\"."
         } else {
             newsAdvice = ""
         }
@@ -415,13 +447,13 @@ public final class SmartBriefingService: ObservableObject {
         let outro: String
         switch slot {
         case .morning:
-            outro = "Setează-ți intențiile, concentrează-te și fă ca ziua de azi să conteze."
+            outro = "Set your intentions, stay focused, and make today count."
         case .intraday:
-            outro = "Menține acest ritm constant pe parcursul după-amiezii."
+            outro = "Keep up this steady momentum through the afternoon."
         case .evening:
-            outro = "Reflectează la realizările de azi și bucură-te de o seară relaxantă."
+            outro = "Reflect on today's milestones and enjoy a restful evening."
         case .nightly:
-            outro = "Închide ecranele, regenerează-ți energia și dormi liniștit."
+            outro = "Power down screens, recharge your energy, and sleep peacefully."
         }
 
         return SmartBriefingNarrative(

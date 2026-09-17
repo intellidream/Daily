@@ -5,6 +5,7 @@ import DailyCore
 public struct HeaderGreetingView: View {
     @ObservedObject private var authService = AuthService.shared
     @ObservedObject private var settingsService = SettingsService.shared
+    @ObservedObject private var briefingService = SmartBriefingService.shared
     private let onAvatarTapped: () -> Void
     private let onCustomizeTapped: (() -> Void)?
     private let onBriefingTapped: (() -> Void)?
@@ -105,17 +106,24 @@ public struct HeaderGreetingView: View {
                             .strokeBorder(ThemeColors.accentCyan.opacity(0.25), lineWidth: 0.8)
                     )
 
-                    // Ambient Pulsing Briefing Sparkle Indicator
-                    if onBriefingTapped != nil {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(ThemeColors.accentCyan)
-                            .shadow(color: ThemeColors.accentCyan.opacity(isBriefingPulsing ? 0.9 : 0.2), radius: isBriefingPulsing ? 8 : 2)
-                            .scaleEffect(isBriefingPulsing ? 1.15 : 0.95)
-                            .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: isBriefingPulsing)
-                            .onAppear {
-                                isBriefingPulsing = true
-                            }
+                    // Ambient Briefing Sparkle Indicator (Pulsing when unread)
+                    if onBriefingTapped != nil && briefingService.hasBriefingAvailable {
+                        Button {
+                            triggerHaptic()
+                            briefingService.markBriefingAsRead()
+                            onBriefingTapped?()
+                        } label: {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(ThemeColors.accentCyan)
+                                .shadow(
+                                    color: ThemeColors.accentCyan.opacity(briefingService.hasUnreadBrief ? (isBriefingPulsing ? 0.95 : 0.3) : 0.2),
+                                    radius: briefingService.hasUnreadBrief && isBriefingPulsing ? 8 : 2
+                                )
+                                .scaleEffect(briefingService.hasUnreadBrief && isBriefingPulsing ? 1.18 : 1.0)
+                                .opacity(briefingService.hasUnreadBrief ? 1.0 : 0.8)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 
@@ -129,11 +137,20 @@ public struct HeaderGreetingView: View {
             .onTapGesture {
                 if let onBriefing = onBriefingTapped {
                     triggerHaptic()
+                    briefingService.markBriefingAsRead()
                     onBriefing()
                 }
             }
             
             Spacer()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if let onBriefing = onBriefingTapped {
+                        triggerHaptic()
+                        briefingService.markBriefingAsRead()
+                        onBriefing()
+                    }
+                }
 
             HStack(spacing: 8) {
                 // Customize Dashboard Action Button
@@ -202,6 +219,19 @@ public struct HeaderGreetingView: View {
         .background {
             heroGlassBackdrop
         }
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .onTapGesture {
+            if let onBriefing = onBriefingTapped {
+                triggerHaptic()
+                briefingService.markBriefingAsRead()
+                onBriefing()
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                isBriefingPulsing = true
+            }
+        }
     }
     
     private var heroGlassBackdrop: some View {
@@ -230,8 +260,8 @@ public struct HeaderGreetingView: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            ThemeColors.accentCyan.opacity(isPulsingAura ? 0.25 : 0.14),
-                            ThemeColors.accentBlue.opacity(isPulsingAura ? 0.09 : 0.03),
+                            ThemeColors.accentCyan.opacity(briefingService.hasUnreadBrief ? (isBriefingPulsing ? 0.32 : 0.16) : (isPulsingAura ? 0.25 : 0.14)),
+                            ThemeColors.accentBlue.opacity(briefingService.hasUnreadBrief ? (isBriefingPulsing ? 0.14 : 0.05) : (isPulsingAura ? 0.09 : 0.03)),
                             Color.clear
                         ],
                         center: .init(x: 0.15, y: 0.35),
@@ -250,15 +280,15 @@ public struct HeaderGreetingView: View {
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: Color.white.opacity(0.55), location: 0.0),
-                            .init(color: ThemeColors.accentCyan.opacity(0.45), location: 0.3),
+                            .init(color: briefingService.hasUnreadBrief && isBriefingPulsing ? ThemeColors.accentCyan.opacity(0.85) : Color.white.opacity(0.55), location: 0.0),
+                            .init(color: ThemeColors.accentCyan.opacity(briefingService.hasUnreadBrief && isBriefingPulsing ? 0.75 : 0.45), location: 0.3),
                             .init(color: ThemeColors.accentBlue.opacity(0.25), location: 0.6),
                             .init(color: Color.white.opacity(0.12), location: 1.0)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
-                    lineWidth: 1.2
+                    lineWidth: briefingService.hasUnreadBrief && isBriefingPulsing ? 1.5 : 1.2
                 )
         }
         .shadow(color: Color.black.opacity(0.28), radius: 10, x: 0, y: 5)

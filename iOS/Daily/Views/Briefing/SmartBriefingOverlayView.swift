@@ -133,17 +133,9 @@ public struct SmartBriefingOverlayView: View {
             }
         }
         .task {
-            let currentSlot = BriefingTimeSlot.current()
-            if let cached = briefingService.activeBriefing,
-               cached.slot == currentSlot,
-               Calendar.current.isDateInToday(cached.createdAt) {
-                self.record = cached
-                startStreaming(for: buildCardItems(from: cached))
-            } else {
-                let rec = await briefingService.getOrGenerateBriefing()
-                self.record = rec
-                startStreaming(for: buildCardItems(from: rec))
-            }
+            let rec = await briefingService.getOrGenerateBriefing()
+            self.record = rec
+            startStreaming(for: buildCardItems(from: rec))
         }
         .onDisappear {
             streamTask?.cancel()
@@ -499,6 +491,9 @@ public struct SmartBriefingOverlayView: View {
             let isSleepHour = rec.slot == .nightly || rec.slot == .morning
             let badge: String? = {
                 if let score = m.sleepScore {
+                    if let f = m.sleepDurationFormatted, !f.isEmpty, f != "--" {
+                        return "\(score)% Sleep · \(f)"
+                    }
                     return "\(score)% Sleep"
                 } else if let hr = m.restingBpm {
                     return "\(Int(hr)) bpm Rest"

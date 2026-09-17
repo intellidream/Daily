@@ -73,13 +73,13 @@ public enum BriefingTimeSlot: String, CaseIterable, Codable, Sendable, Identifia
         }
     }
 
-    /// Personalized diurnal greeting in Romanian for the top bar of the briefing.
+    /// Personalized diurnal greeting in English for the top bar of the briefing.
     public func diurnalGreeting(for name: String) -> String {
         switch self {
-        case .morning: return "Bună dimineața, \(name)!"
-        case .intraday: return "O zi excelentă, \(name)!"
-        case .evening: return "Bună seara, \(name)!"
-        case .nightly: return "Timpul pentru odihnă, \(name)"
+        case .morning: return "Good morning, \(name)!"
+        case .intraday: return "Have a wonderful day, \(name)!"
+        case .evening: return "Good evening, \(name)!"
+        case .nightly: return "Time to rest, \(name)"
         }
     }
 
@@ -192,6 +192,7 @@ public struct SmartBriefingMetrics: Codable, Equatable, Sendable {
     public var weatherCity: String?
     public var sleepScore: Int?
     public var sleepDurationHours: Double?
+    public var sleepDurationFormatted: String?
     public var restingBpm: Double?
     public var totalStepsToday: Int
     public var waterMlToday: Double
@@ -211,6 +212,7 @@ public struct SmartBriefingMetrics: Codable, Equatable, Sendable {
         weatherCity: String? = nil,
         sleepScore: Int? = nil,
         sleepDurationHours: Double? = nil,
+        sleepDurationFormatted: String? = nil,
         restingBpm: Double? = nil,
         totalStepsToday: Int = 0,
         waterMlToday: Double = 0,
@@ -229,6 +231,7 @@ public struct SmartBriefingMetrics: Codable, Equatable, Sendable {
         self.weatherCity = weatherCity
         self.sleepScore = sleepScore
         self.sleepDurationHours = sleepDurationHours
+        self.sleepDurationFormatted = sleepDurationFormatted
         self.restingBpm = restingBpm
         self.totalStepsToday = totalStepsToday
         self.waterMlToday = waterMlToday
