@@ -63,6 +63,8 @@ class MainActivity : ComponentActivity() {
     private val weatherCacheRepository by lazy { DailyApp.instance.weatherCacheRepository }
     private val habitsRepository by lazy { DailyApp.instance.habitsRepository }
     private val healthRepository by lazy { DailyApp.instance.healthRepository }
+    private val smartLedgerRepository by lazy { DailyApp.instance.smartLedgerRepository }
+    private val financeDataRepository by lazy { DailyApp.instance.financeDataRepository }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -151,6 +153,8 @@ class MainActivity : ComponentActivity() {
                                     isWeatherLoading = isWeatherLoading,
                                     habitsRepository = habitsRepository,
                                     healthRepository = healthRepository,
+                                    smartLedgerRepository = smartLedgerRepository,
+                                    financeDataRepository = financeDataRepository,
                                     onRefreshWeather = {
                                         scope.launch {
                                             weatherRepository.refreshWeather(
@@ -203,6 +207,8 @@ fun DailyRootScreen(
     isWeatherLoading: Boolean,
     habitsRepository: com.intellidream.daily.database.HabitsRepository,
     healthRepository: com.intellidream.daily.health.HealthDataRepository,
+    smartLedgerRepository: com.intellidream.daily.database.SmartLedgerRepository,
+    financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     onRefreshWeather: () -> Unit,
     onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -233,13 +239,23 @@ fun DailyRootScreen(
                         isWeatherLoading = isWeatherLoading,
                         habitsRepository = habitsRepository,
                         healthRepository = healthRepository,
+                        smartLedgerRepository = smartLedgerRepository,
+                        financeDataRepository = financeDataRepository,
                         onRefreshWeather = onRefreshWeather,
                         onOpenCustomize = onOpenCustomize,
                         onOpenSettings = onOpenSettings,
                         onUpdateSettings = onUpdateSettings,
                         onNavigateToHabits = { selectedTab = NavigationTab.Habits },
                         onNavigateToHealth = { selectedTab = NavigationTab.Health },
+                        onNavigateToFinances = { selectedTab = NavigationTab.Finances },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                    )
+                }
+                NavigationTab.Finances -> {
+                    com.intellidream.daily.presentation.finances.FinancesMainView(
+                        smartLedgerRepository = smartLedgerRepository,
+                        financeDataRepository = financeDataRepository,
+                        onNavigateBack = { selectedTab = NavigationTab.Dashboard }
                     )
                 }
                 NavigationTab.Habits -> {

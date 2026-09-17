@@ -73,12 +73,15 @@ fun DashboardView(
     isWeatherLoading: Boolean,
     habitsRepository: com.intellidream.daily.database.HabitsRepository,
     healthRepository: com.intellidream.daily.health.HealthDataRepository,
+    smartLedgerRepository: com.intellidream.daily.database.SmartLedgerRepository,
+    financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     onRefreshWeather: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCustomize: () -> Unit,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit = {},
     onNavigateToHabits: () -> Unit = {},
     onNavigateToHealth: () -> Unit = {},
+    onNavigateToFinances: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val visibleWidgets = settings.dashboardWidgets.filter { it.isVisible }
@@ -134,6 +137,27 @@ fun DashboardView(
             items = rows,
             key = { it.id }
         ) { row ->
+            val renderWidget: @Composable (DashboardWidgetConfig, () -> Unit) -> Unit = { config, onLongClick ->
+                DashboardWidgetRenderer(
+                    config = config,
+                    weather = weather,
+                    forecast = forecast,
+                    hourlyForecasts = hourlyForecasts,
+                    locationName = locationName,
+                    isWeatherLoading = isWeatherLoading,
+                    settings = settings,
+                    habitsRepository = habitsRepository,
+                    healthRepository = healthRepository,
+                    smartLedgerRepository = smartLedgerRepository,
+                    financeDataRepository = financeDataRepository,
+                    onRefreshWeather = onRefreshWeather,
+                    onNavigateToHabits = onNavigateToHabits,
+                    onNavigateToHealth = onNavigateToHealth,
+                    onNavigateToFinances = onNavigateToFinances,
+                    onLongClick = onLongClick
+                )
+            }
+
             when (row) {
                 is DashboardRow.Full -> {
                     WidgetWithContextMenu(
@@ -144,21 +168,7 @@ fun DashboardView(
                         onMoveDown = { moveWidget(row.config.id, 1) },
                         onOpenCustomize = onOpenCustomize
                     ) { onLongClick ->
-                        DashboardWidgetRenderer(
-                            config = row.config,
-                            weather = weather,
-                            forecast = forecast,
-                            hourlyForecasts = hourlyForecasts,
-                            locationName = locationName,
-                            isWeatherLoading = isWeatherLoading,
-                            settings = settings,
-                            habitsRepository = habitsRepository,
-                            healthRepository = healthRepository,
-                            onRefreshWeather = onRefreshWeather,
-                            onNavigateToHabits = onNavigateToHabits,
-                            onNavigateToHealth = onNavigateToHealth,
-                            onLongClick = onLongClick
-                        )
+                        renderWidget(row.config, onLongClick)
                     }
                 }
 
@@ -176,21 +186,7 @@ fun DashboardView(
                                 onMoveDown = { moveWidget(row.left.id, 1) },
                                 onOpenCustomize = onOpenCustomize
                             ) { onLongClick ->
-                                DashboardWidgetRenderer(
-                                    config = row.left,
-                                    weather = weather,
-                                    forecast = forecast,
-                                    hourlyForecasts = hourlyForecasts,
-                                    locationName = locationName,
-                                    isWeatherLoading = isWeatherLoading,
-                                    settings = settings,
-                                    habitsRepository = habitsRepository,
-                                    healthRepository = healthRepository,
-                                    onRefreshWeather = onRefreshWeather,
-                                    onNavigateToHabits = onNavigateToHabits,
-                                    onNavigateToHealth = onNavigateToHealth,
-                                    onLongClick = onLongClick
-                                )
+                                renderWidget(row.left, onLongClick)
                             }
                         }
                         Box(modifier = Modifier.weight(1f)) {
@@ -202,21 +198,7 @@ fun DashboardView(
                                 onMoveDown = { moveWidget(row.right.id, 1) },
                                 onOpenCustomize = onOpenCustomize
                             ) { onLongClick ->
-                                DashboardWidgetRenderer(
-                                    config = row.right,
-                                    weather = weather,
-                                    forecast = forecast,
-                                    hourlyForecasts = hourlyForecasts,
-                                    locationName = locationName,
-                                    isWeatherLoading = isWeatherLoading,
-                                    settings = settings,
-                                    habitsRepository = habitsRepository,
-                                    healthRepository = healthRepository,
-                                    onRefreshWeather = onRefreshWeather,
-                                    onNavigateToHabits = onNavigateToHabits,
-                                    onNavigateToHealth = onNavigateToHealth,
-                                    onLongClick = onLongClick
-                                )
+                                renderWidget(row.right, onLongClick)
                             }
                         }
                     }
@@ -236,21 +218,7 @@ fun DashboardView(
                                 onMoveDown = { moveWidget(row.tall.id, 1) },
                                 onOpenCustomize = onOpenCustomize
                             ) { onLongClick ->
-                                DashboardWidgetRenderer(
-                                    config = row.tall,
-                                    weather = weather,
-                                    forecast = forecast,
-                                    hourlyForecasts = hourlyForecasts,
-                                    locationName = locationName,
-                                    isWeatherLoading = isWeatherLoading,
-                                    settings = settings,
-                                    habitsRepository = habitsRepository,
-                                    healthRepository = healthRepository,
-                                    onRefreshWeather = onRefreshWeather,
-                                    onNavigateToHabits = onNavigateToHabits,
-                                    onNavigateToHealth = onNavigateToHealth,
-                                    onLongClick = onLongClick
-                                )
+                                renderWidget(row.tall, onLongClick)
                             }
                         }
                         Column(
@@ -266,21 +234,7 @@ fun DashboardView(
                                     onMoveDown = { moveWidget(smallConfig.id, 1) },
                                     onOpenCustomize = onOpenCustomize
                                 ) { onLongClick ->
-                                    DashboardWidgetRenderer(
-                                        config = smallConfig,
-                                        weather = weather,
-                                        forecast = forecast,
-                                        hourlyForecasts = hourlyForecasts,
-                                        locationName = locationName,
-                                        isWeatherLoading = isWeatherLoading,
-                                        settings = settings,
-                                        habitsRepository = habitsRepository,
-                                        healthRepository = healthRepository,
-                                        onRefreshWeather = onRefreshWeather,
-                                        onNavigateToHabits = onNavigateToHabits,
-                                        onNavigateToHealth = onNavigateToHealth,
-                                        onLongClick = onLongClick
-                                    )
+                                    renderWidget(smallConfig, onLongClick)
                                 }
                             }
                         }
@@ -301,21 +255,7 @@ fun DashboardView(
                                 onMoveDown = { moveWidget(row.config.id, 1) },
                                 onOpenCustomize = onOpenCustomize
                             ) { onLongClick ->
-                                DashboardWidgetRenderer(
-                                    config = row.config,
-                                    weather = weather,
-                                    forecast = forecast,
-                                    hourlyForecasts = hourlyForecasts,
-                                    locationName = locationName,
-                                    isWeatherLoading = isWeatherLoading,
-                                    settings = settings,
-                                    habitsRepository = habitsRepository,
-                                    healthRepository = healthRepository,
-                                    onRefreshWeather = onRefreshWeather,
-                                    onNavigateToHabits = onNavigateToHabits,
-                                    onNavigateToHealth = onNavigateToHealth,
-                                    onLongClick = onLongClick
-                                )
+                                renderWidget(row.config, onLongClick)
                             }
                         }
                         Spacer(modifier = Modifier.weight(1f))
@@ -488,9 +428,12 @@ private fun DashboardWidgetRenderer(
     settings: AppSettings,
     habitsRepository: com.intellidream.daily.database.HabitsRepository,
     healthRepository: com.intellidream.daily.health.HealthDataRepository,
+    smartLedgerRepository: com.intellidream.daily.database.SmartLedgerRepository,
+    financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     onRefreshWeather: () -> Unit,
     onNavigateToHabits: () -> Unit,
     onNavigateToHealth: () -> Unit,
+    onNavigateToFinances: () -> Unit,
     onLongClick: () -> Unit
 ) {
     when (config.id) {
@@ -535,13 +478,11 @@ private fun DashboardWidgetRenderer(
             )
         }
         DashboardWidgetType.Finances.id -> {
-            PlaceholderHubCard(
-                title = "Finances & Markets",
-                subtitle = "Live balances & trends",
-                icon = Icons.Rounded.AccountBalanceWallet,
-                iconTint = Color(0xFF00E676),
+            FinancesDashboardCard(
                 size = config.size,
-                settings = settings,
+                smartLedgerRepository = smartLedgerRepository,
+                financeDataRepository = financeDataRepository,
+                onOpenHub = onNavigateToFinances,
                 onLongClick = onLongClick
             )
         }

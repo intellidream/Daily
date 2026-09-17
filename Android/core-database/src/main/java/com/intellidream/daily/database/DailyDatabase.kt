@@ -6,18 +6,21 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.intellidream.daily.database.dao.HabitLogDao
 import com.intellidream.daily.database.dao.HealthTelemetryDao
+import com.intellidream.daily.database.dao.SmartLedgerDao
 import com.intellidream.daily.database.dao.VitalMetricDao
 import com.intellidream.daily.database.entity.HabitLogEntity
 import com.intellidream.daily.database.entity.HealthTelemetryEntity
+import com.intellidream.daily.database.entity.SmartLedgerEntity
 import com.intellidream.daily.database.entity.VitalMetricEntity
 
 @Database(
     entities = [
         HabitLogEntity::class,
         HealthTelemetryEntity::class,
-        VitalMetricEntity::class
+        VitalMetricEntity::class,
+        SmartLedgerEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class DailyDatabase : RoomDatabase() {
@@ -25,6 +28,7 @@ abstract class DailyDatabase : RoomDatabase() {
     abstract fun habitLogDao(): HabitLogDao
     abstract fun healthTelemetryDao(): HealthTelemetryDao
     abstract fun vitalMetricDao(): VitalMetricDao
+    abstract fun smartLedgerDao(): SmartLedgerDao
 
     companion object {
         @Volatile

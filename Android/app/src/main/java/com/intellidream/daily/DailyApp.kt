@@ -27,6 +27,12 @@ class DailyApp : Application() {
         private set
     lateinit var healthRepository: com.intellidream.daily.health.HealthDataRepository
         private set
+    lateinit var smartLedgerRepository: com.intellidream.daily.database.SmartLedgerRepository
+        private set
+    lateinit var financeDataRepository: com.intellidream.daily.database.FinanceDataRepository
+        private set
+    lateinit var financeRemoteService: com.intellidream.daily.network.FinanceRemoteService
+        private set
 
     private val appScope = CoroutineScope(Dispatchers.IO)
 
@@ -45,6 +51,9 @@ class DailyApp : Application() {
             telemetryDao = dailyDatabase.healthTelemetryDao(),
             vitalsDao = dailyDatabase.vitalMetricDao()
         )
+        smartLedgerRepository = com.intellidream.daily.database.SmartLedgerRepository(dailyDatabase.smartLedgerDao())
+        financeDataRepository = com.intellidream.daily.database.FinanceDataRepository()
+        financeRemoteService = com.intellidream.daily.network.FinanceRemoteService()
 
         habitsRepository.syncHandler = object : com.intellidream.daily.database.HabitSyncHandler {
             override suspend fun pushLog(log: com.intellidream.daily.model.HabitLogRecord): Boolean {
