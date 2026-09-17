@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,14 +46,21 @@ import com.intellidream.daily.designsystem.NavigationTab
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.AppSettings
 import com.intellidream.daily.model.AuthSessionState
+import com.intellidream.daily.model.ForecastItem
+import com.intellidream.daily.model.ForecastResponse
 import com.intellidream.daily.model.UserProfile
+import com.intellidream.daily.model.WeatherResponse
 import com.intellidream.daily.presentation.LoginScreen
 import com.intellidream.daily.presentation.SettingsScreen
+import com.intellidream.daily.presentation.dashboard.CustomizeDashboardScreen
+import com.intellidream.daily.presentation.dashboard.DashboardView
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val authRepository by lazy { DailyApp.instance.authRepository }
     private val settingsRepository by lazy { DailyApp.instance.settingsRepository }
+    private val weatherRepository by lazy { DailyApp.instance.weatherRepository }
+    private val weatherCacheRepository by lazy { DailyApp.instance.weatherCacheRepository }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,13 +71,31 @@ class MainActivity : ComponentActivity() {
         setContent {
             val authState by authRepository.sessionState.collectAsState()
             val settings by settingsRepository.settings.collectAsState()
+            val weather by weatherRepository.currentWeather.collectAsState()
+            val forecast by weatherRepository.forecast.collectAsState()
+            val hourlyForecasts by weatherRepository.hourlyForecasts.collectAsState()
+            val locationName by weatherRepository.currentLocationName.collectAsState()
+            val isWeatherLoading by weatherRepository.isLoading.collectAsState()
+
             val scope = rememberCoroutineScope()
             var showSettings by remember { mutableStateOf(false) }
+            var showCustomize by remember { mutableStateOf(false) }
 
             LaunchedEffect(settings.isGuestMode, authState) {
                 if (settings.isGuestMode && authState is AuthSessionState.Unauthenticated) {
                     authRepository.signInAsGuest()
                 }
+            }
+
+            // Re-fetch weather when unit system changes
+            LaunchedEffect(settings.weatherUnitSystem) {
+                weatherRepository.refreshWeather(
+                    force = true,
+                    unitSystem = settings.weatherUnitSystem,
+                    onSuccess = { w, f, city, lat, lon ->
+                        scope.launch { weatherCacheRepository.saveCache(w, f, city, lat, lon) }
+                    }
+                )
             }
 
             Crossfade(targetState = authState.isAuthenticatedOrGuest, label = "AuthCrossfade") { isAuthenticated ->
@@ -85,29 +110,58 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 } else {
-                    Crossfade(targetState = showSettings, label = "SettingsCrossfade") { inSettings ->
-                        if (inSettings) {
-                            SettingsScreen(
-                                settings = settings,
-                                userProfile = authState.profile,
-                                onUpdateSettings = { transform ->
-                                    scope.launch { settingsRepository.updateSettings(transform) }
-                                },
-                                onSignOutClick = {
-                                    scope.launch {
-                                        settingsRepository.updateSettings { it.copy(isGuestMode = false) }
-                                        authRepository.signOut()
-                                        showSettings = false
-                                    }
-                                },
-                                onBackClick = { showSettings = false }
-                            )
-                        } else {
-                            DailyRootScreen(
-                                userProfile = authState.profile,
-                                settings = settings,
-                                onOpenSettings = { showSettings = true }
-                            )
+                    Crossfade(targetState = if (showCustomize) "customize" else if (showSettings) "settings" else "root", label = "ScreenCrossfade") { screen ->
+                        when (screen) {
+                            "customize" -> {
+                                CustomizeDashboardScreen(
+                                    settings = settings,
+                                    onUpdateSettings = { transform: (AppSettings) -> AppSettings ->
+                                        scope.launch { settingsRepository.updateSettings(transform) }
+                                    },
+                                    onBackClick = { showCustomize = false }
+                                )
+                            }
+                            "settings" -> {
+                                SettingsScreen(
+                                    settings = settings,
+                                    userProfile = authState.profile,
+                                    onUpdateSettings = { transform ->
+                                        scope.launch { settingsRepository.updateSettings(transform) }
+                                    },
+                                    onSignOutClick = {
+                                        scope.launch {
+                                            settingsRepository.updateSettings { it.copy(isGuestMode = false) }
+                                            authRepository.signOut()
+                                            showSettings = false
+                                        }
+                                    },
+                                    onBackClick = { showSettings = false }
+                                )
+                            }
+                            else -> {
+                                DailyRootScreen(
+                                    userProfile = authState.profile,
+                                    settings = settings,
+                                    weather = weather,
+                                    forecast = forecast,
+                                    hourlyForecasts = hourlyForecasts,
+                                    locationName = locationName,
+                                    isWeatherLoading = isWeatherLoading,
+                                    onRefreshWeather = {
+                                        scope.launch {
+                                            weatherRepository.refreshWeather(
+                                                force = true,
+                                                unitSystem = settings.weatherUnitSystem,
+                                                onSuccess = { w, f, city, lat, lon ->
+                                                    scope.launch { weatherCacheRepository.saveCache(w, f, city, lat, lon) }
+                                                }
+                                            )
+                                        }
+                                    },
+                                    onOpenCustomize = { showCustomize = true },
+                                    onOpenSettings = { showSettings = true }
+                                )
+                            }
                         }
                     }
                 }
@@ -135,6 +189,13 @@ class MainActivity : ComponentActivity() {
 fun DailyRootScreen(
     userProfile: UserProfile?,
     settings: AppSettings,
+    weather: WeatherResponse?,
+    forecast: ForecastResponse?,
+    hourlyForecasts: List<ForecastItem>,
+    locationName: String,
+    isWeatherLoading: Boolean,
+    onRefreshWeather: () -> Unit,
+    onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(NavigationTab.Dashboard) }
@@ -144,103 +205,86 @@ fun DailyRootScreen(
             .fillMaxSize()
             .background(brush = ThemeColors.backgroundGradient)
     ) {
-        // Main content
-        Column(
+        // Main Tab Content
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.Top,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
-            // Header with User Greeting and Settings Button
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Welcome, ${userProfile?.firstName ?: "Friend"}",
-                        color = ThemeColors.textSecondary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "Your Life, Synchronized",
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
+            when (selectedTab) {
+                NavigationTab.Dashboard -> {
+                    DashboardView(
+                        userProfile = userProfile,
+                        settings = settings,
+                        weather = weather,
+                        forecast = forecast,
+                        hourlyForecasts = hourlyForecasts,
+                        locationName = locationName,
+                        isWeatherLoading = isWeatherLoading,
+                        onRefreshWeather = onRefreshWeather,
+                        onOpenCustomize = onOpenCustomize,
+                        onOpenSettings = onOpenSettings
                     )
                 }
+                else -> {
+                    // Secondary Tab placeholder screen
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Top,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedTab.displayName,
+                                color = Color.White,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            GlassButton(
+                                onClick = onOpenSettings,
+                                cornerRadius = 12.dp,
+                                paddingHorizontal = 10.dp,
+                                paddingVertical = 10.dp
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Settings,
+                                    contentDescription = "Settings",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
 
-                GlassButton(
-                    onClick = onOpenSettings,
-                    cornerRadius = 12.dp,
-                    paddingHorizontal = 10.dp,
-                    paddingVertical = 10.dp
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = "Settings",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+                        Spacer(modifier = Modifier.height(24.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Hero Glass Card
-            GlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 20.dp,
-                padding = 20.dp,
-                intensity = when (settings.glassIntensity) {
-                    com.intellidream.daily.model.GlassIntensity.Subtle -> GlassIntensity.Subtle
-                    com.intellidream.daily.model.GlassIntensity.Medium -> GlassIntensity.Medium
-                    com.intellidream.daily.model.GlassIntensity.Prominent -> GlassIntensity.Prominent
-                }
-            ) {
-                Column {
-                    Text(
-                        text = "DayOne Android",
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Tactile Liquid Glass design system with 120Hz smooth scrolling, offline-first Room cache, and Supabase cloud sync.",
-                        color = ThemeColors.textSecondary,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Active Tab card
-            GlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 16.dp,
-                padding = 16.dp,
-                intensity = GlassIntensity.Subtle
-            ) {
-                Column {
-                    Text(
-                        text = "Active Tab: ${selectedTab.displayName}",
-                        color = ThemeColors.accentBlue,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "100% parity with iOS & DailyCore architecture.",
-                        color = ThemeColors.textMuted,
-                        fontSize = 13.sp
-                    )
+                        GlassCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 20.dp,
+                            padding = 24.dp,
+                            intensity = GlassIntensity.Medium
+                        ) {
+                            Column {
+                                Text(
+                                    text = "${selectedTab.displayName} Hub",
+                                    color = ThemeColors.accentBlue,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Full parity feature for ${selectedTab.displayName} is scheduled in upcoming phases with Room offline cache and Supabase realtime synchronization.",
+                                    color = ThemeColors.textSecondary,
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

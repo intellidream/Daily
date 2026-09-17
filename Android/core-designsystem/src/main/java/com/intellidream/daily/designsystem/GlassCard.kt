@@ -2,6 +2,7 @@ package com.intellidream.daily.designsystem
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
@@ -74,16 +75,25 @@ fun GlassCard(
     isDark: Boolean = true,
     intensity: GlassIntensity = GlassIntensity.Medium,
     shape: Shape = RoundedCornerShape(cornerRadius),
+    onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val clickModifier = if (onClick != null) {
+        Modifier
+            .clip(shape)
+            .clickable(onClick = onClick)
+    } else Modifier
+
     Box(
-        modifier = modifier.liquidGlass(
-            cornerRadius = cornerRadius,
-            padding = padding,
-            isDark = isDark,
-            intensity = intensity,
-            shape = shape
-        ),
+        modifier = modifier
+            .then(clickModifier)
+            .liquidGlass(
+                cornerRadius = cornerRadius,
+                padding = padding,
+                isDark = isDark,
+                intensity = intensity,
+                shape = shape
+            ),
         content = content
     )
 }
