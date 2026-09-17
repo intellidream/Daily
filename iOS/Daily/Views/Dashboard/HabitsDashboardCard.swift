@@ -322,14 +322,14 @@ public struct HabitsDashboardCard: View {
             
             // Quick Add Action Chips
             HStack(spacing: 6) {
-                quickChip(title: "300", icon: "drop.fill", color: ThemeColors.accentCyan) {
-                    habitsService.logWater(preset: .largeWater)
+                quickChip(title: "100", icon: "cup.and.saucer.fill", color: Color(hex: "#F59E0B")) {
+                    habitsService.logWater(preset: .coffee)
                 }
                 quickChip(title: "150", icon: "drop.fill", color: ThemeColors.accentCyan) {
                     habitsService.logWater(preset: .smallWater)
                 }
-                quickChip(title: "100", icon: "cup.and.saucer.fill", color: Color(hex: "#F59E0B")) {
-                    habitsService.logWater(preset: .coffee)
+                quickChip(title: "300", icon: "drop.fill", color: ThemeColors.accentCyan) {
+                    habitsService.logWater(preset: .largeWater)
                 }
                 
                 Spacer(minLength: 0)

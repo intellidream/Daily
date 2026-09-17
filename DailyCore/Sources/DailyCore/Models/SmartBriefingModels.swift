@@ -73,13 +73,37 @@ public enum BriefingTimeSlot: String, CaseIterable, Codable, Sendable, Identifia
         }
     }
 
-    public var actionButtonIcon: String {
+    /// Personalized diurnal greeting in Romanian for the top bar of the briefing.
+    public func diurnalGreeting(for name: String) -> String {
+        switch self {
+        case .morning: return "Bună dimineața, \(name)!"
+        case .intraday: return "O zi excelentă, \(name)!"
+        case .evening: return "Bună seara, \(name)!"
+        case .nightly: return "Timpul pentru odihnă, \(name)"
+        }
+    }
+
+    /// Contextual closing wish for the bottom action button.
+    public var defaultClosingWish: String {
+        switch self {
+        case .morning: return "Have a great day!"
+        case .intraday: return "Have a productive day!"
+        case .evening: return "Enjoy a restful evening!"
+        case .nightly: return "Sleep tight & rest well!"
+        }
+    }
+
+    public var defaultClosingIcon: String {
         switch self {
         case .morning: return "sun.horizon.fill"
         case .intraday: return "sun.max.fill"
         case .evening: return "sunset.fill"
         case .nightly: return "bed.double.fill"
         }
+    }
+
+    public var actionButtonIcon: String {
+        defaultClosingIcon
     }
 }
 
@@ -93,6 +117,8 @@ public struct SmartBriefingNarrative: Codable, Equatable, Sendable {
     public var tagdosText: String
     public var newsText: String
     public var outroText: String
+    public var closingWish: String?
+    public var closingIcon: String?
 
     public init(
         greeting: String = "",
@@ -102,7 +128,9 @@ public struct SmartBriefingNarrative: Codable, Equatable, Sendable {
         financeText: String = "",
         tagdosText: String = "",
         newsText: String = "",
-        outroText: String = ""
+        outroText: String = "",
+        closingWish: String? = nil,
+        closingIcon: String? = nil
     ) {
         self.greeting = greeting
         self.weatherText = weatherText
@@ -112,6 +140,8 @@ public struct SmartBriefingNarrative: Codable, Equatable, Sendable {
         self.tagdosText = tagdosText
         self.newsText = newsText
         self.outroText = outroText
+        self.closingWish = closingWish
+        self.closingIcon = closingIcon
     }
 
     /// Full concatenated narrative for the unified fading typewriter animation.
@@ -145,7 +175,7 @@ public struct SmartBriefingNarrative: Codable, Equatable, Sendable {
             list.append(("creditcard.fill", "Financial Overview", financeText))
         }
         if !tagdosText.isEmpty {
-            list.append(("tag.fill", "TagDoS Focus", tagdosText))
+            list.append(("checklist", "Tagdos", tagdosText))
         }
         if !newsText.isEmpty {
             list.append(("newspaper.fill", "Headlines Radar", newsText))

@@ -79,16 +79,19 @@ struct SmartBriefingTests {
             slot: .morning,
             userName: "Mihai",
             metrics: metrics,
-            activeStreams: ["Work", "Fitness", "Personal", "Code"]
+            activeStreams: ["Work", "Fitness", "Personal", "Code"],
+            topPills: ["MG/GM/TG", "WRK/PRJ"]
         )
 
-        #expect(narrative.greeting.contains("Good morning, Mihai!"))
+        #expect(narrative.greeting.contains("Bună dimineața, Mihai!"))
         #expect(narrative.weatherText.contains("Clear Sky"))
         #expect(narrative.healthText.contains("88/100"))
         // Check smoking reduction constructive empathy:
-        #expect(narrative.habitsText.contains("safely maintaining below your daily baseline"))
+        #expect(narrative.habitsText.contains("sub pragul tău zilnic"))
         #expect(narrative.habitsText.contains("1.5L / 2.0L"))
-        #expect(narrative.tagdosText.contains("4 mental streams active"))
+        #expect(narrative.tagdosText.contains("Uite, asta ai de rezolvat azi: MG/GM/TG, WRK/PRJ"))
+        #expect(narrative.financeText.contains("Lei"))
+        #expect(narrative.closingWish != nil)
     }
 
     @Test("Data hash sensitivity across metric variations")

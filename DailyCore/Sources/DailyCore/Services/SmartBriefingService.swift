@@ -39,10 +39,14 @@ public final class SmartBriefingService: ObservableObject {
               let record = try? JSONDecoder().decode(SmartBriefingRecord.self, from: data) else {
             return
         }
-        self.inMemoryCache[record.slot] = record
-        self.activeBriefing = record
-        self.isAiGenerated = record.isAiGenerated
-        self.lastGeneratedAt = record.updatedAt
+        let currentSlot = BriefingTimeSlot.current()
+        // Strictly prevent loading stale records from a previous time slot or day into activeBriefing
+        if record.slot == currentSlot && Calendar.current.isDateInToday(record.createdAt) {
+            self.inMemoryCache[record.slot] = record
+            self.activeBriefing = record
+            self.isAiGenerated = record.isAiGenerated
+            self.lastGeneratedAt = record.updatedAt
+        }
     }
 
     private func saveCachedBriefing(_ record: SmartBriefingRecord) {
@@ -59,15 +63,19 @@ public final class SmartBriefingService: ObservableObject {
     // MARK: - Public API
 
     /// Retrieves or generates a Smart Briefing.
-    /// Fast-path returns in 0ms if cached metrics match current data and slot.
+    /// Fast-path returns in 0ms if cached metrics match current data, slot, and day.
     public func getOrGenerateBriefing(forceRefresh: Bool = false) async -> SmartBriefingRecord {
         let currentSlot = BriefingTimeSlot.current()
         let metrics = collectCurrentMetrics()
         let activeStreams = TagdosStore.shared.streams.map(\.title)
         let hash = computeDataHash(slot: currentSlot, metrics: metrics, streamCount: activeStreams.count)
 
-        // 1. Check local cache if not force refreshing
-        if !forceRefresh, let cached = inMemoryCache[currentSlot], cached.dataHash == hash {
+        // 1. Check local cache if not force refreshing, strictly matching slot and date
+        if !forceRefresh,
+           let cached = inMemoryCache[currentSlot],
+           cached.dataHash == hash,
+           cached.slot == currentSlot,
+           Calendar.current.isDateInToday(cached.createdAt) {
             self.activeBriefing = cached
             return cached
         }
@@ -77,12 +85,16 @@ public final class SmartBriefingService: ObservableObject {
 
         let firstName = AuthService.shared.currentUser?.firstName ?? "Friend"
 
-        // 2. Tier 1: Instant Local Deterministic Synthesis (<5ms)
+        // 2. Extract leading uncompleted pills for Tagdos focus
+        let topPills = extractTopPills()
+
+        // 3. Tier 1: Instant Local Deterministic Synthesis (<5ms)
         let localNarrative = synthesizeLocalNarrative(
             slot: currentSlot,
             userName: firstName,
             metrics: metrics,
-            activeStreams: activeStreams
+            activeStreams: activeStreams,
+            topPills: topPills
         )
 
         var finalRecord = SmartBriefingRecord(
@@ -97,7 +109,7 @@ public final class SmartBriefingService: ObservableObject {
             updatedAt: Date()
         )
 
-        // 3. Tier 2: AI Enhancement via Gemini Flash API (if key is present)
+        // 4. Tier 2: AI Enhancement via Gemini Flash API (if key is present)
         let apiKey = SettingsService.shared.settings.geminiApiKey ?? ""
         if !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             do {
@@ -106,7 +118,10 @@ public final class SmartBriefingService: ObservableObject {
                     slot: currentSlot,
                     userName: firstName,
                     metrics: metrics,
-                    streamTitles: activeStreams
+                    streamTitles: activeStreams,
+                    topPills: topPills,
+                    closingWish: localNarrative.closingWish,
+                    closingIcon: localNarrative.closingIcon
                 )
                 finalRecord.narrative = aiNarrative
                 finalRecord.isAiGenerated = true
@@ -118,10 +133,10 @@ public final class SmartBriefingService: ObservableObject {
             }
         }
 
-        // 4. Update memory and disk cache
+        // 5. Update memory and disk cache
         saveCachedBriefing(finalRecord)
 
-        // 5. Asynchronously synchronize to Supabase
+        // 6. Asynchronously synchronize to Supabase
         Task { [weak self] in
             await self?.syncToSupabase(record: finalRecord)
         }
@@ -131,7 +146,7 @@ public final class SmartBriefingService: ObservableObject {
 
     /// Evaluates whether the automatic morning briefing should be presented on app launch.
     /// Strictly executed after all 6 hub data sources have finished loading.
-    public func checkAutomaticMorningPresentation() -> Bool {
+    public func checkAutomaticMorningPresentation() async -> Bool {
         let settings = SettingsService.shared.settings
         guard settings.smartBriefingEnabled && settings.smartBriefingAutoMorning else {
             return false
@@ -152,6 +167,8 @@ public final class SmartBriefingService: ObservableObject {
         // Show if not shown today, or if data hash changed since last show
         if lastShownDay != todayKey || (activeBriefing?.dataHash != hash) {
             groupDefaults.set(todayKey, forKey: lastAutoShownDateKey)
+            // Pre-generate the fresh morning briefing with updated hub metrics before showing
+            _ = await getOrGenerateBriefing(forceRefresh: true)
             self.shouldPresentMorningAutomatically = true
             return true
         }
@@ -163,9 +180,10 @@ public final class SmartBriefingService: ObservableObject {
 
     public func collectCurrentMetrics() -> SmartBriefingMetrics {
         let weather = WeatherService.shared.currentWeather
+        let locationName = WeatherService.shared.currentLocationName
         let health = HealthDataService.shared
         let habits = HabitsService.shared
-        let finance = FinanceService.shared
+        let ledger = SmartLedgerStore.shared.parsedLedger
         let tagdos = TagdosStore.shared
         let news = NewsService.shared
 
@@ -178,24 +196,34 @@ public final class SmartBriefingService: ObservableObject {
             count + (stream.activeMemos.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 1)
         }
 
+        let resolvedCity: String = {
+            if locationName != "Detecting..." && !locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return locationName
+            }
+            if let name = weather?.name, !name.isEmpty {
+                return name
+            }
+            return "Bucharest"
+        }()
+
         return SmartBriefingMetrics(
             weatherTemp: weather?.main.temp,
             weatherCondition: weather?.weather.first?.description.capitalized,
             weatherIcon: weather?.weather.first?.icon,
-            weatherCity: weather?.name.isEmpty == false ? weather?.name : "Bucharest",
+            weatherCity: resolvedCity,
             sleepScore: health.primarySleepSession?.sleepScore,
             sleepDurationHours: sleepDurationHours,
             restingBpm: health.restingBpm > 0 ? health.restingBpm : nil,
             totalStepsToday: health.totalStepsToday,
-            waterMlToday: habits.waterTotalToday,
-            waterGoalMl: habits.waterGoal,
-            smokesToday: habits.smokesTotalToday,
+            waterMlToday: habits.totalWaterMlToday,
+            waterGoalMl: habits.waterGoalMl,
+            smokesToday: habits.totalSmokesToday,
             smokesBaseline: habits.smokesBaselineCount,
-            netWorth: finance.summary.netWorth,
-            daySpend: finance.summary.dayChange,
+            netWorth: ledger.netWorth,
+            daySpend: ledger.outgoingTotal,
             activeStreamCount: tagdos.streams.count,
             activeMemoCount: activeMemoCount,
-            topNewsTitle: news.articles.first?.title
+            topNewsTitle: news.topHeadline?.title ?? news.articles.first?.title
         )
     }
 
@@ -212,48 +240,116 @@ public final class SmartBriefingService: ObservableObject {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Extracts prioritized actionable pills across active Tagdos streams.
+    public func extractTopPills() -> [String] {
+        let streams = TagdosStore.shared.streams
+        var pills: [String] = []
+
+        // 1. Prioritize urgent uncompleted pills
+        for stream in streams {
+            for pill in stream.activePills where pill.type == .urgent {
+                let trimmed = pill.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty && !pills.contains(trimmed) {
+                    pills.append(trimmed)
+                }
+            }
+        }
+
+        // 2. Add driving pills from each active stream
+        for stream in streams {
+            if let driving = stream.drivingPill?.rawText.trimmingCharacters(in: .whitespacesAndNewlines),
+               !driving.isEmpty,
+               !pills.contains(driving) {
+                pills.append(driving)
+            }
+            if pills.count >= 4 { break }
+        }
+
+        // 3. Fallback to any active uncompleted pills
+        if pills.isEmpty {
+            for stream in streams {
+                for pill in stream.activePills {
+                    let trimmed = pill.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty && !pills.contains(trimmed) {
+                        pills.append(trimmed)
+                    }
+                    if pills.count >= 4 { break }
+                }
+                if pills.count >= 4 { break }
+            }
+        }
+
+        return pills
+    }
+
     // MARK: - Tier 1: Local Deterministic Synthesizer
 
     public func synthesizeLocalNarrative(
         slot: BriefingTimeSlot,
         userName: String,
         metrics: SmartBriefingMetrics,
-        activeStreams: [String]
+        activeStreams: [String],
+        topPills: [String] = []
     ) -> SmartBriefingNarrative {
         // Greeting
-        let greeting = "\(slot.greetingPrefix), \(userName)! Here is your unified \(slot.displayName.lowercased())."
+        let greeting = "\(slot.diurnalGreeting(for: userName)) Iată sumarul tău integrat."
 
-        // Weather
-        let tempString = metrics.weatherTemp.map { "\(Int($0.rounded()))°C" } ?? "pleasant temperatures"
-        let condition = metrics.weatherCondition ?? "fair skies"
+        // Weather & Rain Detection
+        let tempString = metrics.weatherTemp.map { "\(Int($0.rounded()))°C" } ?? "temperaturi plăcute"
+        let condition = metrics.weatherCondition ?? "cer senin"
+        let condLower = condition.lowercased()
+        let isRaining = condLower.contains("rain") || condLower.contains("ploaie") || condLower.contains("drizzle") || condLower.contains("thunderstorm") || condLower.contains("averse")
+
         let weatherAdvice: String
-        switch slot {
-        case .morning:
-            weatherAdvice = "Expect \(condition) with \(tempString). Great conditions to plan your day."
-        case .intraday:
-            weatherAdvice = "Current conditions hold at \(tempString) and \(condition)."
-        case .evening:
-            weatherAdvice = "The day is winding down under \(condition) at \(tempString)."
-        case .nightly:
-            weatherAdvice = "Night air is steady around \(tempString)."
+        if isRaining {
+            weatherAdvice = "Afară sunt \(tempString) cu \(condition). Nu uita să iei o umbrelă dacă ieși azi."
+        } else {
+            switch slot {
+            case .morning:
+                weatherAdvice = "Condiții de \(condition) cu \(tempString). O atmosferă excelentă pentru a-ți planifica ziua."
+            case .intraday:
+                weatherAdvice = "Vremea se menține cu \(condition) la \(tempString)."
+            case .evening:
+                weatherAdvice = "Ziua se încheie liniștit sub \(condition) la \(tempString)."
+            case .nightly:
+                weatherAdvice = "Aerul nopții este constant în jurul a \(tempString)."
+            }
+        }
+
+        // Contextual Closing Wish
+        let closingWish: String
+        let closingIcon: String
+        if isRaining {
+            closingWish = "Ia o umbrelă azi :))"
+            closingIcon = "umbrella.fill"
+        } else {
+            closingWish = slot.defaultClosingWish
+            closingIcon = slot.defaultClosingIcon
         }
 
         // Health & Vitals
         let healthAdvice: String
-        let sleepScore = metrics.sleepScore ?? 82
         let steps = metrics.totalStepsToday
-        if let sleepHrs = metrics.sleepDurationHours {
+        if let sleepScore = metrics.sleepScore, let sleepHrs = metrics.sleepDurationHours {
             let formattedHrs = String(format: "%.1fh", sleepHrs)
             if sleepScore >= 80 {
-                healthAdvice = "Strong recovery recorded with \(formattedHrs) of sleep (Score \(sleepScore)/100). You've accumulated \(steps) steps so far."
+                if steps > 500 {
+                    healthAdvice = "Recuperare excelentă cu \(formattedHrs) de somn (Scor \(sleepScore)/100). Ai acumulat deja \(steps) pași."
+                } else {
+                    healthAdvice = "Recuperare excelentă cu \(formattedHrs) de somn (Scor \(sleepScore)/100). Ești gata pentru o zi plină de energie."
+                }
             } else {
-                healthAdvice = "Sleep reached \(formattedHrs) (Score \(sleepScore)/100). Keep physical strain balanced today and stay hydrated. Total steps: \(steps)."
+                healthAdvice = "Ai înregistrat \(formattedHrs) de somn (Scor \(sleepScore)/100). Menține un ritm echilibrat și hidratează-te corespunzător."
             }
+        } else if steps > 500 {
+            let bpmInfo = (metrics.restingBpm ?? 0) > 0 ? ", cu pulsul în repaus la \(Int(metrics.restingBpm!)) bpm" : ""
+            healthAdvice = "Activitatea este în plină desfășurare, cu \(steps) pași înregistrați astăzi\(bpmInfo)."
         } else {
-            healthAdvice = "Activity is tracking with \(steps) steps recorded today."
+            let bpmInfo = (metrics.restingBpm ?? 0) > 0 ? "Pulsul în repaus este la \(Int(metrics.restingBpm!)) bpm." : "Indicatorii de recuperare se sincronizează pe măsură ce începe ziua."
+            healthAdvice = bpmInfo
         }
 
-        // Habits & Cravings (Constructive Empathy for smoking reduction)
+        // Habits & Cravings
         let waterLiters = String(format: "%.1fL", metrics.waterMlToday / 1000.0)
         let waterGoalLiters = String(format: "%.1fL", metrics.waterGoalMl / 1000.0)
         let habitAdvice: String
@@ -262,38 +358,55 @@ public final class SmartBriefingService: ObservableObject {
         let baseline = metrics.smokesBaseline
         let smokesAdvice: String
         if smokes == 0 {
-            smokesAdvice = "Zero smokes logged today—fantastic discipline and clean breathing."
+            if slot == .morning {
+                smokesAdvice = "Începe ziua cu un pahar de apă și ține poftele la zero."
+            } else {
+                smokesAdvice = "Zero țigări consumate—disciplină excelentă pentru plămânii tăi."
+            }
         } else if smokes <= baseline {
-            smokesAdvice = "Currently at \(smokes) smokes, safely maintaining below your daily baseline of \(baseline). Keep hydrating through cravings."
+            smokesAdvice = "\(smokes) țigări înregistrate, menținându-te sub pragul tău zilnic (\(baseline)). Hidratează-te când simți poftă."
         } else {
-            smokesAdvice = "Logged \(smokes) smokes today. Take a pause, breathe deeply, and focus on clean hydration for the rest of the day."
+            smokesAdvice = "\(smokes) țigări înregistrate azi. Respiră adânc, ia o pauză și axează-te pe hidratare pentru restul zilei."
         }
-        habitAdvice = "Hydration is at \(waterLiters) / \(waterGoalLiters). \(smokesAdvice)"
 
-        // Finance
+        if metrics.waterMlToday > 0 {
+            habitAdvice = "Hidratarea este la \(waterLiters) / \(waterGoalLiters). \(smokesAdvice)"
+        } else {
+            habitAdvice = smokesAdvice
+        }
+
+        // Finance (Romanian Lei from SmartLedgerStore)
         let financeAdvice: String
-        let formattedNetWorth = String(format: "$%.0f", metrics.netWorth)
-        if metrics.daySpend != 0 {
-            let sign = metrics.daySpend >= 0 ? "+" : ""
-            financeAdvice = "Net worth stands at \(formattedNetWorth) with a net flow of \(sign)$\(Int(metrics.daySpend)) today."
+        let numFormatter = NumberFormatter()
+        numFormatter.numberStyle = .decimal
+        numFormatter.groupingSeparator = "."
+        numFormatter.maximumFractionDigits = 0
+        let formattedNetWorth = "\(numFormatter.string(from: NSNumber(value: metrics.netWorth)) ?? "\(Int(metrics.netWorth))") Lei"
+
+        let ledger = SmartLedgerStore.shared.parsedLedger
+        if ledger.incomingTotal > 0 || ledger.outgoingTotal > 0 {
+            let inK = String(format: "%.1fk", ledger.incomingTotal / 1000.0)
+            let outK = String(format: "%.1fk", ledger.outgoingTotal / 1000.0)
+            financeAdvice = "Net worth-ul este de \(formattedNetWorth), cu un flux lunar de \(inK) / \(outK) Lei."
         } else {
-            financeAdvice = "Portfolio assets and net worth remain steady at \(formattedNetWorth)."
+            financeAdvice = "Disponibilitățile și portofoliul se mențin stabile la \(formattedNetWorth)."
         }
 
-        // TagDoS
+        // Tagdos Actionable Directive
         let tagdosAdvice: String
-        let streamCount = activeStreams.count
-        if streamCount > 0 {
-            let memoInfo = metrics.activeMemoCount > 0 ? " with \(metrics.activeMemoCount) active memos to tackle" : ""
-            tagdosAdvice = "\(streamCount) mental streams active\(memoInfo)."
+        let resolvedPills = topPills.isEmpty ? extractTopPills() : topPills
+        if !resolvedPills.isEmpty {
+            tagdosAdvice = "Uite, asta ai de rezolvat azi: \(resolvedPills.prefix(3).joined(separator: ", "))."
+        } else if activeStreams.count > 0 {
+            tagdosAdvice = "Toate stream-urile Tagdos sunt la zi, fără blocaje active."
         } else {
-            tagdosAdvice = "TagDoS streams are calm with no pending bottlenecks."
+            tagdosAdvice = "Stream-urile Tagdos sunt calme, fără sarcini active."
         }
 
         // News
         let newsAdvice: String
-        if let topHeadline = metrics.topNewsTitle, !topHeadline.isEmpty {
-            newsAdvice = "Top headline in your radar: \"\(topHeadline)\"."
+        if let topHeadline = metrics.topNewsTitle, !topHeadline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            newsAdvice = "Știrea principală în radar: \"\(topHeadline)\"."
         } else {
             newsAdvice = ""
         }
@@ -302,13 +415,13 @@ public final class SmartBriefingService: ObservableObject {
         let outro: String
         switch slot {
         case .morning:
-            outro = "Set your intentions, stay focused, and make today count."
+            outro = "Setează-ți intențiile, concentrează-te și fă ca ziua de azi să conteze."
         case .intraday:
-            outro = "Keep this steady pace through the afternoon."
+            outro = "Menține acest ritm constant pe parcursul după-amiezii."
         case .evening:
-            outro = "Reflect on today's progress and enjoy a restful evening."
+            outro = "Reflectează la realizările de azi și bucură-te de o seară relaxantă."
         case .nightly:
-            outro = "Power down your screens, restore your energy, and rest well."
+            outro = "Închide ecranele, regenerează-ți energia și dormi liniștit."
         }
 
         return SmartBriefingNarrative(
@@ -319,7 +432,9 @@ public final class SmartBriefingService: ObservableObject {
             financeText: financeAdvice,
             tagdosText: tagdosAdvice,
             newsText: newsAdvice,
-            outroText: outro
+            outroText: outro,
+            closingWish: closingWish,
+            closingIcon: closingIcon
         )
     }
 

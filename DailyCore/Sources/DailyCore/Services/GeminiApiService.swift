@@ -22,7 +22,10 @@ public final class GeminiApiService: @unchecked Sendable {
         slot: BriefingTimeSlot,
         userName: String,
         metrics: SmartBriefingMetrics,
-        streamTitles: [String] = []
+        streamTitles: [String] = [],
+        topPills: [String] = [],
+        closingWish: String? = nil,
+        closingIcon: String? = nil
     ) async throws -> SmartBriefingNarrative {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else {
@@ -35,37 +38,42 @@ public final class GeminiApiService: @unchecked Sendable {
 
         Guidelines:
         1. Address \(userName) directly in natural, warm, second-person language.
-        2. Synthesize all 6 life areas based on the provided JSON telemetry: Weather, Health/Sleep, Habits, Finances, TagDoS Streams, and News.
+        2. Synthesize all 6 life areas based on the provided JSON telemetry: Weather, Health/Sleep, Habits, Finances, Tagdos, and News.
         3. Habit Coaching Directive: Treat smoking/heaters as a habit to consciously reduce. If smokes count is low or below baseline, warmly congratulate the discipline. Never encourage smoking. Encourage hydration and mindful breathing during cravings.
-        4. Sleep & Health: 7-9 hours is optimal. High resting heart rate combined with low sleep requires gentle pacing and extra hydration.
-        5. Tone: Calm, encouraging, succinct. Avoid conversational filler or mentioning prompt rules.
-        6. Return strictly a single JSON object matching this schema:
+        4. Sleep & Health: Report sleep and recovery truthfully based on provided telemetry. If sleep data is not yet recorded for today, note that vitals are syncing or focus on current activity and resting heart rate without inventing numbers.
+        5. Finances: All currency is Romanian Lei ("Lei"). State net worth and flows in Lei with dot separators (e.g. "127.156 Lei"). Never output dollar signs ($).
+        6. Tagdos: Provide actionable focus on the driving pills to solve today (e.g. "Uite, asta ai de rezolvat azi: [key pills]"). Do not merely count streams.
+        7. Tone: Calm, encouraging, succinct. Avoid conversational filler or mentioning prompt rules.
+        8. Return strictly a single JSON object matching this schema:
         {
           "greeting": "A warm, personalized 1-line greeting with date context",
           "weatherText": "Concise atmosphere & outfit recommendation based on weather",
           "healthText": "Recovery analysis correlating sleep score, resting HR, and activity",
           "habitsText": "Empathetic hydration progress and supportive craving reduction advice",
-          "financeText": "Summary of daily spend, net worth context, and financial clarity",
-          "tagdosText": "Focus priority for active TagDoS mental streams and memos",
+          "financeText": "Summary of monthly flow, net worth in Lei, and financial clarity",
+          "tagdosText": "Focus priority for active Tagdos pills (e.g. 'Uite, asta ai de rezolvat azi: ...')",
           "newsText": "1-sentence perspective on the top headline, if present",
           "outroText": "1-line empowering closing sentence"
         }
         """
+
+        var healthPayload: [String: Any] = [
+            "stepsToday": metrics.totalStepsToday
+        ]
+        if let score = metrics.sleepScore { healthPayload["sleepScore"] = score }
+        if let hours = metrics.sleepDurationHours { healthPayload["sleepHours"] = hours }
+        if let bpm = metrics.restingBpm { healthPayload["restingBpm"] = bpm }
 
         let promptPayload: [String: Any] = [
             "timeSlot": slot.rawValue,
             "userName": userName,
             "weather": [
                 "temp": metrics.weatherTemp ?? 20.0,
+                "unit": "°C",
                 "condition": metrics.weatherCondition ?? "Clear",
                 "city": metrics.weatherCity ?? "Current Location"
             ],
-            "health": [
-                "sleepScore": metrics.sleepScore ?? 80,
-                "sleepHours": metrics.sleepDurationHours ?? 7.5,
-                "restingBpm": metrics.restingBpm ?? 65.0,
-                "stepsToday": metrics.totalStepsToday
-            ],
+            "health": healthPayload,
             "habits": [
                 "waterMlToday": metrics.waterMlToday,
                 "waterGoalMl": metrics.waterGoalMl,
@@ -73,11 +81,13 @@ public final class GeminiApiService: @unchecked Sendable {
                 "smokesBaseline": metrics.smokesBaseline
             ],
             "finances": [
+                "currency": "Lei",
                 "netWorth": metrics.netWorth,
                 "daySpend": metrics.daySpend
             ],
             "tagdos": [
                 "activeStreams": streamTitles,
+                "topPillsToTackle": topPills,
                 "activeMemosCount": metrics.activeMemoCount
             ],
             "newsHeadline": metrics.topNewsTitle ?? ""
@@ -87,20 +97,26 @@ public final class GeminiApiService: @unchecked Sendable {
         let userPromptString = String(data: userPromptData, encoding: .utf8) ?? "{}"
 
         do {
-            return try await executeGenerateContent(
+            var result = try await executeGenerateContent(
                 model: primaryModel,
                 apiKey: trimmedKey,
                 systemInstruction: systemInstruction,
                 userPrompt: userPromptString
             )
+            result.closingWish = closingWish
+            result.closingIcon = closingIcon
+            return result
         } catch {
             // Fallback to secondary model if primary encounters model version mismatch
-            return try await executeGenerateContent(
+            var result = try await executeGenerateContent(
                 model: fallbackModel,
                 apiKey: trimmedKey,
                 systemInstruction: systemInstruction,
                 userPrompt: userPromptString
             )
+            result.closingWish = closingWish
+            result.closingIcon = closingIcon
+            return result
         }
     }
 

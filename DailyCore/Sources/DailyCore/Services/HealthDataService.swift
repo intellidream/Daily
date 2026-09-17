@@ -224,8 +224,8 @@ public final class HealthDataService: ObservableObject {
         // Deduplicate any repeated database or provider records
         fetchedTelemetry = Self.deduplicateTelemetry(fetchedTelemetry)
         
-        // 4. Fallback to realistic demo data ONLY if in explicit Guest mode with no data
-        if AuthService.shared.isGuest && fetchedTelemetry.isEmpty && fetchedVitals.isEmpty {
+        // 4. Fallback to realistic demo data if in explicit Guest mode or with -demoHealth argument
+        if (AuthService.shared.isGuest || ProcessInfo.processInfo.arguments.contains("-demoHealth")) && fetchedTelemetry.isEmpty && fetchedVitals.isEmpty {
             let demo = generateDemoData(for: selectedDate)
             fetchedTelemetry = demo.telemetry
             fetchedVitals = demo.vitals
@@ -327,6 +327,19 @@ public final class HealthDataService: ObservableObject {
         self.primarySleepSession = sleepResult.primarySession
         self.allSleepSessions = sleepResult.allSessions
         self.daytimeNaps = sleepResult.naps
+        
+        if self.primarySleepSession == nil && (ProcessInfo.processInfo.arguments.contains("-testSleepStudio") || ProcessInfo.processInfo.arguments.contains("-demoHealth")) {
+            let demo = generateDemoData(for: selectedDate)
+            let demoSleepResult = SleepClusteringEngine.clusterSleep(
+                targetDate: selectedDate,
+                telemetry: demo.telemetry,
+                vitalsSummary: vitalsValues,
+                preferredDevice: nil
+            )
+            self.primarySleepSession = demoSleepResult.primarySession
+            self.allSleepSessions = demoSleepResult.allSessions
+            self.daytimeNaps = demoSleepResult.naps
+        }
         
         WidgetDataCoordinator.shared.updateSleepSnapshot(
             from: sleepResult.primarySession,

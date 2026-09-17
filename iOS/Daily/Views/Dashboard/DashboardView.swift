@@ -86,7 +86,7 @@ public struct DashboardView: View {
             _ = await (w, h, hab, n, f)
             
             // Strictly after all 6 hub data sources finish loading, evaluate automatic morning presentation
-            if SmartBriefingService.shared.checkAutomaticMorningPresentation() {
+            if await SmartBriefingService.shared.checkAutomaticMorningPresentation() {
                 try? await Task.sleep(nanoseconds: 600_000_000)
                 showingBriefingSheet = true
             }

@@ -8,47 +8,51 @@ public struct SleepStudioView: View {
     public init() {}
     
     public var body: some View {
-        VStack(spacing: 16) {
-            if let session = healthService.primarySleepSession {
-                let analysis = SleepAnalysisEngine.shared.analyze(
-                    session: session,
-                    nocturnalRestingBpm: healthService.restingBpm > 0 ? healthService.restingBpm : nil,
-                    nocturnalHrvMs: healthService.currentVitals[.hrvSdnn]?.value
-                )
-                
-                // 1. Hero Sleep Score & Schedule Card
-                heroSleepScoreCard(session: session)
-                
-                // 2. Recovery Verdict & Readiness Card
-                SleepVerdictCard(verdict: analysis.verdict)
-                
-                // 3. AI Sleep Intelligence Companion Card
-                SleepAICoachCard(aiContext: analysis.aiContext, session: session)
-                
-                // 4. Actionable Clinical Sleep Hygiene Tips
-                if !analysis.tips.isEmpty {
-                    SleepAdviceCard(tips: analysis.tips)
+        ScrollViewReader { proxy in
+            VStack(spacing: 16) {
+                if let session = healthService.primarySleepSession {
+                    let analysis = SleepAnalysisEngine.shared.analyze(
+                        session: session,
+                        nocturnalRestingBpm: healthService.restingBpm > 0 ? healthService.restingBpm : nil,
+                        nocturnalHrvMs: healthService.currentVitals[.hrvSdnn]?.value
+                    )
+                    
+                    // 1. Hero Sleep Score & Schedule Card (Tap score ring to scroll to hypnogram)
+                    heroSleepScoreCard(session: session, proxy: proxy)
+                    
+                    // 2. Recovery Verdict & Readiness Card
+                    SleepVerdictCard(verdict: analysis.verdict)
+                    
+                    // 3. AI Sleep Intelligence Companion Card
+                    SleepAICoachCard(aiContext: analysis.aiContext, session: session)
+                    
+                    // 4. Actionable Clinical Sleep Hygiene Tips
+                    if !analysis.tips.isEmpty {
+                        SleepAdviceCard(tips: analysis.tips)
+                    }
+                    
+                    // 5. Clinical Hypnogram or Proportional Stage Bar
+                    hypnogramContainerCard(session: session)
+                        .id("hypnogram_container")
+                    
+                    // 6. Sleep Architecture Breakdown Grid
+                    architectureMetricsGrid(session: session)
+                        .id("sleep_stages_grid")
+                } else {
+                    emptySleepCard
                 }
                 
-                // 5. Clinical Hypnogram or Proportional Stage Bar
-                hypnogramContainerCard(session: session)
-                
-                // 6. Sleep Architecture Breakdown Grid
-                architectureMetricsGrid(session: session)
-            } else {
-                emptySleepCard
-            }
-            
-            // 7. Daytime Naps Section
-            if !healthService.daytimeNaps.isEmpty {
-                daytimeNapsSection
+                // 7. Daytime Naps Section
+                if !healthService.daytimeNaps.isEmpty {
+                    daytimeNapsSection
+                }
             }
         }
     }
     
     // MARK: - Hero Sleep Score Card
     
-    private func heroSleepScoreCard(session: SleepSession) -> some View {
+    private func heroSleepScoreCard(session: SleepSession, proxy: ScrollViewProxy) -> some View {
         GlassCard(cornerRadius: 22, padding: 20) {
             VStack(spacing: 16) {
                 HStack(alignment: .center) {
@@ -82,33 +86,40 @@ public struct SleepStudioView: View {
                     
                     Spacer()
                     
-                    // Radial Score Ring
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white.opacity(0.08), lineWidth: 8)
-                            .frame(width: 76, height: 76)
-                        
-                        Circle()
-                            .trim(from: 0, to: CGFloat(session.sleepScore) / 100.0)
-                            .stroke(
-                                AngularGradient(
-                                    colors: [ThemeColors.accentCyan, ThemeColors.accentBlue, ThemeColors.accentPurple],
-                                    center: .center
-                                ),
-                                style: StrokeStyle(lineWidth: 8, lineCap: .round)
-                            )
-                            .rotationEffect(.degrees(-90))
-                            .frame(width: 76, height: 76)
-                        
-                        VStack(spacing: 1) {
-                            Text("\(session.sleepScore)")
-                                .font(.system(size: 22, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                            Text(session.sleepQualityRating)
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundColor(ThemeColors.accentCyan)
+                    // Radial Score Ring (Tap to smoothly scroll down to Hypnogram & Stage Proportions)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.55)) {
+                            proxy.scrollTo("hypnogram_container", anchor: .top)
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .stroke(Color.white.opacity(0.08), lineWidth: 8)
+                                .frame(width: 76, height: 76)
+                            
+                            Circle()
+                                .trim(from: 0, to: CGFloat(session.sleepScore) / 100.0)
+                                .stroke(
+                                    AngularGradient(
+                                        colors: [ThemeColors.accentCyan, ThemeColors.accentBlue, ThemeColors.accentPurple],
+                                        center: .center
+                                    ),
+                                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                                )
+                                .rotationEffect(.degrees(-90))
+                                .frame(width: 76, height: 76)
+                            
+                            VStack(spacing: 1) {
+                                Text("\(session.sleepScore)")
+                                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                Text(session.sleepQualityRating)
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(ThemeColors.accentCyan)
+                            }
                         }
                     }
+                    .buttonStyle(.plain)
                 }
                 
                 Divider()

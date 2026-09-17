@@ -98,13 +98,27 @@ flowchart TD
 - **📰 Headlines Radar**: Top headline badge + curated world news radar.
 - **✨ Mindful Focus**: Slot-specific actionable suggestion and mindfulness guidance.
 
-### Diurnal Navigation & Action Button
-- **Top Navigation Bar**: Features the centered Diurnal Slot Status Pill (e.g. `🌙 Nightly Wind-Down · 22:00 – 04:59`) with refresh and dismiss actions. Eliminates redundant timestamps and titles.
-- **Contextual Diurnal Bottom Button**: The personal greeting is integrated directly into the primary bottom action button:
-  - **Nightly**: `[ 🛏️ Peaceful night, Mihai ]` (`bed.double.fill`)
-  - **Morning**: `[ 🌅 Good morning, Mihai ]` (`sun.horizon.fill`)
-  - **Intra-day**: `[ ☀️ Good afternoon, Mihai ]` (`sun.max.fill`)
-  - **Evening**: `[ 🌆 Good evening, Mihai ]` (`sunset.fill`)
+### Diurnal Navigation & Contextual Wishes
+- **Warm Top Greeting Pill**: Replaces technical slot ranges (e.g. `Morning Briefing · 05:00-11:59`) with a warm, personal greeting:
+  - **Morning**: `☀️ Bună dimineața, Mihai!`
+  - **Intra-day**: `☀️ O zi excelentă, Mihai!`
+  - **Evening**: `🌆 Bună seara, Mihai!`
+  - **Nightly**: `🌙 Noapte bună, Mihai!`
+- **Contextual Closing Wish Button**: The bottom action button presents an adapted closing wish and symbol:
+  - **Standard**: `[ ☀️ Have a productive day! ]` / `[ ☀️ Have a great day! ]` / `[ 🛏️ Sleep tight & rest well! ]`
+  - **Rain-Aware**: When rain, drizzle, or showers are detected in the forecast, the button dynamically adapts to `[ ☂️ Ia o umbrelă azi :)) ]` (`umbrella.fill`).
+
+### Data Realism Across 6 Core Hubs
+- **Finances (`SmartLedgerStore`)**: Real Romanian `Lei` formatted with European dot separators (`127.156 Lei`), realistic monthly cash flow (`16.0k / 16.0k Lei`), removing all hardcoded dollar symbols.
+- **Tagdos Integration**: Extracts live driving and active uncompleted pills from active streams (e.g. `MG`, `WRK`, `FIT`) and surfaces actionable guidance: `"Uite, asta ai de rezolvat azi: MG, WRK, FIT."` with SF Symbol `"checklist"` and label `"Tagdos"`.
+- **Health & Sleep**: Honest reporting; if no sleep session is recorded for today, reports vitals syncing rather than inventing placeholder sleep scores.
+- **Habits & Cravings**: Realistic hydration progress tracking and empathetic smoking cessation reinforcement.
+- **Weather & Climate**: Real localized temperature in °C, sky conditions, wind speed, and rain detection.
+
+### Companion Enhancements
+- **Hero Card Sparkle**: Cleaned up the dashboard hero header by removing the heavy capsule outline around "Briefing", leaving an ambient pulsing `sparkles` icon with full card tap target.
+- **Sleep Studio Radial Score Scroll**: Tapping the Sleep Score radial ring triggers a smooth easeInOut scroll down directly to the clinical 4-stage hypnogram container.
+- **Habits Widget Water Quick-Add**: Order adjusted to ascending order: `[ 100 ]` (espresso/coffee), `[ 150 ]` (tea/cup), and `[ 300 ]` (glass/bottle).
 
 ---
 
@@ -134,6 +148,9 @@ ALTER TABLE public.daily_smart_summaries ENABLE ROW LEVEL SECURITY;
 ---
 
 ## 7. Quality & Verification
-- **Unit Tests**: 5 dedicated tests in `SmartBriefingTests.swift` covering slot resolution, narrative concatenation, local synthesizer empathy, data hash sensitivity, and AppSettings persistence (41/41 tests passing in `DailyCore`).
-- **SimulaPhone Verification**: Tested and captured screenshots on iPhone 16 Pro simulator (`simulaphone_hero_fixed.png`, `simulaphone_briefing_overlay.png`, `simulaphone_briefing_scrolled.png`, `simulaphone_briefing_settings.png`).
-- **Physical Device Deployment**: Verified on iPhone 16 Pro "Schmitz".
+- **Unit Tests**: 41/41 unit tests in `DailyCore` passing 100% green, including diurnal greeting formatting, Tagdos pill resolution, and currency handling.
+- **SimulaPhone Verification**: Tested and captured screenshots on iPhone 16 Pro simulator:
+  - `simulaphone_dashboard_v3.png`: Hero sparkle, `[ 100 ] [ 150 ] [ 300 ]` water buttons, Romanian `Lei` finances.
+  - `simulaphone_briefing_top_v3.png`: `☀️ O zi excelentă, Mihai!`, Tagdos active pills, `Lei` finances, `Have a productive day!` closing button.
+  - `simulaphone_sleep_studio_scrolled.png`: Sleep Studio radial ring tap smooth scroll to 4-stage hypnogram and nap breakdown.
+- **Physical Device Deployment**: Successfully built arm64 debug package and deployed live to iPhone 16 Pro "Schmitz" (`62990754-1EE9-5A95-A45E-F4A69DA6E591`).

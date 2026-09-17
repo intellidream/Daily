@@ -133,7 +133,10 @@ public struct SmartBriefingOverlayView: View {
             }
         }
         .task {
-            if let cached = briefingService.activeBriefing {
+            let currentSlot = BriefingTimeSlot.current()
+            if let cached = briefingService.activeBriefing,
+               cached.slot == currentSlot,
+               Calendar.current.isDateInToday(cached.createdAt) {
                 self.record = cached
                 startStreaming(for: buildCardItems(from: cached))
             } else {
@@ -151,6 +154,7 @@ public struct SmartBriefingOverlayView: View {
 
     private var navigationActionBar: some View {
         let slot = record?.slot ?? BriefingTimeSlot.current()
+        let firstName = authService.currentUser?.firstName ?? "Mihai"
 
         return HStack(alignment: .center) {
             // Refresh Button
@@ -177,21 +181,21 @@ public struct SmartBriefingOverlayView: View {
 
             Spacer()
 
-            // Diurnal Slot Status Pill
+            // Diurnal Greeting Status Pill (Warm & Non-technical)
             HStack(spacing: 6) {
                 Image(systemName: slot.systemImage)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 12.5, weight: .bold))
                     .foregroundColor(ThemeColors.accentCyan)
 
-                Text("\(slot.displayName) · \(slot.timeRangeString)")
-                    .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                Text(slot.diurnalGreeting(for: firstName))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundColor(.white.opacity(0.95))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6.5)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
             .background(
                 Capsule()
-                    .fill(Color(hex: "080F1E").opacity(0.82))
+                    .fill(Color(hex: "080F1E").opacity(0.85))
             )
             .overlay(
                 Capsule()
@@ -356,9 +360,8 @@ public struct SmartBriefingOverlayView: View {
     // MARK: - Contextual Diurnal Bottom Action Button
 
     private func bottomDoneButton(for slot: BriefingTimeSlot) -> some View {
-        let firstName = authService.currentUser?.firstName ?? "Friend"
-        let greeting = "\(slot.greetingPrefix), \(firstName)"
-        let icon = slot.actionButtonIcon
+        let wish = record?.narrative.closingWish ?? slot.defaultClosingWish
+        let icon = record?.narrative.closingIcon ?? slot.defaultClosingIcon
 
         return Button {
             triggerHaptic()
@@ -369,7 +372,7 @@ public struct SmartBriefingOverlayView: View {
                     .font(.system(size: 17, weight: .bold))
                     .foregroundColor(ThemeColors.accentCyan)
 
-                Text(greeting)
+                Text(wish)
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
@@ -546,13 +549,11 @@ public struct SmartBriefingOverlayView: View {
 
         // 4. Financial Snapshot
         if !n.financeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let badge: String = {
-                if m.daySpend != 0 {
-                    return "\(m.daySpend >= 0 ? "+" : "")$\(Int(m.daySpend)) today"
-                } else {
-                    return String(format: "$%.0f Net", m.netWorth)
-                }
-            }()
+            let numFormatter = NumberFormatter()
+            numFormatter.numberStyle = .decimal
+            numFormatter.groupingSeparator = "."
+            numFormatter.maximumFractionDigits = 0
+            let formattedNet = "\(numFormatter.string(from: NSNumber(value: m.netWorth)) ?? "\(Int(m.netWorth))") Lei"
 
             items.append(
                 BriefingCardItem(
@@ -560,22 +561,22 @@ public struct SmartBriefingOverlayView: View {
                     icon: "creditcard.fill",
                     iconColor: ThemeColors.success,
                     title: "Financial Snapshot",
-                    badgeText: badge,
+                    badgeText: formattedNet,
                     badgeColor: ThemeColors.success,
                     text: n.financeText
                 )
             )
         }
 
-        // 5. TagDoS Focus
+        // 5. Tagdos Focus
         if !n.tagdosText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let badge = "\(m.activeStreamCount) Streams · \(m.activeMemoCount) Memos"
+            let badge = "\(m.activeStreamCount) Streams"
             items.append(
                 BriefingCardItem(
                     id: "tagdos",
-                    icon: "tag.fill",
+                    icon: "checklist",
                     iconColor: ThemeColors.warning,
-                    title: "TagDoS Focus",
+                    title: "Tagdos",
                     badgeText: badge,
                     badgeColor: ThemeColors.warning,
                     text: n.tagdosText

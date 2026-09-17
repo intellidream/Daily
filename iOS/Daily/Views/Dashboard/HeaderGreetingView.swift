@@ -10,6 +10,7 @@ public struct HeaderGreetingView: View {
     private let onBriefingTapped: (() -> Void)?
     
     @State private var isPulsingAura: Bool = false
+    @State private var isBriefingPulsing: Bool = false
     
     public init(
         onAvatarTapped: @escaping () -> Void = {},
@@ -104,33 +105,17 @@ public struct HeaderGreetingView: View {
                             .strokeBorder(ThemeColors.accentCyan.opacity(0.25), lineWidth: 0.8)
                     )
 
-                    // Interactive Briefing Aura Chip
-                    if let onBriefing = onBriefingTapped {
-                        Button {
-                            triggerHaptic()
-                            onBriefing()
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 9, weight: .bold))
-                                Text("Briefing")
-                                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                                    .lineLimit(1)
-                                    .fixedSize()
-                            }
+                    // Ambient Pulsing Briefing Sparkle Indicator
+                    if onBriefingTapped != nil {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundColor(ThemeColors.accentCyan)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(
-                                Capsule()
-                                    .fill(ThemeColors.accentCyan.opacity(0.18))
-                            )
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(ThemeColors.accentCyan.opacity(0.4), lineWidth: 0.8)
-                            )
-                        }
-                        .buttonStyle(.plain)
+                            .shadow(color: ThemeColors.accentCyan.opacity(isBriefingPulsing ? 0.9 : 0.2), radius: isBriefingPulsing ? 8 : 2)
+                            .scaleEffect(isBriefingPulsing ? 1.15 : 0.95)
+                            .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: isBriefingPulsing)
+                            .onAppear {
+                                isBriefingPulsing = true
+                            }
                     }
                 }
                 
