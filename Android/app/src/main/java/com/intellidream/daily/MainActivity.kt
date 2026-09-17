@@ -161,7 +161,10 @@ class MainActivity : ComponentActivity() {
                                         }
                                     },
                                     onOpenCustomize = { showCustomize = true },
-                                    onOpenSettings = { showSettings = true }
+                                    onOpenSettings = { showSettings = true },
+                                    onUpdateSettings = { transform ->
+                                        scope.launch { settingsRepository.updateSettings(transform) }
+                                    }
                                 )
                             }
                         }
@@ -199,7 +202,8 @@ fun DailyRootScreen(
     habitsRepository: com.intellidream.daily.database.HabitsRepository,
     onRefreshWeather: () -> Unit,
     onOpenCustomize: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(NavigationTab.Dashboard) }
 
@@ -213,7 +217,7 @@ fun DailyRootScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             when (selectedTab) {
                 NavigationTab.Dashboard -> {
@@ -229,6 +233,7 @@ fun DailyRootScreen(
                         onRefreshWeather = onRefreshWeather,
                         onOpenCustomize = onOpenCustomize,
                         onOpenSettings = onOpenSettings,
+                        onUpdateSettings = onUpdateSettings,
                         onNavigateToHabits = { selectedTab = NavigationTab.Habits }
                     )
                 }

@@ -9,8 +9,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.HabitDrinkBreakdown
+import com.intellidream.daily.model.HabitType
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -260,62 +263,73 @@ fun WaterProgressWaveView(
         // Circular Glass Center Readout Overlay
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(16.dp)
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(14.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isGoalMet) Icons.Rounded.Check else Icons.Rounded.WaterDrop,
-                    contentDescription = null,
-                    tint = if (isGoalMet) Color(0xFF00FFB2) else ThemeColors.accentCyan,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+            Icon(
+                imageVector = if (isGoalMet) Icons.Rounded.Check else Icons.Rounded.WaterDrop,
+                contentDescription = null,
+                tint = if (isGoalMet) Color(0xFF00FFB2) else ThemeColors.accentCyan,
+                modifier = Modifier.size(18.dp)
+            )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             Text(
-                text = "${currentMl.toInt()} ml",
-                fontSize = 28.sp,
+                text = "${currentMl.toInt()}",
+                fontSize = 34.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
 
             Text(
-                text = "of ${goalMl.toInt()} ml goal",
+                text = "of ${goalMl.toInt()} ml ($percentageDisplay%)",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = ThemeColors.textSecondary
+                color = Color.White.copy(alpha = 0.85f)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(
-                        if (isGoalMet) Color(0xFF00FFB2).copy(alpha = 0.2f)
-                        else ThemeColors.accentCyan.copy(alpha = 0.18f)
+            if (isGoalMet && goalMl > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .border(1.dp, Color(0xFF00FFB2).copy(alpha = 0.40f), CircleShape)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = Color(0xFF00FFB2),
+                        modifier = Modifier.size(10.dp)
                     )
-                    .border(
-                        1.dp,
-                        if (isGoalMet) Color(0xFF00FFB2).copy(alpha = 0.4f)
-                        else ThemeColors.accentCyan.copy(alpha = 0.35f),
-                        CircleShape
+                    Text(
+                        text = "Goal Achieved",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF00FFB2)
                     )
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
+                }
+            } else {
+                val remaining = (goalMl - currentMl).toInt().coerceAtLeast(0)
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "$percentageDisplay%",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isGoalMet) Color(0xFF00FFB2) else ThemeColors.accentCyan
+                    text = "$remaining ml left",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White.copy(alpha = 0.70f)
+                )
+            }
+
+            // Liquid Breakdown Ticker
+            if (drinkBreakdown.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                HabitCircleBreakdownTicker(
+                    items = drinkBreakdown,
+                    habitType = HabitType.WATER
                 )
             }
         }

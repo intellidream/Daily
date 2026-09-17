@@ -454,6 +454,15 @@ class HabitsRepository(
         val latestSmoke = entities.maxByOrNull { it.loggedAt }
         val lastSmokeTime = latestSmoke?.loggedAt
         val timeSince = lastSmokeTime?.let { (now - it).coerceAtLeast(0L) }
+        val lastSmokeType = latestSmoke?.metadata?.let { meta ->
+            try {
+                if (meta.startsWith("{")) {
+                    org.json.JSONObject(meta).optString("preset", meta)
+                } else meta
+            } catch (_: Exception) {
+                meta
+            }
+        }
 
         return SmokesFinancialMetrics(
             moneySaved = moneySaved,
@@ -462,7 +471,8 @@ class HabitsRepository(
             costPerCig = costPerCig,
             currency = settings.currency,
             lastSmokeDate = lastSmokeTime,
-            timeSinceLastSmokeMillis = timeSince
+            timeSinceLastSmokeMillis = timeSince,
+            lastSmokeType = lastSmokeType
         )
     }
 

@@ -189,7 +189,8 @@ data class SmokesFinancialMetrics(
     val costPerCig: Double = 1.325,
     val currency: String = "RON",
     val lastSmokeDate: Long? = null,
-    val timeSinceLastSmokeMillis: Long? = null
+    val timeSinceLastSmokeMillis: Long? = null,
+    val lastSmokeType: String? = null
 ) {
     val formattedMoneySaved: String
         get() = String.format(Locale.US, "+%.2f", moneySaved)

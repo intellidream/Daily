@@ -64,7 +64,8 @@ fun WeatherDashboardCard(
     locationName: String,
     isLoading: Boolean,
     settings: AppSettings,
-    onTap: () -> Unit = {}
+    onTap: () -> Unit = {},
+    onLongClick: (() -> Unit)? = null
 ) {
     val cardHeight = when (size) {
         DashboardWidgetSize.Small -> 155.dp
@@ -85,7 +86,8 @@ fun WeatherDashboardCard(
         cornerRadius = 20.dp,
         padding = if (size == DashboardWidgetSize.Small) 14.dp else 18.dp,
         intensity = glassIntensity,
-        onClick = onTap
+        onClick = onTap,
+        onLongClick = onLongClick
     ) {
         when (size) {
             DashboardWidgetSize.Small -> SmallWeatherContent(weather, locationName, isLoading, settings)
@@ -237,7 +239,7 @@ private fun WideWeatherContent(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Rounded.WbSunny,
+                    imageVector = Icons.Rounded.WbCloudy,
                     contentDescription = null,
                     tint = ThemeColors.accentCyan,
                     modifier = Modifier.size(16.dp)
@@ -286,13 +288,13 @@ private fun WideWeatherContent(
                         Text(
                             text = "$temp",
                             color = Color.White,
-                            fontSize = 46.sp,
+                            fontSize = 48.sp,
                             fontWeight = FontWeight.Thin
                         )
                         Text(
                             text = "°",
                             color = Color.White,
-                            fontSize = 26.sp,
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.Light
                         )
                     }
@@ -319,7 +321,7 @@ private fun WideWeatherContent(
                     imageVector = getWeatherIcon(iconCode),
                     contentDescription = null,
                     tint = Color(WeatherConditionHelper.conditionColorHex(iconCode)),
-                    modifier = Modifier.size(42.dp)
+                    modifier = Modifier.size(36.dp)
                 )
             }
         } else if (isLoading) {

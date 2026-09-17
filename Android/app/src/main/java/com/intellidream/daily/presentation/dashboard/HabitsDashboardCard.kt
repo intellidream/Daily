@@ -51,6 +51,7 @@ fun HabitsDashboardCard(
     size: DashboardWidgetSize,
     repository: HabitsRepository,
     onOpenHub: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val waterTotal by repository.waterTotalToday.collectAsState()
@@ -71,7 +72,8 @@ fun HabitsDashboardCard(
             .height(cardHeight),
         cornerRadius = 20.dp,
         padding = if (size == DashboardWidgetSize.Small) 12.dp else 16.dp,
-        onClick = onOpenHub
+        onClick = onOpenHub,
+        onLongClick = onLongClick
     ) {
         when (size) {
             DashboardWidgetSize.Small -> SmallHabitsContent(
@@ -443,39 +445,51 @@ private fun WideHabitsContent(
         // Quick Action Chips Row
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            MiniActionChip(
-                title = "100",
-                icon = Icons.Rounded.Coffee,
-                color = Color(0xFFF59E0B),
-                onClick = { repository.logWater(WaterPreset.COFFEE) }
-            )
-            MiniActionChip(
-                title = "150",
-                icon = Icons.Rounded.WaterDrop,
-                color = ThemeColors.accentCyan,
-                onClick = { repository.logWater(WaterPreset.SMALL_WATER) }
-            )
-            MiniActionChip(
-                title = "300",
-                icon = Icons.Rounded.WaterDrop,
-                color = ThemeColors.accentCyan,
-                onClick = { repository.logWater(WaterPreset.LARGE_WATER) }
-            )
-            MiniActionChip(
-                title = "Cig",
-                icon = Icons.Rounded.LocalFireDepartment,
-                color = Color(0xFFEF4444),
-                onClick = { repository.logSmoke(SmokePreset.CIGARETTE) }
-            )
-            MiniActionChip(
-                title = "Heat",
-                icon = Icons.Rounded.Bolt,
-                color = Color(0xFF3B82F6),
-                onClick = { repository.logSmoke(SmokePreset.HEATED) }
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MiniActionChip(
+                    title = "100",
+                    icon = Icons.Rounded.Coffee,
+                    color = Color(0xFFF59E0B),
+                    onClick = { repository.logWater(WaterPreset.COFFEE) }
+                )
+                MiniActionChip(
+                    title = "150",
+                    icon = Icons.Rounded.WaterDrop,
+                    color = ThemeColors.accentCyan,
+                    onClick = { repository.logWater(WaterPreset.SMALL_WATER) }
+                )
+                MiniActionChip(
+                    title = "300",
+                    icon = Icons.Rounded.WaterDrop,
+                    color = ThemeColors.accentCyan,
+                    onClick = { repository.logWater(WaterPreset.LARGE_WATER) }
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MiniActionChip(
+                    title = "Cig",
+                    icon = Icons.Rounded.LocalFireDepartment,
+                    color = Color(0xFFEF4444),
+                    onClick = { repository.logSmoke(SmokePreset.CIGARETTE) }
+                )
+                MiniActionChip(
+                    title = "Heat",
+                    icon = Icons.Rounded.Bolt,
+                    color = Color(0xFF3B82F6),
+                    onClick = { repository.logSmoke(SmokePreset.HEATED) }
+                )
+            }
         }
     }
 }

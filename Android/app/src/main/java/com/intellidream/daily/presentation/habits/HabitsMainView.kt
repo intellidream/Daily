@@ -34,6 +34,9 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.WaterDrop
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -230,46 +233,86 @@ fun HabitsMainView(
                 .fillMaxWidth()
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.06f))
-                .padding(4.dp)
+                .border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            val isWater = activeHabit == HabitType.WATER
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(CircleShape)
-                    .background(
-                        if (activeHabit == HabitType.WATER) ThemeColors.accentCyan
-                        else Color.Transparent
+                    .then(
+                        if (isWater) {
+                            Modifier
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(ThemeColors.accentBlue, ThemeColors.accentCyan)
+                                    )
+                                )
+                                .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                        } else Modifier
                     )
                     .clickable { repository.switchHabit(HabitType.WATER) }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "💧 Bubbles",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (activeHabit == HabitType.WATER) Color.Black else ThemeColors.textSecondary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.WaterDrop,
+                        contentDescription = null,
+                        tint = if (isWater) Color.White else Color.White.copy(alpha = 0.60f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Bubbles",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isWater) Color.White else Color.White.copy(alpha = 0.60f)
+                    )
+                }
             }
 
+            val isSmokes = activeHabit == HabitType.SMOKES
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(CircleShape)
-                    .background(
-                        if (activeHabit == HabitType.SMOKES) Color(0xFFFF3B30)
-                        else Color.Transparent
+                    .then(
+                        if (isSmokes) {
+                            Modifier
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xFF00FFB2).copy(alpha = 0.85f), ThemeColors.accentBlue)
+                                    )
+                                )
+                                .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                        } else Modifier
                     )
                     .clickable { repository.switchHabit(HabitType.SMOKES) }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "🔥 Smokes",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (activeHabit == HabitType.SMOKES) Color.White else ThemeColors.textSecondary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.LocalFireDepartment,
+                        contentDescription = null,
+                        tint = if (isSmokes) Color.White else Color.White.copy(alpha = 0.60f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Smokes",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSmokes) Color.White else Color.White.copy(alpha = 0.60f)
+                    )
+                }
             }
         }
 
@@ -287,7 +330,9 @@ fun HabitsMainView(
                 countToday = smokesTotalToday,
                 baselineCount = smokesSettings.baselineDailyCount,
                 lastSmokeDate = smokesFinancials.lastSmokeDate,
-                timeSinceLastSmokeMillis = smokesFinancials.timeSinceLastSmokeMillis
+                lastSmokeType = smokesFinancials.lastSmokeType,
+                isToday = isToday,
+                smokeBreakdown = smokesBreakdown
             )
         }
 
