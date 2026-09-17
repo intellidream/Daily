@@ -120,7 +120,7 @@ flowchart TD
 - **Sleep Studio Radial Score Scroll**: Tapping the Sleep Score radial ring triggers a smooth easeInOut scroll down directly to the clinical 4-stage hypnogram container.
 - **Habits Widget Water Quick-Add**: Order adjusted to ascending order: `[ 100 ]` (espresso/coffee), `[ 150 ]` (tea/cup), and `[ 300 ]` (glass/bottle).
 - **English Localization Standard**: All briefing narratives, diurnal greetings (`Good morning`, `Have a wonderful day`, `Good evening`, `Time to rest`), and closing button wishes are generated in natural English.
-- **Direct Sleep Duration Alignment**: The briefing's sleep metric reads directly from `HealthDataService.shared.primarySleepSession?.totalAsleepFormatted` (the primary large duration display, e.g. `7h 30m`), displayed in the badge (`95% Sleep · 7h 30m`) and narrative, preserving full integrity of Sleep Studio and Health models.
+- **Clean Minimal Top Navigation Bar**: Removed redundant top refresh button and top 'X' close button. Briefing automatically re-synthesizes on data updates whenever opened, leaving the top diurnal greeting status pill cleanly centered, while dismissal is handled seamlessly via the bottom contextual action button or native swipe/drag-down gesture.
 - **Hero Card Briefing Indicator & Pulsing**:
   - The hero greeting card features a `sparkles` icon indicating a briefing is ready.
   - When a freshly generated briefing is available and unread (`hasUnreadBrief == true`), the sparkles icon and hero card border gently pulse with a specular cyan glow.

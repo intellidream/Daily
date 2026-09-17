@@ -13,7 +13,6 @@ public struct SmartBriefingOverlayView: View {
     @ObservedObject private var authService = AuthService.shared
 
     @State private var record: SmartBriefingRecord? = nil
-    @State private var isRefreshing: Bool = false
     @State private var revealedGlobalWordIndex: Int = 0
     @State private var activeCardIndex: Int = 0
     @State private var isFinished: Bool = false
@@ -149,28 +148,6 @@ public struct SmartBriefingOverlayView: View {
         let firstName = authService.currentUser?.firstName ?? "Mihai"
 
         return HStack(alignment: .center) {
-            // Refresh Button
-            Button {
-                triggerHaptic()
-                Task {
-                    isRefreshing = true
-                    let refreshed = await briefingService.getOrGenerateBriefing(forceRefresh: true)
-                    self.record = refreshed
-                    startStreaming(for: buildCardItems(from: refreshed))
-                    isRefreshing = false
-                }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.85))
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color.white.opacity(0.12)))
-                    .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
-                    .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                    .animation(isRefreshing ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default, value: isRefreshing)
-            }
-            .buttonStyle(.plain)
-
             Spacer()
 
             // Diurnal Greeting Status Pill (Warm & Non-technical)
@@ -183,8 +160,8 @@ public struct SmartBriefingOverlayView: View {
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundColor(.white.opacity(0.95))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
             .background(
                 Capsule()
                     .fill(Color(hex: "080F1E").opacity(0.85))
@@ -203,20 +180,6 @@ public struct SmartBriefingOverlayView: View {
             .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
 
             Spacer()
-
-            // Close Button
-            Button {
-                triggerHaptic()
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.85))
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color.white.opacity(0.12)))
-                    .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
-            }
-            .buttonStyle(.plain)
         }
     }
 
