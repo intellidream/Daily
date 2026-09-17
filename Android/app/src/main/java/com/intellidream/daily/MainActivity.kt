@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private val settingsRepository by lazy { DailyApp.instance.settingsRepository }
     private val weatherRepository by lazy { DailyApp.instance.weatherRepository }
     private val weatherCacheRepository by lazy { DailyApp.instance.weatherCacheRepository }
+    private val habitsRepository by lazy { DailyApp.instance.habitsRepository }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -147,6 +148,7 @@ class MainActivity : ComponentActivity() {
                                     hourlyForecasts = hourlyForecasts,
                                     locationName = locationName,
                                     isWeatherLoading = isWeatherLoading,
+                                    habitsRepository = habitsRepository,
                                     onRefreshWeather = {
                                         scope.launch {
                                             weatherRepository.refreshWeather(
@@ -194,6 +196,7 @@ fun DailyRootScreen(
     hourlyForecasts: List<ForecastItem>,
     locationName: String,
     isWeatherLoading: Boolean,
+    habitsRepository: com.intellidream.daily.database.HabitsRepository,
     onRefreshWeather: () -> Unit,
     onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit
@@ -222,9 +225,17 @@ fun DailyRootScreen(
                         hourlyForecasts = hourlyForecasts,
                         locationName = locationName,
                         isWeatherLoading = isWeatherLoading,
+                        habitsRepository = habitsRepository,
                         onRefreshWeather = onRefreshWeather,
                         onOpenCustomize = onOpenCustomize,
-                        onOpenSettings = onOpenSettings
+                        onOpenSettings = onOpenSettings,
+                        onNavigateToHabits = { selectedTab = NavigationTab.Habits }
+                    )
+                }
+                NavigationTab.Habits -> {
+                    com.intellidream.daily.presentation.habits.HabitsMainView(
+                        repository = habitsRepository,
+                        onNavigateBack = { selectedTab = NavigationTab.Dashboard }
                     )
                 }
                 else -> {

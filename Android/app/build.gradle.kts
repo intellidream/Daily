@@ -62,6 +62,8 @@ dependencies {
     implementation(project(":core-health"))
     implementation(project(":core-designsystem"))
 
+    implementation(libs.androidx.room.runtime)
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

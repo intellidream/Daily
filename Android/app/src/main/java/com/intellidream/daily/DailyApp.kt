@@ -19,6 +19,12 @@ class DailyApp : Application() {
         private set
     lateinit var weatherRepository: WeatherRepository
         private set
+    lateinit var dailyDatabase: com.intellidream.daily.database.DailyDatabase
+        private set
+    lateinit var habitsRepository: com.intellidream.daily.database.HabitsRepository
+        private set
+    lateinit var habitRemoteService: com.intellidream.daily.network.HabitRemoteService
+        private set
 
     private val appScope = CoroutineScope(Dispatchers.IO)
 
@@ -29,6 +35,15 @@ class DailyApp : Application() {
         authRepository = AuthRepository()
         weatherCacheRepository = WeatherCacheRepository(this)
         weatherRepository = WeatherRepository()
+        dailyDatabase = com.intellidream.daily.database.DailyDatabase.getDatabase(this)
+        habitsRepository = com.intellidream.daily.database.HabitsRepository(dailyDatabase.habitLogDao())
+        habitRemoteService = com.intellidream.daily.network.HabitRemoteService()
+
+        habitsRepository.syncHandler = object : com.intellidream.daily.database.HabitSyncHandler {
+            override suspend fun pushLog(log: com.intellidream.daily.model.HabitLogRecord): Boolean {
+                return habitRemoteService.pushLog(log)
+            }
+        }
 
         // Bootstrap cached weather & refresh
         appScope.launch {
@@ -45,6 +60,9 @@ class DailyApp : Application() {
             }
 
             val currentSettings = settingsRepository.settings.firstOrNull()
+            if (currentSettings != null) {
+                habitsRepository.setWaterGoal(currentSettings.habitsWaterTargetLiters * 1000.0)
+            }
             weatherRepository.refreshWeather(
                 force = false,
                 unitSystem = currentSettings?.weatherUnitSystem ?: com.intellidream.daily.model.WeatherUnitSystem.Metric,

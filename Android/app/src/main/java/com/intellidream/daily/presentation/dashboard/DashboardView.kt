@@ -58,9 +58,11 @@ fun DashboardView(
     hourlyForecasts: List<ForecastItem>,
     locationName: String,
     isWeatherLoading: Boolean,
+    habitsRepository: com.intellidream.daily.database.HabitsRepository,
     onRefreshWeather: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCustomize: () -> Unit,
+    onNavigateToHabits: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val visibleWidgets = settings.dashboardWidgets.filter { it.isVisible }
@@ -96,7 +98,9 @@ fun DashboardView(
                         locationName = locationName,
                         isWeatherLoading = isWeatherLoading,
                         settings = settings,
-                        onRefreshWeather = onRefreshWeather
+                        habitsRepository = habitsRepository,
+                        onRefreshWeather = onRefreshWeather,
+                        onNavigateToHabits = onNavigateToHabits
                     )
                 }
 
@@ -114,7 +118,9 @@ fun DashboardView(
                                 locationName = locationName,
                                 isWeatherLoading = isWeatherLoading,
                                 settings = settings,
-                                onRefreshWeather = onRefreshWeather
+                                habitsRepository = habitsRepository,
+                                onRefreshWeather = onRefreshWeather,
+                                onNavigateToHabits = onNavigateToHabits
                             )
                         }
                         Box(modifier = Modifier.weight(1f)) {
@@ -126,7 +132,9 @@ fun DashboardView(
                                 locationName = locationName,
                                 isWeatherLoading = isWeatherLoading,
                                 settings = settings,
-                                onRefreshWeather = onRefreshWeather
+                                habitsRepository = habitsRepository,
+                                onRefreshWeather = onRefreshWeather,
+                                onNavigateToHabits = onNavigateToHabits
                             )
                         }
                     }
@@ -146,7 +154,9 @@ fun DashboardView(
                                 locationName = locationName,
                                 isWeatherLoading = isWeatherLoading,
                                 settings = settings,
-                                onRefreshWeather = onRefreshWeather
+                                habitsRepository = habitsRepository,
+                                onRefreshWeather = onRefreshWeather,
+                                onNavigateToHabits = onNavigateToHabits
                             )
                         }
                         Column(
@@ -162,7 +172,9 @@ fun DashboardView(
                                     locationName = locationName,
                                     isWeatherLoading = isWeatherLoading,
                                     settings = settings,
-                                    onRefreshWeather = onRefreshWeather
+                                    habitsRepository = habitsRepository,
+                                    onRefreshWeather = onRefreshWeather,
+                                    onNavigateToHabits = onNavigateToHabits
                                 )
                             }
                         }
@@ -183,7 +195,9 @@ fun DashboardView(
                                 locationName = locationName,
                                 isWeatherLoading = isWeatherLoading,
                                 settings = settings,
-                                onRefreshWeather = onRefreshWeather
+                                habitsRepository = habitsRepository,
+                                onRefreshWeather = onRefreshWeather,
+                                onNavigateToHabits = onNavigateToHabits
                             )
                         }
                         Spacer(modifier = Modifier.weight(1f))
@@ -298,7 +312,9 @@ private fun DashboardWidgetRenderer(
     locationName: String,
     isWeatherLoading: Boolean,
     settings: AppSettings,
-    onRefreshWeather: () -> Unit
+    habitsRepository: com.intellidream.daily.database.HabitsRepository,
+    onRefreshWeather: () -> Unit,
+    onNavigateToHabits: () -> Unit
 ) {
     when (config.id) {
         DashboardWidgetType.Weather.id -> {
@@ -311,6 +327,13 @@ private fun DashboardWidgetRenderer(
                 isLoading = isWeatherLoading,
                 settings = settings,
                 onTap = onRefreshWeather
+            )
+        }
+        DashboardWidgetType.Habits.id -> {
+            HabitsDashboardCard(
+                size = config.size,
+                repository = habitsRepository,
+                onOpenHub = onNavigateToHabits
             )
         }
         DashboardWidgetType.News.id -> {
@@ -329,16 +352,6 @@ private fun DashboardWidgetRenderer(
                 subtitle = "Sleep ${settings.healthSleepTargetHours}h target · In sync",
                 icon = Icons.Rounded.Favorite,
                 iconTint = Color(0xFFFF5252),
-                size = config.size,
-                settings = settings
-            )
-        }
-        DashboardWidgetType.Habits.id -> {
-            PlaceholderHubCard(
-                title = "Habits & Water",
-                subtitle = "Hydration target: ${settings.habitsWaterTargetLiters}L",
-                icon = Icons.Rounded.LocalFireDepartment,
-                iconTint = Color(0xFFFF9100),
                 size = config.size,
                 settings = settings
             )
