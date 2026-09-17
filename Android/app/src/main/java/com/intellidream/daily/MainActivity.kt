@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private val weatherRepository by lazy { DailyApp.instance.weatherRepository }
     private val weatherCacheRepository by lazy { DailyApp.instance.weatherCacheRepository }
     private val habitsRepository by lazy { DailyApp.instance.habitsRepository }
+    private val healthRepository by lazy { DailyApp.instance.healthRepository }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -149,6 +150,7 @@ class MainActivity : ComponentActivity() {
                                     locationName = locationName,
                                     isWeatherLoading = isWeatherLoading,
                                     habitsRepository = habitsRepository,
+                                    healthRepository = healthRepository,
                                     onRefreshWeather = {
                                         scope.launch {
                                             weatherRepository.refreshWeather(
@@ -200,6 +202,7 @@ fun DailyRootScreen(
     locationName: String,
     isWeatherLoading: Boolean,
     habitsRepository: com.intellidream.daily.database.HabitsRepository,
+    healthRepository: com.intellidream.daily.health.HealthDataRepository,
     onRefreshWeather: () -> Unit,
     onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -217,7 +220,6 @@ fun DailyRootScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             when (selectedTab) {
                 NavigationTab.Dashboard -> {
@@ -230,11 +232,14 @@ fun DailyRootScreen(
                         locationName = locationName,
                         isWeatherLoading = isWeatherLoading,
                         habitsRepository = habitsRepository,
+                        healthRepository = healthRepository,
                         onRefreshWeather = onRefreshWeather,
                         onOpenCustomize = onOpenCustomize,
                         onOpenSettings = onOpenSettings,
                         onUpdateSettings = onUpdateSettings,
-                        onNavigateToHabits = { selectedTab = NavigationTab.Habits }
+                        onNavigateToHabits = { selectedTab = NavigationTab.Habits },
+                        onNavigateToHealth = { selectedTab = NavigationTab.Health },
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                     )
                 }
                 NavigationTab.Habits -> {
@@ -243,10 +248,18 @@ fun DailyRootScreen(
                         onNavigateBack = { selectedTab = NavigationTab.Dashboard }
                     )
                 }
+                NavigationTab.Health -> {
+                    com.intellidream.daily.presentation.health.HealthMainView(
+                        repository = healthRepository,
+                        onNavigateBack = { selectedTab = NavigationTab.Dashboard }
+                    )
+                }
                 else -> {
                     // Secondary Tab placeholder screen
                     Column(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.Top,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {

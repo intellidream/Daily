@@ -72,11 +72,13 @@ fun DashboardView(
     locationName: String,
     isWeatherLoading: Boolean,
     habitsRepository: com.intellidream.daily.database.HabitsRepository,
+    healthRepository: com.intellidream.daily.health.HealthDataRepository,
     onRefreshWeather: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCustomize: () -> Unit,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit = {},
     onNavigateToHabits: () -> Unit = {},
+    onNavigateToHealth: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val visibleWidgets = settings.dashboardWidgets.filter { it.isVisible }
@@ -151,8 +153,10 @@ fun DashboardView(
                             isWeatherLoading = isWeatherLoading,
                             settings = settings,
                             habitsRepository = habitsRepository,
+                            healthRepository = healthRepository,
                             onRefreshWeather = onRefreshWeather,
                             onNavigateToHabits = onNavigateToHabits,
+                            onNavigateToHealth = onNavigateToHealth,
                             onLongClick = onLongClick
                         )
                     }
@@ -181,8 +185,10 @@ fun DashboardView(
                                     isWeatherLoading = isWeatherLoading,
                                     settings = settings,
                                     habitsRepository = habitsRepository,
+                                    healthRepository = healthRepository,
                                     onRefreshWeather = onRefreshWeather,
                                     onNavigateToHabits = onNavigateToHabits,
+                                    onNavigateToHealth = onNavigateToHealth,
                                     onLongClick = onLongClick
                                 )
                             }
@@ -205,8 +211,10 @@ fun DashboardView(
                                     isWeatherLoading = isWeatherLoading,
                                     settings = settings,
                                     habitsRepository = habitsRepository,
+                                    healthRepository = healthRepository,
                                     onRefreshWeather = onRefreshWeather,
                                     onNavigateToHabits = onNavigateToHabits,
+                                    onNavigateToHealth = onNavigateToHealth,
                                     onLongClick = onLongClick
                                 )
                             }
@@ -237,8 +245,10 @@ fun DashboardView(
                                     isWeatherLoading = isWeatherLoading,
                                     settings = settings,
                                     habitsRepository = habitsRepository,
+                                    healthRepository = healthRepository,
                                     onRefreshWeather = onRefreshWeather,
                                     onNavigateToHabits = onNavigateToHabits,
+                                    onNavigateToHealth = onNavigateToHealth,
                                     onLongClick = onLongClick
                                 )
                             }
@@ -265,8 +275,10 @@ fun DashboardView(
                                         isWeatherLoading = isWeatherLoading,
                                         settings = settings,
                                         habitsRepository = habitsRepository,
+                                        healthRepository = healthRepository,
                                         onRefreshWeather = onRefreshWeather,
                                         onNavigateToHabits = onNavigateToHabits,
+                                        onNavigateToHealth = onNavigateToHealth,
                                         onLongClick = onLongClick
                                     )
                                 }
@@ -298,8 +310,10 @@ fun DashboardView(
                                     isWeatherLoading = isWeatherLoading,
                                     settings = settings,
                                     habitsRepository = habitsRepository,
+                                    healthRepository = healthRepository,
                                     onRefreshWeather = onRefreshWeather,
                                     onNavigateToHabits = onNavigateToHabits,
+                                    onNavigateToHealth = onNavigateToHealth,
                                     onLongClick = onLongClick
                                 )
                             }
@@ -473,8 +487,10 @@ private fun DashboardWidgetRenderer(
     isWeatherLoading: Boolean,
     settings: AppSettings,
     habitsRepository: com.intellidream.daily.database.HabitsRepository,
+    healthRepository: com.intellidream.daily.health.HealthDataRepository,
     onRefreshWeather: () -> Unit,
     onNavigateToHabits: () -> Unit,
+    onNavigateToHealth: () -> Unit,
     onLongClick: () -> Unit
 ) {
     when (config.id) {
@@ -511,13 +527,10 @@ private fun DashboardWidgetRenderer(
             )
         }
         DashboardWidgetType.Health.id -> {
-            PlaceholderHubCard(
-                title = "Health & Vitals",
-                subtitle = "Sleep ${settings.healthSleepTargetHours}h target · In sync",
-                icon = Icons.Rounded.Favorite,
-                iconTint = Color(0xFFFF5252),
+            HealthDashboardCard(
                 size = config.size,
-                settings = settings,
+                repository = healthRepository,
+                onOpenHub = onNavigateToHealth,
                 onLongClick = onLongClick
             )
         }
