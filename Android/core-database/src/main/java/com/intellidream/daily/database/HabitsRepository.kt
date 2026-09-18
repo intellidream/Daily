@@ -41,6 +41,7 @@ class HabitsRepository(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) {
     var syncHandler: HabitSyncHandler? = null
+    var currentUserId: String = "guest"
 
     // State
     private val _selectedDate = MutableStateFlow(getStartOfDay(System.currentTimeMillis()))
@@ -269,6 +270,7 @@ class HabitsRepository(
         val logTime = computeLogTimestamp()
         val record = HabitLogRecord(
             id = UUID.randomUUID().toString(),
+            userId = if (currentUserId != "guest") currentUserId else null,
             habitType = "water",
             value = totalAmount,
             unit = "ml",
@@ -298,6 +300,7 @@ class HabitsRepository(
         val logTime = computeLogTimestamp()
         val record = HabitLogRecord(
             id = UUID.randomUUID().toString(),
+            userId = if (currentUserId != "guest") currentUserId else null,
             habitType = "smokes",
             value = totalCount.toDouble(),
             unit = "cigs",

@@ -62,6 +62,11 @@ dependencies {
     implementation(project(":core-health"))
     implementation(project(":core-designsystem"))
 
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.auth)
+    implementation(libs.androidx.health.connect)
+
     implementation(libs.androidx.room.runtime)
 
     implementation(libs.androidx.core.ktx)

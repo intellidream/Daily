@@ -59,9 +59,11 @@ class HealthDataRepository(
     private val telemetryDao: HealthTelemetryDao,
     private val vitalsDao: VitalMetricDao,
     private val remoteService: HealthRemoteService = HealthRemoteService(),
-    private val healthConnectManager: HealthConnectManager = HealthConnectManager(context),
+    val healthConnectManager: HealthConnectManager = HealthConnectManager(context),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) {
+    var currentUserId: String = "local_user"
+
     // MARK: - Published State
 
     private val _activeSubTab = MutableStateFlow(HealthSubTab.OVERVIEW)
@@ -227,10 +229,10 @@ class HealthDataRepository(
 
                 // 1. Check Room local database cache first
                 val localEntities = withContext(Dispatchers.IO) {
-                    telemetryDao.getTelemetryBetweenSync("local_user", windowStart, windowEnd)
+                    telemetryDao.getTelemetryBetweenSync(currentUserId, windowStart, windowEnd)
                 }
                 val localVitalsEntities = withContext(Dispatchers.IO) {
-                    vitalsDao.getVitalsForDateSync("local_user", dateKey)
+                    vitalsDao.getVitalsForDateSync(currentUserId, dateKey)
                 }
 
                 telemetry.addAll(localEntities.map { it.toRecord() })
@@ -263,10 +265,10 @@ class HealthDataRepository(
 
                 // 3. Fetch from Supabase Remote (guarded with timeout)
                 val remoteTelemetry = kotlinx.coroutines.withTimeoutOrNull(1500L) {
-                    remoteService.fetchTelemetryBetween("local_user", windowStart, windowEnd)
+                    remoteService.fetchTelemetryBetween(currentUserId, windowStart, windowEnd)
                 } ?: emptyList()
                 val remoteVitals = kotlinx.coroutines.withTimeoutOrNull(1500L) {
-                    remoteService.fetchVitalsForDate("local_user", dateKey)
+                    remoteService.fetchVitalsForDate(currentUserId, dateKey)
                 } ?: emptyList()
 
                 if (remoteTelemetry.isNotEmpty()) {

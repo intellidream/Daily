@@ -33,6 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +78,7 @@ fun DashboardView(
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     tagdosRepository: com.intellidream.daily.database.TagdosRepository = com.intellidream.daily.DailyApp.instance.tagdosRepository,
     newsRepository: com.intellidream.daily.database.NewsRepository = com.intellidream.daily.DailyApp.instance.newsRepository,
+    smartBriefingRepository: com.intellidream.daily.briefing.SmartBriefingRepository,
     onRefreshWeather: () -> Unit,
     onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -86,6 +88,7 @@ fun DashboardView(
     onNavigateToFinances: () -> Unit = {},
     onNavigateToTagdos: () -> Unit = {},
     onNavigateToNews: () -> Unit = {},
+    onNavigateToWeather: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val visibleWidgets = settings.dashboardWidgets.filter { it.isVisible }
@@ -162,6 +165,7 @@ fun DashboardView(
                     onNavigateToFinances = onNavigateToFinances,
                     onNavigateToTagdos = onNavigateToTagdos,
                     onNavigateToNews = onNavigateToNews,
+                    onNavigateToWeather = onNavigateToWeather,
                     onLongClick = onLongClick
                 )
             }
@@ -273,15 +277,26 @@ fun DashboardView(
         }
     }
 
+    val shouldAutoShowBriefing by smartBriefingRepository.shouldPresentMorningAutomatically.collectAsState()
+    LaunchedEffect(shouldAutoShowBriefing) {
+        if (shouldAutoShowBriefing) {
+            showBriefingSheet = true
+        }
+    }
+
     // Smart Briefing Modal Sheet
     if (showBriefingSheet) {
         SmartBriefingBottomSheet(
+            repository = smartBriefingRepository,
             userProfile = userProfile,
+            settings = settings,
             weather = weather,
-            waterTotalMl = waterTotal,
-            waterGoalMl = waterGoal,
-            smokesCount = smokesTotal,
-            smokesBaseline = smokesSettings.baselineDailyCount,
+            locationName = locationName,
+            healthRepository = healthRepository,
+            habitsRepository = habitsRepository,
+            smartLedgerRepository = smartLedgerRepository,
+            tagdosRepository = tagdosRepository,
+            newsRepository = newsRepository,
             onDismiss = { showBriefingSheet = false }
         )
     }
@@ -446,6 +461,7 @@ private fun DashboardWidgetRenderer(
     onNavigateToFinances: () -> Unit,
     onNavigateToTagdos: () -> Unit,
     onNavigateToNews: () -> Unit,
+    onNavigateToWeather: () -> Unit,
     onLongClick: () -> Unit
 ) {
     when (config.id) {
@@ -458,7 +474,7 @@ private fun DashboardWidgetRenderer(
                 locationName = locationName,
                 isLoading = isWeatherLoading,
                 settings = settings,
-                onTap = onRefreshWeather,
+                onTap = onNavigateToWeather,
                 onLongClick = onLongClick
             )
         }

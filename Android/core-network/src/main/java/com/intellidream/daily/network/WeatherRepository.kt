@@ -64,6 +64,9 @@ class WeatherRepository(
     private val _locationSource = MutableStateFlow(LocationSource.Unknown)
     val locationSource: StateFlow<LocationSource> = _locationSource.asStateFlow()
 
+    private val _isAutoLocation = MutableStateFlow(true)
+    val isAutoLocation: StateFlow<Boolean> = _isAutoLocation.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -128,6 +131,64 @@ class WeatherRepository(
         } finally {
             _isLoading.value = false
         }
+    }
+
+    private var isManualLocation: Boolean = false
+
+    suspend fun searchLocations(query: String, limit: Int = 8): List<com.intellidream.daily.model.LocationSuggestion> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        return try {
+            val encoded = java.net.URLEncoder.encode(trimmed, "UTF-8")
+            val url = "https://api.openweathermap.org/geo/1.0/direct?q=$encoded&limit=$limit&appid=$apiKey"
+            httpClient.get(url).body()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun setManualLocation(
+        lat: Double,
+        lon: Double,
+        cityName: String,
+        unitSystem: WeatherUnitSystem = WeatherUnitSystem.Metric,
+        onSuccess: ((WeatherResponse, ForecastResponse, String, Double, Double) -> Unit)? = null
+    ) {
+        isManualLocation = true
+        _isAutoLocation.value = false
+        lastCoordinates = Pair(lat, lon)
+        _currentLocationName.value = cityName
+        _locationSource.value = LocationSource.Manual
+        _isLoading.value = true
+        _errorMessage.value = null
+        try {
+            val units = if (unitSystem == WeatherUnitSystem.Metric) "metric" else "imperial"
+            val weather = fetchCurrentWeather(lat, lon, units, force = true)
+            val forecastData = fetchForecast(lat, lon, units, force = true)
+            _currentWeather.value = weather
+            _forecast.value = forecastData
+            lastFetchTime = System.currentTimeMillis()
+            val resolvedName = if (weather.name.isNotEmpty()) weather.name else cityName
+            _currentLocationName.value = resolvedName
+            _hourlyForecasts.value = forecastData.list.take(8)
+            _dailySummaries.value = aggregateDailyForecasts(forecastData.list)
+            onSuccess?.invoke(weather, forecastData, resolvedName, lat, lon)
+        } catch (e: Exception) {
+            _errorMessage.value = e.message ?: "Failed to fetch weather for $cityName"
+        } finally {
+            _isLoading.value = false
+        }
+    }
+
+    suspend fun resetToAutoLocation(
+        unitSystem: WeatherUnitSystem = WeatherUnitSystem.Metric,
+        onSuccess: ((WeatherResponse, ForecastResponse, String, Double, Double) -> Unit)? = null
+    ) {
+        isManualLocation = false
+        _isAutoLocation.value = true
+        lastCoordinates = null
+        lastFetchTime = 0L
+        refreshWeather(force = true, unitSystem = unitSystem, onSuccess = onSuccess)
     }
 
     private suspend fun getResilientCoordinates(): CoordinatesResult {

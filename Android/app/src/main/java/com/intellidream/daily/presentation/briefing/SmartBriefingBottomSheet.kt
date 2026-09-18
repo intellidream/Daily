@@ -1,8 +1,18 @@
 package com.intellidream.daily.presentation.briefing
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,25 +30,40 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.Newspaper
 import androidx.compose.material.icons.rounded.NightsStay
-import androidx.compose.material.icons.rounded.TaskAlt
-import androidx.compose.material.icons.rounded.WbSunny
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.WaterDrop
+import androidx.compose.material.icons.rounded.WbSunny
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -48,86 +73,145 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.intellidream.daily.designsystem.GlassCard
-import com.intellidream.daily.designsystem.GlassIntensity
+import com.intellidream.daily.briefing.SmartBriefingRepository
+import com.intellidream.daily.database.HabitsRepository
+import com.intellidream.daily.database.NewsRepository
+import com.intellidream.daily.database.SmartLedgerRepository
+import com.intellidream.daily.database.TagdosRepository
 import com.intellidream.daily.designsystem.ThemeColors
+import com.intellidream.daily.health.HealthDataRepository
+import com.intellidream.daily.model.AppSettings
+import com.intellidream.daily.model.BriefingCardItem
+import com.intellidream.daily.model.BriefingTimeSlot
+import com.intellidream.daily.model.SmartBriefingRecord
 import com.intellidream.daily.model.UserProfile
 import com.intellidream.daily.model.WeatherResponse
-import java.util.Calendar
-import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-enum class DiurnalSlot(
-    val title: String,
-    val timeRange: String,
-    val greeting: String,
-    val closingText: String,
-    val icon: ImageVector,
-    val gradientColors: List<Color>
-) {
-    MORNING(
-        "Morning Briefing",
-        "05:00 – 11:59",
-        "Good morning",
-        "Have a great day!",
-        Icons.Rounded.WbSunny,
-        listOf(Color(0xFFFF9A3D), Color(0xFFFF5E62), Color(0xFF7B2CBF))
-    ),
-    INTRADAY(
-        "Intra-day Briefing",
-        "12:00 – 16:59",
-        "Have a wonderful day",
-        "Have a productive day!",
-        Icons.Rounded.WbSunny,
-        listOf(Color(0xFF00F5D4), Color(0xFF00BBF9), Color(0xFF4361EE))
-    ),
-    EVENING(
-        "Evening Review",
-        "17:00 – 21:59",
-        "Good evening",
-        "Enjoy a restful evening!",
-        Icons.Rounded.NightsStay,
-        listOf(Color(0xFFF72585), Color(0xFF7209B7), Color(0xFF3A0CA3))
-    ),
-    NIGHTLY(
-        "Nightly Wind-Down",
-        "22:00 – 04:59",
-        "Peaceful night",
-        "Sleep tight & rest well!",
-        Icons.Rounded.NightsStay,
-        listOf(Color(0xFF3F37C9), Color(0xFF480CA8), Color(0xFF03071E))
-    );
-
-    companion object {
-        fun current(): DiurnalSlot {
-            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-            return when (hour) {
-                in 5..11 -> MORNING
-                in 12..16 -> INTRADAY
-                in 17..21 -> EVENING
-                else -> NIGHTLY
-            }
-        }
-    }
-}
-
+/**
+ * Signature Liquid Glass modal overlay presenting the streamlined Smart Briefing across Morning,
+ * Intra-day, Evening, and Nightly phases with progressive sequential streaming, dynamic luminous
+ * border focus, contextual metric pills, TTS voice narration, and diurnal action buttons.
+ * Forensic parity with iOS Daily [SmartBriefingOverlayView.swift].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmartBriefingBottomSheet(
+    repository: SmartBriefingRepository,
     userProfile: UserProfile?,
+    settings: AppSettings,
     weather: WeatherResponse?,
-    waterTotalMl: Double,
-    waterGoalMl: Double,
-    smokesCount: Int,
-    smokesBaseline: Int,
+    locationName: String,
+    healthRepository: HealthDataRepository,
+    habitsRepository: HabitsRepository,
+    smartLedgerRepository: SmartLedgerRepository,
+    tagdosRepository: TagdosRepository,
+    newsRepository: NewsRepository,
     onDismiss: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val slot = remember { DiurnalSlot.current() }
+
+    val activeBriefing by repository.activeBriefing.collectAsState()
+    val isLoading by repository.isLoading.collectAsState()
+    val isSpeaking by repository.isSpeaking.collectAsState()
+
+    var record by remember { mutableStateOf<SmartBriefingRecord?>(activeBriefing) }
+    var revealedGlobalWordIndex by remember { mutableIntStateOf(0) }
+    var activeCardIndex by remember { mutableIntStateOf(0) }
+    var isFinished by remember { mutableStateOf(false) }
+
+    var streamingJob by remember { mutableStateOf<Job?>(null) }
+
     val firstName = userProfile?.firstName ?: "Friend"
+    val userId = userProfile?.id ?: "guest"
+    val slot = record?.slot ?: BriefingTimeSlot.current()
+
+    // Aurora gradient colors parsed from slot
+    val auraColors = remember(slot) {
+        slot.auraGradientHex.map {
+            try {
+                Color(android.graphics.Color.parseColor(it))
+            } catch (_: Exception) {
+                ThemeColors.accentCyan
+            }
+        }
+    }
+
+    // Clean up TTS when dismissed
+    DisposableEffect(Unit) {
+        onDispose {
+            repository.stopSpeech()
+        }
+    }
+
+    // Fetch or generate briefing on launch
+    LaunchedEffect(Unit) {
+        val rec = repository.getOrGenerateBriefing(
+            forceRefresh = false,
+            userName = firstName,
+            userId = userId,
+            settings = settings,
+            weather = weather,
+            locationName = locationName,
+            healthRepository = healthRepository,
+            habitsRepository = habitsRepository,
+            smartLedgerRepository = smartLedgerRepository,
+            tagdosRepository = tagdosRepository,
+            newsRepository = newsRepository
+        )
+        record = rec
+    }
+
+    // Start typewriter / word-by-word streaming when record is ready
+    LaunchedEffect(record) {
+        val currentRec = record ?: return@LaunchedEffect
+        val cardItems = repository.buildCardItems(currentRec)
+        if (cardItems.isEmpty()) return@LaunchedEffect
+
+        val wordsPerCard = cardItems.map { item ->
+            item.text.split(Regex("\\s+")).filter { it.isNotBlank() }
+        }
+        val totalWords = wordsPerCard.sumOf { it.size }
+
+        revealedGlobalWordIndex = 0
+        activeCardIndex = 0
+        isFinished = false
+
+        streamingJob?.cancel()
+        streamingJob = coroutineScope.launch {
+            var globalIdx = 0
+            for (cardIdx in wordsPerCard.indices) {
+                activeCardIndex = cardIdx
+                val words = wordsPerCard[cardIdx]
+                for (word in words) {
+                    globalIdx++
+                    revealedGlobalWordIndex = globalIdx
+                    delay(38L) // Fast, smooth typewriter cadence (matches iOS 0.035s)
+                }
+                delay(120L) // Subtle pause between cards
+            }
+            isFinished = true
+            repository.markBriefingAsRead()
+        }
+    }
+
+    fun completeInstantly(cardCount: Int, totalWords: Int) {
+        streamingJob?.cancel()
+        revealedGlobalWordIndex = totalWords + 10
+        activeCardIndex = cardCount
+        isFinished = true
+        repository.markBriefingAsRead()
+    }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            repository.stopSpeech()
+            onDismiss()
+        },
         sheetState = sheetState,
         containerColor = Color(0xFF070E1A),
         contentColor = Color.White,
@@ -138,288 +222,449 @@ fun SmartBriefingBottomSheet(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.90f)
+                .fillMaxHeight(0.92f)
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            Color(0xFF0A1426),
-                            Color(0xFF060B14)
+                            Color(0xFF091222),
+                            Color(0xFF050A14),
+                            Color.Black
                         )
                     )
                 )
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.fillMaxSize()
             ) {
-                // Top Navigation Bar
+                // 1. Navigation Action Bar with Diurnal Greeting Status Pill
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Diurnal Slot Status Pill
+                    // Diurnal Slot Status Pill (Matches iOS)
                     Row(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(slot.gradientColors.first().copy(alpha = 0.18f))
-                            .border(1.dp, slot.gradientColors.first().copy(alpha = 0.40f), CircleShape)
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .background(Color(0xFF080F1E).copy(alpha = 0.85f))
+                            .border(
+                                width = 1.dp,
+                                brush = Brush.linearGradient(
+                                    listOf(ThemeColors.accentCyan.copy(alpha = 0.45f), Color.White.copy(alpha = 0.18f))
+                                ),
+                                shape = CircleShape
+                            )
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        val slotIcon: ImageVector = when (slot) {
+                            BriefingTimeSlot.MORNING -> Icons.Rounded.WbSunny
+                            BriefingTimeSlot.INTRADAY -> Icons.Rounded.WbSunny
+                            BriefingTimeSlot.EVENING -> Icons.Rounded.NightsStay
+                            BriefingTimeSlot.NIGHTLY -> Icons.Rounded.NightsStay
+                        }
                         Icon(
-                            imageVector = slot.icon,
+                            imageVector = slotIcon,
                             contentDescription = null,
-                            tint = slot.gradientColors.first(),
-                            modifier = Modifier.size(14.dp)
+                            tint = ThemeColors.accentCyan,
+                            modifier = Modifier.size(13.dp)
                         )
                         Text(
-                            text = "${slot.title.uppercase()} · ${slot.timeRange}",
-                            fontSize = 11.sp,
+                            text = slot.diurnalGreeting(firstName),
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = Color.White.copy(alpha = 0.95f)
                         )
                     }
 
-                    // Close Button
+                    // Right Actions: TTS Speaker + Refresh + Close
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // TTS Speaker Toggle
+                        record?.let { rec ->
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isSpeaking) ThemeColors.accentCyan.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
+                                    .border(1.dp, if (isSpeaking) ThemeColors.accentCyan else Color.White.copy(alpha = 0.15f), CircleShape)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        repository.toggleSpeechReadout(rec.narrative.fullConcatenatedText)
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isSpeaking) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff,
+                                    contentDescription = "Read Aloud",
+                                    tint = if (isSpeaking) ThemeColors.accentCyan else Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        // Close Button
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    repository.stopSpeech()
+                                    onDismiss()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Close",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+                // 2. Body Content
+                if (isLoading || record == null) {
                     Box(
                         modifier = Modifier
-                            .size(34.dp)
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = ThemeColors.accentCyan,
+                                modifier = Modifier.size(36.dp),
+                                strokeWidth = 3.dp
+                            )
+                            Text(
+                                text = "Synthesizing cross-hub briefing...",
+                                color = ThemeColors.textSecondary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                } else {
+                    val currentRec = record!!
+                    val items = remember(currentRec) { repository.buildCardItems(currentRec) }
+                    val wordsPerCard = remember(items) {
+                        items.map { item ->
+                            item.text.split(Regex("\\s+")).filter { it.isNotBlank() }
+                        }
+                    }
+                    val totalWords = remember(wordsPerCard) { wordsPerCard.sumOf { it.size } }
+
+                    // Calculate start indices for each card
+                    val cardStartIndices = remember(wordsPerCard) {
+                        val offsets = mutableListOf<Int>()
+                        var running = 0
+                        for (w in wordsPerCard) {
+                            offsets.add(running)
+                            running += w.size
+                        }
+                        offsets
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                if (!isFinished) {
+                                    completeInstantly(items.size, totalWords)
+                                }
+                            }
+                            .padding(horizontal = 20.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Sequential Card Reveal
+                        items.forEachIndexed { index, item ->
+                            if (isFinished || index <= activeCardIndex) {
+                                AnimatedVisibility(
+                                    visible = true,
+                                    enter = fadeIn(tween(220)) + slideInVertically(
+                                        initialOffsetY = { 20 },
+                                        animationSpec = tween(220, easing = FastOutSlowInEasing)
+                                    )
+                                ) {
+                                    val words = wordsPerCard.getOrElse(index) { emptyList() }
+                                    val startIdx = cardStartIndices.getOrElse(index) { 0 }
+                                    BriefingCard(
+                                        item = item,
+                                        index = index,
+                                        words = words,
+                                        startIndex = startIdx,
+                                        revealedGlobalWordIndex = revealedGlobalWordIndex,
+                                        activeCardIndex = activeCardIndex,
+                                        isFinished = isFinished
+                                    )
+                                }
+                            }
+                        }
+
+                        // Tap to Reveal Instantly hint
+                        if (!isFinished) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = ThemeColors.accentCyan,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Tap anywhere to reveal instantly",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = ThemeColors.textMuted
+                                )
+                            }
+                        }
+
+                        // Contextual Diurnal Bottom Action Button (blooms in at the end)
+                        if (isFinished || activeCardIndex >= items.size - 1) {
+                            val wish = currentRec.narrative.closingWish ?: slot.defaultClosingWish
+                            val buttonIcon: ImageVector = when (slot) {
+                                BriefingTimeSlot.MORNING -> Icons.Rounded.WbSunny
+                                BriefingTimeSlot.INTRADAY -> Icons.Rounded.WbSunny
+                                BriefingTimeSlot.EVENING -> Icons.Rounded.NightsStay
+                                BriefingTimeSlot.NIGHTLY -> Icons.Rounded.NightsStay
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .shadow(10.dp, RoundedCornerShape(18.dp))
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(
+                                        Brush.horizontalGradient(auraColors)
+                                    )
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        repository.stopSpeech()
+                                        repository.markBriefingAsRead()
+                                        onDismiss()
+                                    }
+                                    .padding(vertical = 15.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = buttonIcon,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = wish,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(36.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BriefingCard(
+    item: BriefingCardItem,
+    index: Int,
+    words: List<String>,
+    startIndex: Int,
+    revealedGlobalWordIndex: Int,
+    activeCardIndex: Int,
+    isFinished: Boolean
+) {
+    val count = words.size
+    val isCompleted = isFinished || (index < activeCardIndex) || (revealedGlobalWordIndex >= startIndex + count)
+    val isCurrentlyTyping = !isFinished && (index == activeCardIndex) && (revealedGlobalWordIndex >= startIndex && revealedGlobalWordIndex < startIndex + count)
+
+    val visibleText = when {
+        isCompleted -> item.text
+        isCurrentlyTyping -> {
+            val localCount = (revealedGlobalWordIndex - startIndex).coerceIn(0, count)
+            words.take(localCount).joinToString(" ")
+        }
+        else -> ""
+    }
+
+    val iconVector: ImageVector = when (item.id) {
+        "weather" -> Icons.Rounded.Cloud
+        "health" -> Icons.Rounded.Favorite
+        "habits" -> Icons.Rounded.WaterDrop
+        "finances" -> Icons.Rounded.CreditCard
+        "tagdos" -> Icons.Rounded.Checklist
+        "news" -> Icons.Rounded.Newspaper
+        else -> Icons.Rounded.AutoAwesome
+    }
+
+    val accentColor = try {
+        Color(android.graphics.Color.parseColor(item.accentColorHex))
+    } catch (_: Exception) {
+        ThemeColors.accentCyan
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "cardBorderGlow")
+    val borderAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "borderGlow"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = if (isCurrentlyTyping) 12.dp else 4.dp,
+                shape = RoundedCornerShape(18.dp),
+                ambientColor = Color.Black.copy(alpha = 0.40f),
+                spotColor = if (isCurrentlyTyping) ThemeColors.accentCyan.copy(alpha = 0.35f) else Color.Transparent
+            )
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF080F1E).copy(alpha = if (isCurrentlyTyping) 0.88f else 0.72f))
+            .border(
+                width = if (isCurrentlyTyping) 1.6.dp else 0.8.dp,
+                brush = if (isCurrentlyTyping) {
+                    Brush.linearGradient(
+                        listOf(
+                            ThemeColors.accentCyan.copy(alpha = borderAlpha),
+                            ThemeColors.accentBlue.copy(alpha = borderAlpha * 0.85f),
+                            ThemeColors.accentCyan.copy(alpha = borderAlpha)
+                        )
+                    )
+                } else {
+                    Brush.linearGradient(
+                        listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.06f))
+                    )
+                },
+                shape = RoundedCornerShape(18.dp)
+            )
+            .padding(15.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Header: Category Icon + Title + Suggestive Contextual Metric Badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onDismiss()
-                            },
+                            .background(accentColor.copy(alpha = 0.16f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = "Close",
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                // Diurnal Hero Greeting
-                Text(
-                    text = "${slot.greeting}, $firstName!",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = "Here is your synchronized intelligence briefing.",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = ThemeColors.textSecondary
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Card 1: Atmospheric Telemetry
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 20.dp,
-                    padding = 18.dp,
-                    intensity = GlassIntensity.Medium
-                ) {
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Cloud,
-                                contentDescription = null,
-                                tint = ThemeColors.accentCyan,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Atmosphere & Conditions",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = ThemeColors.accentCyan
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        if (weather != null) {
-                            val temp = weather.main.temp.roundToInt()
-                            val desc = weather.weather.firstOrNull()?.description?.replaceFirstChar { it.uppercase() } ?: "Clear"
-                            Text(
-                                text = "$temp° · $desc",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Humidity ${weather.main.humidity}% · Wind ${weather.wind?.speed?.roundToInt() ?: 0} m/s",
-                                fontSize = 13.sp,
-                                color = ThemeColors.textSecondary
-                            )
-                        } else {
-                            Text(
-                                text = "Telemetry syncing in the background...",
-                                fontSize = 13.sp,
-                                color = ThemeColors.textSecondary
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Card 2: Habit Telemetry (Water & Smokes)
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 20.dp,
-                    padding = 18.dp,
-                    intensity = GlassIntensity.Medium
-                ) {
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.WaterDrop,
-                                contentDescription = null,
-                                tint = Color(0xFF00FFB2),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Habits & Cravings",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF00FFB2)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text(
-                                    text = "HYDRATION",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ThemeColors.textSecondary
-                                )
-                                Text(
-                                    text = "${waterTotalMl.toInt()} / ${waterGoalMl.toInt()} ml",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "TOBACCO LIMIT",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ThemeColors.textSecondary
-                                )
-                                Text(
-                                    text = "$smokesCount / $smokesBaseline max",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (smokesCount > smokesBaseline) Color(0xFFFF3B30) else Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Card 3: Health & Recovery
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 20.dp,
-                    padding = 18.dp,
-                    intensity = GlassIntensity.Medium
-                ) {
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Favorite,
-                                contentDescription = null,
-                                tint = Color(0xFFFF5252),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Vitals & Daily Readiness",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF5252)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Daily readiness score 92% · Sleep Target 8.0h",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Biometric vitals synchronized locally with Room dirty tracking.",
-                            fontSize = 12.sp,
-                            color = ThemeColors.textSecondary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Diurnal Closing Action Button
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(8.dp, RoundedCornerShape(16.dp))
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            Brush.horizontalGradient(slot.gradientColors)
-                        )
-                        .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onDismiss()
-                        }
-                        .padding(vertical = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = slot.icon,
+                            imageVector = iconVector,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            tint = accentColor,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+
+                    Text(
+                        text = item.title,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                item.badgeText?.let { badge ->
+                    val badgeColor = try {
+                        Color(android.graphics.Color.parseColor(item.badgeColorHex ?: item.accentColorHex))
+                    } catch (_: Exception) {
+                        ThemeColors.accentCyan
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(badgeColor.copy(alpha = 0.12f))
+                            .border(0.8.dp, badgeColor.copy(alpha = 0.28f), CircleShape)
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(badgeColor)
                         )
                         Text(
-                            text = slot.closingText,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            text = badge,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = badgeColor
                         )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(30.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+
+            // Body: Progressive Typewriter Word Text
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = visibleText,
+                    color = Color.White.copy(alpha = 0.92f),
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Normal
+                )
+                if (isCurrentlyTyping) {
+                    Text(
+                        text = " ✨",
+                        color = ThemeColors.accentCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

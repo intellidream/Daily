@@ -6,6 +6,7 @@ import com.intellidream.daily.model.SavedArticle
 import io.github.jan.supabase.postgrest.postgrest
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpRedirect
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -23,9 +24,12 @@ class NewsRemoteService(
 ) {
     private val httpClient = HttpClient(CIO) {
         install(HttpTimeout) {
-            requestTimeoutMillis = 8000L
-            connectTimeoutMillis = 8000L
-            socketTimeoutMillis = 8000L
+            requestTimeoutMillis = 10000L
+            connectTimeoutMillis = 10000L
+            socketTimeoutMillis = 10000L
+        }
+        install(HttpRedirect) {
+            checkHttpMethod = false
         }
     }
 
@@ -34,8 +38,9 @@ class NewsRemoteService(
     suspend fun fetchUrl(url: String): String? = withContext(Dispatchers.IO) {
         try {
             val response = httpClient.get(url) {
-                header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36")
+                header("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36")
                 header("Accept", "application/rss+xml, application/atom+xml, application/json, text/xml, text/html, */*")
+                header("Accept-Language", "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7")
             }
             response.bodyAsText()
         } catch (_: Exception) {

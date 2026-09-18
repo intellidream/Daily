@@ -1,10 +1,16 @@
 package com.intellidream.daily.presentation.health
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.health.connect.client.PermissionController
+import com.intellidream.daily.designsystem.GlassCard
+import com.intellidream.daily.designsystem.GlassIntensity
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,6 +48,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -99,6 +106,24 @@ fun HealthMainView(
     val currentVitals by repository.currentVitals.collectAsState()
     val historicalTrends by repository.historicalTrends.collectAsState()
 
+    val coroutineScope = rememberCoroutineScope()
+    var hasHealthPermissions by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        if (repository.healthConnectManager.isAvailable) {
+            hasHealthPermissions = repository.healthConnectManager.hasAllPermissions()
+        }
+    }
+
+    val requestPermissionsLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract()
+    ) { grantedPermissions ->
+        if (grantedPermissions.containsAll(repository.healthConnectManager.requiredPermissions)) {
+            hasHealthPermissions = true
+            repository.loadDataForSelectedDate(forceRefresh = true)
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -132,6 +157,77 @@ fun HealthMainView(
                         activeTab = activeSubTab,
                         onTabSelected = { repository.setActiveSubTab(it) }
                     )
+                }
+
+                // Health Connect Permission Banner
+                if (repository.healthConnectManager.isAvailable && !hasHealthPermissions) {
+                    item(key = "health_connect_banner") {
+                        GlassCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 16.dp,
+                            padding = 16.dp,
+                            intensity = GlassIntensity.Medium
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(ThemeColors.accentCyan.copy(alpha = 0.16f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Favorite,
+                                            contentDescription = null,
+                                            tint = ThemeColors.accentCyan,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Sync Health Connect",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = "Grant access to steps, heart rate & sleep",
+                                            fontSize = 11.sp,
+                                            color = ThemeColors.textSecondary
+                                        )
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(ThemeColors.accentCyan.copy(alpha = 0.20f))
+                                        .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.40f), RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            requestPermissionsLauncher.launch(repository.healthConnectManager.requiredPermissions)
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Grant Access",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ThemeColors.accentCyan
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Sub-Tab Content

@@ -3,6 +3,7 @@ package com.intellidream.daily
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.Crossfade
@@ -46,14 +47,18 @@ import com.intellidream.daily.designsystem.NavigationTab
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.AppSettings
 import com.intellidream.daily.model.AuthSessionState
+import com.intellidream.daily.model.DailyForecastSummary
+import com.intellidream.daily.model.LocationSource
 import com.intellidream.daily.model.ForecastItem
 import com.intellidream.daily.model.ForecastResponse
 import com.intellidream.daily.model.UserProfile
 import com.intellidream.daily.model.WeatherResponse
+import com.intellidream.daily.network.WeatherRepository
 import com.intellidream.daily.presentation.LoginScreen
 import com.intellidream.daily.presentation.SettingsScreen
 import com.intellidream.daily.presentation.dashboard.CustomizeDashboardScreen
 import com.intellidream.daily.presentation.dashboard.DashboardView
+import com.intellidream.daily.presentation.weather.WeatherDetailView
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -67,6 +72,7 @@ class MainActivity : ComponentActivity() {
     private val financeDataRepository by lazy { DailyApp.instance.financeDataRepository }
     private val tagdosRepository by lazy { DailyApp.instance.tagdosRepository }
     private val newsRepository by lazy { DailyApp.instance.newsRepository }
+    private val smartBriefingRepository by lazy { DailyApp.instance.smartBriefingRepository }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,8 +86,12 @@ class MainActivity : ComponentActivity() {
             val weather by weatherRepository.currentWeather.collectAsState()
             val forecast by weatherRepository.forecast.collectAsState()
             val hourlyForecasts by weatherRepository.hourlyForecasts.collectAsState()
+            val dailySummaries by weatherRepository.dailySummaries.collectAsState()
             val locationName by weatherRepository.currentLocationName.collectAsState()
+            val locationSource by weatherRepository.locationSource.collectAsState()
+            val isAutoLocation by weatherRepository.isAutoLocation.collectAsState()
             val isWeatherLoading by weatherRepository.isLoading.collectAsState()
+            val weatherError by weatherRepository.errorMessage.collectAsState()
 
             val scope = rememberCoroutineScope()
             var showSettings by remember { mutableStateOf(false) }
@@ -104,6 +114,25 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
+            LaunchedEffect(authState.profile, weather) {
+                if (authState.isAuthenticatedOrGuest && weather != null) {
+                    val firstName = authState.profile?.firstName ?: "Friend"
+                    val uid = authState.profile?.id ?: "guest"
+                    smartBriefingRepository.checkAutomaticMorningPresentation(
+                        settings = settings,
+                        userName = firstName,
+                        userId = uid,
+                        weather = weather,
+                        locationName = locationName,
+                        healthRepository = healthRepository,
+                        habitsRepository = habitsRepository,
+                        smartLedgerRepository = smartLedgerRepository,
+                        tagdosRepository = tagdosRepository,
+                        newsRepository = newsRepository
+                    )
+                }
+            }
+
             Crossfade(targetState = authState.isAuthenticatedOrGuest, label = "AuthCrossfade") { isAuthenticated ->
                 if (!isAuthenticated) {
                     LoginScreen(
@@ -119,6 +148,7 @@ class MainActivity : ComponentActivity() {
                     Crossfade(targetState = if (showCustomize) "customize" else if (showSettings) "settings" else "root", label = "ScreenCrossfade") { screen ->
                         when (screen) {
                             "customize" -> {
+                                BackHandler { showCustomize = false }
                                 CustomizeDashboardScreen(
                                     settings = settings,
                                     onUpdateSettings = { transform: (AppSettings) -> AppSettings ->
@@ -128,6 +158,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             "settings" -> {
+                                BackHandler { showSettings = false }
                                 SettingsScreen(
                                     settings = settings,
                                     userProfile = authState.profile,
@@ -151,7 +182,11 @@ class MainActivity : ComponentActivity() {
                                     weather = weather,
                                     forecast = forecast,
                                     hourlyForecasts = hourlyForecasts,
+                                    dailySummaries = dailySummaries,
                                     locationName = locationName,
+                                    locationSource = locationSource,
+                                    isAutoLocation = isAutoLocation,
+                                    weatherError = weatherError,
                                     isWeatherLoading = isWeatherLoading,
                                     habitsRepository = habitsRepository,
                                     healthRepository = healthRepository,
@@ -159,6 +194,8 @@ class MainActivity : ComponentActivity() {
                                     financeDataRepository = financeDataRepository,
                                     tagdosRepository = tagdosRepository,
                                     newsRepository = newsRepository,
+                                    smartBriefingRepository = smartBriefingRepository,
+                                    weatherRepository = weatherRepository,
                                     onRefreshWeather = {
                                         scope.launch {
                                             weatherRepository.refreshWeather(
@@ -168,6 +205,20 @@ class MainActivity : ComponentActivity() {
                                                     scope.launch { weatherCacheRepository.saveCache(w, f, city, lat, lon) }
                                                 }
                                             )
+                                        }
+                                    },
+                                    onSelectManualLocation = { lat, lon, name ->
+                                        scope.launch {
+                                            weatherRepository.setManualLocation(lat, lon, name, settings.weatherUnitSystem) { w, f, city, lLat, lLon ->
+                                                scope.launch { weatherCacheRepository.saveCache(w, f, city, lLat, lLon) }
+                                            }
+                                        }
+                                    },
+                                    onResetToAutoLocation = {
+                                        scope.launch {
+                                            weatherRepository.resetToAutoLocation(settings.weatherUnitSystem) { w, f, city, lLat, lLon ->
+                                                scope.launch { weatherCacheRepository.saveCache(w, f, city, lLat, lLon) }
+                                            }
                                         }
                                     },
                                     onOpenCustomize = { showCustomize = true },
@@ -190,7 +241,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntentData(intent: Intent?) {
-        intent?.data?.let { uri ->
+        if (intent == null) return
+        authRepository.handleIntent(intent)
+        intent.data?.let { uri ->
             if (uri.scheme == "com.intellidream.daily" && uri.host == "login-callback") {
                 lifecycleScope.launch {
                     authRepository.handleAuthCallback(uri)
@@ -207,7 +260,11 @@ fun DailyRootScreen(
     weather: WeatherResponse?,
     forecast: ForecastResponse?,
     hourlyForecasts: List<ForecastItem>,
+    dailySummaries: List<DailyForecastSummary>,
     locationName: String,
+    locationSource: LocationSource,
+    isAutoLocation: Boolean,
+    weatherError: String?,
     isWeatherLoading: Boolean,
     habitsRepository: com.intellidream.daily.database.HabitsRepository,
     healthRepository: com.intellidream.daily.health.HealthDataRepository,
@@ -215,17 +272,31 @@ fun DailyRootScreen(
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     tagdosRepository: com.intellidream.daily.database.TagdosRepository,
     newsRepository: com.intellidream.daily.database.NewsRepository,
+    smartBriefingRepository: com.intellidream.daily.briefing.SmartBriefingRepository,
+    weatherRepository: WeatherRepository,
     onRefreshWeather: () -> Unit,
+    onSelectManualLocation: (Double, Double, String) -> Unit,
+    onResetToAutoLocation: () -> Unit,
     onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(NavigationTab.Dashboard) }
 
+    BackHandler(enabled = selectedTab != NavigationTab.Dashboard) {
+        selectedTab = NavigationTab.Dashboard
+    }
+
     LaunchedEffect(userProfile) {
         val uid = userProfile?.id ?: "guest"
         if (newsRepository.currentUserId != uid) {
             newsRepository.currentUserId = uid
+        }
+        if (habitsRepository.currentUserId != uid) {
+            habitsRepository.currentUserId = uid
+        }
+        if (healthRepository.currentUserId != uid) {
+            healthRepository.currentUserId = uid
         }
     }
 
@@ -256,6 +327,7 @@ fun DailyRootScreen(
                         financeDataRepository = financeDataRepository,
                         tagdosRepository = tagdosRepository,
                         newsRepository = newsRepository,
+                        smartBriefingRepository = smartBriefingRepository,
                         onRefreshWeather = onRefreshWeather,
                         onOpenCustomize = onOpenCustomize,
                         onOpenSettings = onOpenSettings,
@@ -265,7 +337,26 @@ fun DailyRootScreen(
                         onNavigateToFinances = { selectedTab = NavigationTab.Finances },
                         onNavigateToTagdos = { selectedTab = NavigationTab.Tagdos },
                         onNavigateToNews = { selectedTab = NavigationTab.News },
+                        onNavigateToWeather = { selectedTab = NavigationTab.Weather },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                    )
+                }
+                NavigationTab.Weather -> {
+                    WeatherDetailView(
+                        weather = weather,
+                        hourlyForecasts = hourlyForecasts,
+                        dailySummaries = dailySummaries,
+                        locationName = locationName,
+                        locationSource = locationSource,
+                        isAutoLocation = isAutoLocation,
+                        isLoading = isWeatherLoading,
+                        errorMessage = weatherError,
+                        settings = settings,
+                        weatherRepository = weatherRepository,
+                        onNavigateBack = { selectedTab = NavigationTab.Dashboard },
+                        onRefreshWeather = onRefreshWeather,
+                        onSelectManualLocation = onSelectManualLocation,
+                        onResetToAutoLocation = onResetToAutoLocation
                     )
                 }
                 NavigationTab.Finances -> {

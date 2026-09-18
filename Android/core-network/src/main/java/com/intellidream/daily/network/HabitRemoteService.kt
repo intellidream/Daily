@@ -9,6 +9,7 @@ class HabitRemoteService(
     private val clientManager: SupabaseClientManager = SupabaseClientManager
 ) {
     suspend fun pushLog(log: HabitLogRecord): Boolean = withContext(Dispatchers.IO) {
+        if (log.userId.isNullOrEmpty()) return@withContext false
         try {
             clientManager.client.postgrest["habits_logs"].insert(log)
             true

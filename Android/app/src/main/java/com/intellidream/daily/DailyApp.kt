@@ -39,14 +39,17 @@ class DailyApp : Application() {
         private set
     lateinit var newsRepository: com.intellidream.daily.database.NewsRepository
         private set
+    lateinit var smartBriefingRepository: com.intellidream.daily.briefing.SmartBriefingRepository
+        private set
 
     private val appScope = CoroutineScope(Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         instance = this
+        com.intellidream.daily.network.SupabaseClientManager.initialize(this)
         settingsRepository = SettingsRepository(this)
-        authRepository = AuthRepository()
+        authRepository = AuthRepository(context = this)
         weatherCacheRepository = WeatherCacheRepository(this)
         weatherRepository = WeatherRepository()
         dailyDatabase = com.intellidream.daily.database.DailyDatabase.getDatabase(this)
@@ -63,6 +66,7 @@ class DailyApp : Application() {
         tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao())
         newsRemoteService = com.intellidream.daily.network.NewsRemoteService()
         newsRepository = com.intellidream.daily.database.NewsRepository(dailyDatabase.newsDao())
+        smartBriefingRepository = com.intellidream.daily.briefing.SmartBriefingRepository(this)
 
         habitsRepository.syncHandler = object : com.intellidream.daily.database.HabitSyncHandler {
             override suspend fun pushLog(log: com.intellidream.daily.model.HabitLogRecord): Boolean {
