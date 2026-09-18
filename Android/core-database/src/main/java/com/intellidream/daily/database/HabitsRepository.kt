@@ -33,6 +33,10 @@ import java.util.UUID
 
 interface HabitSyncHandler {
     suspend fun pushLog(log: HabitLogRecord): Boolean
+    suspend fun pullLogsForDate(userId: String, startIso: String, endIso: String): List<HabitLogRecord>
+    suspend fun pullUserPreferences(userId: String): com.intellidream.daily.model.UserPreferencesRecord?
+    suspend fun pullGoals(userId: String): List<com.intellidream.daily.model.HabitGoalRecord>
+    suspend fun deleteLog(logId: String): Boolean
 }
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -216,6 +220,76 @@ class HabitsRepository(
         }
     }
 
+    fun syncLogs(userId: String = currentUserId, dateMillis: Long = _selectedDate.value) {
+        scope.launch {
+            val handler = syncHandler ?: return@launch
+            val startIso = java.time.Instant.ofEpochMilli(getStartOfDay(dateMillis)).toString()
+            val endIso = java.time.Instant.ofEpochMilli(getEndOfDay(dateMillis)).toString()
+
+            // 1. Fetch user preferences if user is authenticated
+            if (userId.isNotEmpty() && userId != "guest") {
+                try {
+                    val prefs = handler.pullUserPreferences(userId)
+                    if (prefs != null) {
+                        val wg = prefs.water_goal
+                        if (wg != null && wg > 0) {
+                            _waterGoal.value = wg
+                        }
+                        var newSettings = _smokesSettings.value
+                        val baseline = prefs.smokes_baseline
+                        if (baseline != null && baseline > 0) {
+                            newSettings = newSettings.copy(baselineCigsPerDay = baseline)
+                        }
+                        val packSize = prefs.smokes_pack_size
+                        if (packSize != null && packSize > 0) {
+                            newSettings = newSettings.copy(cigsPerPack = packSize)
+                        }
+                        val packCost = prefs.smokes_pack_cost
+                        if (packCost != null && packCost >= 0) {
+                            newSettings = newSettings.copy(costPerPack = packCost)
+                        }
+                        val currency = prefs.smokes_currency
+                        if (!currency.isNullOrEmpty()) {
+                            newSettings = newSettings.copy(currency = currency)
+                        }
+                        val quitDate = prefs.smokes_quit_date
+                        if (!quitDate.isNullOrEmpty()) {
+                            val parsedQuit = try {
+                                java.time.Instant.parse(quitDate).toEpochMilli()
+                            } catch (_: Exception) {
+                                try {
+                                    java.time.LocalDate.parse(quitDate).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            }
+                            if (parsedQuit != null) {
+                                newSettings = newSettings.copy(quitStartDate = parsedQuit)
+                            }
+                        }
+                        _smokesSettings.value = newSettings
+                    }
+
+                    val goals = handler.pullGoals(userId)
+                    for (g in goals) {
+                        if (g.habitType == "water" && g.targetValue > 0) {
+                            _waterGoal.value = g.targetValue
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 2. Fetch logs for this date window
+            try {
+                val remoteLogs = handler.pullLogsForDate(userId, startIso, endIso)
+                if (remoteLogs.isNotEmpty()) {
+                    val entities = remoteLogs.map { HabitLogEntity.fromRecord(it, syncedAt = System.currentTimeMillis()) }
+                    dao.insertAll(entities)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     // Navigation Actions
     fun switchHabit(type: HabitType) {
         _activeHabit.value = type
@@ -223,6 +297,7 @@ class HabitsRepository(
 
     fun selectDate(timestampMillis: Long) {
         _selectedDate.value = getStartOfDay(timestampMillis)
+        syncLogs(currentUserId, _selectedDate.value)
     }
 
     fun goToPreviousDay() {
@@ -231,6 +306,7 @@ class HabitsRepository(
             add(Calendar.DAY_OF_YEAR, -1)
         }
         _selectedDate.value = getStartOfDay(cal.timeInMillis)
+        syncLogs(currentUserId, _selectedDate.value)
     }
 
     fun goToNextDay() {
@@ -239,10 +315,12 @@ class HabitsRepository(
             add(Calendar.DAY_OF_YEAR, 1)
         }
         _selectedDate.value = getStartOfDay(cal.timeInMillis)
+        syncLogs(currentUserId, _selectedDate.value)
     }
 
     fun goToToday() {
         _selectedDate.value = getStartOfDay(System.currentTimeMillis())
+        syncLogs(currentUserId, _selectedDate.value)
     }
 
     fun setWaterGoal(goal: Double) {
@@ -317,6 +395,7 @@ class HabitsRepository(
     fun deleteLog(id: String) {
         scope.launch {
             dao.softDelete(id)
+            syncHandler?.deleteLog(id)
         }
     }
 

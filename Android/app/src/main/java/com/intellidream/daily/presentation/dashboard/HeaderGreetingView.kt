@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellidream.daily.designsystem.DailyAsyncImage
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.UserProfile
 import java.text.SimpleDateFormat
@@ -52,246 +53,241 @@ import java.util.Locale
 @Composable
 fun HeaderGreetingView(
     userProfile: UserProfile?,
-    onAvatarTapped: () -> Unit = {},
-    onCustomizeTapped: () -> Unit = {},
-    onBriefingTapped: () -> Unit = {},
+    onAvatarTapped: () -> Unit,
+    onCustomizeTapped: () -> Unit,
+    onBriefingTapped: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    val infiniteTransition = rememberInfiniteTransition(label = "auras")
-
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseSparkle"
-    )
-
+    val firstName = userProfile?.firstName ?: "Friend"
     val formattedDate = remember {
         SimpleDateFormat("EEE, MMM d", Locale.US).format(Date()).uppercase()
     }
 
-    val firstName = userProfile?.firstName ?: "Friend"
+    // Gentle pulse animation for the smart briefing sparkle badge
+    val infiniteTransition = rememberInfiniteTransition(label = "BriefingSparkleTransition")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "BriefingPulseScale"
+    )
 
-    // Signature Liquid Glass Hero Banner (Corner Radius: 24.dp)
-    Box(
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(
-                elevation = 12.dp,
-                shape = RoundedCornerShape(24.dp),
-                ambientColor = Color.Black.copy(alpha = 0.35f),
-                spotColor = ThemeColors.accentCyan.copy(alpha = 0.15f)
-            )
-            .clip(RoundedCornerShape(24.dp))
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFF080F1E).copy(alpha = 0.85f),
-                        Color(0xFF0D182E).copy(alpha = 0.75f),
-                        Color(0xFF13102C).copy(alpha = 0.70f)
-                    )
-                )
-            )
-            .border(
-                width = 1.2.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.55f),
-                        ThemeColors.accentCyan.copy(alpha = 0.45f),
-                        ThemeColors.accentBlue.copy(alpha = 0.25f),
-                        Color.White.copy(alpha = 0.12f)
-                    )
-                ),
-                shape = RoundedCornerShape(24.dp)
-            )
-            .clickable {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onBriefingTapped()
-            }
-            .padding(horizontal = 18.dp, vertical = 16.dp)
+            .padding(top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        // Left: Interactive Glass Avatar with Gradient Border & Live Sync Dot
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onAvatarTapped()
+                },
+            contentAlignment = Alignment.Center
         ) {
-            // Left: Interactive Glass Avatar with Gradient Border & Live Sync Dot
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onAvatarTapped()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Avatar Outer Ring Glow & Gradient Border
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .shadow(10.dp, CircleShape, ambientColor = ThemeColors.accentCyan, spotColor = ThemeColors.accentCyan)
-                            .clip(CircleShape)
-                            .border(
-                                width = 2.dp,
-                                brush = Brush.linearGradient(
-                                    listOf(ThemeColors.accentCyan, ThemeColors.accentBlue, Color(0xFF8A2BE2))
-                                ),
-                                shape = CircleShape
-                            )
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(ThemeColors.accentBlue.copy(alpha = 0.5f), ThemeColors.accentCyan.copy(alpha = 0.3f))
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val initial = (userProfile?.firstName?.take(1) ?: "G").uppercase()
-                        Text(
-                            text = initial,
-                            color = Color.White,
-                            fontSize = 19.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // Live Online Sync Status Dot (11dp emerald with 2dp dark border and green shadow)
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .offset(x = 1.dp, y = 1.dp)
-                            .size(12.dp)
-                            .shadow(4.dp, CircleShape, ambientColor = Color(0xFF00FFB2), spotColor = Color(0xFF00FFB2))
-                            .clip(CircleShape)
-                            .background(Color(0xFF00FFB2))
-                            .border(2.dp, Color(0xFF030609), CircleShape)
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .shadow(10.dp, CircleShape, ambientColor = ThemeColors.accentCyan, spotColor = ThemeColors.accentCyan)
+                    .clip(CircleShape)
+                    .border(
+                        width = 2.dp,
+                        brush = Brush.linearGradient(
+                            listOf(ThemeColors.accentCyan, ThemeColors.accentBlue, Color(0xFF8A2BE2))
+                        ),
+                        shape = CircleShape
                     )
-                }
-
-                // Middle: Contextual Date Pill & Greeting
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Micro Date Pill Badge
-                        Row(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(ThemeColors.accentCyan.copy(alpha = 0.12f))
-                                .border(0.8.dp, ThemeColors.accentCyan.copy(alpha = 0.25f), CircleShape)
-                                .padding(horizontal = 7.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(4.5.dp)
-                                    .clip(CircleShape)
-                                    .background(ThemeColors.accentCyan)
-                            )
+                    .background(
+                        Brush.linearGradient(
+                            listOf(ThemeColors.accentBlue.copy(alpha = 0.5f), ThemeColors.accentCyan.copy(alpha = 0.3f))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                val avatarUrl = userProfile?.avatarUrl
+                val initial = (userProfile?.firstName?.take(1) ?: "G").uppercase()
+                if (!avatarUrl.isNullOrBlank()) {
+                    DailyAsyncImage(
+                        url = avatarUrl,
+                        contentDescription = "Profile Avatar",
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape),
+                        placeholder = {
                             Text(
-                                text = formattedDate,
-                                color = ThemeColors.accentCyan,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
+                                text = initial,
+                                color = Color.White,
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
-
-                        // Ambient Briefing Sparkle
-                        Icon(
-                            imageVector = Icons.Rounded.AutoAwesome,
-                            contentDescription = "Smart Briefing",
-                            tint = ThemeColors.accentCyan,
-                            modifier = Modifier
-                                .size(12.dp)
-                                .scale(pulseScale)
-                        )
-                    }
-
+                    )
+                } else {
                     Text(
-                        text = "Hi, $firstName!",
+                        text = initial,
                         color = Color.White,
-                        fontSize = 24.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            // Right: Two 40x40 Circle Glass Action Buttons (Customize Grid & Settings)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Customize Button
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .shadow(4.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(Color(0xFF080F1E).copy(alpha = 0.72f))
-                        .border(
-                            1.dp,
-                            Brush.linearGradient(
-                                listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.10f))
-                            ),
-                            CircleShape
-                        )
-                        .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onCustomizeTapped()
-                        },
-                    contentAlignment = Alignment.Center
+            // Live Online Sync Status Dot (11dp emerald with 2dp dark border and green shadow)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 1.dp, y = 1.dp)
+                    .size(12.dp)
+                    .shadow(4.dp, CircleShape, ambientColor = Color(0xFF00FFB2), spotColor = Color(0xFF00FFB2))
+                    .clip(CircleShape)
+                    .background(Color(0xFF00FFB2))
+                    .border(2.dp, Color(0xFF030609), CircleShape)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        // Middle: Contextual Date Pill & Greeting (Click triggers Smart Briefing)
+        Column(
+            modifier = Modifier
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Tune,
-                        contentDescription = "Customize Dashboard",
-                        tint = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.size(16.dp)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onBriefingTapped()
+                },
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Micro Date Pill Badge
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(ThemeColors.accentCyan.copy(alpha = 0.12f))
+                        .border(0.8.dp, ThemeColors.accentCyan.copy(alpha = 0.25f), CircleShape)
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(4.5.dp)
+                            .clip(CircleShape)
+                            .background(ThemeColors.accentCyan)
+                    )
+                    Text(
+                        text = formattedDate,
+                        color = ThemeColors.accentCyan,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
 
-                // Settings Button
-                Box(
+                // Ambient Briefing Sparkle
+                Icon(
+                    imageVector = Icons.Rounded.AutoAwesome,
+                    contentDescription = "Smart Briefing",
+                    tint = ThemeColors.accentCyan,
                     modifier = Modifier
-                        .size(40.dp)
-                        .shadow(4.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(Color(0xFF080F1E).copy(alpha = 0.72f))
-                        .border(
-                            1.dp,
-                            Brush.linearGradient(
-                                listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.10f))
-                            ),
-                            CircleShape
-                        )
-                        .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onAvatarTapped()
-                        },
-                    contentAlignment = Alignment.Center
+                        .size(12.dp)
+                        .scale(pulseScale)
+                )
+            }
+
+            Text(
+                text = "Hi, $firstName!",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Settings,
-                        contentDescription = "Settings",
-                        tint = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.size(16.dp)
-                    )
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onBriefingTapped()
                 }
+        )
+
+        // Right: Two 40x40 Circle Glass Action Buttons (Customize Grid & Settings)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Customize Button
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .shadow(4.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(Color(0xFF080F1E).copy(alpha = 0.72f))
+                    .border(
+                        1.dp,
+                        Brush.linearGradient(
+                            listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.10f))
+                        ),
+                        CircleShape
+                    )
+                    .clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onCustomizeTapped()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Tune,
+                    contentDescription = "Customize Dashboard",
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            // Settings Button
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .shadow(4.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(Color(0xFF080F1E).copy(alpha = 0.72f))
+                    .border(
+                        1.dp,
+                        Brush.linearGradient(
+                            listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.10f))
+                        ),
+                        CircleShape
+                    )
+                    .clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onAvatarTapped()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Settings,
+                    contentDescription = "Settings",
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }

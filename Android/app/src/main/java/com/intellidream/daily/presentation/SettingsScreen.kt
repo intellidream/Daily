@@ -59,6 +59,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.intellidream.daily.designsystem.DailyAsyncImage
 import com.intellidream.daily.designsystem.GlassButton
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.GlassIntensity
@@ -78,6 +79,8 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -92,20 +95,23 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                GlassButton(
-                    onClick = onBackClick,
-                    cornerRadius = 12.dp,
-                    paddingHorizontal = 10.dp,
-                    paddingVertical = 8.dp
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                        .clickable(onClick = onBackClick),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
@@ -123,7 +129,7 @@ fun SettingsScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // 1. Account Section
@@ -222,7 +228,11 @@ private fun AccountSettingsCard(
     userProfile: UserProfile?,
     onSignOutClick: () -> Unit
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        padding = 18.dp
+    ) {
         Column {
             SectionHeader(icon = Icons.Filled.Person, title = "Account")
 
@@ -246,12 +256,32 @@ private fun AccountSettingsCard(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = profile.firstName.take(1).uppercase(),
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    val avatarUrl = profile.avatarUrl
+                    val initial = profile.firstName.take(1).uppercase()
+                    if (!avatarUrl.isNullOrBlank()) {
+                        DailyAsyncImage(
+                            url = avatarUrl,
+                            contentDescription = "User Avatar",
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape),
+                            placeholder = {
+                                Text(
+                                    text = initial,
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        )
+                    } else {
+                        Text(
+                            text = initial,
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -314,7 +344,11 @@ private fun AppearanceSettingsCard(
     settings: AppSettings,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        padding = 18.dp
+    ) {
         Column {
             SectionHeader(icon = Icons.Filled.Palette, title = "Appearance")
 
@@ -451,7 +485,11 @@ private fun HealthHabitsSettingsCard(
     settings: AppSettings,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        padding = 18.dp
+    ) {
         Column {
             SectionHeader(icon = Icons.Filled.Favorite, title = "Health & Habits Goals")
 
@@ -501,7 +539,11 @@ private fun WeatherSettingsCard(
     settings: AppSettings,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        padding = 18.dp
+    ) {
         Column {
             SectionHeader(icon = Icons.Filled.WbSunny, title = "Weather & Atmosphere")
 
@@ -572,7 +614,11 @@ private fun CloudSyncSettingsCard(
     var pingLatencyMs by remember { mutableStateOf<Long?>(null) }
     var isTestingConnection by remember { mutableStateOf(false) }
 
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        padding = 18.dp
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SectionHeader(icon = Icons.Filled.CloudSync, title = "Cloud & Sync")
 
@@ -664,7 +710,11 @@ private fun SmartBriefingSettingsCard(
     val coroutineScope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
 
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        padding = 18.dp
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             // Header
             Row(
@@ -828,7 +878,11 @@ private fun NewsSettingsCard(
     var showMediumDialog by remember { mutableStateOf(false) }
     var mediumUsernameInput by remember { mutableStateOf(settings.newsMediumUsername ?: "") }
 
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        padding = 18.dp
+    ) {
         Column {
             SectionHeader(icon = Icons.Rounded.Newspaper, title = "News & Briefings")
 
@@ -1109,7 +1163,11 @@ private fun NewsSettingsCard(
 
 @Composable
 private fun AboutSettingsCard() {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        padding = 18.dp
+    ) {
         Column {
             SectionHeader(icon = Icons.Filled.Info, title = "About DayOne Android")
             Text(

@@ -72,6 +72,18 @@ class DailyApp : Application() {
             override suspend fun pushLog(log: com.intellidream.daily.model.HabitLogRecord): Boolean {
                 return habitRemoteService.pushLog(log)
             }
+            override suspend fun pullLogsForDate(userId: String, startIso: String, endIso: String): List<com.intellidream.daily.model.HabitLogRecord> {
+                return habitRemoteService.pullLogsForDate(userId, startIso, endIso)
+            }
+            override suspend fun pullUserPreferences(userId: String): com.intellidream.daily.model.UserPreferencesRecord? {
+                return habitRemoteService.pullUserPreferences(userId)
+            }
+            override suspend fun pullGoals(userId: String): List<com.intellidream.daily.model.HabitGoalRecord> {
+                return habitRemoteService.pullGoals(userId)
+            }
+            override suspend fun deleteLog(logId: String): Boolean {
+                return habitRemoteService.deleteLog(logId)
+            }
         }
 
         newsRepository.syncHandler = object : com.intellidream.daily.database.NewsSyncHandler {

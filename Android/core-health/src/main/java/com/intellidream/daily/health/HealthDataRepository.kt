@@ -238,28 +238,26 @@ class HealthDataRepository(
                 telemetry.addAll(localEntities.map { it.toRecord() })
                 vitals.addAll(localVitalsEntities.map { it.toRecord() })
 
-                // Immediate initial rendering (fallback to demo if empty, matching iOS)
-                if (telemetry.isEmpty() && vitals.isEmpty()) {
-                    val demo = generateDemoData(targetDate)
-                    cachedTelemetry = demo.first
-                    cachedVitals = demo.second
-                } else {
-                    cachedTelemetry = deduplicateTelemetry(telemetry)
-                    cachedVitals = vitals
-                }
+                // Pure real-data telemetry and vitals (honest empty state when unpopulated)
+                cachedTelemetry = deduplicateTelemetry(telemetry)
+                cachedVitals = vitals
 
                 updateDevicesAndSources()
                 processDataForCurrentDate()
                 loadHistoricalTrends(targetDate)
 
                 // 2. Fetch on-device Health Connect (if available and permissions granted)
-                if (healthConnectManager.isAvailable && healthConnectManager.hasAllPermissions()) {
+                if (healthConnectManager.isAvailable && healthConnectManager.hasAnyPermissions()) {
                     val hcTelemetry = healthConnectManager.fetchTelemetryForDate(targetDate)
                     if (hcTelemetry.isNotEmpty()) {
                         telemetry.addAll(hcTelemetry)
                         withContext(Dispatchers.IO) {
                             telemetryDao.insertRecords(hcTelemetry.map { HealthTelemetryEntity.fromRecord(it) })
                         }
+                        cachedTelemetry = deduplicateTelemetry(telemetry)
+                        updateDevicesAndSources()
+                        processDataForCurrentDate()
+                        loadHistoricalTrends(targetDate)
                     }
                 }
 
@@ -505,10 +503,15 @@ class HealthDataRepository(
                         HealthMetricType.SLEEP_DURATION -> (_primarySleepSession.value?.asleepSeconds ?: 0.0) / 60.0
                         HealthMetricType.HEART_RATE -> if (_averageBpm.value > 0) _averageBpm.value else _restingBpm.value
                         HealthMetricType.ACTIVE_ENERGY -> _totalActiveCalories.value
-                        else -> _currentVitals.value[m]?.value ?: generateHistoricalValue(m, dayOffset)
+                        else -> _currentVitals.value[m]?.value ?: 0.0
                     }
                 } else {
-                    generateHistoricalValue(m, dayOffset)
+                    val historyDateKey = isoDateFormatter.format(Date(dayTime))
+                    val historyVitals = withContext(Dispatchers.IO) {
+                        vitalsDao.getVitalsForDateSync(currentUserId, historyDateKey)
+                    }
+                    val found = historyVitals.firstOrNull { it.type.equals(m.name, ignoreCase = true) }
+                    found?.value ?: 0.0
                 }
 
                 points.add(
@@ -532,19 +535,6 @@ class HealthDataRepository(
         HealthMetricType.ACTIVE_ENERGY -> 550.0 // kcal
         HealthMetricType.HYDRATION -> 2_500.0 // ml
         else -> 0.0
-    }
-
-    private fun generateHistoricalValue(metric: HealthMetricType, dayOffset: Int): Double {
-        val baseSeed = (dayOffset * 17 % 10).toDouble() / 10.0
-        return when (metric) {
-            HealthMetricType.STEPS -> (8_500 + (baseSeed * 3_500).toInt()).toDouble()
-            HealthMetricType.SLEEP_DURATION -> (410 + (baseSeed * 85).toInt()).toDouble()
-            HealthMetricType.HEART_RATE -> (68 + (baseSeed * 8).toInt()).toDouble()
-            HealthMetricType.HRV_SDNN, HealthMetricType.HRV_RMSSD -> (45 + (baseSeed * 22).toInt()).toDouble()
-            HealthMetricType.ACTIVE_ENERGY -> (480 + (baseSeed * 220).toInt()).toDouble()
-            HealthMetricType.WEIGHT -> 78.2 + (baseSeed * 0.8)
-            else -> 0.0
-        }
     }
 
     // MARK: - Daily Steps Calculation
@@ -693,138 +683,6 @@ class HealthDataRepository(
             if (isIncreasing && hasLargeValues) return true
         }
         return false
-    }
-
-    // MARK: - Realistic Demo / Fallback Generator (Matching iOS 1:1)
-
-    private fun generateDemoData(date: Date): Pair<List<HealthTelemetryRecord>, List<VitalMetricRecord>> {
-        val cal = Calendar.getInstance().apply {
-            time = date
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val startOfDay = cal.timeInMillis
-        val telemetry = mutableListOf<HealthTelemetryRecord>()
-        val vitals = mutableListOf<VitalMetricRecord>()
-        val dateStr = isoDateFormatter.format(date)
-
-        // 1. Bedtime & Sleep stages last night (23:10 to 07:10)
-        val sleepStart = startOfDay - (50 * 60 * 1000L) // 23:10 of previous night
-        var cursor = sleepStart
-
-        val stageDurations = listOf(
-            Pair("sleep_stage_awake", 15),
-            Pair("sleep_stage_light", 45),
-            Pair("sleep_stage_deep", 55),
-            Pair("sleep_stage_light", 30),
-            Pair("sleep_stage_rem", 35),
-            Pair("sleep_stage_light", 40),
-            Pair("sleep_stage_deep", 45),
-            Pair("sleep_stage_rem", 40),
-            Pair("sleep_stage_light", 60),
-            Pair("sleep_stage_awake", 10),
-            Pair("sleep_stage_rem", 45),
-            Pair("sleep_stage_light", 55),
-            Pair("sleep_stage_awake", 5)
-        )
-
-        for ((stType, mins) in stageDurations) {
-            val end = cursor + (mins * 60 * 1000L)
-            telemetry.add(
-                HealthTelemetryRecord(
-                    userId = "demo",
-                    type = stType,
-                    value = mins.toDouble(),
-                    unit = "minutes",
-                    startTime = cursor,
-                    endTime = end,
-                    sourceDevice = "Amazfit Balance"
-                )
-            )
-            cursor = end
-        }
-
-        // 2. Daytime Nap (14:15 to 14:55)
-        val napStart = startOfDay + (855 * 60 * 1000L)
-        val napEnd = startOfDay + (895 * 60 * 1000L)
-        telemetry.add(
-            HealthTelemetryRecord(
-                userId = "demo",
-                type = "sleep_nap",
-                value = 40.0,
-                unit = "minutes",
-                startTime = napStart,
-                endTime = napEnd,
-                sourceDevice = "Amazfit Balance"
-            )
-        )
-
-        // 3. Intraday Heart Rate (sampled every 30 mins)
-        for (hour in 0..23) {
-            for (half in listOf(0, 30)) {
-                val t = startOfDay + ((hour * 60 + half) * 60 * 1000L)
-                if (t > System.currentTimeMillis() && isSameDay(date.time, System.currentTimeMillis())) break
-
-                val bpm: Double = if (hour in 0..6) {
-                    52.0 + (hour * half % 8)
-                } else if (hour in 17..18) {
-                    132.0 + (half % 25)
-                } else {
-                    70.0 + ((hour * 7 + half) % 28)
-                }
-
-                telemetry.add(
-                    HealthTelemetryRecord(
-                        userId = "demo",
-                        type = "heart_rate",
-                        value = bpm,
-                        unit = "bpm",
-                        startTime = t,
-                        endTime = t,
-                        sourceDevice = "Google Pixel Watch 3"
-                    )
-                )
-            }
-        }
-
-        // 4. Hourly Steps
-        for (hour in 7..21) {
-            val t = startOfDay + (hour * 3600 * 1000L)
-            if (t > System.currentTimeMillis() && isSameDay(date.time, System.currentTimeMillis())) break
-            val steps = if (hour == 8 || hour == 17) 1450 else (200 + (hour * 70 % 600))
-            telemetry.add(
-                HealthTelemetryRecord(
-                    userId = "demo",
-                    type = "steps",
-                    value = steps.toDouble(),
-                    unit = "count",
-                    startTime = t,
-                    endTime = t,
-                    sourceDevice = "Google Pixel Watch 3"
-                )
-            )
-        }
-
-        // 5. Daily Vitals
-        vitals.add(VitalMetricRecord(userId = "demo", type = "steps", value = 10420.0, unit = "count", date = dateStr, sourceDevice = "Google Pixel Watch 3"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "active_energy", value = 615.0, unit = "kcal", date = dateStr, sourceDevice = "Google Pixel Watch 3"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "heart_rate", value = 74.0, unit = "bpm", date = dateStr, sourceDevice = "Google Pixel Watch 3"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "resting_heart_rate", value = 58.0, unit = "bpm", date = dateStr, sourceDevice = "Google Pixel Watch 3"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "hrv_sdnn", value = 54.0, unit = "ms", date = dateStr, sourceDevice = "Google Pixel Watch 3"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "oxygen_saturation", value = 98.5, unit = "%", date = dateStr, sourceDevice = "Amazfit Balance"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "respiratory_rate", value = 14.2, unit = "br/min", date = dateStr, sourceDevice = "Google Pixel Watch 3"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "blood_pressure_systolic", value = 118.0, unit = "mmHg", date = dateStr, sourceDevice = "Health Connect"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "blood_pressure_diastolic", value = 76.0, unit = "mmHg", date = dateStr, sourceDevice = "Health Connect"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "stress", value = 34.0, unit = "pts", date = dateStr, sourceDevice = "Amazfit Balance"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "pai", value = 88.0, unit = "pts", date = dateStr, sourceDevice = "Amazfit Balance"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "hydration", value = 2100.0, unit = "ml", date = dateStr, sourceDevice = "Manual"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "weight", value = 78.4, unit = "kg", date = dateStr, sourceDevice = "Health Connect"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "body_fat_percentage", value = 17.8, unit = "%", date = dateStr, sourceDevice = "Health Connect"))
-        vitals.add(VitalMetricRecord(userId = "demo", type = "bmi", value = 23.6, unit = "kg/m²", date = dateStr, sourceDevice = "Health Connect"))
-
-        return Pair(telemetry, vitals)
     }
 
     private fun deduplicateTelemetry(records: List<HealthTelemetryRecord>): List<HealthTelemetryRecord> {

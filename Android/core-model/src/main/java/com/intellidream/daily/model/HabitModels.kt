@@ -1,10 +1,20 @@
 package com.intellidream.daily.model
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
+import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.UUID
 
@@ -70,6 +80,79 @@ enum class SmokePreset(
     val colorHex: String get() = hexColor
 }
 
+// MARK: - Flexible Serializers
+
+object TimestampSerializer : KSerializer<Long> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("TimestampSerializer", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: Long) {
+        encoder.encodeString(java.time.Instant.ofEpochMilli(value).toString())
+    }
+
+    override fun deserialize(decoder: Decoder): Long {
+        return when (val jsonInput = decoder as? JsonDecoder) {
+            null -> {
+                try {
+                    decoder.decodeLong()
+                } catch (_: Exception) {
+                    val str = decoder.decodeString()
+                    parseIsoToEpoch(str)
+                }
+            }
+            else -> {
+                val element = jsonInput.decodeJsonElement()
+                if (element is JsonPrimitive) {
+                    element.content.toLongOrNull() ?: parseIsoToEpoch(element.content)
+                } else {
+                    System.currentTimeMillis()
+                }
+            }
+        }
+    }
+
+    private fun parseIsoToEpoch(raw: String): Long {
+        return try {
+            java.time.Instant.parse(raw).toEpochMilli()
+        } catch (_: Exception) {
+            try {
+                java.time.OffsetDateTime.parse(raw).toInstant().toEpochMilli()
+            } catch (_: Exception) {
+                try {
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    }
+                    sdf.parse(raw)?.time ?: System.currentTimeMillis()
+                } catch (_: Exception) {
+                    System.currentTimeMillis()
+                }
+            }
+        }
+    }
+}
+
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+object FlexibleStringSerializer : KSerializer<String?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("FlexibleStringSerializer", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: String?) {
+        if (value != null) {
+            encoder.encodeString(value)
+        } else {
+            encoder.encodeNull()
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): String? {
+        val jsonInput = decoder as? JsonDecoder ?: return try { decoder.decodeString() } catch (_: Exception) { null }
+        val element = jsonInput.decodeJsonElement()
+        return when (element) {
+            is JsonPrimitive -> element.content
+            is JsonNull -> null
+            else -> element.toString()
+        }
+    }
+}
+
 // MARK: - Habit Log Record
 
 @Serializable
@@ -79,9 +162,13 @@ data class HabitLogRecord(
     @SerialName("habit_type") val habitType: String,
     val value: Double,
     val unit: String,
+    @Serializable(with = TimestampSerializer::class)
     @SerialName("logged_at") val loggedAt: Long = System.currentTimeMillis(),
+    @Serializable(with = FlexibleStringSerializer::class)
     val metadata: String? = null,
+    @Serializable(with = TimestampSerializer::class)
     @SerialName("created_at") val createdAt: Long = System.currentTimeMillis(),
+    @Serializable(with = TimestampSerializer::class)
     @SerialName("updated_at") val updatedAt: Long = System.currentTimeMillis(),
     @SerialName("is_deleted") val isDeleted: Boolean = false
 ) {
@@ -160,9 +247,24 @@ data class HabitGoalRecord(
     @SerialName("habit_type") val habitType: String,
     @SerialName("target_value") val targetValue: Double,
     val unit: String,
+    @Serializable(with = TimestampSerializer::class)
     @SerialName("updated_at") val updatedAt: Long = System.currentTimeMillis(),
+    @Serializable(with = TimestampSerializer::class)
     @SerialName("created_at") val createdAt: Long = System.currentTimeMillis(),
     @SerialName("is_deleted") val isDeleted: Boolean = false
+)
+
+// MARK: - User Preferences Record (Supabase `user_preferences`)
+
+@Serializable
+data class UserPreferencesRecord(
+    val id: String? = null,
+    val smokes_baseline: Int? = null,
+    val smokes_pack_size: Int? = null,
+    val smokes_pack_cost: Double? = null,
+    val smokes_currency: String? = null,
+    val smokes_quit_date: String? = null,
+    val water_goal: Double? = null
 )
 
 // MARK: - Smokes Settings & Financial Metrics

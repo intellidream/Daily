@@ -1,11 +1,14 @@
 package com.intellidream.daily.presentation.health
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.platform.LocalContext
+import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.GlassIntensity
@@ -106,19 +109,20 @@ fun HealthMainView(
     val currentVitals by repository.currentVitals.collectAsState()
     val historicalTrends by repository.historicalTrends.collectAsState()
 
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var hasHealthPermissions by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         if (repository.healthConnectManager.isAvailable) {
-            hasHealthPermissions = repository.healthConnectManager.hasAllPermissions()
+            hasHealthPermissions = repository.healthConnectManager.hasAnyPermissions()
         }
     }
 
     val requestPermissionsLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract()
     ) { grantedPermissions ->
-        if (grantedPermissions.containsAll(repository.healthConnectManager.requiredPermissions)) {
+        if (grantedPermissions.isNotEmpty()) {
             hasHealthPermissions = true
             repository.loadDataForSelectedDate(forceRefresh = true)
         }
@@ -213,7 +217,14 @@ fun HealthMainView(
                                         .background(ThemeColors.accentCyan.copy(alpha = 0.20f))
                                         .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.40f), RoundedCornerShape(10.dp))
                                         .clickable {
-                                            requestPermissionsLauncher.launch(repository.healthConnectManager.requiredPermissions)
+                                            try {
+                                                requestPermissionsLauncher.launch(repository.healthConnectManager.requiredPermissions)
+                                            } catch (_: Exception) {
+                                                try {
+                                                    val intent = Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)
+                                                    context.startActivity(intent)
+                                                } catch (_: Exception) {}
+                                            }
                                         }
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                     contentAlignment = Alignment.Center

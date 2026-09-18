@@ -294,6 +294,7 @@ fun DailyRootScreen(
         }
         if (habitsRepository.currentUserId != uid) {
             habitsRepository.currentUserId = uid
+            habitsRepository.syncLogs(uid)
         }
         if (healthRepository.currentUserId != uid) {
             healthRepository.currentUserId = uid

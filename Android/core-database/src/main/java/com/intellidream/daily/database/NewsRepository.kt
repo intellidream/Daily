@@ -112,7 +112,14 @@ class NewsRepository(
         scope.launch {
             dao.observeSubscriptions(userId).collect { entities ->
                 if (entities.isNotEmpty()) {
-                    _feeds.value = entities.map { it.toFeedSource() }
+                    _feeds.value = entities.map { entity ->
+                        val feed = entity.toFeedSource()
+                        if (feed.url.contains("economica.net/rss")) {
+                            feed.copy(url = "https://www.economica.net/feed")
+                        } else {
+                            feed
+                        }
+                    }
                 } else {
                     // Seed default feeds to Room
                     val seedEntities = defaultFeeds.map { RssSubscriptionEntity.fromFeedSource(it, userId) }
@@ -237,9 +244,13 @@ class NewsRepository(
     }
 
     private suspend fun fetchFeedItems(feed: FeedSource): List<NewsArticle> = withContext(Dispatchers.IO) {
-        val body = syncHandler?.fetchUrl(feed.url) ?: downloadString(feed.url) ?: return@withContext emptyList()
+        val targetUrl = when {
+            feed.url.contains("economica.net/rss") -> "https://www.economica.net/feed"
+            else -> feed.url
+        }
+        val body = syncHandler?.fetchUrl(targetUrl) ?: downloadString(targetUrl) ?: return@withContext emptyList()
 
-        if (feed.type == FeedType.WpJson || feed.url.contains("wp-json", ignoreCase = true)) {
+        if (feed.type == FeedType.WpJson || targetUrl.contains("wp-json", ignoreCase = true)) {
             val parser = WpJsonParser(feed)
             parser.parse(body)
         } else {
@@ -262,19 +273,38 @@ class NewsRepository(
     }
 
     private fun downloadString(urlString: String): String? {
-        return try {
-            val url = URL(urlString)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36")
-            conn.setRequestProperty("Accept", "application/rss+xml, application/atom+xml, application/json, text/xml, text/html, */*")
-            if (conn.responseCode in 200..299) {
-                BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-            } else null
-        } catch (_: Exception) {
-            null
+        var currentUrl = urlString
+        var redirects = 0
+        while (redirects < 5) {
+            try {
+                val url = URL(currentUrl)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.instanceFollowRedirects = true
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36")
+                conn.setRequestProperty("Accept", "application/rss+xml, application/atom+xml, application/json, text/xml, text/html, */*")
+                val responseCode = conn.responseCode
+                if (responseCode in 300..399) {
+                    val location = conn.getHeaderField("Location")
+                    if (!location.isNullOrBlank()) {
+                        currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
+                            location
+                        } else {
+                            URL(url, location).toString()
+                        }
+                        redirects++
+                        continue
+                    }
+                }
+                if (responseCode in 200..299) {
+                    return BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+                } else return null
+            } catch (_: Exception) {
+                return null
+            }
         }
+        return null
     }
 
     // MARK: - Medium Reading List & Subscriptions
@@ -543,7 +573,7 @@ class NewsRepository(
             FeedSource(name = "Ziarul Financiar", url = "https://www.zf.ro/rss/", category = FeedCategory.Local, displayOrder = 2),
             FeedSource(name = "HotNews", url = "https://www.hotnews.ro/rss", category = FeedCategory.Local, displayOrder = 3),
             FeedSource(name = "Biziday", url = "https://www.biziday.ro/feed/", category = FeedCategory.Local, displayOrder = 4),
-            FeedSource(name = "Economica.net", url = "https://www.economica.net/rss", category = FeedCategory.Local, displayOrder = 5),
+            FeedSource(name = "Economica.net", url = "https://www.economica.net/feed", category = FeedCategory.Local, displayOrder = 5),
 
             // 📈 Markets
             FeedSource(name = "CNBC", url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", category = FeedCategory.Markets, displayOrder = 6),

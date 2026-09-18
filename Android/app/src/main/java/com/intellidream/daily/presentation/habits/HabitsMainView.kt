@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -46,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,6 +106,10 @@ fun HabitsMainView(
     val currentLogs = if (activeHabit == HabitType.WATER) waterLogs else smokesLogs
     val isToday = repository.isSelectedDateToday()
     val dateTitle = repository.getFormattedDateTitle()
+
+    LaunchedEffect(activeHabit) {
+        repository.syncLogs()
+    }
 
     Column(
         modifier = modifier
@@ -397,12 +403,30 @@ fun HabitsMainView(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (currentLogs.isEmpty()) {
-                            Text(
-                                text = "No entries logged for $dateTitle yet.",
-                                fontSize = 12.sp,
-                                color = ThemeColors.textSecondary,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Inbox,
+                                        contentDescription = null,
+                                        tint = ThemeColors.fgMutedDark,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Text(
+                                        text = "No entries logged for this date",
+                                        fontSize = 13.sp,
+                                        color = ThemeColors.fgMutedDark
+                                    )
+                                }
+                            }
                         } else {
                             val timeFormat = SimpleDateFormat("HH:mm", Locale.US)
                             currentLogs.forEach { log ->

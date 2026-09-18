@@ -96,7 +96,7 @@ fun HeartRateCurveView(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "${averageBpm.roundToInt()}",
+                                text = if (averageBpm > 0) "${averageBpm.roundToInt()}" else "--",
                                 fontSize = 34.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -134,7 +134,7 @@ fun HeartRateCurveView(
                             )
                         }
                         Text(
-                            text = "${restingBpm.roundToInt()} bpm",
+                            text = if (restingBpm > 0) "${restingBpm.roundToInt()} bpm" else "--",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -306,13 +306,13 @@ fun HeartRateCurveView(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Min: ${minBpm.roundToInt()} bpm",
+                        text = if (minBpm > 0) "Min: ${minBpm.roundToInt()} bpm" else "Min: --",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(android.graphics.Color.parseColor(HeartRateZone.RESTING.hexColor))
                     )
                     Text(
-                        text = "Max: ${maxBpm.roundToInt()} bpm",
+                        text = if (maxBpm > 0) "Max: ${maxBpm.roundToInt()} bpm" else "Max: --",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(android.graphics.Color.parseColor(HeartRateZone.PEAK.hexColor))

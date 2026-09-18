@@ -57,6 +57,17 @@ class HealthConnectManager(private val context: Context) {
         return granted.containsAll(requiredPermissions)
     }
 
+    suspend fun hasAnyPermissions(): Boolean {
+        val client = healthConnectClient ?: return false
+        val granted = client.permissionController.getGrantedPermissions()
+        return granted.isNotEmpty()
+    }
+
+    suspend fun getGrantedPermissions(): Set<String> {
+        val client = healthConnectClient ?: return emptySet()
+        return client.permissionController.getGrantedPermissions()
+    }
+
     /**
      * Reads all local health telemetry from Health Connect for a specific target date.
      * Captures steps, intraday heart rate samples, sleep stages, active calories, SpO2, and HRV.
