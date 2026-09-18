@@ -35,6 +35,10 @@ class DailyApp : Application() {
         private set
     lateinit var tagdosRepository: com.intellidream.daily.database.TagdosRepository
         private set
+    lateinit var newsRemoteService: com.intellidream.daily.network.NewsRemoteService
+        private set
+    lateinit var newsRepository: com.intellidream.daily.database.NewsRepository
+        private set
 
     private val appScope = CoroutineScope(Dispatchers.IO)
 
@@ -57,11 +61,22 @@ class DailyApp : Application() {
         financeDataRepository = com.intellidream.daily.database.FinanceDataRepository()
         financeRemoteService = com.intellidream.daily.network.FinanceRemoteService()
         tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao())
+        newsRemoteService = com.intellidream.daily.network.NewsRemoteService()
+        newsRepository = com.intellidream.daily.database.NewsRepository(dailyDatabase.newsDao())
 
         habitsRepository.syncHandler = object : com.intellidream.daily.database.HabitSyncHandler {
             override suspend fun pushLog(log: com.intellidream.daily.model.HabitLogRecord): Boolean {
                 return habitRemoteService.pushLog(log)
             }
+        }
+
+        newsRepository.syncHandler = object : com.intellidream.daily.database.NewsSyncHandler {
+            override suspend fun fetchUrl(url: String): String? = newsRemoteService.fetchUrl(url)
+            override suspend fun searchFeedly(query: String): List<com.intellidream.daily.model.FeedSearchResult> = newsRemoteService.searchFeedly(query)
+            override suspend fun pullSubscriptions(userId: String): List<com.intellidream.daily.model.RssSubscription> = newsRemoteService.pullSubscriptions(userId)
+            override suspend fun pushSubscription(subscription: com.intellidream.daily.model.RssSubscription): Boolean = newsRemoteService.pushSubscription(subscription)
+            override suspend fun pullSavedArticles(userId: String): List<com.intellidream.daily.model.SavedArticle> = newsRemoteService.pullSavedArticles(userId)
+            override suspend fun pushSavedArticle(article: com.intellidream.daily.model.SavedArticle): Boolean = newsRemoteService.pushSavedArticle(article)
         }
 
         // Bootstrap cached weather & refresh

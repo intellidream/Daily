@@ -28,12 +28,22 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Newspaper
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -157,7 +167,15 @@ fun SettingsScreen(
                     )
                 }
 
-                // 7. About Section
+                // 7. News & Briefings Section
+                item {
+                    NewsSettingsCard(
+                        settings = settings,
+                        onUpdateSettings = onUpdateSettings
+                    )
+                }
+
+                // 8. About Section
                 item {
                     AboutSettingsCard()
                 }
@@ -597,6 +615,293 @@ private fun SmartBriefingSettingsCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun NewsSettingsCard(
+    settings: AppSettings,
+    onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit
+) {
+    var showMediumDialog by remember { mutableStateOf(false) }
+    var mediumUsernameInput by remember { mutableStateOf(settings.newsMediumUsername ?: "") }
+
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column {
+            SectionHeader(icon = Icons.Rounded.Newspaper, title = "News & Briefings")
+
+            // Auto-Refresh
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Auto-Refresh on Startup", color = Color.White, fontSize = 14.sp)
+                    Text(text = "Fetch latest articles when opening the app", color = ThemeColors.textMuted, fontSize = 11.sp)
+                }
+                Switch(
+                    checked = settings.newsAutoRefreshOnStartup,
+                    onCheckedChange = { onUpdateSettings { s -> s.copy(newsAutoRefreshOnStartup = it) } },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = ThemeColors.accentBlue
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Show Article Images
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Show Article Images", color = Color.White, fontSize = 14.sp)
+                    Text(text = "Display rich header imagery in news feeds", color = ThemeColors.textMuted, fontSize = 11.sp)
+                }
+                Switch(
+                    checked = settings.newsShowImages,
+                    onCheckedChange = { onUpdateSettings { s -> s.copy(newsShowImages = it) } },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = ThemeColors.accentBlue
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Medium Setup (Parity with iOS)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "MEDIUM SETUP",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ThemeColors.accentCyan
+                    )
+
+                    val username = settings.newsMediumUsername
+                    if (!username.isNullOrBlank()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(Color(0xFF34C759).copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF34C759))
+                            )
+                            Text(
+                                text = "@$username",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Not Configured",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = ThemeColors.fgMutedDark
+                        )
+                    }
+                }
+
+                val configuredUsername = settings.newsMediumUsername
+                if (!configuredUsername.isNullOrBlank()) {
+                    Text(
+                        text = "Your reading list has been configured. You can customize the URL below if needed.",
+                        fontSize = 12.sp,
+                        color = ThemeColors.fgMutedDark
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Reading List URL",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+
+                        OutlinedTextField(
+                            value = settings.newsMediumReadingListUrl ?: "https://medium.com/@$configuredUsername/list/reading-list",
+                            onValueChange = { valUrl ->
+                                onUpdateSettings { s -> s.copy(newsMediumReadingListUrl = valUrl) }
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = ThemeColors.accentCyan,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                                unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.12f))
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                .clickable {
+                                    mediumUsernameInput = configuredUsername
+                                    showMediumDialog = true
+                                }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Change Account",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFF6B6B).copy(alpha = 0.12f))
+                                .border(1.dp, Color(0xFFFF6B6B).copy(alpha = 0.25f), CircleShape)
+                                .clickable {
+                                    onUpdateSettings { s ->
+                                        s.copy(newsMediumUsername = null, newsMediumReadingListUrl = null)
+                                    }
+                                }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Disconnect",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFFF6B6B)
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Reading List URL will be automatically configured upon entering your Medium username.",
+                        fontSize = 12.sp,
+                        color = ThemeColors.fgMutedDark
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(CircleShape)
+                            .background(ThemeColors.accentCyan)
+                            .clickable {
+                                mediumUsernameInput = ""
+                                showMediumDialog = true
+                            }
+                            .padding(vertical = 9.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Link,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Login to Medium",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showMediumDialog) {
+        AlertDialog(
+            onDismissRequest = { showMediumDialog = false },
+            title = {
+                Text(text = "Connect Medium", color = Color.White, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Enter your Medium username (e.g. @username or username) to sync your public reading list.",
+                        color = ThemeColors.textSecondary,
+                        fontSize = 13.sp
+                    )
+                    OutlinedTextField(
+                        value = mediumUsernameInput,
+                        onValueChange = { mediumUsernameInput = it },
+                        placeholder = { Text("@username", color = ThemeColors.textMuted) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = ThemeColors.accentCyan,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val clean = mediumUsernameInput.trim().removePrefix("@")
+                        if (clean.isNotEmpty()) {
+                            onUpdateSettings { s ->
+                                s.copy(
+                                    newsMediumUsername = clean,
+                                    newsMediumReadingListUrl = "https://medium.com/@$clean/list/reading-list"
+                                )
+                            }
+                        }
+                        showMediumDialog = false
+                    }
+                ) {
+                    Text("Connect", color = ThemeColors.accentCyan, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMediumDialog = false }) {
+                    Text("Cancel", color = ThemeColors.textMuted)
+                }
+            },
+            containerColor = Color(0xFF0F1A2E)
+        )
     }
 }
 

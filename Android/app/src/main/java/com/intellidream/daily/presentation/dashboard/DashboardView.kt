@@ -76,6 +76,7 @@ fun DashboardView(
     smartLedgerRepository: com.intellidream.daily.database.SmartLedgerRepository,
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     tagdosRepository: com.intellidream.daily.database.TagdosRepository = com.intellidream.daily.DailyApp.instance.tagdosRepository,
+    newsRepository: com.intellidream.daily.database.NewsRepository = com.intellidream.daily.DailyApp.instance.newsRepository,
     onRefreshWeather: () -> Unit,
     onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -84,6 +85,7 @@ fun DashboardView(
     onNavigateToHealth: () -> Unit = {},
     onNavigateToFinances: () -> Unit = {},
     onNavigateToTagdos: () -> Unit = {},
+    onNavigateToNews: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val visibleWidgets = settings.dashboardWidgets.filter { it.isVisible }
@@ -153,11 +155,13 @@ fun DashboardView(
                     smartLedgerRepository = smartLedgerRepository,
                     financeDataRepository = financeDataRepository,
                     tagdosRepository = tagdosRepository,
+                    newsRepository = newsRepository,
                     onRefreshWeather = onRefreshWeather,
                     onNavigateToHabits = onNavigateToHabits,
                     onNavigateToHealth = onNavigateToHealth,
                     onNavigateToFinances = onNavigateToFinances,
                     onNavigateToTagdos = onNavigateToTagdos,
+                    onNavigateToNews = onNavigateToNews,
                     onLongClick = onLongClick
                 )
             }
@@ -435,11 +439,13 @@ private fun DashboardWidgetRenderer(
     smartLedgerRepository: com.intellidream.daily.database.SmartLedgerRepository,
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     tagdosRepository: com.intellidream.daily.database.TagdosRepository,
+    newsRepository: com.intellidream.daily.database.NewsRepository,
     onRefreshWeather: () -> Unit,
     onNavigateToHabits: () -> Unit,
     onNavigateToHealth: () -> Unit,
     onNavigateToFinances: () -> Unit,
     onNavigateToTagdos: () -> Unit,
+    onNavigateToNews: () -> Unit,
     onLongClick: () -> Unit
 ) {
     when (config.id) {
@@ -465,13 +471,11 @@ private fun DashboardWidgetRenderer(
             )
         }
         DashboardWidgetType.News.id -> {
-            PlaceholderHubCard(
-                title = "News & Briefings",
-                subtitle = "Morning intelligence ready",
-                icon = Icons.Rounded.Feed,
-                iconTint = ThemeColors.accentCyan,
+            NewsDashboardCard(
                 size = config.size,
+                repository = newsRepository,
                 settings = settings,
+                onTap = onNavigateToNews,
                 onLongClick = onLongClick
             )
         }

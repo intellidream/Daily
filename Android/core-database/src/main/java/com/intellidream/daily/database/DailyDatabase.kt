@@ -12,6 +12,9 @@ import com.intellidream.daily.database.dao.VitalMetricDao
 import com.intellidream.daily.database.entity.HabitLogEntity
 import com.intellidream.daily.database.entity.HealthTelemetryEntity
 import com.intellidream.daily.database.entity.SmartLedgerEntity
+import com.intellidream.daily.database.dao.NewsDao
+import com.intellidream.daily.database.entity.RssSubscriptionEntity
+import com.intellidream.daily.database.entity.SavedArticleEntity
 import com.intellidream.daily.database.entity.TagdoQuickNoteEntity
 import com.intellidream.daily.database.entity.TagdoStreamEntity
 import com.intellidream.daily.database.entity.VitalMetricEntity
@@ -23,9 +26,11 @@ import com.intellidream.daily.database.entity.VitalMetricEntity
         VitalMetricEntity::class,
         SmartLedgerEntity::class,
         TagdoStreamEntity::class,
-        TagdoQuickNoteEntity::class
+        TagdoQuickNoteEntity::class,
+        RssSubscriptionEntity::class,
+        SavedArticleEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class DailyDatabase : RoomDatabase() {
@@ -35,6 +40,7 @@ abstract class DailyDatabase : RoomDatabase() {
     abstract fun vitalMetricDao(): VitalMetricDao
     abstract fun smartLedgerDao(): SmartLedgerDao
     abstract fun tagdosDao(): TagdosDao
+    abstract fun newsDao(): NewsDao
 
     companion object {
         @Volatile
