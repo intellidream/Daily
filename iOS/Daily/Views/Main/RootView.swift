@@ -13,7 +13,7 @@ public struct RootView: View {
             self._selectedTab = State(initialValue: .settings)
         } else if args.contains("-startTabHabits") {
             self._selectedTab = State(initialValue: .habits)
-        } else if args.contains("-startTabHealth") || args.contains("-testSleepStudio") {
+        } else if args.contains("-startTabHealth") || args.contains("-testSleepStudio") || args.contains("-healthSubTabStress") || args.contains("-healthSubTabTrends") {
             self._selectedTab = State(initialValue: .health)
         } else if args.contains("-startTabFinances") {
             self._selectedTab = State(initialValue: .finances)
@@ -32,6 +32,35 @@ public struct RootView: View {
                     DashboardWidgetConfig(id: "health", size: .wide),
                     DashboardWidgetConfig(id: "habits", size: .wide),
                     DashboardWidgetConfig(id: "finances", size: .wide)
+                ]
+            }
+        } else if args.contains("-testHealthTall") {
+            AuthService.shared.continueAsGuest()
+            SettingsService.shared.update { s in
+                s.dashboardWidgets = [
+                    DashboardWidgetConfig(id: "health", size: .tall),
+                    DashboardWidgetConfig(id: "weather", size: .small),
+                    DashboardWidgetConfig(id: "news", size: .small),
+                    DashboardWidgetConfig(id: "finances", size: .wide)
+                ]
+            }
+        } else if args.contains("-testHealthLarge") {
+            AuthService.shared.continueAsGuest()
+            SettingsService.shared.update { s in
+                s.dashboardWidgets = [
+                    DashboardWidgetConfig(id: "health", size: .large),
+                    DashboardWidgetConfig(id: "weather", size: .small),
+                    DashboardWidgetConfig(id: "news", size: .small)
+                ]
+            }
+        } else if args.contains("-testHealthWidgetsAllSizes") {
+            AuthService.shared.continueAsGuest()
+            SettingsService.shared.update { s in
+                s.dashboardWidgets = [
+                    DashboardWidgetConfig(id: "health", size: .small),
+                    DashboardWidgetConfig(id: "weather", size: .small),
+                    DashboardWidgetConfig(id: "health", size: .wide),
+                    DashboardWidgetConfig(id: "health", size: .large)
                 ]
             }
         } else if args.contains("-testFinancesSmall") {

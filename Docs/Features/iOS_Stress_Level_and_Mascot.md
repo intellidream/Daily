@@ -53,7 +53,7 @@ Integrated seamlessly into the Health Hub:
 - **SubTab Switcher**: Added `.stress` ("Stress Studio") with concise tab titles (`Overview`, `Sleep`, `Stress`, `Vitals`, `Trends`) ensuring perfect horizontal proportions.
 - **Hero Autonomic Card**: Features the animated vector monkey mascot, current stress score, clinical classification pill, and contextual wisdom snippet.
 - **Autonomic Tone Balance Bar**: Visualizes Parasympathetic (Rest & Digest) vs. Sympathetic (Fight or Flight) ratio.
-- **Biometric Drivers Grid**: 4 liquid glass cards:
+- **Biometric Drivers Grid**: 4 equalized liquid glass cards (104pt fixed height, strict single-line layout ensuring perfect cross-column row alignment):
   - HRV (SDNN) with delta vs baseline.
   - Resting Heart Rate with cardiovascular baseline reference.
   - Sedentary Heart Rate Elevation with arousal classification.
@@ -67,24 +67,32 @@ Integrated seamlessly into the Health Hub:
     - *4-7-8 Relaxation Flow* (Dr. Andrew Weil: 4s in, 7s hold, 8s out).
   - Haptic feedback on phase changes and dynamic animated breathing circle with duration countdown.
 - **Overview Preview Card**: Compact preview in Health Overview providing quick navigation to Stress Studio.
+- **7-Day Evolution Trends Hub**: Integrated into `HealthTrendsView.swift` and `HealthDataService.swift` with dynamic daily recovery gradient capsule bars, mascot header, and high/low/average/latest statistics.
 
 ---
 
 ## 5. Widgets Integration
 
-### A. In-App Modular Dashboard Card (`StressDashboardCard.swift`)
-- Supports Small, Wide, Tall, and Large layout configurations on the custom dashboard grid.
-- Deep links directly into `daily://health/stress`.
+### A. In-App Modular Dashboard Cards
+1. **Dedicated Stress Card (`StressDashboardCard.swift`)**:
+   - Supports Small, Wide, Tall, and Large layout configurations on the custom dashboard grid.
+   - Deep links directly into `daily://health/stress`.
+2. **Modular Health Dashboard Card (`HealthDashboardCard.swift`)**:
+   - Added Stress across all 4 grid sizes:
+     - **Small (1x1)**: Header badge with monkey mascot emoji and score capsule (`🐵 41`).
+     - **Wide (2x1)**: 4-column layout (`STEPS` | `HEART` | `SLEEP` | `STRESS`).
+     - **Tall (1x2)**: 4 stacked vitals cards with mascot, score, and level pill.
+     - **Large (2x2)**: Stress tile in primary vitals grid with mascot, score, and recovery gauge.
 
 ### B. Standalone iOS Home Screen Widget (`StressWidget.swift`)
 - Supported families: `.systemSmall`, `.systemMedium`, `.accessoryCircular`, `.accessoryRectangular`, `.accessoryInline`.
 - Displays real-time score ring, monkey mascot emoji and mood, HRV metric, autonomic balance bar, and wisdom snippets.
 
 ### C. Reorganized Executive Combined Widget (`CombinedWidget.swift`)
-- Specifically reworked `.systemSmall` to solve vertical cramping:
+- Reworked `.systemSmall` with relaxed vertical spacing (`VStack(spacing: 7.5)`):
   - **Row 1**: 3 Liquid Progress Rings (Sleep, Water, Smokes).
-  - **Row 2**: Horizontal Stress bar with 🐵 monkey face, score, status pill, and mini gradient gauge.
-  - **Row 3**: Single combined row pairing Money (left: `creditcard.fill` + primary net worth) and TagDoS (right: `S1` badge + driving task title).
+  - **Row 2**: Horizontal Stress bar with 🐵 monkey face, score, status pill, and mini gradient gauge (omits "STRESS" label text to optimize horizontal space).
+  - **Row 3**: Single combined row pairing Money (left: `creditcard.fill` + net worth formatted in EUR) and TagDoS (right: compact 4.5pt purple dot indicator + driving task title).
 - Updated `.systemMedium` left hero column to include the compact monkey stress pill alongside Sleep Arc and Net Worth.
 - Updated `.systemLarge` habits row to a balanced 3-card layout (Hydration, Smokes, and Stress).
 

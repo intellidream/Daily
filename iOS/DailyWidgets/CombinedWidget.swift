@@ -350,7 +350,7 @@ public struct CombinedWidgetView: View {
 
     // Small - Regular Mode (Executive 3-Ring Gauges + Horizontal Stress Bar + Combined Money & TagDoS)
     private var smallRegularView: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 7.5) {
             // Row 1: 3 Liquid Progress Rings (Sleep, Water, Smokes)
             HStack(spacing: 4) {
                 // Sleep Ring
@@ -386,21 +386,16 @@ public struct CombinedWidgetView: View {
                     tintColor: sColor
                 )
             }
-            .padding(.bottom, 1)
 
-            // Row 2: Horizontal Stress Bar with Monkey Mascot
+            // Row 2: Horizontal Stress Bar with Monkey Mascot (no word "STRESS" for extra room)
             let stress = entry.snapshot.stress
             let stressColor = Color(hex: stress.level.hexColor)
-            HStack(spacing: 4.5) {
+            HStack(spacing: 5) {
                 Text(stress.monkeyMood.emoji)
-                    .font(.system(size: 11))
-
-                Text("STRESS")
-                    .font(.system(size: 7.5, weight: .heavy, design: .rounded))
-                    .foregroundColor(stressColor)
+                    .font(.system(size: 11.5))
 
                 Text("\(stress.stressScore)")
-                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
                     .foregroundColor(.white)
 
                 // Mini horizontal gauge
@@ -419,66 +414,62 @@ public struct CombinedWidgetView: View {
                                     endPoint: .trailing
                                 )
                             )
-                            .frame(width: max(3, geo.size.width * CGFloat(min(100, max(0, stress.stressScore))) / 100.0))
+                            .frame(width: max(4, geo.size.width * CGFloat(min(100, max(0, stress.stressScore))) / 100.0))
                     }
                 }
-                .frame(height: 3.5)
+                .frame(height: 4)
 
                 Text(stress.level.displayName)
-                    .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                    .font(.system(size: 8, weight: .bold, design: .rounded))
                     .foregroundColor(stressColor)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1.5)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
                     .background(stressColor.opacity(0.18))
                     .clipShape(Capsule())
             }
             .padding(.horizontal, 7)
-            .padding(.vertical, 3.5)
+            .padding(.vertical, 4.5)
             .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            // Row 3: Combined Money & TagDoS Row (Single row with first info from each)
+            // Row 3: Combined Money (EUR) & TagDoS Row (No S1 badge to maximize task text)
             let driving = entry.snapshot.tagdos.streams.first?.drivingPillText ?? "Clear"
-            HStack(spacing: 4.5) {
-                // Left: Money
-                HStack(spacing: 3) {
+            HStack(spacing: 5) {
+                // Left: Money in EUR
+                HStack(spacing: 3.5) {
                     Image(systemName: "creditcard.fill")
-                        .font(.system(size: 8))
+                        .font(.system(size: 8.5))
                         .foregroundColor(WidgetColors.accentGreen)
 
-                    Text(entry.snapshot.money.formattedNetWorth)
-                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    Text(entry.snapshot.money.formattedNetWorthEUR)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.75)
+                        .minimumScaleFactor(0.8)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 // Right: TagDoS Focus
-                HStack(spacing: 3) {
-                    Text("S1")
-                        .font(.system(size: 7.5, weight: .heavy, design: .rounded))
-                        .foregroundColor(WidgetColors.accentPurple)
-                        .padding(.horizontal, 3.5)
-                        .padding(.vertical, 1)
-                        .background(WidgetColors.accentPurple.opacity(0.25))
-                        .clipShape(Capsule())
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(WidgetColors.accentPurple)
+                        .frame(width: 4.5, height: 4.5)
 
                     Text(driving)
-                        .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                        .foregroundColor(Color.white.opacity(0.9))
+                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.92))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
     }

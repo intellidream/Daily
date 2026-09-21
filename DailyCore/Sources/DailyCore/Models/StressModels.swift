@@ -263,4 +263,7 @@ public struct StressAnalysisResult: Codable, Equatable, Sendable {
         self.recommendedBreathing = recommendedBreathing
         self.lastUpdated = lastUpdated
     }
+    
+    public var stressScore: Int { currentScore }
+    public var stressLevel: StressLevel { currentLevel }
 }

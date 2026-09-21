@@ -4,14 +4,20 @@ import DailyCore
 /// 7-day and 30-day historical evolution charts and statistics catalog.
 public struct HealthTrendsView: View {
     @ObservedObject private var healthService = HealthDataService.shared
-    private let displayedMetrics: [HealthMetricType] = [
-        .steps,
-        .sleepDuration,
-        .heartRate,
-        .activeEnergy,
-        .hrvSdnn,
-        .weight
-    ]
+    private var displayedMetrics: [HealthMetricType] {
+        if ProcessInfo.processInfo.arguments.contains("-testTrendsStress") {
+            return [.stress, .steps, .sleepDuration, .heartRate, .activeEnergy, .hrvSdnn, .weight]
+        }
+        return [
+            .steps,
+            .sleepDuration,
+            .heartRate,
+            .stress,
+            .activeEnergy,
+            .hrvSdnn,
+            .weight
+        ]
+    }
     
     public init() {}
     
@@ -31,14 +37,19 @@ public struct HealthTrendsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     HStack(spacing: 8) {
-                        Image(systemName: metric.systemImage)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(ThemeColors.accentCyan)
+                        if metric == .stress {
+                            Text(healthService.stressAnalysis?.monkeyMood.emoji ?? "🐵")
+                                .font(.system(size: 18))
+                        } else {
+                            Image(systemName: metric.systemImage)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(ThemeColors.accentCyan)
+                        }
                         
                         VStack(alignment: .leading, spacing: 2) {
                             Text("7-DAY EVOLUTION")
                                 .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundColor(ThemeColors.accentCyan)
+                                .foregroundColor(metric == .stress ? Color(hex: "#00FFB2") : ThemeColors.accentCyan)
                             Text(metric.displayName)
                                 .font(.system(size: 18, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
@@ -82,7 +93,16 @@ public struct HealthTrendsView: View {
                             Spacer()
                             Capsule()
                                 .fill(
-                                    LinearGradient(
+                                    metric == .stress
+                                    ? LinearGradient(
+                                        colors: [
+                                            Color(hex: "#00FFB2"),
+                                            Color(hex: "#FFA726")
+                                        ],
+                                        startPoint: .bottom,
+                                        endPoint: .top
+                                    )
+                                    : LinearGradient(
                                         colors: [
                                             ThemeColors.accentCyan,
                                             ThemeColors.accentBlue
@@ -140,7 +160,7 @@ public struct HealthTrendsView: View {
     private func formatStat(_ val: Double, for metric: HealthMetricType) -> String {
         guard val > 0 else { return "--" }
         switch metric {
-        case .steps, .activeEnergy, .heartRate, .hrvSdnn:
+        case .steps, .activeEnergy, .heartRate, .hrvSdnn, .stress:
             return "\(Int(round(val)))"
         case .sleepDuration:
             let h = Int(val) / 60
@@ -154,6 +174,6 @@ public struct HealthTrendsView: View {
     }
     
     private func isFluctuatingMetric(_ m: HealthMetricType) -> Bool {
-        m == .heartRate || m == .hrvSdnn || m == .weight
+        m == .heartRate || m == .hrvSdnn || m == .weight || m == .stress
     }
 }

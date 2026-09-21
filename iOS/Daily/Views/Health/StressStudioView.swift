@@ -247,7 +247,7 @@ public struct StressStudioView: View {
                 valueText: String(format: "%+.0f bpm", hrDelta),
                 deltaText: hrDelta <= 6 ? "Calm arousal" : "Elevated tension",
                 isPositive: hrDelta <= 8,
-                subtitle: "Resting delta without movement",
+                subtitle: "Resting baseline delta",
                 icon: "flame.fill",
                 tintColor: Color(hex: "#FFA726")
             )
@@ -259,7 +259,7 @@ public struct StressStudioView: View {
                 valueText: "\(sleepScore)%",
                 deltaText: sleepScore >= 75 ? "Optimal recovery" : "Sleep debt",
                 isPositive: sleepScore >= 75,
-                subtitle: healthService.primarySleepSession?.totalAsleepFormatted ?? "7h 20m",
+                subtitle: "\(healthService.primarySleepSession?.totalAsleepFormatted ?? "7h 20m") total",
                 icon: "moon.fill",
                 tintColor: ThemeColors.accentPurple
             )
@@ -277,7 +277,7 @@ public struct StressStudioView: View {
         tintColor: Color
     ) -> some View {
         GlassCard(cornerRadius: 16, padding: 14) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Image(systemName: icon)
                         .font(.system(size: 12))
@@ -285,22 +285,27 @@ public struct StressStudioView: View {
                     Text(title)
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundColor(ThemeColors.fgMutedDark)
+                        .lineLimit(1)
                 }
                 
                 Text(valueText)
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                    .lineLimit(1)
                 
-                HStack(spacing: 4) {
-                    Text(deltaText)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundColor(isPositive ? Color(hex: "#00FFB2") : Color(hex: "#FFA726"))
-                }
+                Text(deltaText)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundColor(isPositive ? Color(hex: "#00FFB2") : Color(hex: "#FFA726"))
+                    .lineLimit(1)
+                
+                Spacer(minLength: 4)
                 
                 Text(subtitle)
                     .font(.system(size: 9.5, weight: .medium))
                     .foregroundColor(.white.opacity(0.5))
+                    .lineLimit(1)
             }
+            .frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104, alignment: .topLeading)
         }
     }
     

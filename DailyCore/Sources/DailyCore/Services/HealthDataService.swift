@@ -487,7 +487,7 @@ public final class HealthDataService: ObservableObject {
         let cal = Calendar.current
         var trends: [HealthMetricType: [DailyMetricTrendPoint]] = [:]
         
-        let metrics: [HealthMetricType] = [.steps, .sleepDuration, .heartRate, .hrvSdnn, .activeEnergy, .weight]
+        let metrics: [HealthMetricType] = [.steps, .sleepDuration, .heartRate, .stress, .hrvSdnn, .activeEnergy, .weight]
         
         // In Guest mode with no real data, generate preview points
         if AuthService.shared.isGuest && currentVitals.isEmpty {
@@ -599,6 +599,7 @@ public final class HealthDataService: ObservableObject {
                         case .sleepDuration: val = Double(primarySleepSession?.asleepSeconds ?? 0) / 60.0
                         case .heartRate: val = averageBpm > 0 ? averageBpm : restingBpm
                         case .activeEnergy: val = totalActiveCalories
+                        case .stress: val = Double(stressAnalysis?.stressScore ?? currentStressScore)
                         default: val = currentVitals[m]?.value ?? 0
                         }
                     }
@@ -623,6 +624,7 @@ public final class HealthDataService: ObservableObject {
         case .sleepDuration: return 480 // 8 hours in minutes
         case .activeEnergy: return 550 // kcal
         case .hydration: return 2_500 // ml
+        case .stress: return 35 // Optimal recovery threshold
         default: return 0
         }
     }
@@ -643,6 +645,8 @@ public final class HealthDataService: ObservableObject {
             return Double(480 + Int(baseSeed * 220))
         case .weight:
             return Double(78.2 + (baseSeed * 0.8))
+        case .stress:
+            return Double(32 + Int(baseSeed * 24))
         default:
             return 0
         }
