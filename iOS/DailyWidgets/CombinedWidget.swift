@@ -164,9 +164,9 @@ public struct CombinedWidgetView: View {
     // MARK: - 1. SMALL WIDGET
     // =========================================================================
 
-    // Small - Morning Mode (Split / Hybrid: Summary + Compact Status Grid)
+    // Small - Morning Mode
     private var smallMorningView: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
             // Header: Greeting + Weather
             HStack(alignment: .center) {
                 HStack(spacing: 4) {
@@ -193,12 +193,12 @@ public struct CombinedWidgetView: View {
                 }
             }
 
-            // Sleep Hero Highlight
-            HStack(spacing: 8) {
+            // Sleep Hero Progress Ring & Recovery
+            HStack(spacing: 9) {
                 ZStack {
                     Circle()
-                        .stroke(Color.white.opacity(0.1), lineWidth: 3.5)
-                        .frame(width: 32, height: 32)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 3.5)
+                        .frame(width: 36, height: 36)
                     Circle()
                         .trim(from: 0, to: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0))
                         .stroke(
@@ -206,34 +206,51 @@ public struct CombinedWidgetView: View {
                             style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
-                        .frame(width: 32, height: 32)
+                        .frame(width: 36, height: 36)
                     Text("\(entry.snapshot.sleep.sleepScore)")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(entry.snapshot.sleep.totalAsleepFormatted)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                     Text(entry.snapshot.sleep.sleepQualityRating)
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                         .foregroundColor(WidgetColors.accentMint)
                 }
+
+                Spacer(minLength: 0)
             }
-            .padding(.vertical, 1)
+            .padding(.vertical, 2)
 
             // Focus snippet or driving pill
             if let focus = entry.snapshot.morningSummary?.topFocusText ?? entry.snapshot.tagdos.streams.first?.drivingPillText {
-                Text(focus)
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                    .foregroundColor(Color.white.opacity(0.85))
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text("Focus")
+                        .font(.system(size: 8, weight: .heavy, design: .rounded))
+                        .foregroundColor(WidgetColors.accentPurple)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(WidgetColors.accentPurple.opacity(0.2))
+                        .clipShape(Capsule())
+
+                    Text(focus)
+                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.9))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3.5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
 
             Spacer(minLength: 0)
 
-            // Bottom 4-metric status dots
+            // Bottom 3-metric quick status
             HStack(spacing: 4) {
                 // Water
                 HStack(spacing: 2) {
@@ -245,7 +262,7 @@ public struct CombinedWidgetView: View {
                         .foregroundColor(.white)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 3)
+                .padding(.vertical, 3.5)
                 .background(Color.white.opacity(0.06))
                 .clipShape(Capsule())
 
@@ -261,7 +278,7 @@ public struct CombinedWidgetView: View {
                         .foregroundColor(.white)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 3)
+                .padding(.vertical, 3.5)
                 .background(Color.white.opacity(0.06))
                 .clipShape(Capsule())
 
@@ -275,123 +292,153 @@ public struct CombinedWidgetView: View {
                         .foregroundColor(.white)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 3)
+                .padding(.vertical, 3.5)
                 .background(Color.white.opacity(0.06))
                 .clipShape(Capsule())
             }
         }
-        .padding(11)
     }
 
-    // Small - Regular Mode (2x2 Matrix + TagDos footer)
-    private var smallRegularView: some View {
-        VStack(spacing: 6) {
-            // Row 1: Sleep + Money
-            HStack(spacing: 6) {
-                // Sleep Tile
-                HStack(spacing: 6) {
-                    Image(systemName: "moon.stars.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(WidgetColors.accentCyan)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("\(entry.snapshot.sleep.sleepScore)%")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        Text(entry.snapshot.sleep.totalAsleepFormatted)
-                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                            .foregroundColor(WidgetColors.fgMuted)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    // Mini Progress Ring Helper for Small Executive Widget
+    private func smallProgressRing(
+        progress: CGFloat,
+        valueText: String,
+        labelText: String,
+        iconName: String,
+        gradientColors: [Color],
+        tintColor: Color
+    ) -> some View {
+        VStack(spacing: 2.5) {
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.12), lineWidth: 3.5)
+                    .frame(width: 40, height: 40)
 
-                // Money Tile
-                HStack(spacing: 5) {
-                    Image(systemName: "creditcard.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(WidgetColors.accentGreen)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(widgetFormatCompactNumber(entry.snapshot.money.netWorthLei))
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        Text("Lei")
-                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                            .foregroundColor(WidgetColors.fgMuted)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Circle()
+                    .trim(from: 0, to: max(0.04, min(progress, 1.0)))
+                    .stroke(
+                        LinearGradient(
+                            colors: gradientColors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 40, height: 40)
+
+                Text(valueText)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
 
-            // Row 2: Water + Smokes
-            HStack(spacing: 6) {
-                // Water Tile
-                HStack(spacing: 6) {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(WidgetColors.accentBlue)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(widgetFormatCompactNumber(entry.snapshot.bubbles.todayMl))
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        Text("ml")
-                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                            .foregroundColor(WidgetColors.fgMuted)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            HStack(spacing: 2) {
+                Image(systemName: iconName)
+                    .font(.system(size: 7.5))
+                    .foregroundColor(tintColor)
+                Text(labelText)
+                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.75))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
 
-                // Smokes Tile
+    // Small - Regular Mode (Executive 3-Ring Gauges + Dual-Currency Net Worth + TagDoS Focus)
+    private var smallRegularView: some View {
+        VStack(spacing: 5) {
+            // Row 1: 3 Liquid Progress Rings (Sleep, Water, Smokes)
+            HStack(spacing: 4) {
+                // Sleep Ring
+                smallProgressRing(
+                    progress: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0),
+                    valueText: "\(entry.snapshot.sleep.sleepScore)%",
+                    labelText: entry.snapshot.sleep.totalAsleepFormatted,
+                    iconName: "moon.fill",
+                    gradientColors: [WidgetColors.accentCyan, WidgetColors.accentBlue],
+                    tintColor: WidgetColors.accentCyan
+                )
+
+                // Water Ring
+                smallProgressRing(
+                    progress: entry.snapshot.bubbles.progressPercent,
+                    valueText: "\(Int(entry.snapshot.bubbles.progressPercent * 100))%",
+                    labelText: "\(widgetFormatCompactNumber(entry.snapshot.bubbles.todayMl)) ml",
+                    iconName: "drop.fill",
+                    gradientColors: [WidgetColors.accentBlue, Color(hex: "#00FFB2")],
+                    tintColor: WidgetColors.accentBlue
+                )
+
+                // Smokes Ring
                 let sCount = entry.snapshot.smokes.todayTotal
                 let sBase = entry.snapshot.smokes.baseline
-                HStack(spacing: 5) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(widgetSmokeRingColor(countToday: sCount, baseline: sBase))
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("\(sCount)/\(sBase)")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        Text("cigs")
-                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                            .foregroundColor(WidgetColors.fgMuted)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                let sColor = widgetSmokeRingColor(countToday: sCount, baseline: sBase)
+                smallProgressRing(
+                    progress: min(1.0, CGFloat(sCount) / CGFloat(max(1, sBase))),
+                    valueText: "\(sCount)",
+                    labelText: "of \(sBase)",
+                    iconName: "flame.fill",
+                    gradientColors: [sColor, sColor.opacity(0.7)],
+                    tintColor: sColor
+                )
             }
+            .padding(.bottom, 1)
 
-            // Footer: TagDoS stream priority
-            let driving = entry.snapshot.tagdos.streams.first?.drivingPillText ?? "No active focus"
+            // Row 2: Net Worth in Lei & EUR
             HStack(spacing: 4) {
-                Text("S1")
-                    .font(.system(size: 8.5, weight: .heavy, design: .rounded))
-                    .foregroundColor(WidgetColors.accentPurple)
-                Text(driving)
+                Image(systemName: "creditcard.fill")
+                    .font(.system(size: 9))
+                    .foregroundColor(WidgetColors.accentGreen)
+
+                Text(entry.snapshot.money.formattedNetWorth)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                Spacer(minLength: 2)
+
+                Text(entry.snapshot.money.formattedNetWorthEUR)
                     .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                    .foregroundColor(Color.white.opacity(0.85))
+                    .foregroundColor(WidgetColors.accentGreen)
                     .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 7)
             .padding(.vertical, 4)
-            .background(Color.white.opacity(0.05))
-            .clipShape(Capsule())
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            // Row 3: TagDoS Focus
+            let driving = entry.snapshot.tagdos.streams.first?.drivingPillText ?? "No active focus"
+            HStack(spacing: 5) {
+                Text("S1")
+                    .font(.system(size: 8, weight: .heavy, design: .rounded))
+                    .foregroundColor(WidgetColors.accentPurple)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(WidgetColors.accentPurple.opacity(0.2))
+                    .clipShape(Capsule())
+
+                Text(driving)
+                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                    .foregroundColor(Color.white.opacity(0.9))
+                    .lineLimit(1)
+
+                Spacer(minLength: 2)
+
+                Text("\(entry.snapshot.tagdos.totalActivePills)")
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .foregroundColor(WidgetColors.fgMuted)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .padding(10)
     }
 
     // =========================================================================

@@ -22,7 +22,7 @@ The Combined Widget aggregates data across five major daily domains into a singl
   - Displays greeting, weather condition with SF Symbol and temperature, key health readiness highlight, and top focus priority.
   - Tapping anywhere on the morning card deep-links directly via `daily://summary` into the full interactive Smart Briefing modal sheet.
 - **Regular Mode (12:00 - 04:59)**:
-  - Small: Grid split into 4 quadrants (Water, Smokes, Sleep, Net Worth).
+  - Small: Executive 3-Ring Gauges (Sleep score %, Water hydration %, Smokes quota usage) + full-width Net Worth pill concurrently in RON and EUR + TagDoS priority stream pill. Eliminates excess inner padding to maximize edge-to-edge canvas density.
   - Medium: 4-column balanced card stack featuring icons, primary metrics, sub-labels, and progress indicators.
   - Large: Comprehensive control panel featuring deep telemetry cards for Water, Smokes, Sleep, Finances (dual currency), and a 2-stream TagDoS checklist preview.
 
@@ -65,20 +65,20 @@ The Combined Widget aggregates data across five major daily domains into a singl
 
 ---
 
-## 4. Swipeable Hub Tabs
+## 4. Calm & Bounded Swipeable Hub Tabs
 
-Enabled fluid lateral scrub & flick gesture navigation matching the feel of `FloatingGlassCapsule`:
-- **Habits Hub** (`HabitsMainView.swift`):
-  - Swipe left/right between **Bubbles** and **Smokes**.
-- **Health Hub** (`HealthMainView.swift`):
-  - Swipe left/right across **Overview** $\leftrightarrow$ **Sleep Studio** $\leftrightarrow$ **Heart & Vitals** $\leftrightarrow$ **Trends**.
-- **Finances Hub** (`FinancesMainView.swift`):
-  - Swipe left/right across **World** $\leftrightarrow$ **Stocks** $\leftrightarrow$ **Money**.
-- **TagDoS Hub** (`TagdosNotesHubView.swift`):
-  - Swipe left/right across **S1** $\leftrightarrow$ **S2** $\leftrightarrow$ **S3** $\leftrightarrow$ **S4** $\leftrightarrow$ **S5** $\leftrightarrow$ **Notes**.
-
-### Gesture Safety:
-- Protected with horizontal displacement thresholds (`abs(drag.translation.width) > 50`) and directional axis guards (`abs(width) > abs(height) * 1.5`) to prevent conflict with vertical scrolling, interactive charts, and edge navigation gestures.
+Refined the tab swipe mechanics to deliver a calm, weighted feel matching `FloatingGlassCapsule`:
+- **Problem**: Unbounded linear coordinate mapping (`value.location.x / segmentWidth`) previously caused runaway transitions where a single swipe gesture skipped past interior tabs (such as *Sleep Studio* or *Heart & Vitals* in Health, or *Stocks* in Finances) to extreme tabs.
+- **Calm Bounded Mechanics**:
+  - **Switcher Pills Drag**: Replaced raw screen position tracking with a deliberate delta threshold (`translation.width < -35` or `> 35`).
+  - **Single-Step Lock**: Added `hasSwitchedInDrag` state locking that allows at most **ONE** tab transition per continuous swipe, completely eliminating overshoot or skipping of interior tabs.
+  - **Weighted Spring Physics**: Switched animation to `.spring(response: 0.38, dampingFraction: 0.82)` to prevent jitter, bounce, or twitchiness.
+  - **Content ScrollView Swipe**: Tuned horizontal dominance guard (`abs(dx) > abs(dy) * 1.8 && abs(dx) > 55`) and preserved edge-swipe back (`startX > 60`) so vertical scrolling and list interactions remain silky-smooth.
+- **Enabled Across All Hubs**:
+  - **Habits Hub** (`HabitsMainView.swift`): Bubbles $\leftrightarrow$ Smokes
+  - **Health Hub** (`HealthMainView.swift`): Overview $\leftrightarrow$ Sleep Studio $\leftrightarrow$ Heart & Vitals $\leftrightarrow$ Trends
+  - **Finances Hub** (`FinancesMainView.swift`): World $\leftrightarrow$ Stocks $\leftrightarrow$ Money
+  - **TagDoS Hub** (`TagdosNotesHubView.swift`): S1 $\leftrightarrow$ S2 $\leftrightarrow$ S3 $\leftrightarrow$ S4 $\leftrightarrow$ S5 $\leftrightarrow$ Notes
 
 ---
 
