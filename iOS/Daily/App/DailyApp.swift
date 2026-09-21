@@ -20,10 +20,6 @@ struct DailyApp: App {
         WindowGroup {
             RootView()
                 .preferredColorScheme(colorScheme)
-                .onOpenURL { url in
-                    // In case OAuth redirect is handled via external safari rather than ASWebAuthenticationSession
-                    print("[DailyApp] Received external URL: \(url)")
-                }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {

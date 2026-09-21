@@ -6,6 +6,7 @@ import UIKit
 
 public struct DashboardView: View {
     @ObservedObject private var settingsService = SettingsService.shared
+    @ObservedObject private var briefingService = SmartBriefingService.shared
     
     @State private var showingCustomizeSheet = false
     @State private var showingBriefingSheet = false
@@ -97,7 +98,20 @@ public struct DashboardView: View {
         .sheet(isPresented: $showingBriefingSheet) {
             SmartBriefingOverlayView()
         }
+        .onChange(of: briefingService.isBriefingPresented) { _, presented in
+            if presented != showingBriefingSheet {
+                showingBriefingSheet = presented
+            }
+        }
+        .onChange(of: showingBriefingSheet) { _, showing in
+            if briefingService.isBriefingPresented != showing {
+                briefingService.isBriefingPresented = showing
+            }
+        }
         .onAppear {
+            if briefingService.isBriefingPresented && !showingBriefingSheet {
+                showingBriefingSheet = true
+            }
             if ProcessInfo.processInfo.arguments.contains("-openBriefingOnLaunch") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
                     showingBriefingSheet = true

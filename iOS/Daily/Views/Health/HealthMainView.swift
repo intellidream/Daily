@@ -4,7 +4,15 @@ import DailyCore
 /// Master Health & Vitals screen integrating multi-device telemetry, clinical sleep studio, and evolution trends.
 public struct HealthMainView: View {
     @ObservedObject private var healthService = HealthDataService.shared
+    @State private var subTabSwitcherWidth: CGFloat = 0
+    @State private var dragStartSubTab: HealthSubTab? = nil
     public var onNavigateBack: (() -> Void)? = nil
+    
+    private func triggerHaptic() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        #endif
+    }
     
     public init(onNavigateBack: (() -> Void)? = nil) {
         self.onNavigateBack = onNavigateBack
@@ -50,6 +58,30 @@ public struct HealthMainView: View {
                     .padding(.horizontal, 20)
                     .padding(.bottom, 110) // Room for FloatingGlassCapsule
                 }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 25, coordinateSpace: .local)
+                        .onEnded { value in
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            let startX = value.startLocation.x
+                            guard startX > 50 else { return } // Preserve edge-swipe back to Dashboard
+                            guard abs(dx) > abs(dy) * 1.5 && abs(dx) > 45 else { return }
+                            
+                            let tabs = HealthSubTab.allCases
+                            guard let currentIndex = tabs.firstIndex(of: healthService.activeSubTab) else { return }
+                            if dx < 0 && currentIndex < tabs.count - 1 {
+                                triggerHaptic()
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                    healthService.activeSubTab = tabs[currentIndex + 1]
+                                }
+                            } else if dx > 0 && currentIndex > 0 {
+                                triggerHaptic()
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                    healthService.activeSubTab = tabs[currentIndex - 1]
+                                }
+                            }
+                        }
+                )
                 .refreshable {
                     await healthService.loadDataForSelectedDate(forceRefresh: true)
                 }
@@ -249,6 +281,64 @@ public struct HealthMainView: View {
                 .fill(Color.white.opacity(0.05))
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
         )
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: HealthSubTabSwitcherWidthKey.self, value: geo.size.width)
+            }
+        )
+        .onPreferenceChange(HealthSubTabSwitcherWidthKey.self) { newWidth in
+            subTabSwitcherWidth = newWidth
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in
+                    if dragStartSubTab == nil {
+                        dragStartSubTab = healthService.activeSubTab
+                    }
+                    let tabs = HealthSubTab.allCases
+                    guard tabs.count > 0 else { return }
+                    
+                    let targetIndex: Int
+                    if subTabSwitcherWidth > 60 {
+                        let segmentWidth = subTabSwitcherWidth / CGFloat(tabs.count)
+                        let rawIndex = Int(value.location.x / segmentWidth)
+                        targetIndex = max(0, min(tabs.count - 1, rawIndex))
+                    } else if let start = dragStartSubTab, let startIdx = tabs.firstIndex(of: start) {
+                        let step = Int(round(value.translation.width / 40.0))
+                        targetIndex = max(0, min(tabs.count - 1, startIdx + step))
+                    } else {
+                        return
+                    }
+                    
+                    let newTab = tabs[targetIndex]
+                    if newTab != healthService.activeSubTab {
+                        triggerHaptic()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                            healthService.activeSubTab = newTab
+                        }
+                    }
+                }
+                .onEnded { value in
+                    let tabs = HealthSubTab.allCases
+                    let flickVelocity = value.predictedEndTranslation.width - value.translation.width
+                    if let start = dragStartSubTab, let startIdx = tabs.firstIndex(of: start), healthService.activeSubTab == start {
+                        var targetIndex = startIdx
+                        if value.translation.width > 20 || flickVelocity > 45 {
+                            targetIndex = min(tabs.count - 1, startIdx + 1)
+                        } else if value.translation.width < -20 || flickVelocity < -45 {
+                            targetIndex = max(0, startIdx - 1)
+                        }
+                        let targetTab = tabs[targetIndex]
+                        if targetTab != healthService.activeSubTab {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                healthService.activeSubTab = targetTab
+                            }
+                        }
+                    }
+                    dragStartSubTab = nil
+                }
+        )
     }
     
     // MARK: - Overview Section
@@ -407,5 +497,12 @@ public struct HealthMainView: View {
             
             vitalsGrid
         }
+    }
+}
+
+private struct HealthSubTabSwitcherWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }

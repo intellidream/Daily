@@ -228,6 +228,12 @@ public struct RootView: View {
                     HealthDataService.shared.activeSubTab = .sleep
                 } else if fullPath.contains("tagdos") {
                     selectedTab = .tagdos
+                } else if fullPath.contains("summary") || fullPath.contains("briefing") {
+                    selectedTab = .dashboard
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 120_000_000)
+                        SmartBriefingService.shared.isBriefingPresented = true
+                    }
                 } else {
                     switch fullPath {
                     case "dashboard": selectedTab = .dashboard

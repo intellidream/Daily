@@ -289,9 +289,7 @@ class SmartBriefingRepository(
             newsRepository = newsRepository
         )
         val activeStreams = tagdosRepository.streams.value.map { it.displayTitle }
-        val hash = computeDataHash(slot, metrics, activeStreams.size)
-
-        if (lastShownDay != todayKey || _activeBriefing.value?.dataHash != hash) {
+        if (lastShownDay != todayKey) {
             prefs.edit().putString(lastAutoShownDateKey, todayKey).apply()
             getOrGenerateBriefing(
                 forceRefresh = true,

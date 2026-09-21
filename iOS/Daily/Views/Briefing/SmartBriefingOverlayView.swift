@@ -125,6 +125,12 @@ public struct SmartBriefingOverlayView: View {
                                         proxy.scrollTo("bottom_button", anchor: .bottom)
                                     }
                                 }
+                            } else if ProcessInfo.processInfo.arguments.contains("-scrollToTopBriefing") {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                    withAnimation {
+                                        proxy.scrollTo(0, anchor: .top)
+                                    }
+                                }
                             }
                         }
                     }
@@ -132,11 +138,15 @@ public struct SmartBriefingOverlayView: View {
             }
         }
         .task {
-            let rec = await briefingService.getOrGenerateBriefing()
+            let rec = await briefingService.getOrGenerateBriefing(forceRefresh: true)
             self.record = rec
-            startStreaming(for: buildCardItems(from: rec))
+            let items = buildCardItems(from: rec)
+            print("[BriefingDebug] Card items count: \(items.count), ids: \(items.map(\.id)), weatherText: '\(rec.narrative.weatherText)'")
+            startStreaming(for: items)
         }
         .onDisappear {
+            briefingService.markBriefingAsRead()
+            briefingService.isBriefingPresented = false
             streamTask?.cancel()
         }
     }
@@ -320,6 +330,8 @@ public struct SmartBriefingOverlayView: View {
 
         return Button {
             triggerHaptic()
+            briefingService.markBriefingAsRead()
+            briefingService.isBriefingPresented = false
             dismiss()
         } label: {
             HStack(spacing: 10) {
@@ -434,17 +446,30 @@ public struct SmartBriefingOverlayView: View {
         let m = rec.metrics
 
         // 1. Weather
-        if !n.weatherText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let weatherText: String = {
+            if !n.weatherText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return n.weatherText
+            }
+            if let temp = m.weatherTemp {
+                return "Conditions show \(m.weatherCondition ?? "Clear") around \(Int(round(temp)))°C in \(m.weatherCity)."
+            }
+            return ""
+        }()
+
+        if !weatherText.isEmpty {
             let badge: String? = m.weatherTemp != nil ? "\(Int(round(m.weatherTemp!)))° · \(m.weatherCondition ?? "Clear")" : nil
+            let iconCode = m.weatherIcon ?? "01d"
+            let sfSymbol = WeatherConditionHelper.sfSymbol(for: iconCode)
+            let iconColor = Color(hex: WeatherConditionHelper.conditionColorHex(for: iconCode))
             items.append(
                 BriefingCardItem(
                     id: "weather",
-                    icon: m.weatherIcon ?? "cloud.sun.fill",
-                    iconColor: ThemeColors.accentCyan,
+                    icon: sfSymbol,
+                    iconColor: iconColor,
                     title: "Weather & Atmosphere",
                     badgeText: badge,
-                    badgeColor: ThemeColors.accentCyan,
-                    text: n.weatherText
+                    badgeColor: iconColor,
+                    text: weatherText
                 )
             )
         }

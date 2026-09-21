@@ -16,6 +16,7 @@ public final class SmartBriefingService: ObservableObject {
     @Published public private(set) var lastGeneratedAt: Date? = nil
     @Published public private(set) var isAiGenerated: Bool = false
     @Published public var shouldPresentMorningAutomatically: Bool = false
+    @Published public var isBriefingPresented: Bool = false
     @Published public private(set) var hasUnreadBrief: Bool = false
 
     // MARK: - Storage Keys
@@ -38,6 +39,8 @@ public final class SmartBriefingService: ObservableObject {
         if let current = activeBriefing {
             groupDefaults.set(current.dataHash, forKey: lastReadDataHashKey)
         }
+        let todayKey = ISO8601DateFormatter().string(from: Calendar.current.startOfDay(for: Date()))
+        groupDefaults.set(todayKey, forKey: lastAutoShownDateKey)
         self.hasUnreadBrief = false
     }
 
@@ -83,6 +86,9 @@ public final class SmartBriefingService: ObservableObject {
     /// Fast-path returns in 0ms if cached metrics match current data, slot, and day.
     public func getOrGenerateBriefing(forceRefresh: Bool = false) async -> SmartBriefingRecord {
         let currentSlot = BriefingTimeSlot.current()
+        if WeatherService.shared.currentWeather == nil {
+            await WeatherService.shared.refreshWeather(force: false)
+        }
         let metrics = collectCurrentMetrics()
         let activeStreams = TagdosStore.shared.streams.map(\.title)
         let hash = computeDataHash(slot: currentSlot, metrics: metrics, streamCount: activeStreams.count)
@@ -140,7 +146,19 @@ public final class SmartBriefingService: ObservableObject {
                     closingWish: localNarrative.closingWish,
                     closingIcon: localNarrative.closingIcon
                 )
-                finalRecord.narrative = aiNarrative
+                let mergedNarrative = SmartBriefingNarrative(
+                    greeting: aiNarrative.greeting.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.greeting : aiNarrative.greeting,
+                    weatherText: aiNarrative.weatherText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.weatherText : aiNarrative.weatherText,
+                    healthText: aiNarrative.healthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.healthText : aiNarrative.healthText,
+                    habitsText: aiNarrative.habitsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.habitsText : aiNarrative.habitsText,
+                    financeText: aiNarrative.financeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.financeText : aiNarrative.financeText,
+                    tagdosText: aiNarrative.tagdosText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.tagdosText : aiNarrative.tagdosText,
+                    newsText: aiNarrative.newsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.newsText : aiNarrative.newsText,
+                    outroText: aiNarrative.outroText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.outroText : aiNarrative.outroText,
+                    closingWish: (aiNarrative.closingWish?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ? localNarrative.closingWish : aiNarrative.closingWish,
+                    closingIcon: (aiNarrative.closingIcon?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ? localNarrative.closingIcon : aiNarrative.closingIcon
+                )
+                finalRecord.narrative = mergedNarrative
                 finalRecord.isAiGenerated = true
             } catch {
                 // Seamlessly retain Tier 1 deterministic narrative on timeout or failure
@@ -177,20 +195,17 @@ public final class SmartBriefingService: ObservableObject {
         let todayKey = ISO8601DateFormatter().string(from: Calendar.current.startOfDay(for: Date()))
         let lastShownDay = groupDefaults.string(forKey: lastAutoShownDateKey)
 
-        let metrics = collectCurrentMetrics()
-        let activeStreams = TagdosStore.shared.streams.map(\.title)
-        let hash = computeDataHash(slot: slot, metrics: metrics, streamCount: activeStreams.count)
-
-        // Show if not shown today, or if data hash changed since last show
-        if lastShownDay != todayKey || (activeBriefing?.dataHash != hash) {
-            groupDefaults.set(todayKey, forKey: lastAutoShownDateKey)
-            // Pre-generate the fresh morning briefing with updated hub metrics before showing
-            _ = await getOrGenerateBriefing(forceRefresh: true)
-            self.shouldPresentMorningAutomatically = true
-            return true
+        // Strictly present automatically only once per day
+        guard lastShownDay != todayKey else {
+            return false
         }
 
-        return false
+        groupDefaults.set(todayKey, forKey: lastAutoShownDateKey)
+        // Pre-generate the fresh morning briefing with updated hub metrics before showing
+        _ = await getOrGenerateBriefing(forceRefresh: true)
+        self.shouldPresentMorningAutomatically = true
+        self.isBriefingPresented = true
+        return true
     }
 
     // MARK: - Metrics Collection & Hashing

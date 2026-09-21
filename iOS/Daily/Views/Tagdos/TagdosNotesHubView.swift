@@ -92,6 +92,28 @@ public struct TagdosNotesHubView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 40)
                 }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 25, coordinateSpace: .local)
+                        .onEnded { value in
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            let startX = value.startLocation.x
+                            guard startX > 75 else { return } // Preserve edge swipe back
+                            guard abs(dx) > abs(dy) * 1.5 && abs(dx) > 45 else { return }
+                            let totalTabs = store.streams.count + 1
+                            if dx < 0 && selectedStreamIndex < totalTabs - 1 {
+                                triggerHaptic()
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                    selectedStreamIndex += 1
+                                }
+                            } else if dx > 0 && selectedStreamIndex > 0 {
+                                triggerHaptic()
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                    selectedStreamIndex -= 1
+                                }
+                            }
+                        }
+                )
                 .refreshable {
                     await store.syncWithSupabase()
                 }

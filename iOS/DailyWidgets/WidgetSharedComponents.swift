@@ -41,6 +41,7 @@ public struct WidgetColors {
     public static let accentPurple = Color(hex: "#A855F7")
     public static let coffeeYellow = Color(hex: "#F59E0B")
     public static let teaLime = Color(hex: "#84CC16")
+    public static let fgMuted = Color.white.opacity(0.6)
     
     public static let bgGradient = LinearGradient(
         colors: [Color(hex: "#040810"), Color(hex: "#0A1424")],

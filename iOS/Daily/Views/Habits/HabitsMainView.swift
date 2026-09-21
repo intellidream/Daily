@@ -1,16 +1,23 @@
 import SwiftUI
 import DailyCore
 
-/// Main Habits Hub for Bubbles (Hydration) and Smokes (Tobacco reduction).
 public struct HabitsMainView: View {
     @ObservedObject private var habitsService = HabitsService.shared
     @State private var showingGuidanceSheet = false
     @State private var showingDatePicker = false
     @State private var isLogsExpanded = false
+    @State private var habitSwitcherWidth: CGFloat = 0
+    @State private var dragStartHabit: HabitType? = nil
     public var onNavigateBack: (() -> Void)? = nil
     
     public init(onNavigateBack: (() -> Void)? = nil) {
         self.onNavigateBack = onNavigateBack
+    }
+    
+    private func triggerHaptic() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        #endif
     }
     
     public var body: some View {
@@ -78,6 +85,27 @@ public struct HabitsMainView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 110) // Leave space for FloatingGlassCapsule
             }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 25, coordinateSpace: .local)
+                    .onEnded { value in
+                        let dx = value.translation.width
+                        let dy = value.translation.height
+                        let startX = value.startLocation.x
+                        guard startX > 50 else { return } // Preserve edge-swipe back to Dashboard
+                        guard abs(dx) > abs(dy) * 1.5 && abs(dx) > 45 else { return }
+                        if dx < 0 && habitsService.activeHabit == .water {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                habitsService.activeHabit = .smokes
+                            }
+                        } else if dx > 0 && habitsService.activeHabit == .smokes {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                habitsService.activeHabit = .water
+                            }
+                        }
+                    }
+            )
             .task {
                 await habitsService.loadDataForSelectedDate()
             }
@@ -330,6 +358,64 @@ public struct HabitsMainView: View {
         .overlay {
             Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
         }
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: HabitSwitcherWidthKey.self, value: geo.size.width)
+            }
+        )
+        .onPreferenceChange(HabitSwitcherWidthKey.self) { newWidth in
+            habitSwitcherWidth = newWidth
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in
+                    if dragStartHabit == nil {
+                        dragStartHabit = habitsService.activeHabit
+                    }
+                    let habits = HabitType.allCases
+                    guard habits.count > 0 else { return }
+                    
+                    let targetIndex: Int
+                    if habitSwitcherWidth > 40 {
+                        let segmentWidth = habitSwitcherWidth / CGFloat(habits.count)
+                        let rawIndex = Int(value.location.x / segmentWidth)
+                        targetIndex = max(0, min(habits.count - 1, rawIndex))
+                    } else if let start = dragStartHabit, let startIdx = habits.firstIndex(of: start) {
+                        let step = Int(round(value.translation.width / 40.0))
+                        targetIndex = max(0, min(habits.count - 1, startIdx + step))
+                    } else {
+                        return
+                    }
+                    
+                    let newHabit = habits[targetIndex]
+                    if newHabit != habitsService.activeHabit {
+                        triggerHaptic()
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            habitsService.activeHabit = newHabit
+                        }
+                    }
+                }
+                .onEnded { value in
+                    let habits = HabitType.allCases
+                    let flickVelocity = value.predictedEndTranslation.width - value.translation.width
+                    if let start = dragStartHabit, let startIdx = habits.firstIndex(of: start), habitsService.activeHabit == start {
+                        var targetIndex = startIdx
+                        if value.translation.width > 20 || flickVelocity > 45 {
+                            targetIndex = min(habits.count - 1, startIdx + 1)
+                        } else if value.translation.width < -20 || flickVelocity < -45 {
+                            targetIndex = max(0, startIdx - 1)
+                        }
+                        let targetHabit = habits[targetIndex]
+                        if targetHabit != habitsService.activeHabit {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                habitsService.activeHabit = targetHabit
+                            }
+                        }
+                    }
+                    dragStartHabit = nil
+                }
+        )
     }
     
     // MARK: - Daily Logs Timeline (Collapsible)
@@ -450,6 +536,13 @@ private struct HabitLogRow: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+private struct HabitSwitcherWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

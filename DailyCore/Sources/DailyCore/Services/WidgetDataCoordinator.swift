@@ -108,6 +108,67 @@ public struct MoneyWidgetSnapshot: Sendable {
     }
 }
 
+/// Briefing summary snippet model for the Combined Widget morning mode
+public struct BriefingSummarySnippet: Sendable, Codable {
+    public let greeting: String
+    public let weatherTemp: Double?
+    public let weatherCondition: String?
+    public let weatherIcon: String?
+    public let sleepDurationFormatted: String?
+    public let sleepScore: Int?
+    public let topFocusText: String?
+    public let isAiGenerated: Bool
+    
+    public init(
+        greeting: String,
+        weatherTemp: Double? = nil,
+        weatherCondition: String? = nil,
+        weatherIcon: String? = nil,
+        sleepDurationFormatted: String? = nil,
+        sleepScore: Int? = nil,
+        topFocusText: String? = nil,
+        isAiGenerated: Bool = false
+    ) {
+        self.greeting = greeting
+        self.weatherTemp = weatherTemp
+        self.weatherCondition = weatherCondition
+        self.weatherIcon = weatherIcon
+        self.sleepDurationFormatted = sleepDurationFormatted
+        self.sleepScore = sleepScore
+        self.topFocusText = topFocusText
+        self.isAiGenerated = isAiGenerated
+    }
+}
+
+/// Combined Executive Snapshot encompassing all 5 core pillars + Diurnal Briefing
+public struct CombinedWidgetSnapshot: Sendable {
+    public let bubbles: BubblesWidgetSnapshot
+    public let smokes: SmokesWidgetSnapshot
+    public let money: MoneyWidgetSnapshot
+    public let sleep: SleepWidgetSnapshot
+    public let tagdos: TagdosWidgetSnapshot
+    public let morningSummary: BriefingSummarySnippet?
+    public let isMorningSlot: Bool
+    
+    public init(
+        bubbles: BubblesWidgetSnapshot,
+        smokes: SmokesWidgetSnapshot,
+        money: MoneyWidgetSnapshot,
+        sleep: SleepWidgetSnapshot,
+        tagdos: TagdosWidgetSnapshot,
+        morningSummary: BriefingSummarySnippet? = nil,
+        isMorningSlot: Bool = false
+    ) {
+        self.bubbles = bubbles
+        self.smokes = smokes
+        self.money = money
+        self.sleep = sleep
+        self.tagdos = tagdos
+        self.morningSummary = morningSummary
+        self.isMorningSlot = isMorningSlot
+    }
+}
+
 /// Snapshot model for Sleep Studio Widget
 public struct SleepWidgetSnapshot: Sendable, Codable {
     public let hasData: Bool
@@ -792,6 +853,70 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             return snapshot
         }
         return TagdosWidgetSnapshot.empty
+    }
+
+    // MARK: - Combined Executive Snapshot (5 Core Pillars + Briefing)
+
+    public func fetchCombinedSnapshot() -> CombinedWidgetSnapshot {
+        let bubbles = fetchBubblesSnapshot()
+        let smokes = fetchSmokesSnapshot()
+        let money = fetchMoneySnapshot()
+        let sleep = fetchSleepSnapshot()
+        let tagdos = fetchTagdosSnapshot()
+
+        let hour = Calendar.current.component(.hour, from: Date())
+        let isMorning = (hour >= 5 && hour < 12)
+
+        var snippet: BriefingSummarySnippet? = nil
+        let briefingCacheKey = "daily_smart_summary_cache_v4"
+        if let data = groupDefaults.data(forKey: briefingCacheKey),
+           let record = try? JSONDecoder().decode(SmartBriefingRecord.self, from: data) {
+            let m = record.metrics
+            let n = record.narrative
+
+            let focus: String? = {
+                if !n.tagdosText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return n.tagdosText
+                } else if !n.healthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return n.healthText
+                } else {
+                    return nil
+                }
+            }()
+
+            snippet = BriefingSummarySnippet(
+                greeting: BriefingTimeSlot.current().diurnalGreeting(for: "Mihai"),
+                weatherTemp: m.weatherTemp,
+                weatherCondition: m.weatherCondition,
+                weatherIcon: m.weatherIcon,
+                sleepDurationFormatted: m.sleepDurationFormatted,
+                sleepScore: m.sleepScore,
+                topFocusText: focus,
+                isAiGenerated: record.isAiGenerated
+            )
+        } else {
+            let primaryPill = tagdos.streams.first?.drivingPillText
+            snippet = BriefingSummarySnippet(
+                greeting: isMorning ? "Good Morning, Mihai" : "Welcome back, Mihai",
+                weatherTemp: nil,
+                weatherCondition: nil,
+                weatherIcon: nil,
+                sleepDurationFormatted: sleep.hasData ? sleep.totalAsleepFormatted : nil,
+                sleepScore: sleep.hasData ? sleep.sleepScore : nil,
+                topFocusText: primaryPill != nil ? "Focus: \(primaryPill!)" : nil,
+                isAiGenerated: false
+            )
+        }
+
+        return CombinedWidgetSnapshot(
+            bubbles: bubbles,
+            smokes: smokes,
+            money: money,
+            sleep: sleep,
+            tagdos: tagdos,
+            morningSummary: snippet,
+            isMorningSlot: isMorning
+        )
     }
 }
 
