@@ -318,5 +318,230 @@ struct HealthServiceTests {
         )
         #expect(healthKitFilterResult.totalSteps == 8878)
     }
+    
+    @Test func testConcurrentOuraAndAmazfitIsolationAndPrioritization() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let bedtime = cal.date(byAdding: .hour, value: -1, to: today)! // 23:00 yesterday
+        let wakeTime = cal.date(byAdding: .minute, value: 420, to: today)! // 07:00 today (8 hours)
+        
+        // Oura Ring telemetry: ~7.5 hours
+        let ouraTelemetry = [
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_light",
+                value: 60,
+                unit: "minutes",
+                startTime: bedtime,
+                endTime: bedtime.addingTimeInterval(3600),
+                sourceDevice: "Oura Ring"
+            ),
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_deep",
+                value: 90,
+                unit: "minutes",
+                startTime: bedtime.addingTimeInterval(3600),
+                endTime: bedtime.addingTimeInterval(9000),
+                sourceDevice: "Oura Ring"
+            ),
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_rem",
+                value: 120,
+                unit: "minutes",
+                startTime: bedtime.addingTimeInterval(9000),
+                endTime: bedtime.addingTimeInterval(16200),
+                sourceDevice: "Oura Ring"
+            ),
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_light",
+                value: 180,
+                unit: "minutes",
+                startTime: bedtime.addingTimeInterval(16200),
+                endTime: wakeTime,
+                sourceDevice: "Oura Ring"
+            )
+        ]
+        
+        // Amazfit Balance telemetry: ~7.5 hours (slight time offset)
+        let amazfitBedtime = bedtime.addingTimeInterval(300) // 23:05
+        let amazfitWake = wakeTime.addingTimeInterval(300)   // 07:05
+        let amazfitTelemetry = [
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_light",
+                value: 90,
+                unit: "minutes",
+                startTime: amazfitBedtime,
+                endTime: amazfitBedtime.addingTimeInterval(5400),
+                sourceDevice: "Amazfit Balance"
+            ),
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_deep",
+                value: 75,
+                unit: "minutes",
+                startTime: amazfitBedtime.addingTimeInterval(5400),
+                endTime: amazfitBedtime.addingTimeInterval(9900),
+                sourceDevice: "Amazfit Balance"
+            ),
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_rem",
+                value: 105,
+                unit: "minutes",
+                startTime: amazfitBedtime.addingTimeInterval(9900),
+                endTime: amazfitBedtime.addingTimeInterval(16200),
+                sourceDevice: "Amazfit Balance"
+            ),
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_light",
+                value: 180,
+                unit: "minutes",
+                startTime: amazfitBedtime.addingTimeInterval(16200),
+                endTime: amazfitWake,
+                sourceDevice: "Amazfit Balance"
+            )
+        ]
+        
+        let combinedTelemetry = ouraTelemetry + amazfitTelemetry
+        
+        // 1. Cluster both without preferred device filter
+        let result = SleepClusteringEngine.clusterSleep(targetDate: today, telemetry: combinedTelemetry)
+        
+        // Verify both sessions exist independently (no lumping / doubling into a 15-hour session!)
+        #expect(result.allSessions.count == 2)
+        
+        // Primary session must prioritize dedicated tracker Oura Ring
+        let primary = try #require(result.primarySession)
+        #expect(primary.sourceDevice == "Oura Ring")
+        #expect(primary.asleepSeconds == 450 * 60) // 7.5 hours, NOT doubled to 15 hours!
+        #expect(primary.asleepSeconds <= 8 * 3600)
+        
+        // 2. Explicit device preference for Amazfit Balance
+        let amazfitResult = SleepClusteringEngine.clusterSleep(
+            targetDate: today,
+            telemetry: combinedTelemetry,
+            preferredDevice: "Amazfit Balance"
+        )
+        let amazfitPrimary = try #require(amazfitResult.primarySession)
+        #expect(amazfitPrimary.sourceDevice == "Amazfit Balance")
+        #expect(amazfitPrimary.asleepSeconds == 450 * 60)
+    }
+    
+    @Test func testOverlappingStageIntervalClippingDefenseInDepth() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let bedtime = cal.date(byAdding: .hour, value: -1, to: today)! // 23:00
+        
+        // 3 overlapping records for the same device
+        // Record 1: 23:00 to 02:00 (3h)
+        // Record 2: 01:00 to 03:00 (2h - overlaps with 1 by 1h)
+        // Record 3: 02:30 to 05:00 (2.5h - overlaps with 2 by 0.5h)
+        // Total unclipped sum: 3 + 2 + 2.5 = 7.5h
+        // Actual elapsed span: 23:00 to 05:00 = 6 hours!
+        let overlappingTelemetry = [
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_deep",
+                value: 180,
+                unit: "minutes",
+                startTime: bedtime,
+                endTime: bedtime.addingTimeInterval(10800), // 02:00
+                sourceDevice: "Apple Health"
+            ),
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_light",
+                value: 180,
+                unit: "minutes",
+                startTime: bedtime.addingTimeInterval(3600), // 00:00 to 03:00 (overlaps with 1)
+                endTime: bedtime.addingTimeInterval(14400), // 03:00
+                sourceDevice: "Apple Health"
+            ),
+            HealthTelemetryRecord(
+                userId: "u1",
+                type: "sleep_stage_rem",
+                value: 150,
+                unit: "minutes",
+                startTime: bedtime.addingTimeInterval(12600), // 02:30 (overlapping)
+                endTime: bedtime.addingTimeInterval(21600), // 05:00
+                sourceDevice: "Apple Health"
+            )
+        ]
+        
+        let result = SleepClusteringEngine.clusterSleep(targetDate: today, telemetry: overlappingTelemetry)
+        let session = try #require(result.primarySession)
+        
+        // Defense-in-depth: asleepSeconds must NEVER exceed the elapsed wall-clock span (6 hours)
+        let elapsedWallClock = session.endTime.timeIntervalSince(session.startTime)
+        #expect(session.asleepSeconds <= elapsedWallClock)
+        #expect(session.asleepSeconds == 6 * 3600) // Exactly 6 hours, not 7.5 hours!
+    }
+    
+    @Test func testCalibratedSleepScoreDiscrimination() async throws {
+        let now = Date()
+        
+        // Scenario A: Mediocre / restless night (5.5h sleep, 78% efficiency, 6 awakenings, 50m awake, 8% deep)
+        let restlessStages = [
+            SleepStageRecord(stageType: .light, startTime: now, endTime: now.addingTimeInterval(12600), durationSeconds: 12600), // 3.5h
+            SleepStageRecord(stageType: .deep, startTime: now.addingTimeInterval(12600), endTime: now.addingTimeInterval(14400), durationSeconds: 1800), // 30m (9%)
+            SleepStageRecord(stageType: .rem, startTime: now.addingTimeInterval(14400), endTime: now.addingTimeInterval(19800), durationSeconds: 5400), // 1.5h
+            SleepStageRecord(stageType: .awake, startTime: now.addingTimeInterval(19800), endTime: now.addingTimeInterval(20300), durationSeconds: 500),
+            SleepStageRecord(stageType: .awake, startTime: now.addingTimeInterval(20300), endTime: now.addingTimeInterval(20800), durationSeconds: 500),
+            SleepStageRecord(stageType: .awake, startTime: now.addingTimeInterval(20800), endTime: now.addingTimeInterval(21300), durationSeconds: 500),
+            SleepStageRecord(stageType: .awake, startTime: now.addingTimeInterval(21300), endTime: now.addingTimeInterval(21800), durationSeconds: 500),
+            SleepStageRecord(stageType: .awake, startTime: now.addingTimeInterval(21800), endTime: now.addingTimeInterval(22300), durationSeconds: 500),
+            SleepStageRecord(stageType: .awake, startTime: now.addingTimeInterval(22300), endTime: now.addingTimeInterval(22800), durationSeconds: 500) // 6 awakes, 3000s = 50m
+        ]
+        let restlessSession = SleepSession(
+            startTime: now,
+            endTime: now.addingTimeInterval(25400), // 7.05h bed, 5.5h sleep -> 78% eff
+            stages: restlessStages,
+            sourceDevice: "Oura Ring",
+            hasGranularHypnogram: true
+        )
+        // Under old formula this scored ~74 ("Fair"). Now it must score <= 58 ("Restless")!
+        #expect(restlessSession.sleepScore <= 58)
+        #expect(restlessSession.sleepQualityRating == "Restless")
+        
+        // Scenario B: Solid normal night (7.2h sleep, 90% efficiency, 2 awakenings, 20m awake, 16% deep, 22% rem)
+        let normalStages = [
+            SleepStageRecord(stageType: .light, startTime: now, endTime: now.addingTimeInterval(13680), durationSeconds: 13680), // 3.8h
+            SleepStageRecord(stageType: .deep, startTime: now.addingTimeInterval(13680), endTime: now.addingTimeInterval(17880), durationSeconds: 4200), // 1.16h (~16%)
+            SleepStageRecord(stageType: .rem, startTime: now.addingTimeInterval(17880), endTime: now.addingTimeInterval(23640), durationSeconds: 5760), // 1.6h (~22%)
+            SleepStageRecord(stageType: .awake, startTime: now.addingTimeInterval(23640), endTime: now.addingTimeInterval(24240), durationSeconds: 600),
+            SleepStageRecord(stageType: .awake, startTime: now.addingTimeInterval(24240), endTime: now.addingTimeInterval(24840), durationSeconds: 600)
+        ]
+        let normalSession = SleepSession(
+            startTime: now,
+            endTime: now.addingTimeInterval(26000), // 7.2h sleep, 89% eff
+            stages: normalStages,
+            sourceDevice: "Oura Ring",
+            hasGranularHypnogram: true
+        )
+        #expect(normalSession.sleepScore >= 78 && normalSession.sleepScore <= 88)
+        #expect(normalSession.sleepQualityRating == "Good" || normalSession.sleepQualityRating == "Optimal")
+        
+        // Scenario C: Truly restorative night (8.0h sleep, 94% efficiency, 1 awakening, 15m awake, 18% deep, 24% rem)
+        let optimalStages = [
+            SleepStageRecord(stageType: .light, startTime: now, endTime: now.addingTimeInterval(16704), durationSeconds: 16704), // 4.64h
+            SleepStageRecord(stageType: .deep, startTime: now.addingTimeInterval(16704), endTime: now.addingTimeInterval(21888), durationSeconds: 5184), // 1.44h (18%)
+            SleepStageRecord(stageType: .rem, startTime: now.addingTimeInterval(21888), endTime: now.addingTimeInterval(28800), durationSeconds: 6912), // 1.92h (24%)
+            SleepStageRecord(stageType: .awake, startTime: now.addingTimeInterval(28800), endTime: now.addingTimeInterval(29700), durationSeconds: 900)  // 1 awake 15m
+        ]
+        let optimalSession = SleepSession(
+            startTime: now,
+            endTime: now.addingTimeInterval(30638), // 8h sleep / 8.51h bed = 94% eff
+            stages: optimalStages,
+            sourceDevice: "Oura Ring",
+            hasGranularHypnogram: true
+        )
+        #expect(optimalSession.sleepScore >= 90)
+        #expect(optimalSession.sleepQualityRating == "Optimal")
+    }
 }
 

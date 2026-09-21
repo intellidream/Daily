@@ -37,6 +37,9 @@ interface HabitLogDao {
     @Query("SELECT * FROM habits_logs WHERE synced_at IS NULL AND is_deleted = 0")
     suspend fun getUnsyncedLogs(): List<HabitLogEntity>
 
+    @Query("SELECT id FROM habits_logs WHERE is_deleted = 1")
+    suspend fun getDeletedLogIds(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: HabitLogEntity)
 

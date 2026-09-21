@@ -303,14 +303,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                         typeName = sample.value == HKCategoryValueSleepAnalysis.awake.rawValue ? "sleep_stage_awake" : "sleep"
                     }
                     
-                    let devName: String
-                    if let d = sample.device?.name, !d.isEmpty {
-                        devName = d
-                    } else if sample.sourceRevision.source.name.localizedCaseInsensitiveContains("Watch") {
-                        devName = "Apple Watch"
-                    } else {
-                        devName = "Apple Health"
-                    }
+                    let devName = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
                     
                     let durationMinutes = sample.endDate.timeIntervalSince(sample.startDate) / 60.0
                     records.append(HealthTelemetryRecord(
@@ -437,7 +430,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     return
                 }
                 let records = qSamples.map { sample in
-                    let dev = sample.device?.name ?? (sample.sourceRevision.source.name.localizedCaseInsensitiveContains("Watch") ? "Apple Watch" : "Apple Health")
+                    let dev = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
                     return HealthTelemetryRecord(
                         id: sample.uuid.uuidString,
                         userId: "healthkit",
@@ -460,7 +453,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
             let query = HKSampleQuery(sampleType: quantityType, predicate: predicate, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
                 if let sample = samples?.first as? HKQuantitySample {
-                    let dev = sample.device?.name ?? (sample.sourceRevision.source.name.localizedCaseInsensitiveContains("Watch") ? "Apple Watch" : "Apple Health")
+                    let dev = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
                     continuation.resume(returning: (sample.quantity.doubleValue(for: unit), dev, sample.endDate))
                 } else {
                     continuation.resume(returning: nil)
@@ -481,6 +474,24 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                 }
             }
             healthStore.execute(query)
+        }
+    }
+    
+    private static func resolveDeviceName(device: HKDevice?, source: HKSource) -> String {
+        if let d = device?.name, !d.isEmpty {
+            return d
+        }
+        let src = source.name
+        if src.localizedCaseInsensitiveContains("Watch") {
+            return "Apple Watch"
+        } else if src.localizedCaseInsensitiveContains("Oura") {
+            return "Oura Ring"
+        } else if src.localizedCaseInsensitiveContains("Zepp") || src.localizedCaseInsensitiveContains("Amazfit") {
+            return "Amazfit Balance"
+        } else if !src.isEmpty {
+            return src
+        } else {
+            return "Apple Health"
         }
     }
 }

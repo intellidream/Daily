@@ -283,8 +283,23 @@ class HabitsRepository(
             try {
                 val remoteLogs = handler.pullLogsForDate(userId, startIso, endIso)
                 if (remoteLogs.isNotEmpty()) {
-                    val entities = remoteLogs.map { HabitLogEntity.fromRecord(it, syncedAt = System.currentTimeMillis()) }
-                    dao.insertAll(entities)
+                    val locallyDeletedIds = dao.getDeletedLogIds().toSet()
+                    val remoteDeletedLogs = remoteLogs.filter { it.isDeleted }
+                    
+                    // Synchronize remote tombstones to local database
+                    for (del in remoteDeletedLogs) {
+                        dao.softDelete(del.id)
+                    }
+
+                    // Insert active entities that are not locally deleted
+                    val allDeletedIds = locallyDeletedIds + remoteDeletedLogs.map { it.id }.toSet()
+                    val activeEntities = remoteLogs
+                        .filter { !it.isDeleted && !allDeletedIds.contains(it.id) }
+                        .map { HabitLogEntity.fromRecord(it, syncedAt = System.currentTimeMillis()) }
+                    
+                    if (activeEntities.isNotEmpty()) {
+                        dao.insertAll(activeEntities)
+                    }
                 }
             } catch (_: Exception) {}
         }

@@ -18,6 +18,7 @@ data class SmartLedgerItem(
     val key: String,
     val rawAmount: Double = 0.0,
     val calculatedAmount: Double = 0.0,
+    val currency: String = "Lei",
     val isScaled: Boolean = true,
     val notes: List<String> = emptyList(),
     val isPureNote: Boolean = false,
@@ -37,9 +38,31 @@ data class SmartLedgerItem(
         }
 
     /**
-     * Nicely formatted full amount in Romanian Lei (e.g. "15.100 Lei" or "53.156,47 Lei").
+     * Nicely formatted amount in original currency (e.g. "2.500 €" or "15.100 Lei").
      */
     val formattedCalculatedAmount: String
+        get() {
+            val symbols = DecimalFormatSymbols(Locale("ro", "RO")).apply {
+                groupingSeparator = '.'
+                decimalSeparator = ','
+            }
+            if (currency == "EUR") {
+                val hasDecimals = (rawAmount % 1.0) != 0.0
+                val pattern = if (hasDecimals) "#,##0.00" else "#,##0"
+                val formatter = DecimalFormat(pattern, symbols)
+                return "${formatter.format(rawAmount)} €"
+            } else {
+                val hasDecimals = (calculatedAmount % 1.0) != 0.0
+                val pattern = if (hasDecimals) "#,##0.00" else "#,##0"
+                val formatter = DecimalFormat(pattern, symbols)
+                return "${formatter.format(calculatedAmount)} Lei"
+            }
+        }
+
+    /**
+     * Always formats the full equivalent amount in Romanian Lei (e.g. "12.500 Lei").
+     */
+    val formattedLeiAmount: String
         get() {
             val symbols = DecimalFormatSymbols(Locale("ro", "RO")).apply {
                 groupingSeparator = '.'

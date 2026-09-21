@@ -92,9 +92,21 @@ It mirrors the Double-Entry DSL architecture established in WinUI (`Daily.Servic
 - **Backup Raw Editor (`SmartLedgerEditorSheet.swift`)**:
   - Retained as a robust fallback editor for directly modifying the raw DSL code.
 
+### 5. Multi-Currency (EUR) Detection & Net Worth Integration
+- **Direct Currency Parsing**:
+  - In addition to standard Lei denominations, lines specifying explicit Euros (e.g. `EUR = 2500€` or `Revolut EUR = 1000 EUR` outside parentheses and comments) are parsed with `currency = "EUR"`.
+  - Content within parentheses `(...)` (e.g. `(Chirie ~ 37.000€)` or `Card = 500 (100€)`) is treated as metadata notes and does not flip item currency.
+- **Conversion & Net Worth**:
+  - Item calculated amount in Lei is evaluated as `rawAmount * (isScaled ? 100.0 : 1.0) * eurRate` (default `eurRate = 5.0`).
+  - Section totals and Net Worth (`depositTotal + balanceTotal`) include the full converted Lei amount (`12.500 Lei` for a `2.500 €` deposit).
+  - Equivalent Net Worth in EUR (`netWorthEUR = netWorth / eurRate`) reconciles back seamlessly.
+- **UI Amount Badges**:
+  - Main item rows display the nominal EUR value (e.g. `2.500 €`) in bold white text, with the converted equivalent (e.g. `~12.500 Lei`) positioned directly underneath in subtle secondary typography.
+  - Steppers and quick adjusters preserve the `€` suffix upon mutation.
+
 ---
 
 ## Verification & Testing
-- **Unit Tests**: `DailyCoreTests/SmartLedgerParserTests.swift` passes 10/10 tests (including preserving `//` in keys, stripping embedded parenthesized notes, positive balance, increment adjustment with total balancing, comment/note preservation, category addition, and deletion). All 57 test cases across `DailyCore` passing cleanly.
+- **Unit Tests**: `DailyCoreTests/SmartLedgerParserTests.swift` passes all 12 tests (including `testEURParsingAndNetWorthContribution`, `testEURAdjustPreservesCurrency`, preserving `//` in keys, stripping embedded parenthesized notes, positive balance, increment adjustment with total balancing, comment/note preservation, category addition, and deletion). All 44 test cases across `DailyCore` passing cleanly.
 - **Simulator Inspection (SimulaPhone)**: Verified interactive `[ - ]` and `[ + ]` steppers, subtab ordering, floating capsule order `[Dashboard, Money, Health, Habits]`, horizontal title dragging in list, and auto-scrolling titles in detail sheets.
-- **Physical Device Deployment**: Built, signed, installed, and launched on iPhone 16 Pro ("Schmitz").
+- **Physical Device Deployment**: Built, signed, installed, and verified on iPhone 16 Pro ("Schmitz").

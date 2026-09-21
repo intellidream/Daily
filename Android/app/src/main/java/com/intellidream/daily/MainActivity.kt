@@ -289,15 +289,12 @@ fun DailyRootScreen(
 
     LaunchedEffect(userProfile) {
         val uid = userProfile?.id ?: "guest"
-        if (newsRepository.currentUserId != uid) {
-            newsRepository.currentUserId = uid
-        }
-        if (habitsRepository.currentUserId != uid) {
-            habitsRepository.currentUserId = uid
+        newsRepository.currentUserId = uid
+        habitsRepository.currentUserId = uid
+        healthRepository.currentUserId = uid
+        if (uid.isNotEmpty() && uid != "guest") {
             habitsRepository.syncLogs(uid)
-        }
-        if (healthRepository.currentUserId != uid) {
-            healthRepository.currentUserId = uid
+            newsRepository.syncWithSupabase(uid)
         }
     }
 

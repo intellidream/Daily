@@ -304,10 +304,63 @@ data class SleepSession(
     val sleepScore: Int
         get() {
             if (asleepSeconds <= 0) return 0
-            val durationScore = min((asleepSeconds / (8.0 * 3600.0)) * 50.0, 50.0)
-            val effScore = (efficiencyPercent.toDouble() / 100.0) * 30.0
-            val qualScore = min((restorativePercent.toDouble() / 40.0) * 20.0, 20.0)
-            val total = (durationScore + effScore + qualScore).roundToInt()
+            val asleepHours = asleepSeconds / 3600.0
+
+            // 1. Duration score (max 40 pts, benchmark 7.5h - 9.0h)
+            val durationScore = when {
+                asleepHours in 7.5..9.0 -> 38.0 + min((asleepHours - 7.5) / 1.5 * 2.0, 2.0)
+                asleepHours > 9.0 -> max(34.0, 40.0 - (asleepHours - 9.0) * 2.0)
+                asleepHours >= 7.0 -> 34.0 + (asleepHours - 7.0) / 0.5 * 4.0
+                asleepHours >= 6.0 -> 24.0 + (asleepHours - 6.0) * 10.0
+                asleepHours >= 5.0 -> 14.0 + (asleepHours - 5.0) * 10.0
+                else -> max(0.0, (asleepHours / 5.0) * 14.0)
+            }
+
+            // 2. Efficiency score (max 25 pts, clinical baseline >= 88%)
+            val eff = efficiencyPercent.toDouble()
+            val effScore = when {
+                eff >= 95.0 -> 25.0
+                eff >= 90.0 -> 21.0 + ((eff - 90.0) / 5.0) * 4.0
+                eff >= 85.0 -> 16.0 + ((eff - 85.0) / 5.0) * 5.0
+                eff >= 80.0 -> 10.0 + ((eff - 80.0) / 5.0) * 6.0
+                else -> max(0.0, (eff / 80.0) * 10.0)
+            }
+
+            // 3. Restorative Architecture (max 25 pts: Deep up to 13, REM up to 12)
+            val dp = deepPercent.toDouble()
+            val deepScore = when {
+                dp >= 16.0 -> 11.0 + min(((dp - 16.0) / 6.0) * 2.0, 2.0)
+                dp >= 10.0 -> 6.0 + ((dp - 10.0) / 6.0) * 5.0
+                else -> max(0.0, (dp / 10.0) * 6.0)
+            }
+
+            val rp = remPercent.toDouble()
+            val remScore = when {
+                rp >= 20.0 -> 10.0 + min(((rp - 20.0) / 5.0) * 2.0, 2.0)
+                rp >= 14.0 -> 5.0 + ((rp - 14.0) / 6.0) * 5.0
+                else -> max(0.0, (rp / 14.0) * 5.0)
+            }
+            val qualScore = deepScore + remScore
+
+            // 4. Restfulness & Sleep Continuity (max 10 pts)
+            val awakeCount = stages.count { it.stageType == SleepStageType.AWAKE }
+            val awakeMinutes = awakeSeconds / 60.0
+
+            val awakeCountPenalty = when {
+                awakeCount <= 2 -> 0.0
+                awakeCount <= 4 -> 1.5
+                else -> min(1.5 + (awakeCount - 4) * 0.75, 5.0)
+            }
+
+            val awakeDurationPenalty = if (awakeMinutes <= 25.0) {
+                0.0
+            } else {
+                min(((awakeMinutes - 25.0) / 10.0) * 1.0, 5.0)
+            }
+
+            val restfulnessScore = max(1.0, 10.0 - awakeCountPenalty - awakeDurationPenalty)
+
+            val total = (durationScore + effScore + qualScore + restfulnessScore).roundToInt()
             return min(max(total, 0), 100)
         }
 

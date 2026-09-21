@@ -88,7 +88,7 @@ public final class SmartLedgerParser: Sendable {
                     // This is an explicit total enclosed in parentheses (e.g. under Dentist: (Total = 106))
                     let parts = inner.components(separatedBy: "=")
                     if parts.count >= 2 {
-                        let parsedVal = parseNumericString(parts[1], isScaled: currentSectionScaled)
+                        let parsedVal = parseNumericString(parts[1], isScaled: currentSectionScaled, eurRate: eurRate)
                         currentSectionExplicitTotal = parsedVal.calculated
                         currentSectionRawTotal = parsedVal.raw
                     }
@@ -102,6 +102,7 @@ public final class SmartLedgerParser: Sendable {
                         key: inner,
                         rawAmount: 0,
                         calculatedAmount: 0,
+                        currency: "Lei",
                         isScaled: currentSectionScaled,
                         notes: [inner],
                         isPureNote: true
@@ -119,7 +120,7 @@ public final class SmartLedgerParser: Sendable {
                 
                 // Check if this is an explicit Total line: Total = 160
                 if keyPart.caseInsensitiveCompare("Total") == .orderedSame {
-                    let parsedVal = parseNumericString(valuePart, isScaled: currentSectionScaled)
+                    let parsedVal = parseNumericString(valuePart, isScaled: currentSectionScaled, eurRate: eurRate)
                     currentSectionExplicitTotal = parsedVal.calculated
                     currentSectionRawTotal = parsedVal.raw
                     continue
@@ -129,7 +130,7 @@ public final class SmartLedgerParser: Sendable {
                 let notes = extractParenthesesNotes(from: line)
                 
                 // Parse the numerical value (ignoring parentheses content)
-                let parsedVal = parseNumericString(valuePart, isScaled: currentSectionScaled)
+                let parsedVal = parseNumericString(valuePart, isScaled: currentSectionScaled, eurRate: eurRate)
                 
                 // Clean the key: remove leading/trailing noise
                 let cleanKey = cleanKeyName(keyPart)
@@ -141,6 +142,7 @@ public final class SmartLedgerParser: Sendable {
                     key: cleanKey,
                     rawAmount: parsedVal.raw,
                     calculatedAmount: parsedVal.calculated,
+                    currency: parsedVal.isEUR ? "EUR" : "Lei",
                     isScaled: currentSectionScaled,
                     notes: notes,
                     isPureNote: false
@@ -199,9 +201,10 @@ public final class SmartLedgerParser: Sendable {
     
     // MARK: - Helper Parsing Methods
     
-    /// Parses a raw value string into a tuple of (raw: Double, calculated: Double).
+    /// Parses a raw value string into a tuple of (raw: Double, calculated: Double, isEUR: Bool).
     /// Ignores all content inside parentheses `(...)` and drops comments after `//`.
-    private func parseNumericString(_ valStr: String, isScaled: Bool) -> (raw: Double, calculated: Double) {
+    /// When currency is EUR (indicated by € or EUR outside parentheses), converts calculated amount to Lei using eurRate.
+    private func parseNumericString(_ valStr: String, isScaled: Bool, eurRate: Double = 5.0) -> (raw: Double, calculated: Double, isEUR: Bool) {
         var clean = valStr
         
         // 1. Remove all content inside parentheses (...) first (all parenthesized notes are ignored)
@@ -212,11 +215,15 @@ public final class SmartLedgerParser: Sendable {
             clean = String(clean[..<commentRange.lowerBound])
         }
         
+        // Detect EUR symbol or letters outside parentheses and comments
+        let isEUR = clean.contains("€") || clean.range(of: "EUR", options: .caseInsensitive) != nil
+        
         // 3. Remove letters and currency symbols (L, €, $, ~, etc.)
         let unwantedChars = CharacterSet(charactersIn: "L€$~$% ")
         clean = clean.components(separatedBy: unwantedChars).joined().trimmingCharacters(in: .whitespaces)
+        clean = clean.replacingOccurrences(of: "EUR", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespaces)
         
-        guard !clean.isEmpty else { return (0.0, 0.0) }
+        guard !clean.isEmpty else { return (0.0, 0.0, isEUR) }
         
         // 4. Parse Romanian / European decimal format
         var normalized = clean
@@ -232,10 +239,11 @@ public final class SmartLedgerParser: Sendable {
             }
         }
         
-        guard let num = Double(normalized) else { return (0.0, 0.0) }
+        guard let num = Double(normalized) else { return (0.0, 0.0, isEUR) }
         
-        let calculated = isScaled ? num * 100.0 : num
-        return (raw: num, calculated: calculated)
+        let baseCalculated = isScaled ? num * 100.0 : num
+        let calculated = isEUR ? baseCalculated * eurRate : baseCalculated
+        return (raw: num, calculated: calculated, isEUR: isEUR)
     }
     
     /// Extracts all note strings found between round parentheses `(...)`.
@@ -321,6 +329,8 @@ public final class SmartLedgerParser: Sendable {
         var suffix = ""
         if numRegion.contains("€") {
             suffix = "€"
+        } else if numRegion.range(of: "EUR", options: .caseInsensitive) != nil {
+            suffix = " EUR"
         } else if numRegion.contains("L") {
             suffix = "L"
         } else if numRegion.contains("$") {

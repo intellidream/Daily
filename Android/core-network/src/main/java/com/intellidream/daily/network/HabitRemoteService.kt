@@ -32,7 +32,6 @@ class HabitRemoteService(
                         }
                         gte("logged_at", startIso)
                         lt("logged_at", endIso)
-                        eq("is_deleted", false)
                     }
                 }
                 .decodeList<HabitLogRecord>()

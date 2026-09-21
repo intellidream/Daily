@@ -56,7 +56,6 @@ import com.intellidream.daily.model.HabitType
 import com.intellidream.daily.model.SmokePreset
 import com.intellidream.daily.model.WaterPreset
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HabitQuickActionGrid(
     habitType: HabitType,
@@ -69,90 +68,185 @@ fun HabitQuickActionGrid(
     var showCustomDialog by remember { mutableStateOf(false) }
     var customAmountText by remember { mutableStateOf("250") }
     var customDrinkName by remember { mutableStateOf("Water") }
+    var selectedMultiplier by remember { mutableStateOf(1) }
+
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = if (habitType == HabitType.WATER) "QUICK INTAKE" else "LOG SMOKE OR CRAVING",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = ThemeColors.textSecondary,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (habitType == HabitType.WATER) "QUICK INTAKE" else "QUICK LOG",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = ThemeColors.textSecondary,
+                letterSpacing = 1.sp
+            )
+
+            // Multiplier Selector Pill Bar: 1x, 2x, 3x, 5x
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf(1, 2, 3, 5).forEach { mult ->
+                    val isSelected = selectedMultiplier == mult
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) {
+                                    if (habitType == HabitType.WATER) ThemeColors.accentCyan.copy(alpha = 0.35f)
+                                    else Color(0xFFFF4D4D).copy(alpha = 0.35f)
+                                } else Color.White.copy(alpha = 0.06f)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) {
+                                    if (habitType == HabitType.WATER) ThemeColors.accentCyan
+                                    else Color(0xFFFF4D4D)
+                                } else Color.Transparent,
+                                shape = CircleShape
+                            )
+                            .clickable {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                selectedMultiplier = mult
+                            }
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${mult}x",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) Color.White else ThemeColors.textSecondary
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         if (habitType == HabitType.WATER) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                QuickActionChip(
-                    title = "+100 Coffee",
-                    icon = Icons.Rounded.Coffee,
-                    color = Color(0xFFF59E0B),
-                    onClick = { onLogWater(WaterPreset.COFFEE, 1) }
-                )
-                QuickActionChip(
-                    title = "+150 Water",
-                    icon = Icons.Rounded.WaterDrop,
-                    color = Color(0xFF38BDF8),
-                    onClick = { onLogWater(WaterPreset.SMALL_WATER, 1) }
-                )
-                QuickActionChip(
-                    title = "+300 Water",
-                    icon = Icons.Rounded.WaterDrop,
-                    color = ThemeColors.accentCyan,
-                    onClick = { onLogWater(WaterPreset.LARGE_WATER, 1) }
-                )
-                QuickActionChip(
-                    title = "+500 Bottle",
-                    icon = Icons.Rounded.Science,
-                    color = Color(0xFF06B6D4),
-                    onClick = { onLogWater(WaterPreset.BOTTLE, 1) }
-                )
-                QuickActionChip(
-                    title = "+250 Tea",
-                    icon = Icons.Rounded.EmojiFoodBeverage,
-                    color = Color(0xFF84CC16),
-                    onClick = { onLogWater(WaterPreset.TEA, 1) }
-                )
-                QuickActionChip(
-                    title = "+ Custom",
-                    icon = Icons.Rounded.Add,
-                    color = Color.White,
-                    onClick = { showCustomDialog = true }
-                )
-            }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                FlowRow(
+            // 2-Column Grid (3 pairs of 2 buttons)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Row 1: Coffee & Small Water
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     QuickActionChip(
-                        title = "+1 Cigarette",
+                        title = "Coffee",
+                        subtitle = "+${(100 * selectedMultiplier)} ml",
+                        icon = Icons.Rounded.Coffee,
+                        color = Color(0xFFF59E0B),
+                        onClick = { onLogWater(WaterPreset.COFFEE, selectedMultiplier) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionChip(
+                        title = "Small Water",
+                        subtitle = "+${(150 * selectedMultiplier)} ml",
+                        icon = Icons.Rounded.WaterDrop,
+                        color = Color(0xFF38BDF8),
+                        onClick = { onLogWater(WaterPreset.SMALL_WATER, selectedMultiplier) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Row 2: Large Water & Bottle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    QuickActionChip(
+                        title = "Large Water",
+                        subtitle = "+${(300 * selectedMultiplier)} ml",
+                        icon = Icons.Rounded.WaterDrop,
+                        color = ThemeColors.accentCyan,
+                        onClick = { onLogWater(WaterPreset.LARGE_WATER, selectedMultiplier) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionChip(
+                        title = "Bottle",
+                        subtitle = "+${(500 * selectedMultiplier)} ml",
+                        icon = Icons.Rounded.Science,
+                        color = Color(0xFF06B6D4),
+                        onClick = { onLogWater(WaterPreset.BOTTLE, selectedMultiplier) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Row 3: Tea & Custom
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    QuickActionChip(
+                        title = "Tea",
+                        subtitle = "+${(250 * selectedMultiplier)} ml",
+                        icon = Icons.Rounded.EmojiFoodBeverage,
+                        color = Color(0xFF84CC16),
+                        onClick = { onLogWater(WaterPreset.TEA, selectedMultiplier) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionChip(
+                        title = "Custom",
+                        subtitle = "Enter ml",
+                        icon = Icons.Rounded.Add,
+                        color = Color.White,
+                        onClick = { showCustomDialog = true },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
+            // Smokes 2-Column Grid (2 pairs of 2 buttons) + Emergency Protocol Card
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Row 1: Cigarette & Heated
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    QuickActionChip(
+                        title = "Cigarette",
+                        subtitle = if (selectedMultiplier > 1) "+$selectedMultiplier Logs" else "+1 Log",
                         icon = Icons.Rounded.LocalFireDepartment,
                         color = Color(0xFFEF4444),
-                        onClick = { onLogSmoke(SmokePreset.CIGARETTE, 1) }
+                        onClick = { onLogSmoke(SmokePreset.CIGARETTE, selectedMultiplier) },
+                        modifier = Modifier.weight(1f)
                     )
                     QuickActionChip(
-                        title = "+1 Heated",
+                        title = "Heated",
+                        subtitle = if (selectedMultiplier > 1) "+$selectedMultiplier Logs" else "+1 Log",
                         icon = Icons.Rounded.Bolt,
                         color = Color(0xFF3B82F6),
-                        onClick = { onLogSmoke(SmokePreset.HEATED, 1) }
+                        onClick = { onLogSmoke(SmokePreset.HEATED, selectedMultiplier) },
+                        modifier = Modifier.weight(1f)
                     )
+                }
+
+                // Row 2: Rolled & Cigarillo
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     QuickActionChip(
-                        title = "+1 Rolled",
+                        title = "Rolled",
+                        subtitle = if (selectedMultiplier > 1) "+$selectedMultiplier Logs" else "+1 Log",
                         icon = Icons.Rounded.Eco,
                         color = Color(0xFFF97316),
-                        onClick = { onLogSmoke(SmokePreset.ROLLED, 1) }
+                        onClick = { onLogSmoke(SmokePreset.ROLLED, selectedMultiplier) },
+                        modifier = Modifier.weight(1f)
                     )
                     QuickActionChip(
-                        title = "+1 Cigarillo",
+                        title = "Cigarillo",
+                        subtitle = if (selectedMultiplier > 1) "+$selectedMultiplier Logs" else "+1 Log",
                         icon = Icons.Rounded.LocalFireDepartment,
                         color = Color(0xFFA855F7),
-                        onClick = { onLogSmoke(SmokePreset.CIGARILLO, 1) }
+                        onClick = { onLogSmoke(SmokePreset.CIGARILLO, selectedMultiplier) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
@@ -168,7 +262,10 @@ fun HabitQuickActionGrid(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
@@ -307,32 +404,58 @@ fun QuickActionChip(
     icon: ImageVector,
     color: Color,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    subtitle: String? = null
 ) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     Box(
         modifier = modifier
-            .clip(CircleShape)
-            .background(color.copy(alpha = 0.12f))
-            .border(1.dp, color.copy(alpha = 0.35f), CircleShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 7.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.06f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+            .clickable {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                onClick()
+            }
+            .padding(horizontal = 12.dp, vertical = 11.dp)
     ) {
         Row(
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(13.dp)
-            )
-            Text(
-                text = title,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(color.copy(alpha = 0.15f))
+                    .border(1.dp, color.copy(alpha = 0.35f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = color
+                    )
+                }
+            }
         }
     }
 }

@@ -113,6 +113,14 @@ class DailyApp : Application() {
             if (currentSettings != null) {
                 habitsRepository.setWaterGoal(currentSettings.habitsWaterTargetLiters * 1000.0)
             }
+            val state = authRepository.sessionState.firstOrNull()
+            val uid = (state as? com.intellidream.daily.model.AuthSessionState.Authenticated)?.profile?.id
+            if (!uid.isNullOrEmpty() && uid != "guest") {
+                habitsRepository.currentUserId = uid
+                habitsRepository.syncLogs(uid)
+                newsRepository.currentUserId = uid
+                newsRepository.syncWithSupabase(uid)
+            }
             weatherRepository.refreshWeather(
                 force = false,
                 unitSystem = currentSettings?.weatherUnitSystem ?: com.intellidream.daily.model.WeatherUnitSystem.Metric,

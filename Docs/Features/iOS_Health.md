@@ -46,6 +46,7 @@ graph TD
 
 ### 2.1 Canonical Device Classification (`DeviceSource`)
 Smartwatch telemetry records are classified via `DeviceSource`:
+- **Oura Ring**: Dedicated smart ring sleep and readiness telemetry (`HKSource` or direct sync).
 - **Apple Watch**: watchOS native sensor records (`HKSource`).
 - **Apple Health**: Aggregated HealthKit store entries.
 - **OnePlus Watch 3**: WearOS / Android Health Connect telemetry.
@@ -64,26 +65,40 @@ $$\text{Window}(D) = [D-1\text{ at } 18:00,\; D\text{ at } 18:00]$$
 - Bedtime at 23:30 (Sep 9) with wake-up at 07:15 (Sep 10) $\implies$ Attributed to **Sep 10**.
 - Shift worker bedtime at 01:00 (Sep 10) with wake-up at 03:45 (Sep 10) $\implies$ Attributed to **Sep 10** (never dropped).
 
-### 3.2 Sleep Clustering Algorithm
-1. **Device Partitioning**: Split all raw records into groups: `groupedByDevice[device]`.
-2. **Stage Interval Extraction**:
-   - `sleep_stage_deep` $\implies$ Deep Sleep
-   - `sleep_stage_rem` $\implies$ REM Sleep
-   - `sleep_stage_light` / `sleep_stage_core` $\implies$ Light Sleep
-   - `sleep_stage_awake` $\implies$ Awake Interval
+### 3.2 Sleep Clustering Algorithm & Multi-Device Isolation
+1. **Source Attribution & Device Partitioning**:
+   - `HealthKitManager` maps samples from companion apps (Oura, Zepp/Amazfit) to distinct device names (`"Oura Ring"`, `"Amazfit Balance"`, `"Apple Watch"`) instead of collapsing them to `"Apple Health"`.
+   - Records are partitioned into isolated clusters: `groupedByDevice[device]`.
+2. **Stage Interval Extraction & Clipping (Defense-in-Depth)**:
+   - Within each device cluster, stage records are sorted and normalized with **interval clipping**: if intervals overlap, the later interval is clipped to the previous stage's end time, and redundant sub-intervals are skipped.
+   - **Mathematical Guarantee**: Total asleep duration $\sum \text{stage.durationSeconds}$ can **never** exceed the elapsed wall-clock time $\Delta t = \text{endTime} - \text{startTime}$.
 3. **Cluster Heuristic**: If the gap between two consecutive stages of the same device exceeds **45 minutes**, a new session boundary is created.
 4. **Nocturnal vs. Nap Classification**:
    - If session duration $\ge 3.5\text{ hours}$ OR session occurs predominantly at night (20:00 to 09:00) $\implies$ **Primary Nocturnal Sleep**.
    - If session duration $< 3.5\text{ hours}$ between 09:00 and 20:00 $\implies$ **Daytime Nap**.
-5. **Multi-Device Resolution**: If multiple watches record nocturnal sleep for the same night, the session with higher stage granularity or longer valid duration is elevated to primary, while all sessions remain accessible via the device filter bar.
+5. **Tracker Priority in Multi-Device Resolution**:
+   - When multiple wearables record nocturnal sleep for the same night (e.g. Oura Ring + Amazfit Balance), the engine prioritizes dedicated clinical trackers:
+     $$\text{Oura Ring (100)} > \text{Apple Watch (80)} > \text{Amazfit Balance (70)} > \text{Generic (10-40)}$$
+   - Sessions from all devices remain accessible via the interactive device filter menu.
 
-### 3.3 Clinical Sleep Metrics
-- **Sleep Efficiency**:
-  $$\text{Efficiency} = \frac{\text{Total Asleep Time}}{\text{Time In Bed}} \times 100\%$$
-- **Restorative Sleep Percentage**:
-  $$\text{Restorative Pct} = \frac{\text{Deep Sleep Duration} + \text{REM Sleep Duration}}{\text{Total Asleep Duration}} \times 100\%$$
-- **Clinical Sleep Score (0–100)**:
-  $$\text{Score} = \text{Clamp}\Big(0.40 \times S_{\text{duration}} + 0.30 \times S_{\text{efficiency}} + 0.30 \times S_{\text{restorative}},\; 0,\; 100\Big)$$
+### 3.3 Calibrated Clinical Sleep Score (0–100)
+To prevent overly optimistic scoring (where mediocre nights previously scored 80+), the score is calibrated across 4 clinical pillars aligned with sleep medicine standards:
+1. **Duration (40 pts max)**:
+   - $7.5\text{h} - 9.0\text{h} \implies 38 - 40\text{ pts}$ (optimal adult sleep duration).
+   - $7.0\text{h} - 7.5\text{h} \implies 34 - 38\text{ pts}$.
+   - $6.0\text{h} - 7.0\text{h} \implies 24 - 34\text{ pts}$ (steep drop-off for chronic sleep debt).
+   - $< 6.0\text{h} \implies < 24\text{ pts}$.
+2. **Efficiency (25 pts max)**:
+   - $\ge 95\% \implies 25\text{ pts}$; $90-94\% \implies 21-25\text{ pts}$; $85-89\% \implies 16-21\text{ pts}$; $80-84\% \implies 10-16\text{ pts}$; $< 80\% \implies < 10\text{ pts}$.
+3. **Restorative Architecture (25 pts max)**:
+   - **Deep Sleep (13 pts)**: Target $16-22\% \implies 11-13\text{ pts}$; $10-15\% \implies 6-11\text{ pts}$; $< 10\% \implies < 6\text{ pts}$.
+   - **REM Sleep (12 pts)**: Target $20-25\% \implies 10-12\text{ pts}$; $14-19\% \implies 5-10\text{ pts}$; $< 14\% \implies < 5\text{ pts}$.
+4. **Restfulness & Fragmentation (10 pts max)**:
+   - Evaluates awakening frequency (`awakeCount`) and awake duration:
+   - $\le 2$ awakenings & $\le 25\text{m} \implies 10\text{ pts}$.
+   - $3-4$ awakenings $\implies -1.5\text{ pts}$; $\ge 5$ awakenings $\implies$ up to $-5\text{ pts}$.
+   - $> 25\text{m}$ awake $\implies$ up to $-5\text{ pts}$.
+   - Result: Mediocre/restless nights score **50–68 ("Restless" / "Fair")**, normal nights score **78–86 ("Good")**, and **90+ ("Optimal")** is reserved for truly restorative sleep.
 
 ---
 

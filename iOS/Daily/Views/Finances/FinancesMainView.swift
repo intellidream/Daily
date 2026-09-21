@@ -754,7 +754,11 @@ public struct FinancesMainView: View {
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                         
-                        if item.isScaled && item.rawAmount > 0 {
+                        if item.currency == "EUR" {
+                            Text("~\(item.formattedLeiAmount)")
+                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        } else if item.isScaled && item.rawAmount > 0 {
                             Text("(\(item.formattedRawAmount))")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundColor(ThemeColors.fgMutedDark)

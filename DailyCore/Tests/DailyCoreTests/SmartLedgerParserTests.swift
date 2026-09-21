@@ -295,4 +295,103 @@ final class SmartLedgerParserTests: XCTestCase {
         XCTAssertEqual(serviciuItem?.notes[0], "0/*100")
         XCTAssertEqual(serviciuItem?.notes[1], "0*200")
     }
+    
+    func testEURParsingAndNetWorthContribution() {
+        let parser = SmartLedgerParser()
+        let ledgerText = """
+        **Incoming**
+        Salariu = 100
+
+        **Outgoing**
+        Cheltuieli = 50
+
+        **Deposit**
+        Garanti = 10.000
+        EUR = 2500€
+        Revolut EUR = 1000 EUR
+        Card Lei = 500 (100€ bonus)
+        """
+        
+        let parsed = parser.parse(ledgerText, eurRate: 5.0)
+        
+        guard let depositSec = parsed.sections.first(where: { $0.name == "Deposit" }) else {
+            XCTFail("Deposit section missing")
+            return
+        }
+        
+        // Garanti (Lei)
+        guard let garanti = depositSec.items.first(where: { $0.key == "Garanti" }) else {
+            XCTFail("Garanti missing")
+            return
+        }
+        XCTAssertEqual(garanti.currency, "Lei")
+        XCTAssertEqual(garanti.rawAmount, 10000.0)
+        XCTAssertEqual(garanti.calculatedAmount, 10000.0)
+        
+        // EUR = 2500€
+        guard let eurItem = depositSec.items.first(where: { $0.key == "EUR" }) else {
+            XCTFail("EUR item missing")
+            return
+        }
+        XCTAssertEqual(eurItem.currency, "EUR")
+        XCTAssertEqual(eurItem.rawAmount, 2500.0)
+        XCTAssertEqual(eurItem.calculatedAmount, 12500.0, accuracy: 0.01)
+        XCTAssertEqual(eurItem.formattedCalculatedAmount, "2.500 €")
+        XCTAssertEqual(eurItem.formattedLeiAmount, "12.500 Lei")
+        
+        // Revolut EUR = 1000 EUR
+        guard let revEur = depositSec.items.first(where: { $0.key == "Revolut EUR" }) else {
+            XCTFail("Revolut EUR missing")
+            return
+        }
+        XCTAssertEqual(revEur.currency, "EUR")
+        XCTAssertEqual(revEur.rawAmount, 1000.0)
+        XCTAssertEqual(revEur.calculatedAmount, 5000.0, accuracy: 0.01)
+        XCTAssertEqual(revEur.formattedCalculatedAmount, "1.000 €")
+        
+        // Card Lei = 500 (100€ bonus) -> € inside parentheses should NOT make currency EUR
+        guard let cardLei = depositSec.items.first(where: { $0.key == "Card Lei" }) else {
+            XCTFail("Card Lei missing")
+            return
+        }
+        XCTAssertEqual(cardLei.currency, "Lei")
+        XCTAssertEqual(cardLei.rawAmount, 500.0)
+        XCTAssertEqual(cardLei.calculatedAmount, 500.0)
+        
+        // Deposit Total = 10,000 + 12,500 + 5,000 + 500 = 28,000 Lei
+        XCTAssertEqual(parsed.depositTotal, 28000.0, accuracy: 0.01)
+        
+        // Incoming = 100 * 100 = 10,000; Outgoing = 50 * 100 = 5,000; Balance = 5,000 Lei
+        XCTAssertEqual(parsed.balanceTotal, 5000.0, accuracy: 0.01)
+        
+        // Net Worth = 28,000 (Deposit) + 5,000 (Balance) = 33,000 Lei
+        XCTAssertEqual(parsed.netWorth, 33000.0, accuracy: 0.01)
+        // Net Worth EUR = 33,000 / 5.0 = 6,600 €
+        XCTAssertEqual(parsed.netWorthEUR, 6600.0, accuracy: 0.01)
+    }
+    
+    func testEURAdjustPreservesCurrency() {
+        let parser = SmartLedgerParser()
+        let ledgerText = """
+        **Deposit**
+        EUR = 2500€
+        """
+        let parsed = parser.parse(ledgerText, eurRate: 5.0)
+        guard let item = parsed.sections.first?.items.first else {
+            XCTFail("Item not found")
+            return
+        }
+        
+        let adjusted = parser.adjustItemAmount(in: ledgerText, lineIndex: item.lineIndex, deltaRaw: 100)
+        XCTAssertTrue(adjusted.contains("EUR = 2600€"))
+        
+        let reParsed = parser.parse(adjusted, eurRate: 5.0)
+        guard let adjustedItem = reParsed.sections.first?.items.first else {
+            XCTFail("Adjusted item missing")
+            return
+        }
+        XCTAssertEqual(adjustedItem.rawAmount, 2600.0)
+        XCTAssertEqual(adjustedItem.currency, "EUR")
+        XCTAssertEqual(adjustedItem.calculatedAmount, 13000.0, accuracy: 0.01)
+    }
 }

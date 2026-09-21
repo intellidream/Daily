@@ -88,7 +88,7 @@ object SmartLedgerParser {
                 if (inner.startsWith("Total =", ignoreCase = true) || inner.startsWith("Total=", ignoreCase = true)) {
                     val parts = inner.split("=")
                     if (parts.size >= 2) {
-                        val parsedVal = parseNumericString(parts[1], isScaled = currentSectionScaled)
+                        val parsedVal = parseNumericString(parts[1], isScaled = currentSectionScaled, eurRate = eurRate)
                         currentSectionExplicitTotal = parsedVal.calculated
                         currentSectionRawTotal = parsedVal.raw
                     }
@@ -101,6 +101,7 @@ object SmartLedgerParser {
                         key = inner,
                         rawAmount = 0.0,
                         calculatedAmount = 0.0,
+                        currency = "Lei",
                         isScaled = currentSectionScaled,
                         notes = listOf(inner),
                         isPureNote = true
@@ -117,14 +118,14 @@ object SmartLedgerParser {
                 val valuePart = parts[1].trim()
 
                 if (keyPart.equals("Total", ignoreCase = true)) {
-                    val parsedVal = parseNumericString(valuePart, isScaled = currentSectionScaled)
+                    val parsedVal = parseNumericString(valuePart, isScaled = currentSectionScaled, eurRate = eurRate)
                     currentSectionExplicitTotal = parsedVal.calculated
                     currentSectionRawTotal = parsedVal.raw
                     continue
                 }
 
                 val notes = extractParenthesesNotes(line)
-                val parsedVal = parseNumericString(valuePart, isScaled = currentSectionScaled)
+                val parsedVal = parseNumericString(valuePart, isScaled = currentSectionScaled, eurRate = eurRate)
                 val cleanKey = cleanKeyName(keyPart)
 
                 val item = SmartLedgerItem(
@@ -134,6 +135,7 @@ object SmartLedgerParser {
                     key = cleanKey,
                     rawAmount = parsedVal.raw,
                     calculatedAmount = parsedVal.calculated,
+                    currency = if (parsedVal.isEUR) "EUR" else "Lei",
                     isScaled = currentSectionScaled,
                     notes = notes,
                     isPureNote = false
@@ -185,9 +187,9 @@ object SmartLedgerParser {
         )
     }
 
-    data class ParsedNumeric(val raw: Double, val calculated: Double)
+    data class ParsedNumeric(val raw: Double, val calculated: Double, val isEUR: Boolean = false)
 
-    fun parseNumericString(valStr: String, isScaled: Boolean): ParsedNumeric {
+    fun parseNumericString(valStr: String, isScaled: Boolean, eurRate: Double = 5.0): ParsedNumeric {
         var clean = valStr
 
         // 1. Remove all content inside parentheses (...) first
@@ -199,10 +201,13 @@ object SmartLedgerParser {
             clean = clean.substring(0, commentIdx)
         }
 
-        // 3. Remove letters and unwanted characters (L, €, $, ~, %, etc.)
-        clean = clean.replace(Regex("[L€$~$% ]"), "").trim()
+        // Detect EUR symbol or letters outside parentheses and comments
+        val isEUR = clean.contains("€") || clean.contains("EUR", ignoreCase = true)
 
-        if (clean.isEmpty()) return ParsedNumeric(0.0, 0.0)
+        // 3. Remove letters and unwanted characters (L, €, $, ~, %, etc.)
+        clean = clean.replace(Regex("[L€$~$% ]"), "").replace(Regex("EUR", RegexOption.IGNORE_CASE), "").trim()
+
+        if (clean.isEmpty()) return ParsedNumeric(0.0, 0.0, isEUR)
 
         // 4. Parse Romanian / European decimal format
         var normalized = clean
@@ -217,9 +222,10 @@ object SmartLedgerParser {
             }
         }
 
-        val num = normalized.toDoubleOrNull() ?: return ParsedNumeric(0.0, 0.0)
-        val calculated = if (isScaled) num * 100.0 else num
-        return ParsedNumeric(num, calculated)
+        val num = normalized.toDoubleOrNull() ?: return ParsedNumeric(0.0, 0.0, isEUR)
+        val baseCalculated = if (isScaled) num * 100.0 else num
+        val calculated = if (isEUR) baseCalculated * eurRate else baseCalculated
+        return ParsedNumeric(num, calculated, isEUR)
     }
 
     private fun extractParenthesesNotes(line: String): List<String> {
@@ -281,6 +287,7 @@ object SmartLedgerParser {
 
         val suffix = when {
             numRegion.contains("€") -> "€"
+            numRegion.contains("EUR", ignoreCase = true) -> " EUR"
             numRegion.contains("L") -> "L"
             numRegion.contains("$") -> "$"
             else -> ""

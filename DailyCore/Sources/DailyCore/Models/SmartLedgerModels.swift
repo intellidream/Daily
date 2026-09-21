@@ -27,6 +27,8 @@ public struct SmartLedgerItem: Identifiable, Codable, Equatable, Sendable {
         return clean.isEmpty ? key : clean
     }
     
+    public var currency: String
+    
     public init(
         id: UUID = UUID(),
         sectionName: String = "",
@@ -35,6 +37,7 @@ public struct SmartLedgerItem: Identifiable, Codable, Equatable, Sendable {
         key: String,
         rawAmount: Double = 0.0,
         calculatedAmount: Double = 0.0,
+        currency: String = "Lei",
         isScaled: Bool = true,
         notes: [String] = [],
         isPureNote: Bool = false,
@@ -47,14 +50,35 @@ public struct SmartLedgerItem: Identifiable, Codable, Equatable, Sendable {
         self.key = key
         self.rawAmount = rawAmount
         self.calculatedAmount = calculatedAmount
+        self.currency = currency
         self.isScaled = isScaled
         self.notes = notes
         self.isPureNote = isPureNote
         self.percentageOfSection = percentageOfSection
     }
     
-    /// Nicely formatted full amount in Romanian Lei (e.g. "15.100 Lei" or "53.156,47 Lei").
+    /// Nicely formatted amount in original currency (e.g. "2.500 €" or "15.100 Lei").
     public var formattedCalculatedAmount: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = "."
+        formatter.decimalSeparator = ","
+        
+        if currency == "EUR" {
+            formatter.maximumFractionDigits = rawAmount.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 2
+            formatter.minimumFractionDigits = rawAmount.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 2
+            let numStr = formatter.string(from: NSNumber(value: rawAmount)) ?? "\(rawAmount)"
+            return "\(numStr) €"
+        } else {
+            formatter.maximumFractionDigits = calculatedAmount.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 2
+            formatter.minimumFractionDigits = calculatedAmount.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 2
+            let numStr = formatter.string(from: NSNumber(value: calculatedAmount)) ?? "\(calculatedAmount)"
+            return "\(numStr) Lei"
+        }
+    }
+    
+    /// Always formats the full equivalent amount in Romanian Lei (e.g. "12.500 Lei").
+    public var formattedLeiAmount: String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.groupingSeparator = "."

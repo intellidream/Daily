@@ -201,11 +201,17 @@ public enum SleepClusteringEngine {
         
         // Prioritize:
         // 1. Granular hypnogram sessions over summary sessions
-        // 2. Highest asleep duration
+        // 2. Dedicated sleep tracking device priority (Oura > Apple Watch > Amazfit > etc.)
+        // 3. Highest asleep duration
         let primary = eligibleSessions
             .sorted { (a, b) -> Bool in
                 if a.hasGranularHypnogram != b.hasGranularHypnogram {
                     return a.hasGranularHypnogram && !b.hasGranularHypnogram
+                }
+                let rankA = deviceSleepPriorityRank(a.sourceDevice)
+                let rankB = deviceSleepPriorityRank(b.sourceDevice)
+                if rankA != rankB {
+                    return rankA > rankB
                 }
                 return a.asleepSeconds > b.asleepSeconds
             }
@@ -296,16 +302,8 @@ public enum SleepClusteringEngine {
         let totalDuration = max(0, end.timeIntervalSince(start))
         guard totalDuration >= 600 else { return nil } // Ignore < 10 mins noise
         
-        let stageRecords = cluster.map { record in
-            SleepStageRecord(
-                id: record.id,
-                stageType: record.sleepStageType,
-                startTime: record.startTime,
-                endTime: record.effectiveEndTime,
-                durationSeconds: record.durationSeconds,
-                sourceDevice: sourceDevice
-            )
-        }
+        let stageRecords = normalizeAndDeduplicateStages(cluster, sourceDevice: sourceDevice)
+        guard !stageRecords.isEmpty else { return nil }
         
         // Daytime Nap Heuristic:
         // Duration < 3.5 hours AND starts during daytime (>= 09:00) AND ends <= 20:30 on day D
@@ -386,5 +384,72 @@ public enum SleepClusteringEngine {
             sourceDevice: sourceDevice,
             hasGranularHypnogram: false
         )
+    }
+    
+    // MARK: - Dedicated Tracker Priority Ranking
+    
+    /// Priority ranking for selecting the primary nocturnal sleep session among multiple wearables.
+    /// Dedicated sleep trackers (Oura Ring) have highest clinical accuracy, followed by Apple Watch and Amazfit.
+    private static func deviceSleepPriorityRank(_ deviceName: String) -> Int {
+        let lower = deviceName.lowercased()
+        if lower.contains("oura") { return 100 }
+        if lower.contains("watch") || lower.contains("apple") { return 80 }
+        if lower.contains("amazfit") || lower.contains("zepp") || lower.contains("balance") { return 70 }
+        if lower.contains("oneplus") || lower.contains("wearos") { return 60 }
+        if lower.contains("huawei") || lower.contains("harmony") { return 50 }
+        if lower.contains("healthkit") || lower.contains("health") { return 40 }
+        return 10
+    }
+    
+    // MARK: - Stage Interval Clipping & De-duplication
+    
+    /// Normalizes and clips stage records within a cluster to prevent overlapping time spans.
+    /// Guarantees that the sum of stage durations can mathematically never exceed the session's wall-clock duration.
+    private static func normalizeAndDeduplicateStages(
+        _ rawRecords: [HealthTelemetryRecord],
+        sourceDevice: String
+    ) -> [SleepStageRecord] {
+        let sorted = rawRecords.sorted {
+            if $0.startTime != $1.startTime {
+                return $0.startTime < $1.startTime
+            }
+            return $0.effectiveEndTime < $1.effectiveEndTime
+        }
+        
+        var normalized: [SleepStageRecord] = []
+        var lastEnd: Date? = nil
+        
+        for record in sorted {
+            var start = record.startTime
+            let end = record.effectiveEndTime
+            guard end > start else { continue }
+            
+            if let prevEnd = lastEnd {
+                if start < prevEnd {
+                    if end <= prevEnd {
+                        // Completely subsumed by previous stage, ignore duplicate
+                        continue
+                    } else {
+                        // Partially overlapping: clip start to prevEnd
+                        start = prevEnd
+                    }
+                }
+            }
+            
+            let dur = max(0, end.timeIntervalSince(start))
+            guard dur >= 10 else { continue } // Ignore sub-10s artifacts
+            
+            normalized.append(SleepStageRecord(
+                id: record.id,
+                stageType: record.sleepStageType,
+                startTime: start,
+                endTime: end,
+                durationSeconds: dur,
+                sourceDevice: sourceDevice
+            ))
+            lastEnd = end
+        }
+        
+        return normalized
     }
 }

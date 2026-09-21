@@ -528,17 +528,91 @@ public struct SleepSession: Identifiable, Codable, Hashable, Sendable {
         return min(max(raw, 10), 100)
     }
     
-    // Clinical Sleep Score (0 - 100)
+    // Calibrated Clinical Sleep Score (0 - 100)
     public var sleepScore: Int {
         guard asleepSeconds > 0 else { return 0 }
-        // 1. Duration score (up to 50 pts based on 8-hour target)
-        let durationScore = min((asleepSeconds / (8.0 * 3600.0)) * 50.0, 50.0)
-        // 2. Efficiency score (up to 30 pts)
-        let effScore = (Double(efficiencyPercent) / 100.0) * 30.0
-        // 3. Restorative score (up to 20 pts based on 40% Deep+REM target)
-        let qualScore = min((Double(restorativePercent) / 40.0) * 20.0, 20.0)
         
-        let total = Int(round(durationScore + effScore + qualScore))
+        let asleepHours = asleepSeconds / 3600.0
+        
+        // 1. Duration score (max 40 pts, benchmark 7.5h - 9.0h)
+        let durationScore: Double
+        if asleepHours >= 7.5 && asleepHours <= 9.0 {
+            durationScore = 38.0 + min((asleepHours - 7.5) / 1.5 * 2.0, 2.0)
+        } else if asleepHours > 9.0 {
+            // Slight taper for excessive sleep (> 10h)
+            durationScore = max(34.0, 40.0 - (asleepHours - 9.0) * 2.0)
+        } else if asleepHours >= 7.0 {
+            durationScore = 34.0 + (asleepHours - 7.0) / 0.5 * 4.0 // 34 - 38
+        } else if asleepHours >= 6.0 {
+            durationScore = 24.0 + (asleepHours - 6.0) * 10.0      // 24 - 34
+        } else if asleepHours >= 5.0 {
+            durationScore = 14.0 + (asleepHours - 5.0) * 10.0      // 14 - 24
+        } else {
+            durationScore = max(0.0, (asleepHours / 5.0) * 14.0)   // 0 - 14
+        }
+        
+        // 2. Efficiency score (max 25 pts, clinical baseline >= 88%)
+        let eff = Double(efficiencyPercent)
+        let effScore: Double
+        if eff >= 95.0 {
+            effScore = 25.0
+        } else if eff >= 90.0 {
+            effScore = 21.0 + ((eff - 90.0) / 5.0) * 4.0 // 21 - 25
+        } else if eff >= 85.0 {
+            effScore = 16.0 + ((eff - 85.0) / 5.0) * 5.0 // 16 - 21
+        } else if eff >= 80.0 {
+            effScore = 10.0 + ((eff - 80.0) / 5.0) * 6.0 // 10 - 16
+        } else {
+            effScore = max(0.0, (eff / 80.0) * 10.0)     // 0 - 10
+        }
+        
+        // 3. Restorative Architecture (max 25 pts: Deep up to 13, REM up to 12)
+        // Deep sleep target: 16% - 22% (or >= 60m)
+        let deepScore: Double
+        let dp = Double(deepPercent)
+        if dp >= 16.0 {
+            deepScore = 11.0 + min(((dp - 16.0) / 6.0) * 2.0, 2.0) // 11 - 13
+        } else if dp >= 10.0 {
+            deepScore = 6.0 + ((dp - 10.0) / 6.0) * 5.0            // 6 - 11
+        } else {
+            deepScore = max(0.0, (dp / 10.0) * 6.0)                // 0 - 6
+        }
+        
+        // REM sleep target: 20% - 25% (or >= 80m)
+        let remScore: Double
+        let rp = Double(remPercent)
+        if rp >= 20.0 {
+            remScore = 10.0 + min(((rp - 20.0) / 5.0) * 2.0, 2.0)  // 10 - 12
+        } else if rp >= 14.0 {
+            remScore = 5.0 + ((rp - 14.0) / 6.0) * 5.0             // 5 - 10
+        } else {
+            remScore = max(0.0, (rp / 14.0) * 5.0)                 // 0 - 5
+        }
+        let qualScore = deepScore + remScore // Max 25
+        
+        // 4. Restfulness & Sleep Continuity (max 10 pts)
+        let awakeCount = stages.filter { $0.stageType == .awake }.count
+        let awakeMinutes = awakeSeconds / 60.0
+        
+        let awakeCountPenalty: Double
+        if awakeCount <= 2 {
+            awakeCountPenalty = 0.0
+        } else if awakeCount <= 4 {
+            awakeCountPenalty = 1.5
+        } else {
+            awakeCountPenalty = min(1.5 + Double(awakeCount - 4) * 0.75, 5.0)
+        }
+        
+        let awakeDurationPenalty: Double
+        if awakeMinutes <= 25.0 {
+            awakeDurationPenalty = 0.0
+        } else {
+            awakeDurationPenalty = min(((awakeMinutes - 25.0) / 10.0) * 1.0, 5.0)
+        }
+        
+        let restfulnessScore = max(1.0, 10.0 - awakeCountPenalty - awakeDurationPenalty)
+        
+        let total = Int(round(durationScore + effScore + qualScore + restfulnessScore))
         return min(max(total, 0), 100)
     }
     
@@ -734,6 +808,7 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
     case amazfit
     case oneplus
     case huawei
+    case oura
     case healthKit
     case healthConnect
     case manual
@@ -750,6 +825,7 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
             return .other("Unknown")
         }
         let lower = name.lowercased()
+        if lower.contains("oura") { return .oura }
         if lower.contains("healthkit") || lower.contains("apple health") || lower == "ios" { return .healthKit }
         if lower.contains("apple") || lower.contains("watchos") { return .appleWatch }
         if lower.contains("zepp") || lower.contains("amazfit") || lower.contains("balance") { return .amazfit }
@@ -766,6 +842,7 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
         case .amazfit: return "Amazfit Balance"
         case .oneplus: return "OnePlus Watch 3"
         case .huawei: return "Huawei Watch GT 5 Pro"
+        case .oura: return "Oura Ring"
         case .healthKit: return "Apple Health"
         case .healthConnect: return "Health Connect"
         case .manual: return "Manual Entry"
@@ -776,6 +853,7 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
     public var systemImage: String {
         switch self {
         case .appleWatch, .amazfit, .oneplus, .huawei: return "applewatch"
+        case .oura: return "circle.circle"
         case .healthKit, .healthConnect: return "heart.text.square.fill"
         case .manual: return "hand.tap.fill"
         case .other: return "sensor.fill"

@@ -23,8 +23,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BookmarkRemove
@@ -362,21 +365,22 @@ private fun NewsHeaderBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Back Button
-        IconButton(
-            onClick = {
-                if (isSearchExpanded) {
-                    onSearchExpandedChange(false)
-                    onSearchQueryChange("")
-                    focusManager.clearFocus()
-                } else {
-                    onNavigateBack()
-                }
-            },
+        Box(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.08f))
                 .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                .clickable {
+                    if (isSearchExpanded) {
+                        onSearchExpandedChange(false)
+                        onSearchQueryChange("")
+                        focusManager.clearFocus()
+                    } else {
+                        onNavigateBack()
+                    }
+                },
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
@@ -403,7 +407,8 @@ private fun NewsHeaderBar(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Search,
@@ -412,42 +417,46 @@ private fun NewsHeaderBar(
                     modifier = Modifier.size(15.dp)
                 )
 
-                OutlinedTextField(
+                BasicTextField(
                     value = searchQuery,
                     onValueChange = {
                         onSearchQueryChange(it)
                         onSearchExpandedChange(true)
                     },
-                    placeholder = {
-                        Text(
-                            text = "Search articles...",
-                            color = ThemeColors.textMuted,
-                            fontSize = 13.sp
-                        )
-                    },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent
+                    textStyle = TextStyle(
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal
                     ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    cursorBrush = SolidColor(ThemeColors.accentCyan),
                     modifier = Modifier
                         .weight(1f)
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused) {
                                 onSearchExpandedChange(true)
                             }
+                        },
+                    decorationBox = { innerTextField ->
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                text = "Search articles...",
+                                color = ThemeColors.textMuted,
+                                fontSize = 13.sp
+                            )
                         }
+                        innerTextField()
+                    }
                 )
 
                 if (searchQuery.isNotEmpty()) {
-                    IconButton(
-                        onClick = { onSearchQueryChange("") },
-                        modifier = Modifier.size(20.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .clickable { onSearchQueryChange("") },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Clear,
@@ -477,13 +486,14 @@ private fun NewsHeaderBar(
             )
         } else {
             // Manage Feeds Button
-            IconButton(
-                onClick = onOpenManageFeeds,
+            Box(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.08f))
                     .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                    .clickable(onClick = onOpenManageFeeds),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Tune,
@@ -495,13 +505,14 @@ private fun NewsHeaderBar(
 
             // Category Selector Menu
             Box {
-                IconButton(
-                    onClick = { showCategoryMenu = true },
+                Box(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
                         .background(ThemeColors.accentCyan.copy(alpha = 0.15f))
                         .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.30f), CircleShape)
+                        .clickable { showCategoryMenu = true },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = categoryIcon(selectedCategory),

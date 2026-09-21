@@ -478,15 +478,19 @@ fun HabitsMainView(
                                             color = Color(android.graphics.Color.parseColor(log.specificIconColorHex))
                                         )
 
-                                        IconButton(
-                                            onClick = { repository.deleteLog(log.id) },
-                                            modifier = Modifier.size(24.dp)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.White.copy(alpha = 0.06f))
+                                                .clickable { repository.deleteLog(log.id) },
+                                            contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Rounded.DeleteOutline,
                                                 contentDescription = "Delete",
-                                                tint = Color.White.copy(alpha = 0.4f),
-                                                modifier = Modifier.size(15.dp)
+                                                tint = Color.White.copy(alpha = 0.5f),
+                                                modifier = Modifier.size(14.dp)
                                             )
                                         }
                                     }
