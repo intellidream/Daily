@@ -112,6 +112,7 @@ public struct SmartBriefingNarrative: Codable, Equatable, Sendable {
     public var greeting: String
     public var weatherText: String
     public var healthText: String
+    public var stressText: String
     public var habitsText: String
     public var financeText: String
     public var tagdosText: String
@@ -124,6 +125,7 @@ public struct SmartBriefingNarrative: Codable, Equatable, Sendable {
         greeting: String = "",
         weatherText: String = "",
         healthText: String = "",
+        stressText: String = "",
         habitsText: String = "",
         financeText: String = "",
         tagdosText: String = "",
@@ -135,6 +137,7 @@ public struct SmartBriefingNarrative: Codable, Equatable, Sendable {
         self.greeting = greeting
         self.weatherText = weatherText
         self.healthText = healthText
+        self.stressText = stressText
         self.habitsText = habitsText
         self.financeText = financeText
         self.tagdosText = tagdosText
@@ -150,6 +153,7 @@ public struct SmartBriefingNarrative: Codable, Equatable, Sendable {
             greeting,
             weatherText,
             healthText,
+            stressText,
             habitsText,
             financeText,
             tagdosText,
@@ -167,6 +171,9 @@ public struct SmartBriefingNarrative: Codable, Equatable, Sendable {
         }
         if !healthText.isEmpty {
             list.append(("heart.fill", "Health & Recovery", healthText))
+        }
+        if !stressText.isEmpty {
+            list.append(("brain.head.profile", "Stress & Balance", stressText))
         }
         if !habitsText.isEmpty {
             list.append(("drop.fill", "Habits & Cravings", habitsText))
@@ -204,6 +211,9 @@ public struct SmartBriefingMetrics: Codable, Equatable, Sendable {
     public var activeStreamCount: Int
     public var activeMemoCount: Int
     public var topNewsTitle: String?
+    public var stressScore: Int?
+    public var stressStatus: String?
+    public var monkeyMood: String?
 
     public init(
         weatherTemp: Double? = nil,
@@ -223,7 +233,10 @@ public struct SmartBriefingMetrics: Codable, Equatable, Sendable {
         daySpend: Double = 0,
         activeStreamCount: Int = 0,
         activeMemoCount: Int = 0,
-        topNewsTitle: String? = nil
+        topNewsTitle: String? = nil,
+        stressScore: Int? = nil,
+        stressStatus: String? = nil,
+        monkeyMood: String? = nil
     ) {
         self.weatherTemp = weatherTemp
         self.weatherCondition = weatherCondition
@@ -243,6 +256,9 @@ public struct SmartBriefingMetrics: Codable, Equatable, Sendable {
         self.activeStreamCount = activeStreamCount
         self.activeMemoCount = activeMemoCount
         self.topNewsTitle = topNewsTitle
+        self.stressScore = stressScore
+        self.stressStatus = stressStatus
+        self.monkeyMood = monkeyMood
     }
 }
 

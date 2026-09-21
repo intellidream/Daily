@@ -504,6 +504,26 @@ public struct SmartBriefingOverlayView: View {
             )
         }
 
+        // 2.5. Stress Level & Autonomic Tone (Monkey Mascot)
+        if !n.stressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let sScore = m.stressScore ?? 35
+            let sStatus = m.stressStatus ?? "Calm"
+            let badgeText = "\(sScore) · \(sStatus)"
+            let statusColor = (sScore <= 25) ? Color(hex: "#00E5FF") : (sScore <= 50 ? Color(hex: "#00FFB2") : (sScore <= 75 ? Color(hex: "#FFA726") : Color(hex: "#FF5252")))
+
+            items.append(
+                BriefingCardItem(
+                    id: "stress",
+                    icon: "brain.head.profile",
+                    iconColor: statusColor,
+                    title: "Stress & Mind Balance 🐵",
+                    badgeText: badgeText,
+                    badgeColor: statusColor,
+                    text: n.stressText
+                )
+            )
+        }
+
         // 3. Habits & Balance
         if !n.habitsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let badge: String? = {

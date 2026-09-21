@@ -50,6 +50,7 @@ public final class GeminiApiService: @unchecked Sendable {
           "greeting": "A warm, personalized 1-line greeting with date context",
           "weatherText": "Concise atmosphere & outfit recommendation based on weather",
           "healthText": "Recovery analysis correlating sleep score, resting HR, and activity",
+          "stressText": "Wise, supportive, and cute advice from the stylized Monkey Mascot correlating autonomic stress level (0-100), HRV, and practical breathing tips",
           "habitsText": "Empathetic hydration progress and supportive craving reduction advice",
           "financeText": "Summary of monthly flow, net worth in Lei, and financial clarity",
           "tagdosText": "Focus priority for active Tagdos pills (e.g. 'Here\\'s what needs your focus today: ...')",
@@ -66,6 +67,11 @@ public final class GeminiApiService: @unchecked Sendable {
         else if let hours = metrics.sleepDurationHours { healthPayload["sleepHours"] = String(format: "%.1fh", hours) }
         if let bpm = metrics.restingBpm { healthPayload["restingBpm"] = bpm }
 
+        var stressPayload: [String: Any] = [:]
+        if let score = metrics.stressScore { stressPayload["score"] = score }
+        if let status = metrics.stressStatus { stressPayload["status"] = status }
+        if let mood = metrics.monkeyMood { stressPayload["monkeyMood"] = mood }
+
         let promptPayload: [String: Any] = [
             "timeSlot": slot.rawValue,
             "userName": userName,
@@ -76,6 +82,7 @@ public final class GeminiApiService: @unchecked Sendable {
                 "city": metrics.weatherCity ?? "Current Location"
             ],
             "health": healthPayload,
+            "stress": stressPayload,
             "habits": [
                 "waterMlToday": metrics.waterMlToday,
                 "waterGoalMl": metrics.waterGoalMl,

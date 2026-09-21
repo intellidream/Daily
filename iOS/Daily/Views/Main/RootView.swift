@@ -226,6 +226,9 @@ public struct RootView: View {
                 } else if fullPath.contains("sleep") {
                     selectedTab = .health
                     HealthDataService.shared.activeSubTab = .sleep
+                } else if fullPath.contains("stress") {
+                    selectedTab = .health
+                    HealthDataService.shared.activeSubTab = .stress
                 } else if fullPath.contains("tagdos") {
                     selectedTab = .tagdos
                 } else if fullPath.contains("summary") || fullPath.contains("briefing") {

@@ -98,7 +98,8 @@ public final class SmartBriefingService: ObservableObject {
            let cached = inMemoryCache[currentSlot],
            cached.dataHash == hash,
            cached.slot == currentSlot,
-           Calendar.current.isDateInToday(cached.createdAt) {
+           Calendar.current.isDateInToday(cached.createdAt),
+           !cached.narrative.stressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             self.activeBriefing = cached
             return cached
         }
@@ -150,6 +151,7 @@ public final class SmartBriefingService: ObservableObject {
                     greeting: aiNarrative.greeting.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.greeting : aiNarrative.greeting,
                     weatherText: aiNarrative.weatherText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.weatherText : aiNarrative.weatherText,
                     healthText: aiNarrative.healthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.healthText : aiNarrative.healthText,
+                    stressText: aiNarrative.stressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.stressText : aiNarrative.stressText,
                     habitsText: aiNarrative.habitsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.habitsText : aiNarrative.habitsText,
                     financeText: aiNarrative.financeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.financeText : aiNarrative.financeText,
                     tagdosText: aiNarrative.tagdosText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localNarrative.tagdosText : aiNarrative.tagdosText,
@@ -258,7 +260,10 @@ public final class SmartBriefingService: ObservableObject {
             daySpend: ledger.outgoingTotal,
             activeStreamCount: tagdos.streams.count,
             activeMemoCount: activeMemoCount,
-            topNewsTitle: news.topHeadline?.title ?? news.articles.first?.title
+            topNewsTitle: news.topHeadline?.title ?? news.articles.first?.title,
+            stressScore: health.currentStressScore,
+            stressStatus: health.currentStressLevel.displayName,
+            monkeyMood: health.stressAnalysis?.monkeyMood.displayName
         )
     }
 
@@ -269,8 +274,9 @@ public final class SmartBriefingService: ObservableObject {
         let waterBucket = Int(metrics.waterMlToday / 100.0)
         let smokes = metrics.smokesToday
         let netWorthBucket = Int(metrics.netWorth / 50.0)
+        let stressBucket = (metrics.stressScore ?? 35) / 5
 
-        let composite = "\(slot.rawValue)|\(tempRounded)|\(sleepRounded)|\(stepsBucket)|\(waterBucket)|\(smokes)|\(netWorthBucket)|\(streamCount)|\(metrics.topNewsTitle ?? "")"
+        let composite = "\(slot.rawValue)|\(tempRounded)|\(sleepRounded)|\(stepsBucket)|\(waterBucket)|\(smokes)|\(netWorthBucket)|\(streamCount)|\(metrics.topNewsTitle ?? "")|\(stressBucket)"
         let digest = SHA256.hash(data: Data(composite.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
@@ -471,10 +477,25 @@ public final class SmartBriefingService: ObservableObject {
             outro = "Power down screens, recharge your energy, and sleep peacefully."
         }
 
+        // Stress & Autonomic Balance (voiced by Monkey Mascot)
+        let stressAdvice: String
+        let sScore = metrics.stressScore ?? 32
+        let sMood = metrics.monkeyMood ?? "Curious Monkey"
+        if sScore <= 25 {
+            stressAdvice = "Stress is Restful (\(sScore)/100). Zen Monkey says: You're in peak recovery mode — wonderful flow for deep, creative tasks!"
+        } else if sScore <= 50 {
+            stressAdvice = "Stress is Calm (\(sScore)/100). Curious Monkey says: Autonomic tone is balanced. Keep this steady groove going with a sip of water."
+        } else if sScore <= 75 {
+            stressAdvice = "Stress is Moderate (\(sScore)/100). Busy Monkey says: Tension is building up. Take a 3-minute screen break and try Box Breathing."
+        } else {
+            stressAdvice = "Stress is High (\(sScore)/100). Overheated Monkey says: High sympathetic arousal detected! Take 3 Physiological Sighs right now (double nose inhale, long mouth exhale)."
+        }
+
         return SmartBriefingNarrative(
             greeting: greeting,
             weatherText: weatherAdvice,
             healthText: healthAdvice,
+            stressText: stressAdvice,
             habitsText: habitAdvice,
             financeText: financeAdvice,
             tagdosText: tagdosAdvice,

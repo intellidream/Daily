@@ -10,5 +10,6 @@ struct DailyWidgetsBundle: WidgetBundle {
         MoneyWidget()
         SleepWidget()
         TagdosWidget()
+        StressWidget()
     }
 }

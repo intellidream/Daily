@@ -140,13 +140,14 @@ public struct BriefingSummarySnippet: Sendable, Codable {
     }
 }
 
-/// Combined Executive Snapshot encompassing all 5 core pillars + Diurnal Briefing
+/// Combined Executive Snapshot encompassing all core pillars + Diurnal Briefing
 public struct CombinedWidgetSnapshot: Sendable {
     public let bubbles: BubblesWidgetSnapshot
     public let smokes: SmokesWidgetSnapshot
     public let money: MoneyWidgetSnapshot
     public let sleep: SleepWidgetSnapshot
     public let tagdos: TagdosWidgetSnapshot
+    public let stress: StressWidgetSnapshot
     public let morningSummary: BriefingSummarySnippet?
     public let isMorningSlot: Bool
     
@@ -156,6 +157,7 @@ public struct CombinedWidgetSnapshot: Sendable {
         money: MoneyWidgetSnapshot,
         sleep: SleepWidgetSnapshot,
         tagdos: TagdosWidgetSnapshot,
+        stress: StressWidgetSnapshot = .placeholder,
         morningSummary: BriefingSummarySnippet? = nil,
         isMorningSlot: Bool = false
     ) {
@@ -164,6 +166,7 @@ public struct CombinedWidgetSnapshot: Sendable {
         self.money = money
         self.sleep = sleep
         self.tagdos = tagdos
+        self.stress = stress
         self.morningSummary = morningSummary
         self.isMorningSlot = isMorningSlot
     }
@@ -398,6 +401,82 @@ extension SleepWidgetSnapshot {
 
     public static var placeholder: SleepWidgetSnapshot {
         empty
+    }
+}
+
+/// Snapshot model for Stress Level & Monkey Mascot Widget
+public struct StressWidgetSnapshot: Sendable, Codable {
+    public let hasData: Bool
+    public let stressScore: Int
+    public let levelRaw: String
+    public let monkeyMoodRaw: String
+    public let adviceSnippet: String
+    public let hrvMs: Double?
+    public let restingHeartRate: Double?
+    public let parasympatheticPercent: Int
+    public let sympatheticPercent: Int
+    public let lastUpdated: Date
+    
+    public init(
+        hasData: Bool = true,
+        stressScore: Int = 38,
+        levelRaw: String = "Calm",
+        monkeyMoodRaw: String = "Curious Monkey",
+        adviceSnippet: String = "Autonomic tone is balanced. Keep up this steady groove!",
+        hrvMs: Double? = 48,
+        restingHeartRate: Double? = 62,
+        parasympatheticPercent: Int = 62,
+        sympatheticPercent: Int = 38,
+        lastUpdated: Date = Date()
+    ) {
+        self.hasData = hasData
+        self.stressScore = stressScore
+        self.levelRaw = levelRaw
+        self.monkeyMoodRaw = monkeyMoodRaw
+        self.adviceSnippet = adviceSnippet
+        self.hrvMs = hrvMs
+        self.restingHeartRate = restingHeartRate
+        self.parasympatheticPercent = parasympatheticPercent
+        self.sympatheticPercent = sympatheticPercent
+        self.lastUpdated = lastUpdated
+    }
+    
+    public var level: StressLevel {
+        StressLevel(rawValue: levelRaw) ?? .calm
+    }
+    
+    public var monkeyMood: MonkeyMood {
+        MonkeyMood(rawValue: monkeyMoodRaw) ?? .curious
+    }
+    
+    public static var empty: StressWidgetSnapshot {
+        StressWidgetSnapshot(
+            hasData: false,
+            stressScore: 35,
+            levelRaw: "Calm",
+            monkeyMoodRaw: "Curious Monkey",
+            adviceSnippet: "Wear your Apple Watch to track real-time stress and HRV.",
+            hrvMs: nil,
+            restingHeartRate: nil,
+            parasympatheticPercent: 65,
+            sympatheticPercent: 35,
+            lastUpdated: Date()
+        )
+    }
+    
+    public static var placeholder: StressWidgetSnapshot {
+        StressWidgetSnapshot(
+            hasData: true,
+            stressScore: 32,
+            levelRaw: "Calm",
+            monkeyMoodRaw: "Curious Monkey",
+            adviceSnippet: "Autonomic system is well balanced. Keep this steady groove going!",
+            hrvMs: 52,
+            restingHeartRate: 59,
+            parasympatheticPercent: 68,
+            sympatheticPercent: 32,
+            lastUpdated: Date()
+        )
     }
 }
 
@@ -855,6 +934,51 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         return TagdosWidgetSnapshot.empty
     }
 
+    // MARK: - Stress Level & Monkey Mascot
+    
+    private let stressSnapshotKey = "daily_stress_widget_snapshot_v1"
+    
+    public func updateStressSnapshot(
+        score: Int,
+        level: StressLevel,
+        monkeyMood: MonkeyMood,
+        advice: String,
+        hrvMs: Double?,
+        restingHeartRate: Double?,
+        parasympathetic: Int,
+        sympathetic: Int
+    ) {
+        let snapshot = StressWidgetSnapshot(
+            hasData: true,
+            stressScore: score,
+            levelRaw: level.rawValue,
+            monkeyMoodRaw: monkeyMood.rawValue,
+            adviceSnippet: advice,
+            hrvMs: hrvMs,
+            restingHeartRate: restingHeartRate,
+            parasympatheticPercent: parasympathetic,
+            sympatheticPercent: sympathetic,
+            lastUpdated: Date()
+        )
+        
+        if let data = try? JSONEncoder().encode(snapshot) {
+            groupDefaults.set(data, forKey: stressSnapshotKey)
+            UserDefaults.standard.set(data, forKey: stressSnapshotKey)
+        }
+        
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+    }
+    
+    public func fetchStressSnapshot() -> StressWidgetSnapshot {
+        if let data = groupDefaults.data(forKey: stressSnapshotKey),
+           let snapshot = try? JSONDecoder().decode(StressWidgetSnapshot.self, from: data) {
+            return snapshot
+        }
+        return StressWidgetSnapshot.placeholder
+    }
+
     // MARK: - Combined Executive Snapshot (5 Core Pillars + Briefing)
 
     public func fetchCombinedSnapshot() -> CombinedWidgetSnapshot {
@@ -863,6 +987,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         let money = fetchMoneySnapshot()
         let sleep = fetchSleepSnapshot()
         let tagdos = fetchTagdosSnapshot()
+        let stress = fetchStressSnapshot()
 
         let hour = Calendar.current.component(.hour, from: Date())
         let isMorning = (hour >= 5 && hour < 12)
@@ -914,6 +1039,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             money: money,
             sleep: sleep,
             tagdos: tagdos,
+            stress: stress,
             morningSummary: snippet,
             isMorningSlot: isMorning
         )

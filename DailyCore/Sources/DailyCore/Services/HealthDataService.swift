@@ -49,6 +49,12 @@ public final class HealthDataService: ObservableObject {
     @Published public var currentVitals: [HealthMetricType: VitalMetricRecord] = [:]
     @Published public var historicalTrends: [HealthMetricType: [DailyMetricTrendPoint]] = [:]
     
+    // Stress Level & Mascot (StressWatch Model)
+    @Published public var currentStressScore: Int = 32
+    @Published public var currentStressLevel: StressLevel = .calm
+    @Published public var intradayStress: [IntradayStressPoint] = []
+    @Published public var stressAnalysis: StressAnalysisResult? = nil
+    
     // MARK: - Private State & Dependencies
     
     private let supabase = SupabaseService.shared.client
@@ -427,6 +433,50 @@ public final class HealthDataService: ObservableObject {
                 vitalsValues[.hydration] = Double(waterMl)
             }
         }
+        
+        // 4. Process Stress Level (StressWatch physiological model)
+        let hrvVal = vitalsValues[.hrvSdnn] ?? vitalsValues[.hrvRmssd]
+        let stressCalculation = StressAnalysisEngine.calculateStress(
+            targetDate: selectedDate,
+            hrvMs: hrvVal,
+            hrTelemetry: self.intradayHeartRate,
+            hourlySteps: self.hourlySteps,
+            restingBpm: self.restingBpm > 0 ? self.restingBpm : vitalsValues[.restingHeartRate],
+            priorSleepScore: self.primarySleepSession?.sleepScore,
+            personalBaselineHrv: nil,
+            personalBaselineRhr: nil,
+            calendar: cal
+        )
+        self.stressAnalysis = stressCalculation.result
+        self.intradayStress = stressCalculation.intradayPoints
+        self.currentStressScore = stressCalculation.result.currentScore
+        self.currentStressLevel = stressCalculation.result.currentLevel
+        
+        // Ensure stress metric in vitalsMap
+        if vitalsMap[.stress] == nil {
+            let stressRecord = VitalMetricRecord(
+                userId: "stress-engine",
+                type: HealthMetricType.stress.rawValue,
+                value: Double(self.currentStressScore),
+                unit: "score",
+                date: dateKey,
+                sourceDevice: selectedDeviceFilter ?? selectedDeviceSource?.displayName ?? "StressWatch Model"
+            )
+            vitalsMap[.stress] = stressRecord
+            vitalsValues[.stress] = Double(self.currentStressScore)
+        }
+        
+        // Update Widget Coordinator with fresh stress snapshot
+        WidgetDataCoordinator.shared.updateStressSnapshot(
+            score: stressCalculation.result.currentScore,
+            level: stressCalculation.result.currentLevel,
+            monkeyMood: stressCalculation.result.monkeyMood,
+            advice: stressCalculation.result.adviceQuote,
+            hrvMs: stressCalculation.result.currentHrvMs,
+            restingHeartRate: stressCalculation.result.restingHeartRateBpm,
+            parasympathetic: stressCalculation.result.parasympatheticPercent,
+            sympathetic: stressCalculation.result.sympatheticPercent
+        )
         
         self.currentVitals = vitalsMap
     }

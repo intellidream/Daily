@@ -181,6 +181,12 @@ public struct DashboardView: View {
         case DashboardWidgetType.health.rawValue:
             HealthDashboardCard(size: config.size, onTap: onNavigateToHealth)
                 .equatable()
+        case DashboardWidgetType.stress.rawValue:
+            StressDashboardCard(size: config.size) {
+                HealthDataService.shared.activeSubTab = .stress
+                onNavigateToHealth()
+            }
+            .equatable()
         case DashboardWidgetType.habits.rawValue:
             HabitsDashboardCard(size: config.size, onTap: onNavigateToHabits)
                 .equatable()

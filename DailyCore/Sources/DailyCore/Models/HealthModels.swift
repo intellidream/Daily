@@ -5,10 +5,21 @@ import Foundation
 public enum HealthSubTab: String, CaseIterable, Identifiable, Sendable {
     case overview = "Overview"
     case sleep = "Sleep Studio"
+    case stress = "Stress Studio"
     case vitals = "Heart & Vitals"
     case trends = "Trends"
     
     public var id: String { rawValue }
+    
+    public var shortTitle: String {
+        switch self {
+        case .overview: return "Overview"
+        case .sleep: return "Sleep"
+        case .stress: return "Stress"
+        case .vitals: return "Vitals"
+        case .trends: return "Trends"
+        }
+    }
 }
 
 // MARK: - Health Metric Types

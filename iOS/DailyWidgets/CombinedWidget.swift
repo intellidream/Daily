@@ -308,11 +308,11 @@ public struct CombinedWidgetView: View {
         gradientColors: [Color],
         tintColor: Color
     ) -> some View {
-        VStack(spacing: 2.5) {
+        VStack(spacing: 2) {
             ZStack {
                 Circle()
-                    .stroke(Color.white.opacity(0.12), lineWidth: 3.5)
-                    .frame(width: 40, height: 40)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 3.2)
+                    .frame(width: 36, height: 36)
 
                 Circle()
                     .trim(from: 0, to: max(0.04, min(progress, 1.0)))
@@ -322,33 +322,33 @@ public struct CombinedWidgetView: View {
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 3.2, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 36, height: 36)
 
                 Text(valueText)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.75)
             }
 
             HStack(spacing: 2) {
                 Image(systemName: iconName)
-                    .font(.system(size: 7.5))
+                    .font(.system(size: 7))
                     .foregroundColor(tintColor)
                 Text(labelText)
-                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    .font(.system(size: 7.5, weight: .semibold, design: .rounded))
                     .foregroundColor(.white.opacity(0.75))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.75)
             }
         }
         .frame(maxWidth: .infinity)
     }
 
-    // Small - Regular Mode (Executive 3-Ring Gauges + Dual-Currency Net Worth + TagDoS Focus)
+    // Small - Regular Mode (Executive 3-Ring Gauges + Horizontal Stress Bar + Combined Money & TagDoS)
     private var smallRegularView: some View {
         VStack(spacing: 5) {
             // Row 1: 3 Liquid Progress Rings (Sleep, Water, Smokes)
@@ -388,56 +388,98 @@ public struct CombinedWidgetView: View {
             }
             .padding(.bottom, 1)
 
-            // Row 2: Net Worth in Lei & EUR
-            HStack(spacing: 4) {
-                Image(systemName: "creditcard.fill")
-                    .font(.system(size: 9))
-                    .foregroundColor(WidgetColors.accentGreen)
+            // Row 2: Horizontal Stress Bar with Monkey Mascot
+            let stress = entry.snapshot.stress
+            let stressColor = Color(hex: stress.level.hexColor)
+            HStack(spacing: 4.5) {
+                Text(stress.monkeyMood.emoji)
+                    .font(.system(size: 11))
 
-                Text(entry.snapshot.money.formattedNetWorth)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                Text("STRESS")
+                    .font(.system(size: 7.5, weight: .heavy, design: .rounded))
+                    .foregroundColor(stressColor)
+
+                Text("\(stress.stressScore)")
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
                     .foregroundColor(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
 
-                Spacer(minLength: 2)
+                // Mini horizontal gauge
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.12))
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(hex: stress.level.gradientHex.first ?? "#00FFB2"),
+                                        Color(hex: stress.level.gradientHex.last ?? "#00B4D8")
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(3, geo.size.width * CGFloat(min(100, max(0, stress.stressScore))) / 100.0))
+                    }
+                }
+                .frame(height: 3.5)
 
-                Text(entry.snapshot.money.formattedNetWorthEUR)
-                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                    .foregroundColor(WidgetColors.accentGreen)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            // Row 3: TagDoS Focus
-            let driving = entry.snapshot.tagdos.streams.first?.drivingPillText ?? "No active focus"
-            HStack(spacing: 5) {
-                Text("S1")
-                    .font(.system(size: 8, weight: .heavy, design: .rounded))
-                    .foregroundColor(WidgetColors.accentPurple)
+                Text(stress.level.displayName)
+                    .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                    .foregroundColor(stressColor)
                     .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(WidgetColors.accentPurple.opacity(0.2))
+                    .padding(.vertical, 1.5)
+                    .background(stressColor.opacity(0.18))
                     .clipShape(Capsule())
-
-                Text(driving)
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                    .foregroundColor(Color.white.opacity(0.9))
-                    .lineLimit(1)
-
-                Spacer(minLength: 2)
-
-                Text("\(entry.snapshot.tagdos.totalActivePills)")
-                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                    .foregroundColor(WidgetColors.fgMuted)
             }
             .padding(.horizontal, 7)
-            .padding(.vertical, 4)
+            .padding(.vertical, 3.5)
             .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            // Row 3: Combined Money & TagDoS Row (Single row with first info from each)
+            let driving = entry.snapshot.tagdos.streams.first?.drivingPillText ?? "Clear"
+            HStack(spacing: 4.5) {
+                // Left: Money
+                HStack(spacing: 3) {
+                    Image(systemName: "creditcard.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(WidgetColors.accentGreen)
+
+                    Text(entry.snapshot.money.formattedNetWorth)
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                // Right: TagDoS Focus
+                HStack(spacing: 3) {
+                    Text("S1")
+                        .font(.system(size: 7.5, weight: .heavy, design: .rounded))
+                        .foregroundColor(WidgetColors.accentPurple)
+                        .padding(.horizontal, 3.5)
+                        .padding(.vertical, 1)
+                        .background(WidgetColors.accentPurple.opacity(0.25))
+                        .clipShape(Capsule())
+
+                    Text(driving)
+                        .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.9))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
         }
     }
 
@@ -604,27 +646,27 @@ public struct CombinedWidgetView: View {
     // Medium - Regular Mode (Sleep & Money Hero + 3-Row Metrics)
     private var mediumRegularView: some View {
         HStack(spacing: 12) {
-            // Left Hero Column: Sleep Arc + Net Worth
-            VStack(alignment: .center, spacing: 8) {
+            // Left Hero Column: Sleep Arc + Net Worth + Stress
+            VStack(alignment: .center, spacing: 5) {
                 // Sleep Arc Gauge
                 ZStack {
                     Circle()
-                        .stroke(Color.white.opacity(0.08), lineWidth: 6)
-                        .frame(width: 58, height: 58)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 5.5)
+                        .frame(width: 52, height: 52)
                     Circle()
                         .trim(from: 0, to: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0))
                         .stroke(
                             LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentBlue], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                            style: StrokeStyle(lineWidth: 5.5, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
-                        .frame(width: 58, height: 58)
+                        .frame(width: 52, height: 52)
                     VStack(spacing: 0) {
                         Text("\(entry.snapshot.sleep.sleepScore)")
-                            .font(.system(size: 17, weight: .heavy, design: .rounded))
+                            .font(.system(size: 15, weight: .heavy, design: .rounded))
                             .foregroundColor(.white)
                         Text(entry.snapshot.sleep.totalAsleepFormatted)
-                            .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
                             .foregroundColor(WidgetColors.accentMint)
                     }
                 }
@@ -632,16 +674,34 @@ public struct CombinedWidgetView: View {
                 // Net Worth Pill
                 VStack(spacing: 1) {
                     Text(entry.snapshot.money.formattedNetWorth)
-                        .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentGreen)
                         .lineLimit(1)
                     Text(entry.snapshot.money.formattedNetWorthEUR)
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .font(.system(size: 8.5, weight: .medium, design: .rounded))
                         .foregroundColor(WidgetColors.fgMuted)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3.5)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
                 .background(Color.white.opacity(0.06))
+                .clipShape(Capsule())
+
+                // Stress Pill with Monkey Mascot
+                let stress = entry.snapshot.stress
+                let sColor = Color(hex: stress.level.hexColor)
+                HStack(spacing: 3) {
+                    Text(stress.monkeyMood.emoji)
+                        .font(.system(size: 9))
+                    Text("\(stress.stressScore)")
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .foregroundColor(sColor)
+                    Text(stress.level.displayName)
+                        .font(.system(size: 8, weight: .bold, design: .rounded))
+                        .foregroundColor(sColor)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2.5)
+                .background(sColor.opacity(0.15))
                 .clipShape(Capsule())
             }
             .frame(width: 104)
@@ -1016,19 +1076,19 @@ public struct CombinedWidgetView: View {
     }
 
     private var largeRegularHabitsRow: some View {
-        HStack(spacing: 10) {
-            // Water
+        HStack(spacing: 8) {
+            // 1. Water
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Image(systemName: "drop.fill")
-                        .font(.system(size: 11))
+                        .font(.system(size: 10))
                         .foregroundColor(WidgetColors.accentBlue)
                     Text("Hydration")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                     Spacer()
-                    Text("\(Int(entry.snapshot.bubbles.todayMl)) ml")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                    Text(widgetFormatCompactNumber(entry.snapshot.bubbles.todayMl))
+                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                 }
                 GeometryReader { geo in
@@ -1036,40 +1096,97 @@ public struct CombinedWidgetView: View {
                         Capsule().fill(Color.white.opacity(0.08))
                         Capsule()
                             .fill(LinearGradient(colors: [WidgetColors.accentBlue, WidgetColors.accentCyan], startPoint: .leading, endPoint: .trailing))
-                            .frame(width: max(4, geo.size.width * CGFloat(min(1.0, entry.snapshot.bubbles.progressPercent))))
+                            .frame(width: max(3, geo.size.width * CGFloat(min(1.0, entry.snapshot.bubbles.progressPercent))))
                     }
                 }
-                .frame(height: 5)
-            }
-            .padding(11)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .frame(height: 4)
 
-            // Smokes
+                Text("\(Int(entry.snapshot.bubbles.progressPercent * 100))% of goal")
+                    .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                    .foregroundColor(WidgetColors.fgMuted)
+            }
+            .padding(9)
+            .frame(maxWidth: .infinity)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            // 2. Smokes
             let count = entry.snapshot.smokes.todayTotal
             let base = entry.snapshot.smokes.baseline
-            HStack {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
                     Image(systemName: "flame.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 10))
                         .foregroundColor(widgetSmokeRingColor(countToday: count, baseline: base))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Smokes")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        Text("Limit \(base)")
-                            .font(.system(size: 9, weight: .medium, design: .rounded))
-                            .foregroundColor(WidgetColors.fgMuted)
+                    Text("Smokes")
+                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Text("\(count)")
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .foregroundColor(widgetSmokeRingColor(countToday: count, baseline: base))
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.08))
+                        Capsule()
+                            .fill(widgetSmokeRingColor(countToday: count, baseline: base))
+                            .frame(width: max(3, geo.size.width * CGFloat(min(1.0, Double(count) / Double(max(1, base))))))
                     }
                 }
-                Spacer()
-                Text("\(count)")
-                    .font(.system(size: 17, weight: .heavy, design: .rounded))
-                    .foregroundColor(widgetSmokeRingColor(countToday: count, baseline: base))
+                .frame(height: 4)
+
+                Text("Limit \(base)")
+                    .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                    .foregroundColor(WidgetColors.fgMuted)
             }
-            .padding(11)
+            .padding(9)
+            .frame(maxWidth: .infinity)
             .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            // 3. Stress
+            let stress = entry.snapshot.stress
+            let stressColor = Color(hex: stress.level.hexColor)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(stress.monkeyMood.emoji)
+                        .font(.system(size: 11))
+                    Text("Stress")
+                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Text("\(stress.stressScore)")
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .foregroundColor(stressColor)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.08))
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(hex: stress.level.gradientHex.first ?? "#00FFB2"),
+                                        Color(hex: stress.level.gradientHex.last ?? "#00B4D8")
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(3, geo.size.width * CGFloat(min(100, max(0, stress.stressScore))) / 100.0))
+                    }
+                }
+                .frame(height: 4)
+
+                Text(stress.level.displayName)
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .foregroundColor(stressColor)
+            }
+            .padding(9)
+            .frame(maxWidth: .infinity)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
 

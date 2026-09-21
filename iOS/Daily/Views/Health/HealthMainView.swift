@@ -19,6 +19,8 @@ public struct HealthMainView: View {
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-healthSubTabSleep") || args.contains("-testSleepStudio") {
             healthService.activeSubTab = .sleep
+        } else if args.contains("-healthSubTabStress") {
+            healthService.activeSubTab = .stress
         } else if args.contains("-healthSubTabTrends") {
             healthService.activeSubTab = .trends
         } else if args.contains("-healthSubTabVitals") {
@@ -40,7 +42,7 @@ public struct HealthMainView: View {
                 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 16) {
-                        // Sub-Tab Switcher (Overview, Sleep Studio, Heart & Vitals, Trends)
+                        // Sub-Tab Switcher (Overview, Sleep, Stress, Vitals, Trends)
                         subTabSwitcher
                         
                         // Main Content Based on Active Sub-Tab
@@ -49,6 +51,8 @@ public struct HealthMainView: View {
                             overviewSection
                         case .sleep:
                             SleepStudioView()
+                        case .stress:
+                            StressStudioView()
                         case .vitals:
                             vitalsSection
                         case .trends:
@@ -262,7 +266,7 @@ public struct HealthMainView: View {
                         healthService.activeSubTab = tab
                     }
                 } label: {
-                    Text(tab.rawValue)
+                    Text(tab.shortTitle)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(isSelected ? .white : .white.opacity(0.6))
                         .frame(maxWidth: .infinity)
@@ -331,6 +335,9 @@ public struct HealthMainView: View {
             if let sleep = healthService.primarySleepSession {
                 sleepOverviewPreviewCard(session: sleep)
             }
+            
+            // Stress & Autonomic Tone Preview Card (Tap opens Stress Studio)
+            stressOverviewPreviewCard
             
             // Primary Vitals Tiles Grid
             vitalsGrid
@@ -433,6 +440,62 @@ public struct HealthMainView: View {
                         Text("\(session.sleepScore) Score • \(session.sleepQualityRating)")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(ThemeColors.fgMutedDark)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var stressOverviewPreviewCard: some View {
+        let score = healthService.currentStressScore
+        let level = healthService.currentStressLevel
+        let mood = healthService.stressAnalysis?.monkeyMood ?? .curious
+        let levelColor = Color(hex: level.hexColor)
+        
+        return Button {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                healthService.activeSubTab = .stress
+            }
+        } label: {
+            GlassCard(cornerRadius: 18, padding: 16) {
+                HStack(spacing: 14) {
+                    MonkeyMascotView(mood: mood, size: .mini, animated: false)
+                        .frame(width: 42, height: 42)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text("STRESS & AUTONOMIC BALANCE")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundColor(levelColor)
+                            
+                            Circle()
+                                .fill(levelColor)
+                                .frame(width: 6, height: 6)
+                        }
+                        
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text("\(score)")
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            Text("• \(level.displayName)")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundColor(levelColor)
+                            Text("(\(mood.displayName))")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                        
+                        Text(mood.adviceQuote)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.75))
+                            .lineLimit(1)
                     }
                     
                     Spacer()
