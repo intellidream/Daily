@@ -93,12 +93,12 @@ public struct HabitsMainView: View {
                         let startX = value.startLocation.x
                         guard startX > 60 else { return } // Preserve edge-swipe back to Dashboard
                         guard abs(dx) > abs(dy) * 1.8 && abs(dx) > 55 else { return }
-                        if dx < 0 && habitsService.activeHabit == .water {
+                        if dx > 0 && habitsService.activeHabit == .water {
                             triggerHaptic()
                             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                                 habitsService.activeHabit = .smokes
                             }
-                        } else if dx > 0 && habitsService.activeHabit == .smokes {
+                        } else if dx < 0 && habitsService.activeHabit == .smokes {
                             triggerHaptic()
                             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                                 habitsService.activeHabit = .water
@@ -371,13 +371,15 @@ public struct HabitsMainView: View {
                     guard let start = dragStartHabit, let startIdx = habits.firstIndex(of: start) else { return }
                     
                     let dx = value.translation.width
-                    if dx < -35 && startIdx < habits.count - 1 {
+                    // Dragging right -> moves to Smokes (+1)
+                    if dx > 35 && startIdx < habits.count - 1 {
                         hasSwitchedHabitInDrag = true
                         triggerHaptic()
                         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                             habitsService.activeHabit = habits[startIdx + 1]
                         }
-                    } else if dx > 35 && startIdx > 0 {
+                    // Dragging left -> moves to Bubbles (-1)
+                    } else if dx < -35 && startIdx > 0 {
                         hasSwitchedHabitInDrag = true
                         triggerHaptic()
                         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {

@@ -84,12 +84,12 @@ public struct FinancesMainView: View {
                                 
                                 let tabs = FinanceSubTab.allCases
                                 guard let currentIndex = tabs.firstIndex(of: activeSubTab) else { return }
-                                if dx < 0 && currentIndex < tabs.count - 1 {
+                                if dx > 0 && currentIndex < tabs.count - 1 {
                                     triggerHaptic()
                                     withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                                         activeSubTab = tabs[currentIndex + 1]
                                     }
-                                } else if dx > 0 && currentIndex > 0 {
+                                } else if dx < 0 && currentIndex > 0 {
                                     triggerHaptic()
                                     withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                                         activeSubTab = tabs[currentIndex - 1]
@@ -217,13 +217,15 @@ public struct FinancesMainView: View {
                     guard let start = dragStartSubTab, let startIdx = tabs.firstIndex(of: start) else { return }
                     
                     let dx = value.translation.width
-                    if dx < -35 && startIdx < tabs.count - 1 {
+                    // Dragging right -> moves to tab on the right (+1)
+                    if dx > 35 && startIdx < tabs.count - 1 {
                         hasSwitchedSubTabInDrag = true
                         triggerHaptic()
                         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                             activeSubTab = tabs[startIdx + 1]
                         }
-                    } else if dx > 35 && startIdx > 0 {
+                    // Dragging left -> moves to tab on the left (-1)
+                    } else if dx < -35 && startIdx > 0 {
                         hasSwitchedSubTabInDrag = true
                         triggerHaptic()
                         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {

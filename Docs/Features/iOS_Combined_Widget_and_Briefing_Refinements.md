@@ -70,7 +70,7 @@ The Combined Widget aggregates data across five major daily domains into a singl
 Refined the tab swipe mechanics to deliver a calm, weighted feel matching `FloatingGlassCapsule`:
 - **Problem**: Unbounded linear coordinate mapping (`value.location.x / segmentWidth`) previously caused runaway transitions where a single swipe gesture skipped past interior tabs (such as *Sleep Studio* or *Heart & Vitals* in Health, or *Stocks* in Finances) to extreme tabs.
 - **Calm Bounded Mechanics**:
-  - **Switcher Pills Drag**: Replaced raw screen position tracking with a deliberate delta threshold (`translation.width < -35` or `> 35`).
+  - **Natural Direction & Threshold**: Dragging right (`translation.width > 35` / `> 0`) advances to the tab to the right (+1), and dragging left (`translation.width < -35` / `< 0`) retreats to the tab to the left (-1), perfectly mirroring horizontal spatial pill arrangement and `FloatingGlassCapsule`.
   - **Single-Step Lock**: Added `hasSwitchedInDrag` state locking that allows at most **ONE** tab transition per continuous swipe, completely eliminating overshoot or skipping of interior tabs.
   - **Weighted Spring Physics**: Switched animation to `.spring(response: 0.38, dampingFraction: 0.82)` to prevent jitter, bounce, or twitchiness.
   - **Content ScrollView Swipe**: Tuned horizontal dominance guard (`abs(dx) > abs(dy) * 1.8 && abs(dx) > 55`) and preserved edge-swipe back (`startX > 60`) so vertical scrolling and list interactions remain silky-smooth.
