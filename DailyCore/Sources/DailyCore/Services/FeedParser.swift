@@ -11,8 +11,12 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
     private var currentContentEncoded = ""
     private var currentAuthor = ""
     private var currentPubDateStr = ""
+    private var currentPublishedStr = ""
+    private var currentDcDateStr = ""
+    private var currentUpdatedStr = ""
     private var currentImageUrl: String?
     private var channelImageUrl: String?
+    private var lastParsedArticleDate: Date?
     
     private var isInsideItem = false
     private var isInsideChannelImage = false
@@ -27,6 +31,7 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
     /// Parses raw XML data into an array of NewsArticle items.
     public func parse(xmlData: Data) -> [NewsArticle] {
         articles = []
+        lastParsedArticleDate = nil
         
         // Sanitize XML string (e.g. naked ampersands)
         if let xmlString = String(data: xmlData, encoding: .utf8) ?? String(data: xmlData, encoding: .isoLatin1) {
@@ -58,6 +63,7 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
         attributes attributeDict: [String: String] = [:]
     ) {
         let name = elementName.lowercased()
+        let qualified = qName?.lowercased() ?? name
         currentElement = name
         
         if name == "item" || name == "entry" {
@@ -68,6 +74,9 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
             currentContentEncoded = ""
             currentAuthor = ""
             currentPubDateStr = ""
+            currentPublishedStr = ""
+            currentDcDateStr = ""
+            currentUpdatedStr = ""
             currentImageUrl = nil
             return
         }
@@ -77,6 +86,21 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
                 isInsideChannelImage = true
             }
             return
+        }
+        
+        // Inside item - reset specific date element buffers to prevent concatenation
+        if name == "pubdate" {
+            currentElement = "pubdate"
+            currentPubDateStr = ""
+        } else if name == "published" {
+            currentElement = "published"
+            currentPublishedStr = ""
+        } else if name == "date" || qualified == "dc:date" {
+            currentElement = "date"
+            currentDcDateStr = ""
+        } else if name == "updated" || qualified == "atom:updated" {
+            currentElement = "updated"
+            currentUpdatedStr = ""
         }
         
         // Atom link element: <link href="..." rel="alternate"/>
@@ -132,8 +156,14 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
             currentDescription += string
         case "encoded", "content":
             currentContentEncoded += string
-        case "pubdate", "published", "updated", "date":
+        case "pubdate":
             currentPubDateStr += string
+        case "published":
+            currentPublishedStr += string
+        case "date":
+            currentDcDateStr += string
+        case "updated":
+            currentUpdatedStr += string
         case "creator", "author", "name":
             currentAuthor += string
         default:
@@ -152,6 +182,14 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
             currentDescription += str
         case "encoded", "content":
             currentContentEncoded += str
+        case "pubdate":
+            currentPubDateStr += str
+        case "published":
+            currentPublishedStr += str
+        case "date":
+            currentDcDateStr += str
+        case "updated":
+            currentUpdatedStr += str
         case "creator", "author", "name":
             currentAuthor += str
         default:
@@ -177,7 +215,41 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
             
             let title = decodeHtmlEntities(currentTitle.trimmingCharacters(in: .whitespacesAndNewlines))
             let link = currentLink.trimmingCharacters(in: .whitespacesAndNewlines)
-            let date = parseDate(currentPubDateStr.trimmingCharacters(in: .whitespacesAndNewlines))
+            
+            // Priority resolution:
+            // 1. pubDate (RSS 2.0 original publication date)
+            // 2. published (Atom 1.0 original publication date)
+            // 3. dc:date (Dublin Core / RDF publication date)
+            // 4. atom:updated / updated (Revision date fallback)
+            let rawPubDate = currentPubDateStr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawPublished = currentPublishedStr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawDcDate = currentDcDateStr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawUpdated = currentUpdatedStr.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            let parsedDate: Date?
+            if !rawPubDate.isEmpty, let d = parseDate(rawPubDate) {
+                parsedDate = d
+            } else if !rawPublished.isEmpty, let d = parseDate(rawPublished) {
+                parsedDate = d
+            } else if !rawDcDate.isEmpty, let d = parseDate(rawDcDate) {
+                parsedDate = d
+            } else if !rawUpdated.isEmpty, let d = parseDate(rawUpdated) {
+                parsedDate = d
+            } else {
+                parsedDate = nil
+            }
+            
+            let date: Date
+            if let valid = parsedDate {
+                date = valid
+                lastParsedArticleDate = valid
+            } else if let fallback = lastParsedArticleDate {
+                // Keep relative chronological feed order if an individual item lacks date
+                date = fallback.addingTimeInterval(-60)
+            } else {
+                // If even the first item lacks date, fall back to current time
+                date = Date()
+            }
             
             // Extract image from description or content if not found in tags
             if currentImageUrl == nil {
@@ -241,9 +313,19 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
             let content = extractTagValue(tag: "content:encoded", from: itemContent).isEmpty
                 ? extractTagValue(tag: "content", from: itemContent)
                 : extractTagValue(tag: "content:encoded", from: itemContent)
-            let pubDate = extractTagValue(tag: "pubDate", from: itemContent).isEmpty
-                ? extractTagValue(tag: "published", from: itemContent)
-                : extractTagValue(tag: "pubDate", from: itemContent)
+            var rawDate = extractTagValue(tag: "pubDate", from: itemContent)
+            if rawDate.isEmpty {
+                rawDate = extractTagValue(tag: "published", from: itemContent)
+            }
+            if rawDate.isEmpty {
+                rawDate = extractTagValue(tag: "dc:date", from: itemContent)
+            }
+            if rawDate.isEmpty {
+                rawDate = extractTagValue(tag: "atom:updated", from: itemContent)
+            }
+            if rawDate.isEmpty {
+                rawDate = extractTagValue(tag: "updated", from: itemContent)
+            }
             let author = extractTagValue(tag: "dc:creator", from: itemContent).isEmpty
                 ? extractTagValue(tag: "author", from: itemContent)
                 : extractTagValue(tag: "dc:creator", from: itemContent)
@@ -262,11 +344,21 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
                 cleanDesc = contentClean.count > 280 ? String(contentClean.prefix(280)) + "..." : contentClean
             }
             
+            let date: Date
+            if let parsed = parseDate(rawDate) {
+                date = parsed
+                lastParsedArticleDate = parsed
+            } else if let fallback = lastParsedArticleDate {
+                date = fallback.addingTimeInterval(-60)
+            } else {
+                date = Date()
+            }
+            
             results.append(NewsArticle(
                 id: link.isEmpty ? UUID().uuidString : link,
                 title: decodeHtmlEntities(title),
                 link: link,
-                publishDate: parseDate(pubDate),
+                publishDate: date,
                 imageUrl: optimizeMediumImageUrl(imageUrl.isEmpty ? feed.iconUrl : imageUrl),
                 description: cleanDesc,
                 content: content.isEmpty ? desc : content,
@@ -324,33 +416,53 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
         return ns.substring(with: match.range(at: 1))
     }
     
-    private func parseDate(_ str: String) -> Date {
-        guard !str.isEmpty else { return Date() }
+    private func parseDate(_ str: String) -> Date? {
+        guard !str.isEmpty else { return nil }
+        
+        let cleanStr = str.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         
         let formats = [
             "EEE, dd MMM yyyy HH:mm:ss Z",
             "EEE, dd MMM yyyy HH:mm:ss zzz",
+            "EEE, dd MMM yyyy HH:mm:ss z",
+            "EEE, d MMM yyyy HH:mm:ss Z",
+            "EEE, d MMM yyyy HH:mm:ss zzz",
+            "d MMM yyyy HH:mm:ss Z",
+            "d MMM yyyy HH:mm:ss zzz",
             "yyyy-MM-dd'T'HH:mm:ssZ",
             "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
             "yyyy-MM-dd'T'HH:mm:ssXXXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ",
             "yyyy-MM-dd HH:mm:ss",
-            "EEE, dd MMM yyyy HH:mm zzz"
+            "EEE, dd MMM yyyy HH:mm zzz",
+            "EEE, dd MMM yyyy HH:mm Z",
+            "yyyy-MM-dd"
         ]
         
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         for f in formats {
             formatter.dateFormat = f
-            if let date = formatter.date(from: str) {
+            if let date = formatter.date(from: cleanStr) {
                 return date
             }
         }
         
-        if let iso = ISO8601DateFormatter().date(from: str) {
+        let isoFormatterWithMillis = ISO8601DateFormatter()
+        isoFormatterWithMillis.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let iso = isoFormatterWithMillis.date(from: cleanStr) {
             return iso
         }
         
-        return Date()
+        let isoFormatterStandard = ISO8601DateFormatter()
+        isoFormatterStandard.formatOptions = [.withInternetDateTime]
+        if let iso = isoFormatterStandard.date(from: cleanStr) {
+            return iso
+        }
+        
+        return nil
     }
     
     private func stripHtmlTags(_ str: String) -> String {

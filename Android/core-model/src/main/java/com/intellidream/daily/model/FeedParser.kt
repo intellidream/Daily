@@ -10,9 +10,11 @@ import java.util.UUID
 import java.util.regex.Pattern
 
 class FeedParser(private val feed: FeedSource) {
+    private var lastParsedArticleDate: Long? = null
 
     fun parse(xmlString: String): List<NewsArticle> {
         val articles = mutableListOf<NewsArticle>()
+        lastParsedArticleDate = null
         val sanitized = sanitizeXml(xmlString)
 
         try {
@@ -32,6 +34,9 @@ class FeedParser(private val feed: FeedSource) {
             var currentContentEncoded = ""
             var currentAuthor = ""
             var currentPubDateStr = ""
+            var currentPublishedStr = ""
+            var currentDcDateStr = ""
+            var currentUpdatedStr = ""
             var currentImageUrl: String? = null
             var channelImageUrl: String? = null
 
@@ -51,12 +56,24 @@ class FeedParser(private val feed: FeedSource) {
                             currentContentEncoded = ""
                             currentAuthor = ""
                             currentPubDateStr = ""
+                            currentPublishedStr = ""
+                            currentDcDateStr = ""
+                            currentUpdatedStr = ""
                             currentImageUrl = null
                         } else if (!isInsideItem) {
                             if (name == "image" || name == "logo" || name == "icon") {
                                 isInsideChannelImage = true
                             }
                         } else {
+                            if (name == "pubdate") {
+                                currentPubDateStr = ""
+                            } else if (name == "published") {
+                                currentPublishedStr = ""
+                            } else if (name == "date" || name == "dc:date") {
+                                currentDcDateStr = ""
+                            } else if (name == "updated" || name == "atom:updated") {
+                                currentUpdatedStr = ""
+                            }
                             // Atom link: <link href="..." rel="alternate"/>
                             if (name == "link") {
                                 val href = parser.getAttributeValue(null, "href")
@@ -101,7 +118,10 @@ class FeedParser(private val feed: FeedSource) {
                                 "link" -> if (currentLink.isEmpty()) currentLink += text.trim()
                                 "description", "summary" -> currentDescription += text
                                 "encoded", "content" -> currentContentEncoded += text
-                                "pubdate", "published", "updated", "date" -> currentPubDateStr += text
+                                "pubdate" -> currentPubDateStr += text
+                                "published" -> currentPublishedStr += text
+                                "date" -> currentDcDateStr += text
+                                "updated" -> currentUpdatedStr += text
                                 "creator", "author", "name" -> currentAuthor += text
                             }
                         }
@@ -116,7 +136,30 @@ class FeedParser(private val feed: FeedSource) {
 
                             val title = decodeHtmlEntities(currentTitle.trim())
                             val link = currentLink.trim()
-                            val date = parseDate(currentPubDateStr.trim())
+                            
+                            // Priority resolution:
+                            // 1. pubDate (RSS 2.0 original publication date)
+                            // 2. published (Atom 1.0 original publication date)
+                            // 3. dc:date (Dublin Core / RDF publication date)
+                            // 4. atom:updated / updated (Revision date fallback)
+                            val rawPubDate = currentPubDateStr.trim()
+                            val rawPublished = currentPublishedStr.trim()
+                            val rawDcDate = currentDcDateStr.trim()
+                            val rawUpdated = currentUpdatedStr.trim()
+
+                            val parsedDate = parseDateOrNull(rawPubDate)
+                                ?: parseDateOrNull(rawPublished)
+                                ?: parseDateOrNull(rawDcDate)
+                                ?: parseDateOrNull(rawUpdated)
+
+                            val date = if (parsedDate != null) {
+                                lastParsedArticleDate = parsedDate
+                                parsedDate
+                            } else if (lastParsedArticleDate != null) {
+                                lastParsedArticleDate!! - 60000L
+                            } else {
+                                System.currentTimeMillis()
+                            }
 
                             // Extract image from description or content if missing
                             if (currentImageUrl == null) {
@@ -197,8 +240,18 @@ class FeedParser(private val feed: FeedSource) {
             val contentEncoded = extractTagValue("content:encoded", itemContent).ifEmpty {
                 extractTagValue("content", itemContent)
             }
-            val pubDate = extractTagValue("pubDate", itemContent).ifEmpty {
-                extractTagValue("published", itemContent)
+            var rawDate = extractTagValue("pubDate", itemContent)
+            if (rawDate.isEmpty()) {
+                rawDate = extractTagValue("published", itemContent)
+            }
+            if (rawDate.isEmpty()) {
+                rawDate = extractTagValue("dc:date", itemContent)
+            }
+            if (rawDate.isEmpty()) {
+                rawDate = extractTagValue("atom:updated", itemContent)
+            }
+            if (rawDate.isEmpty()) {
+                rawDate = extractTagValue("updated", itemContent)
             }
             val author = extractTagValue("dc:creator", itemContent).ifEmpty {
                 val authorBlock = extractTagValue("author", itemContent)
@@ -220,12 +273,22 @@ class FeedParser(private val feed: FeedSource) {
                 cleanDesc = if (contentClean.length > 280) contentClean.take(280) + "..." else contentClean
             }
 
+            val parsedDate = parseDateOrNull(rawDate)
+            val date = if (parsedDate != null) {
+                lastParsedArticleDate = parsedDate
+                parsedDate
+            } else if (lastParsedArticleDate != null) {
+                lastParsedArticleDate!! - 60000L
+            } else {
+                System.currentTimeMillis()
+            }
+
             results.add(
                 NewsArticle(
                     id = if (link.isNotBlank()) link else UUID.randomUUID().toString(),
                     title = decodeHtmlEntities(title),
                     link = link,
-                    publishDate = parseDate(pubDate),
+                    publishDate = date,
                     imageUrl = optimizeMediumImageUrl(if (imageUrl.isNotBlank()) imageUrl else feed.iconUrl),
                     description = cleanDesc,
                     content = if (contentEncoded.isNotEmpty()) contentEncoded else desc,
@@ -274,33 +337,46 @@ class FeedParser(private val feed: FeedSource) {
         return if (matcher.find()) matcher.group(1)?.trim() ?: "" else ""
     }
 
-    private fun parseDate(str: String): Long {
-        if (str.isBlank()) return System.currentTimeMillis()
+    private fun parseDateOrNull(str: String): Long? {
+        if (str.isBlank()) return null
+        val cleanStr = str.trim().replace(Regex("\\s+"), " ")
 
         val formats = listOf(
             "EEE, dd MMM yyyy HH:mm:ss Z",
             "EEE, dd MMM yyyy HH:mm:ss zzz",
+            "EEE, dd MMM yyyy HH:mm:ss z",
+            "EEE, d MMM yyyy HH:mm:ss Z",
+            "EEE, d MMM yyyy HH:mm:ss zzz",
+            "d MMM yyyy HH:mm:ss Z",
+            "d MMM yyyy HH:mm:ss zzz",
             "yyyy-MM-dd'T'HH:mm:ssZ",
             "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
             "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
             "yyyy-MM-dd HH:mm:ss",
-            "EEE, dd MMM yyyy HH:mm zzz"
+            "EEE, dd MMM yyyy HH:mm zzz",
+            "EEE, dd MMM yyyy HH:mm Z",
+            "yyyy-MM-dd"
         )
 
         for (fmt in formats) {
             try {
                 val sdf = SimpleDateFormat(fmt, Locale.US)
                 sdf.timeZone = TimeZone.getTimeZone("UTC")
-                val date = sdf.parse(str)
+                val date = sdf.parse(cleanStr)
                 if (date != null) return date.time
             } catch (_: Exception) {}
         }
 
         try {
-            return java.time.Instant.parse(str).toEpochMilli()
+            return java.time.Instant.parse(cleanStr).toEpochMilli()
         } catch (_: Exception) {}
 
-        return System.currentTimeMillis()
+        return null
+    }
+
+    private fun parseDate(str: String): Long {
+        return parseDateOrNull(str) ?: System.currentTimeMillis()
     }
 
     companion object {

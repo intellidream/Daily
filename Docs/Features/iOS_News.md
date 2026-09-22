@@ -205,5 +205,36 @@ Shared between iOS and upcoming macOS apps without any UIKit dependencies:
 - **News Widget Elevation**: Moved the Live News Feed Widget Card directly beneath `WeatherDashboardCard` on the main `DashboardView`, giving real-time headlines top priority below weather conditions.
 - **Eager Feed Loading**: Updated the `.task` lifecycle hook in `DashboardView` to eagerly fetch headlines alongside weather, health vitals, and habits on app startup.
 
+---
+
+## 6. Feed Date Parsing Resolution & Chronological Sorting Integrity (Medium Subscriptions)
+
+### 6.1 Root Cause Analysis: Dual-Date Element Concatenation
+- **Problem**: Articles from Medium subscriptions (e.g. `https://medium.com/feed/@author` or publication feeds) consistently appeared at the very top of the Live Feed as "just now" / 1st position, despite having been published months or years ago.
+- **Root Cause Identified**:
+  - Medium RSS items include both `<pubDate>` (RFC 822 original publication date, e.g. `Thu, 12 Dec 2024 17:11:33 GMT`) and `<atom:updated>` (ISO 8601 revision timestamp, e.g. `2025-05-19T19:09:35.029Z`).
+  - In `FeedParser.swift` (and Android's `FeedParser.kt`), the streaming XML parser delegate previously handled all date tags under a shared switch case (`case "pubdate", "published", "updated", "date": currentPubDateStr += string`) without resetting the string buffer on each element start.
+  - Consequently, both strings were concatenated into a single corrupted payload:
+    $$\text{"Thu, 12 Dec 2024 17:11:33 GMT2025-05-19T19:09:35.029Z"}$$
+  - `parseDate()` failed to match any format against this corrupted string and unconditionally fell back to `Date()` (current instant).
+  - When `loadAllNews()` aggregated articles across all active feeds and sorted them chronologically descending (`$0.publishDate > $1.publishDate`), the newly fetched Medium items (stamped with the current moment) jumped ahead of all genuine fresh news!
+
+### 6.2 Architectural Resolution
+1. **Isolated Date Element Accumulators**:
+   - Distinct state buffers for each date element: `currentPubDateStr`, `currentPublishedStr`, `currentDcDateStr`, and `currentUpdatedStr`.
+   - Explicit buffer resetting when encountering `<pubdate>`, `<published>`, `<date>`, or `<updated>`.
+2. **Deterministic Priority Resolution Hierarchy**:
+   - Evaluates date candidates in strict semantic order:
+     1. Original RSS Publication Date (`pubDate`)
+     2. Original Atom Publication Date (`published`)
+     3. Dublin Core Date (`dc:date`)
+     4. Revision / Update Fallback (`atom:updated` / `updated`)
+3. **Robust Multi-Format Parsing & ISO8601 Milliseconds**:
+   - `parseDate(_ str: String) -> Date?` now cleans multi-space whitespace anomalies, supports single-digit days, and parses ISO 8601 strings with and without fractional milliseconds via `ISO8601DateFormatter`.
+4. **Relative Feed Order Safeguard**:
+   - If an individual article in an RSS feed completely lacks date tags, it inherits `lastParsedArticleDate?.addingTimeInterval(-60)`, guaranteeing it never jumps ahead of preceding items or other fresh publications.
+5. **Cross-Platform Parity**:
+   - Implemented the identical fix and fallback mechanism in Android's `FeedParser.kt`, backed by unit tests in `NewsParsersTest.kt`.
+
 
 

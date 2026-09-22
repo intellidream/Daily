@@ -219,4 +219,58 @@ final class NewsServiceTests: XCTestCase {
             XCTAssertNotEqual(p1, p2, "Round-robin fairness must alternate distinct publication sources")
         }
     }
+    
+    // MARK: - 8. Medium Feed Dual-Date Tag Parsing (pubDate + atom:updated)
+    
+    func testMediumRssFeedDateParsingWithPubDateAndAtomUpdated() {
+        let sampleMediumRss = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+            <channel>
+                <title>Stories by Ev Williams on Medium</title>
+                <link>https://medium.com/@ev</link>
+                <description>Stories by Ev Williams on Medium</description>
+                <item>
+                    <title><![CDATA[Making “Social” Social Again]]></title>
+                    <link>https://ev.medium.com/making-social-social-again-0126fa5c6ce8</link>
+                    <guid isPermaLink="false">https://medium.com/p/0126fa5c6ce8</guid>
+                    <category><![CDATA[social]]></category>
+                    <dc:creator><![CDATA[Ev Williams]]></dc:creator>
+                    <pubDate>Thu, 12 Dec 2024 17:11:33 GMT</pubDate>
+                    <atom:updated>2025-05-19T19:09:35.029Z</atom:updated>
+                    <content:encoded><![CDATA[<p>Content body here...</p>]]></content:encoded>
+                </item>
+            </channel>
+        </rss>
+        """
+        
+        let feed = FeedSource(name: "Medium: Ev Williams", url: "https://medium.com/feed/@ev", category: .tech)
+        let parser = FeedParser(feed: feed)
+        let articles = parser.parse(xmlData: Data(sampleMediumRss.utf8))
+        
+        XCTAssertEqual(articles.count, 1)
+        let article = articles[0]
+        XCTAssertEqual(article.title, "Making “Social” Social Again")
+        XCTAssertEqual(article.author, "Ev Williams")
+        
+        // Ensure date is NOT current instant/Date.now
+        let now = Date()
+        XCTAssertGreaterThan(now.timeIntervalSince(article.publishDate), 86400 * 30, "Medium article should parse actual historical pubDate, not fall back to Date.now")
+        
+        // Exact calendar verification: 12 Dec 2024
+        let calendar = Calendar(identifier: .gregorian)
+        var utcCal = calendar
+        utcCal.timeZone = TimeZone(secondsFromGMT: 0)!
+        let year = utcCal.component(.year, from: article.publishDate)
+        let month = utcCal.component(.month, from: article.publishDate)
+        let day = utcCal.component(.day, from: article.publishDate)
+        let hour = utcCal.component(.hour, from: article.publishDate)
+        let minute = utcCal.component(.minute, from: article.publishDate)
+        
+        XCTAssertEqual(year, 2024)
+        XCTAssertEqual(month, 12)
+        XCTAssertEqual(day, 12)
+        XCTAssertEqual(hour, 17)
+        XCTAssertEqual(minute, 11)
+    }
 }

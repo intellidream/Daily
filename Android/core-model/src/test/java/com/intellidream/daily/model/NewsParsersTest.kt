@@ -233,4 +233,55 @@ class NewsParsersTest {
         // Related article in Tech with matching keywords should rank first
         assertEquals(relatedArticle.link, recommendations.first().link)
     }
+
+    @Test
+    fun testMediumRssFeedDateParsingWithPubDateAndAtomUpdated() {
+        val sampleMediumRss = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+              <channel>
+                <title>Stories by Ev Williams on Medium</title>
+                <link>https://medium.com/@ev</link>
+                <description>Stories by Ev Williams on Medium</description>
+                <item>
+                  <title><![CDATA[Making “Social” Social Again]]></title>
+                  <link>https://ev.medium.com/making-social-social-again-0126fa5c6ce8</link>
+                  <dc:creator><![CDATA[Ev Williams]]></dc:creator>
+                  <pubDate>Thu, 12 Dec 2024 17:11:33 GMT</pubDate>
+                  <atom:updated>2025-05-19T19:09:35.029Z</atom:updated>
+                  <content:encoded><![CDATA[<p>Content body here...</p>]]></content:encoded>
+                </item>
+              </channel>
+            </rss>
+        """.trimIndent()
+
+        val feed = FeedSource(
+            id = "medium_ev",
+            name = "Medium: Ev Williams",
+            url = "https://medium.com/feed/@ev",
+            category = FeedCategory.Tech
+        )
+
+        val parser = FeedParser(feed)
+        val articles = parser.parse(sampleMediumRss)
+
+        assertEquals(1, articles.size)
+        val article = articles.first()
+        assertEquals("Making “Social” Social Again", article.title)
+        assertEquals("Ev Williams", article.author)
+
+        // Ensure date is not current instant / System.currentTimeMillis()
+        val now = System.currentTimeMillis()
+        assertTrue(now - article.publishDate > 86400000L * 30L)
+
+        // Verify year is 2024
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+        cal.timeInMillis = article.publishDate
+        assertEquals(2024, cal.get(java.util.Calendar.YEAR))
+        assertEquals(java.util.Calendar.DECEMBER, cal.get(java.util.Calendar.MONTH))
+        assertEquals(12, cal.get(java.util.Calendar.DAY_OF_MONTH))
+        assertEquals(17, cal.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(11, cal.get(java.util.Calendar.MINUTE))
+    }
 }
+
