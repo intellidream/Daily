@@ -226,7 +226,10 @@ public struct CombinedWidgetView: View {
             .padding(.vertical, 2)
 
             // Focus snippet or driving pill
-            if let focus = entry.snapshot.morningSummary?.topFocusText ?? entry.snapshot.tagdos.streams.first?.drivingPillText {
+            if let focus = cleanMorningFocusTask(
+                topFocus: entry.snapshot.morningSummary?.topFocusText,
+                streamDriving: entry.snapshot.tagdos.streams.first?.drivingPillText
+            ) {
                 HStack(spacing: 4) {
                     Text("Focus")
                         .font(.system(size: 8, weight: .heavy, design: .rounded))
@@ -282,14 +285,16 @@ public struct CombinedWidgetView: View {
                 .background(Color.white.opacity(0.06))
                 .clipShape(Capsule())
 
-                // Net worth
+                // Net worth in EUR, compact integer format (e.g. 55k) without decimals
                 HStack(spacing: 2) {
                     Image(systemName: "creditcard.fill")
                         .font(.system(size: 8))
                         .foregroundColor(WidgetColors.accentGreen)
-                    Text(widgetFormatCompactNumber(entry.snapshot.money.netWorthLei))
+                    Text(widgetFormatCompactIntegerEUR(entry.snapshot.money.netWorthEUR))
                         .font(.system(size: 9, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 3.5)
@@ -297,6 +302,31 @@ public struct CombinedWidgetView: View {
                 .clipShape(Capsule())
             }
         }
+    }
+
+    private func cleanMorningFocusTask(topFocus: String?, streamDriving: String?) -> String? {
+        if let streamDriving = streamDriving, !streamDriving.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return streamDriving
+        }
+        guard let raw = topFocus, !raw.isEmpty else { return nil }
+        var cleaned = raw
+        let prefixes = [
+            "Here's what you need to focus on today:",
+            "Here's what needs your focus today:",
+            "Here's what needs focus today:",
+            "Here's what needs your focus:",
+            "Focus priority for active Tagdos pills:",
+            "Focus on",
+            "Focus:"
+        ]
+        for p in prefixes {
+            if let range = cleaned.range(of: p, options: [.caseInsensitive]) {
+                cleaned.removeSubrange(cleaned.startIndex..<range.upperBound)
+                break
+            }
+        }
+        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines.union(.init(charactersIn: ".-: ")))
+        return cleaned.isEmpty ? raw : cleaned
     }
 
     // Mini Progress Ring Helper for Small Executive Widget

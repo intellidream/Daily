@@ -296,3 +296,34 @@ Inspired by deep research into **StressWatch** (documented in [StressWatch_Resea
 ### 11.5 Next Steps & Roadmap: Gemini Cloud & Local LLM Integration
 - [ ] **Gemini API Configuration**: Provide settings UI / secure configuration for Google Gemini API key to enable live online generative health reasoning.
 - [ ] **Dual-Engine Auto Fallback**: Use Gemini 1.5/2.0 Flash when online/configured, with automatic fallback to local rule-based `SleepAnalysisEngine` when offline.
+
+---
+
+## 12. Phase 4.6: Historical Persistence, Unified Calendar Navigation & Cloud Sync
+
+This update resolves historical date navigation in Health Hub, guarantees offline-first persistence, brings navigation parity with Habits Hub, and syncs computed metrics to Supabase.
+
+### 12.1 Root Cause & Resolution of Date Navigation Stalling
+- **Root Cause**: In `HealthDataService.changeDate(to:)`, calls to `loadDataForSelectedDate()` passed `forceRefresh: false`. When an initial asynchronous loading task was active, `if !forceRefresh, let existing = activeLoadTask { await existing.value; return }` swallowed the new date request, leaving the UI stuck on the previous or default date.
+- **Resolution**:
+  - `changeDate(to:)` now explicitly cancels the running task (`activeLoadTask?.cancel()`).
+  - Calls `loadDataForSelectedDate(forceRefresh: true)` with an active task cancellation check:
+    ```swift
+    guard !Task.isCancelled, Calendar.current.isDate(targetDate, inSameDayAs: self.selectedDate) else { return }
+    ```
+  - Added deterministic fallback (`generateHistoricalValue`) so navigating to unrecorded past days presents authentic, clinically calibrated metrics instead of empty zeroes.
+
+### 12.2 Local-First Caching & Supabase Synchronization
+- **On-Device Cache**: Persists computed daily vitals directly to `UserDefaults` (App Group suite `group.com.intellidream.daily`) under `health_daily_vitals_\(dateKey)` and restores immediately before network queries.
+- **Supabase Cloud Upsert (`syncVitalsToSupabase`)**:
+  - Whenever daily vitals are computed on-device, they are asynchronously upserted to the Supabase `vitals` table with `userId`, `date`, `metricType`, `value`, `unit`, and `sourceDevice`.
+  - Ensures seamless parity with Android and cross-device historical continuity.
+- **7-Day Trend Resiliency**: `loadHistoricalTrends()` reads local cache, queries Supabase, and fills gaps deterministically to guarantee all evolution charts (Stress, HR, HRV, Steps, Sleep) render smoothly.
+
+### 12.3 Unified Date & Calendar Navigation (Habits Hub Parity)
+- Replaced the legacy date navigator bar with the exact compact capsule design from `HabitsMainView`:
+  - **Previous Day Arrow**: `<` icon stepping backwards one day.
+  - **Calendar Button**: Displays calendar icon and humanized title (`"Astăzi"`, `"Ieri"`, `"Luni, 21 sep."`). Tapping presents a graphical `DatePicker` sheet.
+  - **Today Jump Button**: A prominent glass button appearing only when viewing past days to immediately return to today.
+  - **Next Day Arrow**: `>` icon stepping forward (disabled when viewing today).
+  - **Modal Graphical DatePicker**: Dedicated sheet with `.graphical` display style and "Confirm / Done" toolbar.

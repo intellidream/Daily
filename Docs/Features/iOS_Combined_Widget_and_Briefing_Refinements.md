@@ -20,6 +20,9 @@ The Combined Widget aggregates data across five major daily domains into a singl
 - **Morning Mode (05:00 - 11:59)**:
   - The widget transforms into a compact Morning Summary Card.
   - Displays greeting, weather condition with SF Symbol and temperature, key health readiness highlight, and top focus priority.
+  - **Small (`.systemSmall`) Morning Refinements**:
+    - **Direct Actionable Focus Task**: Strips verbose conversational conversational openers (such as *"Here's what you need to focus on today:"*, *"Here's what needs your focus today:"*, *"Focus on:"*, etc.) via `cleanMorningFocusTask()`, rendering the concrete actionable task title directly next to the `Focus` badge to eliminate text truncation.
+    - **Compact Integer EUR Net Worth**: Net worth pill uses `widgetFormatCompactIntegerEUR(netWorthEUR)` (e.g. `55k`, `1M`), eliminating decimal digits to fit cleanly alongside weather and health status in constrained small canvas.
   - Tapping anywhere on the morning card deep-links directly via `daily://summary` into the full interactive Smart Briefing modal sheet.
 - **Regular Mode (12:00 - 04:59)**:
   - Small: Executive 3-Ring Gauges (Sleep score %, Water hydration %, Smokes quota usage) + full-width Net Worth pill concurrently in RON and EUR + TagDoS priority stream pill. Eliminates excess inner padding to maximize edge-to-edge canvas density.

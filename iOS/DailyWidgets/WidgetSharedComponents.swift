@@ -222,3 +222,14 @@ public func widgetFormatCompactNumber(_ amount: Double) -> String {
         return String(format: "%.0f", amount)
     }
 }
+
+public func widgetFormatCompactIntegerEUR(_ amount: Double) -> String {
+    if amount >= 1_000_000 {
+        return "\(Int(round(amount / 1_000_000)))M"
+    } else if amount >= 1_000 {
+        return "\(Int(round(amount / 1_000)))k"
+    } else {
+        return "\(Int(round(amount)))"
+    }
+}
+

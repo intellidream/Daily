@@ -543,5 +543,19 @@ struct HealthServiceTests {
         #expect(optimalSession.sleepScore >= 90)
         #expect(optimalSession.sleepQualityRating == "Optimal")
     }
+    
+    @Test @MainActor func testHealthDataServiceDateNavigation() throws {
+        let service = HealthDataService.shared
+        service.goToToday()
+        #expect(service.isToday == true)
+        #expect(service.formattedDateTitle == "Today")
+        
+        service.goToPreviousDay()
+        #expect(service.isToday == false)
+        #expect(service.formattedDateTitle == "Yesterday")
+        
+        service.goToToday()
+        #expect(service.isToday == true)
+    }
 }
 

@@ -6,6 +6,7 @@ public struct HealthMainView: View {
     @ObservedObject private var healthService = HealthDataService.shared
     @State private var dragStartSubTab: HealthSubTab? = nil
     @State private var hasSwitchedSubTabInDrag: Bool = false
+    @State private var showingDatePicker = false
     public var onNavigateBack: (() -> Void)? = nil
     
     private func triggerHaptic() {
@@ -91,6 +92,47 @@ public struct HealthMainView: View {
                 }
                 .task {
                     await healthService.loadDataForSelectedDate()
+                }
+                .sheet(isPresented: $showingDatePicker) {
+                    NavigationStack {
+                        LiquidGlassBackground {
+                            VStack {
+                                DatePicker("Select Date", selection: Binding(
+                                    get: { healthService.selectedDate },
+                                    set: { healthService.selectDate($0) }
+                                ), displayedComponents: [.date])
+                                .datePickerStyle(.graphical)
+                                .padding()
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .padding(20)
+                                
+                                Button("Confirm") {
+                                    showingDatePicker = false
+                                }
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 30)
+                                .padding(.vertical, 12)
+                                .background(ThemeColors.accentCyan)
+                                .clipShape(Capsule())
+                                
+                                Spacer()
+                            }
+                            .padding(.top, 20)
+                            .navigationTitle("Select Date")
+                            .navigationBarTitleDisplayMode(.inline)
+                            .toolbar {
+                                ToolbarItem(placement: .topBarTrailing) {
+                                    Button("Done") {
+                                        showingDatePicker = false
+                                    }
+                                    .foregroundColor(.white)
+                                }
+                            }
+                        }
+                    }
+                    .presentationDetents([.medium])
                 }
             }
         }
@@ -182,7 +224,7 @@ public struct HealthMainView: View {
         HStack(spacing: 8) {
             // Previous Day Button
             Button {
-                healthService.prevDay()
+                healthService.goToPreviousDay()
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 11, weight: .bold))
@@ -192,16 +234,26 @@ public struct HealthMainView: View {
             }
             .buttonStyle(.plain)
             
-            // Date Title
-            Text(formattedDateTitle)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
+            // Calendar Button with Icon and Date Title
+            Button {
+                showingDatePicker = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(ThemeColors.accentCyan)
+                    
+                    Text(healthService.formattedDateTitle)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                }
+            }
+            .buttonStyle(.plain)
             
             // Jump to Today or Next Day Button
-            let isToday = Calendar.current.isDateInToday(healthService.selectedDate)
-            if !isToday {
+            if !healthService.isToday {
                 Button {
-                    healthService.jumpToToday()
+                    healthService.goToToday()
                 } label: {
                     Text("Today")
                         .font(.system(size: 10, weight: .bold))
@@ -213,7 +265,7 @@ public struct HealthMainView: View {
                 .buttonStyle(.plain)
                 
                 Button {
-                    healthService.nextDay()
+                    healthService.goToNextDay()
                 } label: {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .bold))
@@ -236,23 +288,6 @@ public struct HealthMainView: View {
                 .fill(Color.white.opacity(0.06))
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
         )
-    }
-    
-    private var formattedDateTitle: String {
-        let cal = Calendar.current
-        if cal.isDateInToday(healthService.selectedDate) {
-            return "Today, \(dateString(healthService.selectedDate, format: "MMM d"))"
-        } else if cal.isDateInYesterday(healthService.selectedDate) {
-            return "Yesterday, \(dateString(healthService.selectedDate, format: "MMM d"))"
-        } else {
-            return dateString(healthService.selectedDate, format: "EEEE, MMM d")
-        }
-    }
-    
-    private func dateString(_ date: Date, format: String) -> String {
-        let f = DateFormatter()
-        f.dateFormat = format
-        return f.string(from: date)
     }
     
     // MARK: - Sub-Tab Switcher

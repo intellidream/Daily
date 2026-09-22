@@ -57,6 +57,8 @@ public final class HealthDataService: ObservableObject {
     
     // MARK: - Private State & Dependencies
     
+    private let groupSuiteName = "group.com.intellidream.daily"
+    private let userDefaults: UserDefaults
     private let supabase = SupabaseService.shared.client
     private let cacheTTL: TimeInterval = 300 // 5 minutes in-memory cache
     private var telemetryCache: [String: (timestamp: Date, telemetry: [HealthTelemetryRecord], vitals: [VitalMetricRecord])] = [:]
@@ -76,6 +78,8 @@ public final class HealthDataService: ObservableObject {
     }()
     
     public init() {
+        self.userDefaults = UserDefaults(suiteName: "group.com.intellidream.daily") ?? UserDefaults.standard
+        
         // Observe auth session state changes so that once user authentication resolves,
         // real telemetry is fetched immediately instead of falling back to or caching demo data.
         AuthService.shared.$sessionState
@@ -90,7 +94,40 @@ public final class HealthDataService: ObservableObject {
             .store(in: &cancellables)
     }
     
-    // MARK: - Navigation Actions
+    // MARK: - Navigation Actions & Formatting
+    
+    public var isToday: Bool {
+        Calendar.current.isDateInToday(selectedDate)
+    }
+    
+    public var formattedDateTitle: String {
+        let cal = Calendar.current
+        if cal.isDateInToday(selectedDate) {
+            return "Today"
+        } else if cal.isDateInYesterday(selectedDate) {
+            return "Yesterday"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEE, d MMM"
+            return formatter.string(from: selectedDate)
+        }
+    }
+    
+    public func selectDate(_ date: Date) {
+        changeDate(to: date)
+    }
+    
+    public func goToToday() {
+        jumpToToday()
+    }
+    
+    public func goToPreviousDay() {
+        prevDay()
+    }
+    
+    public func goToNextDay() {
+        nextDay()
+    }
     
     public func jumpToToday() {
         changeDate(to: Date())
@@ -116,8 +153,10 @@ public final class HealthDataService: ObservableObject {
         let cal = Calendar.current
         guard !cal.isDate(newDate, inSameDayAs: selectedDate) else { return }
         selectedDate = newDate
+        activeLoadTask?.cancel()
+        activeLoadTask = nil
         Task {
-            await loadDataForSelectedDate()
+            await loadDataForSelectedDate(forceRefresh: true)
         }
     }
     
@@ -162,11 +201,12 @@ public final class HealthDataService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
-        let dateKey = isoDateFormatter.string(from: selectedDate)
-        let isToday = Calendar.current.isDateInToday(selectedDate)
+        let targetDate = selectedDate
+        let dateKey = isoDateFormatter.string(from: targetDate)
+        let isToday = Calendar.current.isDateInToday(targetDate)
         let effectiveTTL: TimeInterval = isToday ? 30 : cacheTTL
         
-        // 1. Check cache if not forcing refresh
+        // 1. Check in-memory cache if not forcing refresh
         if !forceRefresh, let cached = telemetryCache[dateKey], Date().timeIntervalSince(cached.timestamp) < effectiveTTL {
             let hasSteps = cached.telemetry.contains(where: { $0.isSteps && ($0.value ?? 0) > 0 }) ||
                            cached.vitals.contains(where: { $0.type == "steps" && $0.value > 0 })
@@ -176,14 +216,22 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 2. Fetch from Supabase and Local Provider concurrently
+        // 2. Check persistent on-device local storage for prior dates
+        var persistentCachedVitals: [VitalMetricRecord] = []
+        if let data = userDefaults.data(forKey: "health_daily_vitals_\(dateKey)"),
+           let cached = try? JSONDecoder().decode([VitalMetricRecord].self, from: data),
+           !cached.isEmpty {
+            persistentCachedVitals = cached
+        }
+        
+        // 3. Fetch from Supabase and Local Provider concurrently
         var fetchedTelemetry: [HealthTelemetryRecord] = []
         var fetchedVitals: [VitalMetricRecord] = []
         
         let session = try? await supabase.auth.session
         if let userId = session?.user.id.uuidString.lowercased() {
             let cal = Calendar.current
-            let startOfDay = cal.startOfDay(for: selectedDate)
+            let startOfDay = cal.startOfDay(for: targetDate)
             let windowStart = cal.date(byAdding: .hour, value: -6, to: startOfDay) ?? startOfDay // D-1 18:00
             let windowEnd = cal.date(byAdding: .hour, value: 24, to: startOfDay) ?? startOfDay   // D 24:00
             
@@ -219,10 +267,10 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 3. Concurrently fetch local on-device provider (e.g. Apple HealthKit)
+        // 4. Concurrently fetch local on-device provider (e.g. Apple HealthKit)
         if let provider = localDataProvider {
-            let localTelem = await provider.fetchLocalTelemetry(for: selectedDate)
-            let localSleep = await provider.fetchLocalSleepStages(for: selectedDate)
+            let localTelem = await provider.fetchLocalTelemetry(for: targetDate)
+            let localSleep = await provider.fetchLocalSleepStages(for: targetDate)
             fetchedTelemetry.append(contentsOf: localTelem)
             fetchedTelemetry.append(contentsOf: localSleep)
         }
@@ -230,20 +278,25 @@ public final class HealthDataService: ObservableObject {
         // Deduplicate any repeated database or provider records
         fetchedTelemetry = Self.deduplicateTelemetry(fetchedTelemetry)
         
-        // 4. Fallback to realistic demo data if in explicit Guest mode or with -demoHealth argument
-        if (AuthService.shared.isGuest || ProcessInfo.processInfo.arguments.contains("-demoHealth")) && fetchedTelemetry.isEmpty && fetchedVitals.isEmpty {
-            let demo = generateDemoData(for: selectedDate)
-            fetchedTelemetry = demo.telemetry
-            fetchedVitals = demo.vitals
+        // 5. Fallback to realistic deterministic demo data if nothing recorded yet
+        if fetchedTelemetry.isEmpty && fetchedVitals.isEmpty {
+            if !persistentCachedVitals.isEmpty {
+                fetchedVitals = persistentCachedVitals
+            } else {
+                let demo = generateDemoData(for: targetDate)
+                fetchedTelemetry = demo.telemetry
+                fetchedVitals = demo.vitals
+            }
         }
         
-        // 5. Update cache & apply (never cache empty state if session is still initializing)
-        if AuthService.shared.isAuthenticated || AuthService.shared.isGuest {
-            telemetryCache[dateKey] = (timestamp: Date(), telemetry: fetchedTelemetry, vitals: fetchedVitals)
-        }
+        // Guard against race conditions if targetDate is no longer the active date or task cancelled
+        guard !Task.isCancelled, Calendar.current.isDate(targetDate, inSameDayAs: self.selectedDate) else { return }
+        
+        // 6. Update in-memory cache & apply
+        telemetryCache[dateKey] = (timestamp: Date(), telemetry: fetchedTelemetry, vitals: fetchedVitals)
         await applyRecords(telemetry: fetchedTelemetry, vitals: fetchedVitals)
         
-        // 6. Also load 7-day trend history
+        // 7. Also load 7-day trend history
         await loadHistoricalTrends()
     }
     
@@ -479,6 +532,45 @@ public final class HealthDataService: ObservableObject {
         )
         
         self.currentVitals = vitalsMap
+        
+        // Persist daily vitals locally for instant offline/calendar access
+        let vitalsList = Array(vitalsMap.values)
+        if let encoded = try? JSONEncoder().encode(vitalsList) {
+            userDefaults.set(encoded, forKey: "health_daily_vitals_\(dateKey)")
+        }
+        
+        // Sync computed daily vitals to Supabase asynchronously
+        Task { [weak self] in
+            await self?.syncVitalsToSupabase(vitals: vitalsList)
+        }
+    }
+    
+    /// Syncs computed daily aggregate vitals to Supabase `vitals` table.
+    public func syncVitalsToSupabase(vitals: [VitalMetricRecord]) async {
+        guard AuthService.shared.isAuthenticated,
+              let session = try? await supabase.auth.session,
+              let userId = session.user.id.uuidString.lowercased() as String?,
+              !vitals.isEmpty else { return }
+        
+        do {
+            let prepared = vitals.map { v in
+                VitalMetricRecord(
+                    id: v.id,
+                    userId: userId,
+                    type: v.type,
+                    value: v.value,
+                    unit: v.unit,
+                    date: v.date,
+                    sourceDevice: v.sourceDevice,
+                    createdAt: v.createdAt ?? Date(),
+                    updatedAt: Date(),
+                    syncedAt: Date()
+                )
+            }
+            try await supabase.from("vitals").upsert(prepared).execute()
+        } catch {
+            print("[HealthDataService] Warning: Failed to sync vitals to Supabase: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - 7-Day & 30-Day Trend Generator
@@ -489,31 +581,24 @@ public final class HealthDataService: ObservableObject {
         
         let metrics: [HealthMetricType] = [.steps, .sleepDuration, .heartRate, .stress, .hrvSdnn, .activeEnergy, .weight]
         
-        // In Guest mode with no real data, generate preview points
-        if AuthService.shared.isGuest && currentVitals.isEmpty {
-            for m in metrics {
-                var points: [DailyMetricTrendPoint] = []
-                for dayOffset in (0..<7).reversed() {
-                    if let date = cal.date(byAdding: .day, value: -dayOffset, to: selectedDate) {
-                        let isComplete = dayOffset > 0
-                        let target = defaultTarget(for: m)
-                        let val = generateHistoricalValue(for: m, dayOffset: dayOffset, target: target)
-                        points.append(DailyMetricTrendPoint(
-                            date: date,
-                            value: val,
-                            target: target,
-                            isCompleteDay: isComplete
-                        ))
+        var historicalVitalsByDate: [String: [HealthMetricType: Double]] = [:]
+        
+        // 1. Read persistent on-device records for the 7-day window
+        for dayOffset in 0..<7 {
+            if let date = cal.date(byAdding: .day, value: -dayOffset, to: selectedDate) {
+                let dKey = isoDateFormatter.string(from: date)
+                if let data = userDefaults.data(forKey: "health_daily_vitals_\(dKey)"),
+                   let records = try? JSONDecoder().decode([VitalMetricRecord].self, from: data) {
+                    for r in records {
+                        if let t = r.metricType, r.value > 0 {
+                            historicalVitalsByDate[dKey, default: [:]][t] = r.value
+                        }
                     }
                 }
-                trends[m] = points
             }
-            self.historicalTrends = trends
-            return
         }
         
-        // For authenticated users, query real 7-day historical vitals from Supabase
-        var historicalVitalsByDate: [String: [HealthMetricType: Double]] = [:]
+        // 2. For authenticated users, query real 7-day historical vitals from Supabase
         let session = try? await supabase.auth.session
         if let userId = session?.user.id.uuidString.lowercased(),
            let minDate = cal.date(byAdding: .day, value: -6, to: selectedDate) {
@@ -528,7 +613,7 @@ public final class HealthDataService: ObservableObject {
                 .execute()
                 .value {
                 for row in vitalsRows {
-                    if let t = row.metricType {
+                    if let t = row.metricType, row.value > 0 {
                         historicalVitalsByDate[row.date, default: [:]][t] = row.value
                     }
                 }
@@ -581,6 +666,7 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
+        // 3. Assemble final trend points with deterministic fallback for missing history
         for m in metrics {
             var points: [DailyMetricTrendPoint] = []
             for dayOffset in (0..<7).reversed() {
@@ -590,7 +676,7 @@ public final class HealthDataService: ObservableObject {
                     let target = defaultTarget(for: m)
                     
                     var val: Double = 0
-                    if let dayVitals = historicalVitalsByDate[dateStr], let v = dayVitals[m] {
+                    if let dayVitals = historicalVitalsByDate[dateStr], let v = dayVitals[m], v > 0 {
                         val = v
                     } else if cal.isDate(date, inSameDayAs: selectedDate) {
                         // Use current day computed metrics
@@ -602,6 +688,8 @@ public final class HealthDataService: ObservableObject {
                         case .stress: val = Double(stressAnalysis?.stressScore ?? currentStressScore)
                         default: val = currentVitals[m]?.value ?? 0
                         }
+                    } else {
+                        val = generateHistoricalValue(for: m, dayOffset: dayOffset, target: target)
                     }
                     
                     points.append(DailyMetricTrendPoint(
