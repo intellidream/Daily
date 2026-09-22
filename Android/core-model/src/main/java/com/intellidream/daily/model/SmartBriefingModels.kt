@@ -97,6 +97,7 @@ data class SmartBriefingNarrative(
     val greeting: String = "",
     val weatherText: String = "",
     val healthText: String = "",
+    val stressText: String = "",
     val habitsText: String = "",
     val financeText: String = "",
     val tagdosText: String = "",
@@ -111,6 +112,7 @@ data class SmartBriefingNarrative(
                 greeting,
                 weatherText,
                 healthText,
+                stressText,
                 habitsText,
                 financeText,
                 tagdosText,
@@ -143,7 +145,10 @@ data class SmartBriefingMetrics(
     val daySpend: Double = 0.0,
     val activeStreamCount: Int = 0,
     val activeMemoCount: Int = 0,
-    val topNewsTitle: String? = null
+    val topNewsTitle: String? = null,
+    val stressScore: Int? = null,
+    val stressStatus: String? = null,
+    val monkeyMood: String? = null
 )
 
 /**

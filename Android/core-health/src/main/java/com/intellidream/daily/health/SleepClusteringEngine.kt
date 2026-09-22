@@ -276,11 +276,19 @@ object SleepClusteringEngine {
 
         // Prioritize:
         // 1. Granular hypnogram sessions over summary sessions
-        // 2. Highest asleep duration
-        val primary = eligibleSessions.sortedWith(
-            compareByDescending<SleepSession> { it.hasGranularHypnogram }
-                .thenByDescending { it.asleepSeconds }
-        ).firstOrNull()
+        // 2. Dedicated sleep tracking device priority (Oura > Watch > Amazfit > etc.)
+        // 3. Highest asleep duration
+        val primary = eligibleSessions.sortedWith { a, b ->
+            if (a.hasGranularHypnogram != b.hasGranularHypnogram) {
+                return@sortedWith if (a.hasGranularHypnogram) -1 else 1
+            }
+            val rankA = deviceSleepPriorityRank(a.sourceDevice)
+            val rankB = deviceSleepPriorityRank(b.sourceDevice)
+            if (rankA != rankB) {
+                return@sortedWith rankB.compareTo(rankA)
+            }
+            b.asleepSeconds.compareTo(a.asleepSeconds)
+        }.firstOrNull()
 
         // 6. Deduplicate and merge duplicate or overlapping nap sessions
         val sortedNaps = allNaps.sortedBy { it.startTime }
@@ -366,16 +374,7 @@ object SleepClusteringEngine {
         val totalDuration = max(0.0, (end - start) / 1000.0)
         if (totalDuration < 600.0) return null // Ignore < 10 mins noise
 
-        val stageRecords = cluster.map { record ->
-            SleepStageRecord(
-                id = record.id,
-                stageType = record.sleepStageType,
-                startTime = record.startTime,
-                endTime = record.effectiveEndTime,
-                durationSeconds = record.durationSeconds,
-                sourceDevice = sourceDevice
-            )
-        }
+        val stageRecords = normalizeAndDeduplicateStages(cluster, sourceDevice)
 
         // Daytime Nap Heuristic:
         // Duration < 3.5 hours AND starts during daytime (>= 09:00) AND ends <= 20:30 on day D
@@ -458,6 +457,77 @@ object SleepClusteringEngine {
             sourceDevice = sourceDevice,
             hasGranularHypnogram = false
         )
+    }
+
+    /**
+     * Priority ranking for selecting the primary nocturnal sleep session among multiple wearables.
+     * Dedicated sleep trackers (Oura Ring) have highest clinical accuracy, followed by Pixel/Galaxy/Apple Watch and Amazfit.
+     */
+    private fun deviceSleepPriorityRank(deviceName: String): Int {
+        val lower = deviceName.lowercase()
+        if (lower.contains("oura")) return 100
+        if (lower.contains("watch") || lower.contains("pixel") || lower.contains("galaxy") || lower.contains("apple")) return 80
+        if (lower.contains("amazfit") || lower.contains("zepp") || lower.contains("balance")) return 70
+        if (lower.contains("oneplus") || lower.contains("wearos") || lower.contains("wear os")) return 60
+        if (lower.contains("huawei") || lower.contains("harmony")) return 50
+        if (lower.contains("health connect") || lower.contains("health")) return 40
+        return 10
+    }
+
+    /**
+     * Normalizes and clips stage records within a cluster to prevent overlapping time spans.
+     * Guarantees that the sum of stage durations can mathematically never exceed the session's wall-clock duration.
+     */
+    private fun normalizeAndDeduplicateStages(
+        rawRecords: List<HealthTelemetryRecord>,
+        sourceDevice: String
+    ): List<SleepStageRecord> {
+        val sorted = rawRecords.sortedWith { a, b ->
+            if (a.startTime != b.startTime) {
+                a.startTime.compareTo(b.startTime)
+            } else {
+                a.effectiveEndTime.compareTo(b.effectiveEndTime)
+            }
+        }
+
+        val normalized = mutableListOf<SleepStageRecord>()
+        var lastEnd: Long? = null
+
+        for (record in sorted) {
+            var start = record.startTime
+            val end = record.effectiveEndTime
+            if (end <= start) continue
+
+            val prevEnd = lastEnd
+            if (prevEnd != null) {
+                if (start < prevEnd) {
+                    if (end <= prevEnd) {
+                        // Completely subsumed by previous stage, ignore duplicate
+                        continue
+                    } else {
+                        // Partially overlapping: clip start to prevEnd
+                        start = prevEnd
+                    }
+                }
+            }
+
+            val dur = max(0.0, (end - start) / 1000.0)
+            if (dur < 10.0) continue // Ignore sub-10s artifacts
+
+            normalized.add(
+                SleepStageRecord(
+                    id = record.id,
+                    stageType = record.sleepStageType,
+                    startTime = start,
+                    endTime = end,
+                    durationSeconds = dur,
+                    sourceDevice = sourceDevice
+                )
+            )
+            lastEnd = end
+        }
+
+        return normalized
     }
 
     private fun isSameDay(time1: Long, time2: Long): Boolean {

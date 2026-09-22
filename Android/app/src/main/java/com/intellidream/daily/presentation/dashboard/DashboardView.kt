@@ -512,6 +512,17 @@ private fun DashboardWidgetRenderer(
                 onLongClick = onLongClick
             )
         }
+        DashboardWidgetType.Stress.id -> {
+            StressDashboardCard(
+                size = config.size,
+                repository = healthRepository,
+                onTap = {
+                    healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.STRESS)
+                    onNavigateToHealth()
+                },
+                onLongClick = onLongClick
+            )
+        }
         DashboardWidgetType.TagdosNotes.id -> {
             TagdosNotesDashboardCard(
                 size = config.size,

@@ -15,8 +15,18 @@ import kotlin.math.roundToInt
 enum class HealthSubTab(val displayName: String) {
     OVERVIEW("Overview"),
     SLEEP("Sleep Studio"),
+    STRESS("Stress Studio"),
     VITALS("Heart & Vitals"),
-    TRENDS("Trends")
+    TRENDS("Trends");
+
+    val shortTitle: String
+        get() = when (this) {
+            OVERVIEW -> "Overview"
+            SLEEP -> "Sleep"
+            STRESS -> "Stress"
+            VITALS -> "Vitals"
+            TRENDS -> "Trends"
+        }
 }
 
 // MARK: - Health Metric Types

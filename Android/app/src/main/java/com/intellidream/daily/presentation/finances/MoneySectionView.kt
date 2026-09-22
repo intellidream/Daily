@@ -34,6 +34,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.ParsedSmartLedger
@@ -46,6 +56,7 @@ fun MoneySectionView(
     onOpenEditor: () -> Unit,
     onSelectItem: (SmartLedgerItem) -> Unit,
     onAddItem: (String) -> Unit,
+    onAdjustItem: ((SmartLedgerItem, Double) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -63,7 +74,8 @@ fun MoneySectionView(
             LedgerSectionCard(
                 section = section,
                 onSelectItem = onSelectItem,
-                onAddItem = { onAddItem(section.name) }
+                onAddItem = { onAddItem(section.name) },
+                onAdjustItem = onAdjustItem
             )
         }
     }
@@ -220,9 +232,11 @@ private fun MetricBadge(
 private fun LedgerSectionCard(
     section: SmartLedgerSection,
     onSelectItem: (SmartLedgerItem) -> Unit,
-    onAddItem: () -> Unit
+    onAddItem: () -> Unit,
+    onAdjustItem: ((SmartLedgerItem, Double) -> Unit)? = null
 ) {
     val (icon, color, title) = getSectionStyle(section.name)
+    val haptic = LocalHapticFeedback.current
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -257,15 +271,28 @@ private fun LedgerSectionCard(
                         Box(
                             modifier = Modifier
                                 .clip(CircleShape)
+                                .background(color.copy(alpha = 0.12f))
+                                .border(1.dp, color.copy(alpha = 0.25f), CircleShape)
                                 .clickable(onClick = onAddItem)
-                                .padding(4.dp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.AddCircle,
-                                contentDescription = "Add Item",
-                                tint = color.copy(alpha = 0.85f),
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = "Adaugă",
+                                    tint = color,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Text(
+                                    text = "Adaugă",
+                                    color = color,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
@@ -313,69 +340,196 @@ private fun LedgerSectionCard(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Color.White.copy(alpha = 0.04f))
                                 .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
-                                .clickable { onSelectItem(item) }
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(
-                                modifier = Modifier.weight(1f, fill = false),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = item.displayName,
-                                        color = Color.White,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1
-                                    )
-                                    if (item.percentageOfSection > 0) {
+                                    // Horizontally scrollable title allowing left-right dragging, tap opens quick adjust
+                                    Row(
+                                        modifier = Modifier.weight(1f, fill = false),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Box(
                                             modifier = Modifier
-                                                .clip(CircleShape)
-                                                .background(Color.White.copy(alpha = 0.08f))
-                                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                                                .weight(1f, fill = false)
+                                                .horizontalScroll(rememberScrollState())
+                                                .clickable { onSelectItem(item) }
                                         ) {
                                             Text(
-                                                text = String.format(java.util.Locale.US, "%.1f%%", item.percentageOfSection * 100),
-                                                color = ThemeColors.fgMutedDark,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Medium
+                                                text = item.displayName,
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1
                                             )
+                                        }
+
+                                        Icon(
+                                            imageVector = Icons.Rounded.Tune,
+                                            contentDescription = "Adjust",
+                                            tint = ThemeColors.fgMutedDark.copy(alpha = 0.7f),
+                                            modifier = Modifier
+                                                .size(13.dp)
+                                                .clickable { onSelectItem(item) }
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    // Amount badges and inline steppers
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.End,
+                                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                                        ) {
+                                            Text(
+                                                text = item.formattedCalculatedAmount,
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            if (item.currency == "EUR") {
+                                                Text(
+                                                    text = "~${item.formattedLeiAmount}",
+                                                    color = ThemeColors.fgMutedDark,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            } else if (item.isScaled && item.rawAmount > 0) {
+                                                Text(
+                                                    text = "(${item.formattedRawAmount})",
+                                                    color = ThemeColors.fgMutedDark,
+                                                    fontSize = 10.sp
+                                                )
+                                            }
+                                        }
+
+                                        // Inline Glass Stepper Controls [ - ] [ + ]
+                                        if (onAdjustItem != null) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(26.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color.White.copy(alpha = 0.08f))
+                                                        .border(1.dp, Color.White.copy(alpha = 0.20f), CircleShape)
+                                                        .clickable {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            val delta = if (item.isScaled) -1.0 else -100.0
+                                                            onAdjustItem(item, delta)
+                                                        },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Remove,
+                                                        contentDescription = "Decrease",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(11.dp)
+                                                    )
+                                                }
+
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(26.dp)
+                                                        .clip(CircleShape)
+                                                        .background(color.copy(alpha = 0.25f))
+                                                        .border(1.dp, color.copy(alpha = 0.45f), CircleShape)
+                                                        .clickable {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            val delta = if (item.isScaled) 1.0 else 100.0
+                                                            onAdjustItem(item, delta)
+                                                        },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Add,
+                                                        contentDescription = "Increase",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(11.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
 
-                                if (item.notes.isNotEmpty()) {
-                                    Text(
-                                        text = item.notes.joinToString(" · "),
-                                        color = ThemeColors.fgMutedDark,
-                                        fontSize = 10.sp,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
+                                // Progress bar for percentage of section if applicable
+                                if (item.percentageOfSection > 0) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(4.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.White.copy(alpha = 0.08f))
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(fraction = item.percentageOfSection.toFloat().coerceIn(0.04f, 1f))
+                                                    .fillMaxHeight()
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        Brush.horizontalGradient(
+                                                            listOf(color, color.copy(alpha = 0.65f))
+                                                        )
+                                                    )
+                                            )
+                                        }
 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = item.formattedCalculatedAmount,
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (item.isScaled && item.rawAmount > 0) {
-                                    Text(
-                                        text = "(${item.formattedRawAmount})",
-                                        color = ThemeColors.fgMutedDark,
-                                        fontSize = 11.sp
-                                    )
+                                        Text(
+                                            text = String.format(java.util.Locale.US, "%.1f%%", item.percentageOfSection * 100),
+                                            color = color,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+
+                                // Informative notes pills underneath
+                                if (item.notes.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        item.notes.forEach { note ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(CircleShape)
+                                                    .background(Color.White.copy(alpha = 0.06f))
+                                                    .clickable { onSelectItem(item) }
+                                                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(
+                                                    text = note,
+                                                    color = ThemeColors.fgMutedDark,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

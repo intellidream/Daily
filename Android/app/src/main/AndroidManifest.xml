@@ -61,6 +61,29 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Jetpack Glance Widgets -->
+        <receiver
+            android:name=".glance.DailyCombinedGlanceReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_combined_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".glance.DailyStressGlanceReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_stress_widget_info" />
+        </receiver>
+
     </application>
 
 </manifest>

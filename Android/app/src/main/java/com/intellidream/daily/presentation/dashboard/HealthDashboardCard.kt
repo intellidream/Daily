@@ -65,6 +65,9 @@ fun HealthDashboardCard(
     val restingBpm by repository.restingBpm.collectAsState()
     val primarySleep by repository.primarySleepSession.collectAsState()
     val currentVitals by repository.currentVitals.collectAsState()
+    val currentStressScore by repository.currentStressScore.collectAsState()
+    val currentStressLevel by repository.currentStressLevel.collectAsState()
+    val stressAnalysis by repository.stressAnalysis.collectAsState()
 
     val cardHeight = when (size) {
         DashboardWidgetSize.Small -> 155.dp
@@ -94,7 +97,10 @@ fun HealthDashboardCard(
                 totalActiveCalories = totalActiveCalories,
                 averageBpm = averageBpm,
                 restingBpm = restingBpm,
-                primarySleep = primarySleep
+                primarySleep = primarySleep,
+                stressScore = currentStressScore,
+                stressLevel = currentStressLevel,
+                stressAnalysis = stressAnalysis
             )
             DashboardWidgetSize.Tall -> TallHealthContent(
                 totalSteps = totalSteps,
@@ -270,7 +276,7 @@ private fun SmallHealthContent(
     }
 }
 
-// MARK: - Wide (2x1) Standard 3-Column Split
+// MARK: - Wide (2x1) Standard 4-Column Split
 
 @Composable
 private fun WideHealthContent(
@@ -278,7 +284,10 @@ private fun WideHealthContent(
     totalActiveCalories: Double,
     averageBpm: Double,
     restingBpm: Double,
-    primarySleep: com.intellidream.daily.model.SleepSession?
+    primarySleep: com.intellidream.daily.model.SleepSession?,
+    stressScore: Int,
+    stressLevel: com.intellidream.daily.model.StressLevel,
+    stressAnalysis: com.intellidream.daily.model.StressAnalysisResult?
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -327,7 +336,7 @@ private fun WideHealthContent(
             }
         }
 
-        // 3-Column Split
+        // 4-Column Split: Steps | Heart | Sleep | Stress
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -350,14 +359,14 @@ private fun WideHealthContent(
                     )
                     Text(
                         text = "STEPS",
-                        fontSize = 10.sp,
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = ThemeColors.fgMutedDark
                     )
                 }
                 Text(
                     text = "$totalSteps",
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
@@ -374,7 +383,7 @@ private fun WideHealthContent(
                         )
                         Text(
                             text = "${totalActiveCalories.roundToInt()} kcal",
-                            fontSize = 9.5.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Medium,
                             color = ThemeColors.fgMutedDark
                         )
@@ -385,8 +394,8 @@ private fun WideHealthContent(
             VerticalDivider(
                 color = Color.White.copy(alpha = 0.15f),
                 modifier = Modifier
-                    .height(36.dp)
-                    .padding(horizontal = 8.dp)
+                    .height(34.dp)
+                    .padding(horizontal = 4.dp)
             )
 
             // Heart Rate Column
@@ -405,15 +414,15 @@ private fun WideHealthContent(
                         modifier = Modifier.size(9.dp)
                     )
                     Text(
-                        text = "HEART RATE",
-                        fontSize = 10.sp,
+                        text = "HEART",
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = ThemeColors.fgMutedDark
                     )
                 }
                 Text(
                     text = if (averageBpm > 0) "${averageBpm.roundToInt()} bpm" else "--",
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = ThemeColors.accentPink
                 )
@@ -430,7 +439,7 @@ private fun WideHealthContent(
                         )
                         Text(
                             text = "Rest ${restingBpm.roundToInt()}",
-                            fontSize = 9.5.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Medium,
                             color = ThemeColors.fgMutedDark
                         )
@@ -441,8 +450,8 @@ private fun WideHealthContent(
             VerticalDivider(
                 color = Color.White.copy(alpha = 0.15f),
                 modifier = Modifier
-                    .height(36.dp)
-                    .padding(horizontal = 8.dp)
+                    .height(34.dp)
+                    .padding(horizontal = 4.dp)
             )
 
             // Sleep Column
@@ -462,14 +471,14 @@ private fun WideHealthContent(
                     )
                     Text(
                         text = "SLEEP",
-                        fontSize = 10.sp,
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = ThemeColors.fgMutedDark
                     )
                 }
                 Text(
                     text = primarySleep?.totalAsleepFormatted ?: "--",
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = ThemeColors.accentCyan
                 )
@@ -486,11 +495,67 @@ private fun WideHealthContent(
                         )
                         Text(
                             text = "${primarySleep.efficiencyPercent}% eff",
-                            fontSize = 9.5.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Medium,
                             color = ThemeColors.fgMutedDark
                         )
                     }
+                }
+            }
+
+            VerticalDivider(
+                color = Color.White.copy(alpha = 0.15f),
+                modifier = Modifier
+                    .height(34.dp)
+                    .padding(horizontal = 4.dp)
+            )
+
+            // Stress Column
+            val mood = stressAnalysis?.monkeyMood ?: com.intellidream.daily.model.MonkeyMood.CURIOUS
+            val levelColor = Color(android.graphics.Color.parseColor(stressLevel.hexColor))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = mood.emoji,
+                        fontSize = 9.sp
+                    )
+                    Text(
+                        text = "STRESS",
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ThemeColors.fgMutedDark
+                    )
+                }
+                Text(
+                    text = "$stressScore",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = levelColor
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(levelColor)
+                    )
+                    Text(
+                        text = stressLevel.displayName,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = ThemeColors.fgMutedDark,
+                        maxLines = 1
+                    )
                 }
             }
         }

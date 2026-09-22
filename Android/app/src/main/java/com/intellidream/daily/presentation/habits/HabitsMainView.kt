@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import com.intellidream.daily.database.HabitsRepository
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.ThemeColors
+import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
 import com.intellidream.daily.model.HabitConsistencyCell
 import com.intellidream.daily.model.HabitLogRecord
 import com.intellidream.daily.model.HabitTrendDay
@@ -111,9 +112,19 @@ fun HabitsMainView(
         repository.syncLogs()
     }
 
+    val habitIndex = if (activeHabit == HabitType.WATER) 0 else 1
+
     Column(
         modifier = modifier
             .fillMaxSize()
+            .calmBoundedSwipeGesture(
+                currentIndex = habitIndex,
+                maxIndex = 1,
+                onIndexChange = { newIdx ->
+                    if (newIdx == 0) repository.switchHabit(HabitType.WATER)
+                    else repository.switchHabit(HabitType.SMOKES)
+                }
+            )
             .padding(horizontal = 20.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally

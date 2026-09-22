@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DayOne</string>
+    <string name="widget_combined_title">Daily Combined</string>
+    <string name="widget_combined_description">At-a-glance health, habits, and stress overview</string>
+    <string name="widget_stress_title">Daily Stress Studio</string>
+    <string name="widget_stress_description">Real-time autonomic stress score and monkey mood</string>
 </resources>

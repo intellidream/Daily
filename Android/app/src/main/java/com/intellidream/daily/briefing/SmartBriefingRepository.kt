@@ -233,8 +233,21 @@ class SmartBriefingRepository(
                         closingWish = localNarrative.closingWish,
                         closingIcon = localNarrative.closingIcon
                     )
+                    val mergedNarrative = SmartBriefingNarrative(
+                        greeting = aiNarrative.greeting.ifBlank { localNarrative.greeting },
+                        weatherText = aiNarrative.weatherText.ifBlank { localNarrative.weatherText },
+                        healthText = aiNarrative.healthText.ifBlank { localNarrative.healthText },
+                        stressText = aiNarrative.stressText.ifBlank { localNarrative.stressText },
+                        habitsText = aiNarrative.habitsText.ifBlank { localNarrative.habitsText },
+                        financeText = aiNarrative.financeText.ifBlank { localNarrative.financeText },
+                        tagdosText = aiNarrative.tagdosText.ifBlank { localNarrative.tagdosText },
+                        newsText = aiNarrative.newsText.ifBlank { localNarrative.newsText },
+                        outroText = aiNarrative.outroText.ifBlank { localNarrative.outroText },
+                        closingWish = aiNarrative.closingWish ?: localNarrative.closingWish,
+                        closingIcon = aiNarrative.closingIcon ?: localNarrative.closingIcon
+                    )
                     finalRecord = finalRecord.copy(
-                        narrative = aiNarrative,
+                        narrative = mergedNarrative,
                         isAiGenerated = true
                     )
                 } catch (_: Exception) {
@@ -335,6 +348,9 @@ class SmartBriefingRepository(
         val activeMemoCount = streams.count { it.activeMemos.isNotBlank() }
 
         val restingBpm = healthRepository.restingBpm.value.toDouble()
+        val stressScore = healthRepository.currentStressScore.value
+        val stressStatus = healthRepository.currentStressLevel.value.displayName
+        val monkeyMood = healthRepository.stressAnalysis.value?.monkeyMood?.displayName
 
         return SmartBriefingMetrics(
             weatherTemp = weather?.main?.temp,
@@ -354,7 +370,10 @@ class SmartBriefingRepository(
             daySpend = ledger.outgoingTotal,
             activeStreamCount = streams.size,
             activeMemoCount = activeMemoCount,
-            topNewsTitle = newsRepository.articles.value.firstOrNull()?.title
+            topNewsTitle = newsRepository.articles.value.firstOrNull()?.title,
+            stressScore = stressScore,
+            stressStatus = stressStatus,
+            monkeyMood = monkeyMood
         )
     }
 
@@ -365,8 +384,9 @@ class SmartBriefingRepository(
         val waterBucket = (metrics.waterMlToday / 100.0).toInt()
         val smokes = metrics.smokesToday
         val netWorthBucket = (metrics.netWorth / 50.0).toInt()
+        val stressBucket = (metrics.stressScore ?: 35) / 5
 
-        val composite = "${slot.value}|$tempRounded|$sleepRounded|$stepsBucket|$waterBucket|$smokes|$netWorthBucket|$streamCount|${metrics.topNewsTitle ?: ""}"
+        val composite = "${slot.value}|$tempRounded|$sleepRounded|$stepsBucket|$waterBucket|$smokes|$netWorthBucket|$streamCount|${metrics.topNewsTitle ?: ""}|$stressBucket"
         val digest = MessageDigest.getInstance("SHA-256").digest(composite.toByteArray())
         return digest.joinToString("") { "%02x".format(it) }
     }
@@ -543,10 +563,20 @@ class SmartBriefingRepository(
             BriefingTimeSlot.NIGHTLY -> "Power down screens, recharge your energy, and sleep peacefully."
         }
 
+        // Stress & Autonomic Balance (voiced by Monkey Mascot)
+        val sScore = metrics.stressScore ?: 32
+        val stressAdvice = when {
+            sScore <= 25 -> "Stress is Restful ($sScore/100). Zen Monkey says: You're in peak recovery mode — wonderful flow for deep, creative tasks!"
+            sScore <= 50 -> "Stress is Calm ($sScore/100). Curious Monkey says: Autonomic tone is balanced. Keep this steady groove going with a sip of water."
+            sScore <= 75 -> "Stress is Moderate ($sScore/100). Busy Monkey says: Tension is building up. Take a 3-minute screen break and try Box Breathing."
+            else -> "Stress is High ($sScore/100). Overheated Monkey says: High sympathetic arousal detected! Take 3 Physiological Sighs right now (double nose inhale, long mouth exhale)."
+        }
+
         return SmartBriefingNarrative(
             greeting = greeting,
             weatherText = weatherAdvice,
             healthText = healthAdvice,
+            stressText = stressAdvice,
             habitsText = habitAdvice,
             financeText = financeAdvice,
             tagdosText = tagdosAdvice,
@@ -595,7 +625,23 @@ class SmartBriefingRepository(
             )
         }
 
-        // 3. Habits & Cravings
+        // 3. Stress & Mind Balance (voiced by Monkey Mascot)
+        if (narrative.stressText.isNotBlank()) {
+            val badge = if (metrics.stressScore != null) "Stress ${metrics.stressScore}/100" else (metrics.stressStatus ?: "Calm")
+            list.add(
+                BriefingCardItem(
+                    id = "stress",
+                    iconName = "self_improvement",
+                    title = "Stress & Mind Balance \uD83D\uDC35",
+                    badgeText = badge,
+                    badgeColorHex = "#FFB703",
+                    text = narrative.stressText,
+                    accentColorHex = "#FFB703"
+                )
+            )
+        }
+
+        // 4. Habits & Cravings
         if (narrative.habitsText.isNotBlank()) {
             val badge = if (metrics.smokesToday == 0) "Zero Smokes" else "${metrics.smokesToday} Cigs"
             list.add(

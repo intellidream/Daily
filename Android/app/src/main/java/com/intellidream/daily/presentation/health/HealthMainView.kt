@@ -35,14 +35,17 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.app.DatePickerDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Watch
+import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -108,6 +111,10 @@ fun HealthMainView(
     val sleepAIContext by repository.sleepAIContext.collectAsState()
     val currentVitals by repository.currentVitals.collectAsState()
     val historicalTrends by repository.historicalTrends.collectAsState()
+    val currentStressScore by repository.currentStressScore.collectAsState()
+    val currentStressLevel by repository.currentStressLevel.collectAsState()
+    val stressAnalysis by repository.stressAnalysis.collectAsState()
+    val intradayStress by repository.intradayStress.collectAsState()
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -128,6 +135,9 @@ fun HealthMainView(
         }
     }
 
+    val tabs = HealthSubTab.entries
+    val currentTabIndex = tabs.indexOf(activeSubTab)
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -143,6 +153,7 @@ fun HealthMainView(
                 onPrevDay = { repository.prevDay() },
                 onNextDay = { repository.nextDay() },
                 onJumpToday = { repository.jumpToToday() },
+                onSelectDate = { repository.changeDate(it) },
                 onSelectSource = { repository.setDeviceFilter(it) },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -151,7 +162,17 @@ fun HealthMainView(
 
             // Scrollable Content
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .calmBoundedSwipeGesture(
+                        currentIndex = currentTabIndex,
+                        maxIndex = tabs.lastIndex,
+                        onIndexChange = { newIdx ->
+                            if (newIdx in tabs.indices) {
+                                repository.setActiveSubTab(tabs[newIdx])
+                            }
+                        }
+                    ),
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -269,6 +290,14 @@ fun HealthMainView(
                                 daytimeNaps = daytimeNaps
                             )
 
+                            HealthSubTab.STRESS -> StressStudioView(
+                                stressScore = currentStressScore,
+                                stressLevel = currentStressLevel,
+                                stressAnalysis = stressAnalysis,
+                                intradayStress = intradayStress,
+                                primarySleep = primarySleep
+                            )
+
                             HealthSubTab.VITALS -> VitalsSection(
                                 averageBpm = averageBpm,
                                 restingBpm = restingBpm,
@@ -306,6 +335,7 @@ private fun HeaderBar(
     onPrevDay: () -> Unit,
     onNextDay: () -> Unit,
     onJumpToday: () -> Unit,
+    onSelectDate: (Long) -> Unit,
     onSelectSource: (DeviceSource?) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -337,7 +367,8 @@ private fun HeaderBar(
             selectedDateMillis = selectedDateMillis,
             onPrevDay = onPrevDay,
             onNextDay = onNextDay,
-            onJumpToday = onJumpToday
+            onJumpToday = onJumpToday,
+            onSelectDate = onSelectDate
         )
 
         // Device Selector Menu
@@ -354,9 +385,31 @@ private fun DayNavigatorBar(
     selectedDateMillis: Long,
     onPrevDay: () -> Unit,
     onNextDay: () -> Unit,
-    onJumpToday: () -> Unit
+    onJumpToday: () -> Unit,
+    onSelectDate: (Long) -> Unit
 ) {
+    val context = LocalContext.current
     val isToday = isSameDay(selectedDateMillis, System.currentTimeMillis())
+
+    val showDatePicker = {
+        val cal = Calendar.getInstance().apply { timeInMillis = selectedDateMillis }
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val newCal = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month)
+                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                    set(Calendar.HOUR_OF_DAY, 12)
+                    set(Calendar.MINUTE, 0)
+                }
+                onSelectDate(newCal.timeInMillis)
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -384,13 +437,29 @@ private fun DayNavigatorBar(
             )
         }
 
-        // Date Title
-        Text(
-            text = formatDayTitle(selectedDateMillis),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
+        // Calendar Button with Icon and Date Title
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier
+                .clip(CircleShape)
+                .clickable { showDatePicker() }
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.CalendarToday,
+                contentDescription = "Select Date",
+                tint = ThemeColors.accentCyan,
+                modifier = Modifier.size(12.dp)
+            )
+
+            Text(
+                text = formatDayTitle(selectedDateMillis),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
 
         if (!isToday) {
             // Jump to Today
@@ -415,7 +484,7 @@ private fun DayNavigatorBar(
                     .size(26.dp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.08f))
-                .clickable { onNextDay() },
+                    .clickable { onNextDay() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -526,7 +595,7 @@ private fun SubTabSwitcher(
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        HealthSubTab.values().forEach { tab ->
+        HealthSubTab.entries.forEach { tab ->
             val isSelected = activeTab == tab
             Box(
                 modifier = Modifier
@@ -538,7 +607,7 @@ private fun SubTabSwitcher(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = tab.displayName,
+                    text = tab.shortTitle,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f)

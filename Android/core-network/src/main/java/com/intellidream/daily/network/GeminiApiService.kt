@@ -71,6 +71,7 @@ class GeminiApiService {
               "greeting": "A warm, personalized 1-line greeting with date context",
               "weatherText": "Concise atmosphere & outfit recommendation based on weather",
               "healthText": "Recovery analysis correlating sleep score, resting HR, and activity",
+              "stressText": "Wise, supportive, and cute advice from the stylized Monkey Mascot correlating autonomic stress level (0-100), HRV, and practical breathing tips",
               "habitsText": "Empathetic hydration progress and supportive craving reduction advice",
               "financeText": "Summary of monthly flow, net worth in Lei, and financial clarity",
               "tagdosText": "Focus priority for active Tagdos pills (e.g. 'Here\\'s what needs your focus today: ...')",
@@ -94,6 +95,11 @@ class GeminiApiService {
                 metrics.sleepDurationFormatted?.let { put("sleepFormatted", it) }
                     ?: metrics.sleepDurationHours?.let { put("sleepHours", String.format("%.1fh", it)) }
                 metrics.restingBpm?.let { put("restingBpm", it) }
+            })
+            put("stress", JSONObject().apply {
+                metrics.stressScore?.let { put("score", it) }
+                metrics.stressStatus?.let { put("status", it) }
+                metrics.monkeyMood?.let { put("monkeyMood", it) }
             })
             put("habits", JSONObject().apply {
                 put("waterMlToday", metrics.waterMlToday)
@@ -188,6 +194,7 @@ class GeminiApiService {
             greeting = parsed.optString("greeting", ""),
             weatherText = parsed.optString("weatherText", ""),
             healthText = parsed.optString("healthText", ""),
+            stressText = parsed.optString("stressText", ""),
             habitsText = parsed.optString("habitsText", ""),
             financeText = parsed.optString("financeText", ""),
             tagdosText = parsed.optString("tagdosText", ""),

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Nightlight
 import androidx.compose.material.icons.rounded.Scale
+import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -50,6 +51,7 @@ fun HealthTrendsView(
         HealthMetricType.STEPS,
         HealthMetricType.SLEEP_DURATION,
         HealthMetricType.HEART_RATE,
+        HealthMetricType.STRESS,
         HealthMetricType.ACTIVE_ENERGY,
         HealthMetricType.HRV_SDNN,
         HealthMetricType.WEIGHT
@@ -132,6 +134,13 @@ private fun DailyCapsuleBarChart(
             metric == HealthMetricType.HRV_SDNN ||
             metric == HealthMetricType.WEIGHT
 
+    val isStress = metric == HealthMetricType.STRESS
+    val barGradient = if (isStress) {
+        Brush.verticalGradient(colors = listOf(Color(0xFFFFA726), Color(0xFFFF7043)))
+    } else {
+        Brush.verticalGradient(colors = listOf(ThemeColors.accentCyan, ThemeColors.accentBlue))
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -140,7 +149,9 @@ private fun DailyCapsuleBarChart(
         verticalAlignment = Alignment.Bottom
     ) {
         points.forEach { pt ->
-            val normalizedFrac = if (isFluctuating) {
+            val normalizedFrac = if (isStress) {
+                (pt.value / 100.0).toFloat().coerceIn(0.08f, 1f)
+            } else if (isFluctuating) {
                 if (maxVal > minVal) {
                     (((pt.value - minVal) / (maxVal - minVal)) * 0.75 + 0.15).toFloat()
                 } else 0.5f
@@ -165,11 +176,7 @@ private fun DailyCapsuleBarChart(
                             .fillMaxWidth(0.6f)
                             .fillMaxHeight(if (pt.value > 0) normalizedFrac else 0.04f)
                             .clip(CircleShape)
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(ThemeColors.accentCyan, ThemeColors.accentBlue)
-                                )
-                            )
+                            .background(barGradient)
                             .then(
                                 Modifier.background(
                                     Color.White.copy(
@@ -245,6 +252,7 @@ private fun formatStat(valNum: Double, metric: HealthMetricType): String {
         HealthMetricType.ACTIVE_ENERGY,
         HealthMetricType.HEART_RATE,
         HealthMetricType.HRV_SDNN -> "${valNum.roundToInt()}"
+        HealthMetricType.STRESS -> "${valNum.roundToInt()}/100"
 
         HealthMetricType.SLEEP_DURATION -> {
             val h = valNum.toInt() / 60
@@ -263,6 +271,7 @@ private fun getTrendIcon(metric: HealthMetricType): ImageVector = when (metric) 
     HealthMetricType.HEART_RATE -> Icons.Rounded.Favorite
     HealthMetricType.ACTIVE_ENERGY -> Icons.Rounded.LocalFireDepartment
     HealthMetricType.HRV_SDNN -> Icons.Rounded.ShowChart
+    HealthMetricType.STRESS -> Icons.Rounded.SelfImprovement
     HealthMetricType.WEIGHT -> Icons.Rounded.Scale
     else -> Icons.Rounded.ShowChart
 }

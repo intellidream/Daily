@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellidream.daily.database.TagdosRepository
 import com.intellidream.daily.designsystem.ThemeColors
+import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
 import com.intellidream.daily.model.TagDoCluster
 import com.intellidream.daily.model.TagDoPill
 import com.intellidream.daily.model.TagDoPillAction
@@ -354,6 +355,19 @@ fun TagdosNotesHubView(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .calmBoundedSwipeGesture(
+                        currentIndex = selectedStreamIndex,
+                        maxIndex = streams.size,
+                        edgeGuardDp = 75.dp,
+                        onIndexChange = { newIdx ->
+                            if (!isRawEditMode && newIdx in 0..streams.size) {
+                                selectedStreamIndex = newIdx
+                                if (newIdx < streams.size) {
+                                    rawTextBuffer = streams[newIdx].rawText
+                                }
+                            }
+                        }
+                    )
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)

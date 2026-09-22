@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Newspaper
 import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.CircularProgressIndicator
@@ -526,6 +527,7 @@ private fun BriefingCard(
     val iconVector: ImageVector = when (item.id) {
         "weather" -> Icons.Rounded.Cloud
         "health" -> Icons.Rounded.Favorite
+        "stress" -> Icons.Rounded.SelfImprovement
         "habits" -> Icons.Rounded.WaterDrop
         "finances" -> Icons.Rounded.CreditCard
         "tagdos" -> Icons.Rounded.Checklist

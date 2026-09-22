@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Feed
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.HorizontalDivider
@@ -395,6 +396,7 @@ private fun getWidgetIcon(id: String): ImageVector {
         DashboardWidgetType.Health.id -> Icons.Rounded.Favorite
         DashboardWidgetType.Habits.id -> Icons.Rounded.LocalFireDepartment
         DashboardWidgetType.Finances.id -> Icons.Rounded.AccountBalanceWallet
+        DashboardWidgetType.Stress.id -> Icons.Rounded.SelfImprovement
         DashboardWidgetType.TagdosNotes.id -> Icons.Rounded.CheckCircle
         else -> Icons.Rounded.WbSunny
     }

@@ -11,9 +11,9 @@ import java.util.UUID
  */
 @Serializable
 enum class FinanceSubTab(val id: String, val title: String) {
-    World("world", "World"),
+    Money("money", "Money"),
     Stocks("stocks", "Stocks"),
-    Money("money", "Money");
+    World("world", "World");
 
     companion object {
         fun fromId(id: String): FinanceSubTab = entries.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: Money

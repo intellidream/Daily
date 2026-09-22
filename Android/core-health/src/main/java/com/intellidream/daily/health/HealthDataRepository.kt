@@ -19,6 +19,9 @@ import com.intellidream.daily.model.SleepAIContext
 import com.intellidream.daily.model.SleepActionableTip
 import com.intellidream.daily.model.SleepRecoveryVerdict
 import com.intellidream.daily.model.SleepSession
+import com.intellidream.daily.model.IntradayStressPoint
+import com.intellidream.daily.model.StressAnalysisResult
+import com.intellidream.daily.model.StressLevel
 import com.intellidream.daily.model.VitalMetricRecord
 import com.intellidream.daily.network.HealthRemoteService
 import kotlinx.coroutines.CoroutineScope
@@ -134,6 +137,19 @@ class HealthDataRepository(
 
     private val _totalActiveCalories = MutableStateFlow(0.0)
     val totalActiveCalories: StateFlow<Double> = _totalActiveCalories.asStateFlow()
+
+    // Stress & Autonomic Nervous System
+    private val _currentStressScore = MutableStateFlow(35)
+    val currentStressScore: StateFlow<Int> = _currentStressScore.asStateFlow()
+
+    private val _currentStressLevel = MutableStateFlow(StressLevel.CALM)
+    val currentStressLevel: StateFlow<StressLevel> = _currentStressLevel.asStateFlow()
+
+    private val _stressAnalysis = MutableStateFlow<StressAnalysisResult?>(null)
+    val stressAnalysis: StateFlow<StressAnalysisResult?> = _stressAnalysis.asStateFlow()
+
+    private val _intradayStress = MutableStateFlow<List<IntradayStressPoint>>(emptyList())
+    val intradayStress: StateFlow<List<IntradayStressPoint>> = _intradayStress.asStateFlow()
 
     // Vitals Grid & Trends
     private val _currentVitals = MutableStateFlow<Map<HealthMetricType, VitalMetricRecord>>(emptyMap())
@@ -469,6 +485,33 @@ class HealthDataRepository(
             vitalsValues[HealthMetricType.RESTING_HEART_RATE] = _restingBpm.value
         }
 
+        // 4. Process Stress using StressAnalysisEngine
+        val hrvVal = vitalsValues[HealthMetricType.HRV_SDNN] ?: vitalsValues[HealthMetricType.HRV_RMSSD]
+        val (stressResult, intradayPoints) = StressAnalysisEngine.calculateStress(
+            targetDate = targetDate,
+            hrvMs = hrvVal,
+            hrTelemetry = sortedHrPoints,
+            hourlySteps = stepsResult.hourlyBuckets,
+            restingBpm = _restingBpm.value.takeIf { it > 0 },
+            priorSleepScore = _primarySleepSession.value?.sleepScore
+        )
+        _currentStressScore.value = stressResult.currentScore
+        _currentStressLevel.value = stressResult.currentLevel
+        _stressAnalysis.value = stressResult
+        _intradayStress.value = intradayPoints
+
+        // Store computed stress in vitalsMap
+        val stressRecord = VitalMetricRecord(
+            userId = "computed",
+            type = "stress",
+            value = stressResult.currentScore.toDouble(),
+            unit = "pts",
+            date = dateKey,
+            sourceDevice = "Stress Engine"
+        )
+        vitalsMap[HealthMetricType.STRESS] = stressRecord
+        vitalsValues[HealthMetricType.STRESS] = stressResult.currentScore.toDouble()
+
         _currentVitals.value = vitalsMap
     }
 
@@ -481,6 +524,7 @@ class HealthDataRepository(
             HealthMetricType.STEPS,
             HealthMetricType.SLEEP_DURATION,
             HealthMetricType.HEART_RATE,
+            HealthMetricType.STRESS,
             HealthMetricType.HRV_SDNN,
             HealthMetricType.ACTIVE_ENERGY,
             HealthMetricType.WEIGHT
@@ -502,6 +546,7 @@ class HealthDataRepository(
                         HealthMetricType.STEPS -> _totalStepsToday.value.toDouble()
                         HealthMetricType.SLEEP_DURATION -> (_primarySleepSession.value?.asleepSeconds ?: 0.0) / 60.0
                         HealthMetricType.HEART_RATE -> if (_averageBpm.value > 0) _averageBpm.value else _restingBpm.value
+                        HealthMetricType.STRESS -> _currentStressScore.value.toDouble()
                         HealthMetricType.ACTIVE_ENERGY -> _totalActiveCalories.value
                         else -> _currentVitals.value[m]?.value ?: 0.0
                     }
@@ -534,6 +579,7 @@ class HealthDataRepository(
         HealthMetricType.SLEEP_DURATION -> 480.0 // 8 hours in minutes
         HealthMetricType.ACTIVE_ENERGY -> 550.0 // kcal
         HealthMetricType.HYDRATION -> 2_500.0 // ml
+        HealthMetricType.STRESS -> 50.0
         else -> 0.0
     }
 

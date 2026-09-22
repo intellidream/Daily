@@ -35,6 +35,7 @@ enum class DashboardWidgetType(val id: String, val title: String) {
     Weather("weather", "Weather & Atmosphere"),
     News("news", "News & Briefings"),
     Health("health", "Health & Vitals"),
+    Stress("stress", "Stress & Mind Balance"),
     Habits("habits", "Habits & Cravings"),
     Finances("finances", "Finances & Markets"),
     TagdosNotes("tagdos_notes", "Tagdos & Notes")
