@@ -436,7 +436,7 @@ public struct HealthMainView: View {
                             Text("Current BPM")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(ThemeColors.fgMutedDark)
-                            Text(healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm)) bpm" : "--")
+                            Text(healthService.latestBpm != nil ? "\(Int(healthService.latestBpm!)) bpm" : (healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm)) bpm" : "--"))
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundColor(ThemeColors.accentPink)
                         }

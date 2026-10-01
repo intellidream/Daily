@@ -137,9 +137,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
             }
         }
         
-        // 3. Intraday Heart Rate Samples
+        // 3. Intraday Heart Rate Samples (query all samples for the day without arbitrary limit)
         if let hrType = HKObjectType.quantityType(forIdentifier: .heartRate) {
-            let hrSamples = await fetchQuantitySamples(for: hrType, predicate: predicate, unit: HKUnit.count().unitDivided(by: .minute()), typeName: "heart_rate")
+            let hrSamples = await fetchQuantitySamples(for: hrType, predicate: predicate, unit: HKUnit.count().unitDivided(by: .minute()), typeName: "heart_rate", limit: HKObjectQueryNoLimit)
             records.append(contentsOf: hrSamples)
         }
         
@@ -147,9 +147,10 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         let vitalsStart = cal.date(byAdding: .hour, value: -6, to: startOfDay) ?? startOfDay
         let vitalsPredicate = HKQuery.predicateForSamples(withStart: vitalsStart, end: endOfDay, options: [])
         
-        // 4. Resting Heart Rate
+        // 4. Resting Heart Rate (capture recent sample per distinct wearable source: Apple Watch, Oura Ring, etc.)
         if let rhrType = HKObjectType.quantityType(forIdentifier: .restingHeartRate) {
-            if let rhr = await fetchMostRecentSample(for: rhrType, predicate: vitalsPredicate, unit: HKUnit.count().unitDivided(by: .minute())) {
+            let rhrList = await fetchRecentSamplesPerSource(for: rhrType, predicate: vitalsPredicate, unit: HKUnit.count().unitDivided(by: .minute()))
+            for rhr in rhrList {
                 records.append(HealthTelemetryRecord(
                     userId: "healthkit",
                     type: "resting_heart_rate",
@@ -162,9 +163,10 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
             }
         }
         
-        // 5. Heart Rate Variability (SDNN)
+        // 5. Heart Rate Variability (SDNN) (capture recent sample per distinct wearable source)
         if let hrvType = HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN) {
-            if let hrv = await fetchMostRecentSample(for: hrvType, predicate: vitalsPredicate, unit: HKUnit.secondUnit(with: .milli)) {
+            let hrvList = await fetchRecentSamplesPerSource(for: hrvType, predicate: vitalsPredicate, unit: HKUnit.secondUnit(with: .milli))
+            for hrv in hrvList {
                 records.append(HealthTelemetryRecord(
                     userId: "healthkit",
                     type: "hrv_sdnn",
@@ -179,7 +181,8 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         
         // 6. Blood Oxygen / SpO2
         if let o2Type = HKObjectType.quantityType(forIdentifier: .oxygenSaturation) {
-            if let o2 = await fetchMostRecentSample(for: o2Type, predicate: vitalsPredicate, unit: HKUnit.percent()) {
+            let o2List = await fetchRecentSamplesPerSource(for: o2Type, predicate: vitalsPredicate, unit: HKUnit.percent())
+            for o2 in o2List {
                 let val = o2.value <= 1.0 ? (o2.value * 100.0) : o2.value
                 records.append(HealthTelemetryRecord(
                     userId: "healthkit",
@@ -195,7 +198,8 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         
         // 7. Respiratory Rate
         if let respType = HKObjectType.quantityType(forIdentifier: .respiratoryRate) {
-            if let resp = await fetchMostRecentSample(for: respType, predicate: vitalsPredicate, unit: HKUnit.count().unitDivided(by: .minute())) {
+            let respList = await fetchRecentSamplesPerSource(for: respType, predicate: vitalsPredicate, unit: HKUnit.count().unitDivided(by: .minute()))
+            for resp in respList {
                 records.append(HealthTelemetryRecord(
                     userId: "healthkit",
                     type: "respiratory_rate",
@@ -421,7 +425,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         }
     }
     
-    private func fetchQuantitySamples(for quantityType: HKQuantityType, predicate: NSPredicate, unit: HKUnit, typeName: String, limit: Int = 120) async -> [HealthTelemetryRecord] {
+    private func fetchQuantitySamples(for quantityType: HKQuantityType, predicate: NSPredicate, unit: HKUnit, typeName: String, limit: Int = HKObjectQueryNoLimit) async -> [HealthTelemetryRecord] {
         await withCheckedContinuation { continuation in
             let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
             let query = HKSampleQuery(sampleType: quantityType, predicate: predicate, limit: limit, sortDescriptors: [sortDescriptor]) { _, samples, _ in
@@ -443,6 +447,39 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     )
                 }
                 continuation.resume(returning: records)
+            }
+            healthStore.execute(query)
+        }
+    }
+    
+    private func fetchRecentSamplesPerSource(
+        for quantityType: HKQuantityType,
+        predicate: NSPredicate,
+        unit: HKUnit,
+        sampleLimit: Int = 50
+    ) async -> [(value: Double, device: String, timestamp: Date)] {
+        await withCheckedContinuation { continuation in
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+            let query = HKSampleQuery(sampleType: quantityType, predicate: predicate, limit: sampleLimit, sortDescriptors: [sort]) { _, samples, _ in
+                guard let qSamples = samples as? [HKQuantitySample], !qSamples.isEmpty else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                var seenDevices = Set<String>()
+                var results: [(value: Double, device: String, timestamp: Date)] = []
+                
+                for sample in qSamples {
+                    let dev = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
+                    if DeviceSource.from(name: dev).isVirtualEngine {
+                        continue
+                    }
+                    if !seenDevices.contains(dev) {
+                        seenDevices.insert(dev)
+                        results.append((sample.quantity.doubleValue(for: unit), dev, sample.endDate))
+                    }
+                }
+                continuation.resume(returning: results)
             }
             healthStore.execute(query)
         }
@@ -479,14 +516,26 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
     
     private static func resolveDeviceName(device: HKDevice?, source: HKSource) -> String {
         if let d = device?.name, !d.isEmpty {
-            return d
+            let lowerD = d.lowercased()
+            if lowerD.contains("stresswatch") || lowerD.contains("stress-engine") {
+                // Ignore virtual synthetic name
+            } else if lowerD.contains("oura") {
+                return "Oura Ring"
+            } else if lowerD.contains("watch") {
+                return "Apple Watch"
+            } else {
+                return d
+            }
         }
         let src = source.name
-        if src.localizedCaseInsensitiveContains("Watch") {
-            return "Apple Watch"
-        } else if src.localizedCaseInsensitiveContains("Oura") {
+        let lowerSrc = src.lowercased()
+        if lowerSrc.contains("stresswatch") || lowerSrc.contains("stress-engine") {
+            return "Daily Biometric Engine"
+        } else if lowerSrc.contains("oura") {
             return "Oura Ring"
-        } else if src.localizedCaseInsensitiveContains("Zepp") || src.localizedCaseInsensitiveContains("Amazfit") {
+        } else if lowerSrc.contains("watch") {
+            return "Apple Watch"
+        } else if lowerSrc.contains("zepp") || lowerSrc.contains("amazfit") {
             return "Amazfit Balance"
         } else if !src.isEmpty {
             return src

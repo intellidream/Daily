@@ -327,3 +327,24 @@ This update resolves historical date navigation in Health Hub, guarantees offlin
   - **Today Jump Button**: A prominent glass button appearing only when viewing past days to immediately return to today.
   - **Next Day Arrow**: `>` icon stepping forward (disabled when viewing today).
   - **Modal Graphical DatePicker**: Dedicated sheet with `.graphical` display style and "Confirm / Done" toolbar.
+
+---
+
+## 13. Phase 4.7: Device Selector Sanitization & Multi-Device Wearable Telemetry (Apple Watch & Oura Ring)
+
+This phase eliminates virtual software artifacts from device selector menus and resolves telemetry ingestion across multi-wearable setups (e.g. Apple Watch Ultra 2 docked on charger, Oura Ring actively worn).
+
+### 13.1 Virtual Computational Engine Purge
+- **`DeviceSource.isVirtualEngine`**: Identifies synthetic computational engines (`"StressWatch"`, `"StressWatch Model"`, `"Daily Biometric Engine"`, `"Bubbles"`, `"computed"`).
+- **Device Selector Sanitization**: `HealthDataService.applyRecords` filters out virtual engines so only authentic physical hardware (`Apple Watch`, `Oura Ring`, `Amazfit Balance`, etc.) appears in `availableSources` and `availableDevices`.
+- **Cache Sanitization**: Filters legacy cached vitals in `UserDefaults` (`health_daily_vitals_*`) and Supabase query results upon loading.
+
+### 13.2 Uncapped Intraday Heart Rate Telemetry
+- **Root Cause**: `HealthKitManager.fetchQuantitySamples` had an arbitrary `limit: 120` sorted by start date ascending. Because Apple Watch logs 20–30 samples/hour, the quota was completely exhausted by mid-morning, ignoring all afternoon samples logged by an active Oura Ring.
+- **Fix**: Upgraded query to `HKObjectQueryNoLimit`. All intraday heart rate points across all devices are gathered chronologically.
+- **Latest BPM Metric**: Added `HealthDataService.latestBpm` (`intradayHeartRate.last?.bpm`) and updated `HealthMainView`'s "Current BPM" label to display the actual live reading rather than the day's arithmetic average.
+
+### 13.3 Multi-Device Concurrent Vitals Ingestion (`fetchRecentSamplesPerSource`)
+- **Root Cause**: Vitals queries (`restingHeartRate`, `hrv_sdnn`, `oxygenSaturation`, `respiratoryRate`) queried HealthKit with `limit: 1` globally. If Apple Watch logged an early sample and Oura Ring logged a later sample, only one device's reading was loaded, causing the other device's filter to display empty states (`--`).
+- **Fix**: Implemented `fetchRecentSamplesPerSource` to capture the most recent sample for *each* distinct wearable. Both Apple Watch and Oura Ring metrics are loaded into memory; selecting "All Devices" prioritizes the fresher active wearable, while picking a specific device displays its dedicated telemetry.
+- **Stress Attribution**: Changed resolution from `.first` to `.last` on `intradayHeartRate`, ensuring stress level attribution dynamically reflects the active wearable currently on the wrist/finger.

@@ -121,4 +121,7 @@ Integrated seamlessly into the Health Hub:
   - **Stress Studio**: Renders `emptyStressCard` displaying `-- / 100`, `NO TELEMETRY RECORDED`, and actionable guidance on wearing a smartwatch or recording an ECG/mindfulness session. The interactive breathwork player remains fully accessible.
   - **Health Overview & Dashboards**: Shows clean `--` unmeasured indicators and "No Telemetry" instead of fake numbers.
   - **iOS Widgets**: `CombinedWidget` and `StressWidget` display `--` with "No Data" badges when unmeasured, keeping widget memory clear.
+- **Hardware Device Picker Sanitization**:
+  - `DeviceSource.isVirtualEngine`: Filters `"StressWatch"` and software algorithms out of `availableSources` and `availableDevices` so only authentic physical wearables (`Apple Watch`, `Oura Ring`, etc.) appear in the Health Hub device selector menu.
+  - Multi-wearable dynamic attribution: Intraday samples and stress attribution dynamically resolve to the latest reported wearable sample (`intradayHeartRate.last`), seamlessly adapting when one device (e.g. Apple Watch) is docked and another (e.g. Oura Ring) is actively worn.
 

@@ -40,6 +40,11 @@ public final class HealthDataService: ObservableObject {
     @Published public var maxBpm: Double = 0
     @Published public var restingBpm: Double = 0
     
+    /// Most recent intraday heart rate reading from the currently active wearable
+    public var latestBpm: Double? {
+        intradayHeartRate.last?.bpm
+    }
+    
     // Activity
     @Published public var hourlySteps: [HourlyStepBucket] = []
     @Published public var totalStepsToday: Int = 0
@@ -221,7 +226,10 @@ public final class HealthDataService: ObservableObject {
         if let data = userDefaults.data(forKey: "health_daily_vitals_\(dateKey)"),
            let cached = try? JSONDecoder().decode([VitalMetricRecord].self, from: data),
            !cached.isEmpty {
-            persistentCachedVitals = cached
+            persistentCachedVitals = cached.filter { v in
+                guard let dev = v.sourceDevice, !dev.isEmpty else { return true }
+                return !DeviceSource.from(name: dev).isVirtualEngine
+            }
         }
         
         // 3. Fetch from Supabase and Local Provider concurrently
@@ -301,19 +309,25 @@ public final class HealthDataService: ObservableObject {
     }
     
     private func applyRecords(telemetry: [HealthTelemetryRecord], vitals: [VitalMetricRecord]) async {
-        // Collect available devices and canonical sources
+        // Collect available devices and canonical sources (filtering out virtual computational engines like StressWatch/Daily Biometric Engine)
         var devicesSet = Set<String>()
         var sourcesSet = Set<DeviceSource>()
         for t in telemetry {
             if let d = t.sourceDevice, !d.isEmpty {
-                devicesSet.insert(d)
-                sourcesSet.insert(DeviceSource.from(name: d))
+                let src = DeviceSource.from(name: d)
+                if !src.isVirtualEngine {
+                    devicesSet.insert(d)
+                    sourcesSet.insert(src)
+                }
             }
         }
         for v in vitals {
             if let d = v.sourceDevice, !d.isEmpty {
-                devicesSet.insert(d)
-                sourcesSet.insert(DeviceSource.from(name: d))
+                let src = DeviceSource.from(name: d)
+                if !src.isVirtualEngine {
+                    devicesSet.insert(d)
+                    sourcesSet.insert(src)
+                }
             }
         }
         availableDevices = Array(devicesSet).sorted()
@@ -343,6 +357,9 @@ public final class HealthDataService: ObservableObject {
         var vitalsValues: [HealthMetricType: Double] = [:]
         for v in vitals {
             if let type = v.metricType {
+                if let dev = v.sourceDevice, DeviceSource.from(name: dev).isVirtualEngine {
+                    continue
+                }
                 vitalsMap[type] = v
                 vitalsValues[type] = v.value
             }
@@ -515,11 +532,13 @@ public final class HealthDataService: ObservableObject {
                 if let src = selectedDeviceSource?.displayName {
                     return src
                 }
-                let legacyFilter: (String) -> Bool = { $0 != "StressWatch Model" && !$0.isEmpty }
+                let legacyFilter: (String) -> Bool = { name in
+                    !name.isEmpty && !DeviceSource.from(name: name).isVirtualEngine
+                }
                 if let hrvSource = vitalsMap[.hrvSdnn]?.sourceDevice ?? vitalsMap[.hrvRmssd]?.sourceDevice, legacyFilter(hrvSource) {
                     return hrvSource
                 }
-                if let hrSource = self.intradayHeartRate.first(where: { $0.sourceDevice != nil && legacyFilter($0.sourceDevice!) })?.sourceDevice {
+                if let hrSource = self.intradayHeartRate.last(where: { $0.sourceDevice != nil && legacyFilter($0.sourceDevice!) })?.sourceDevice {
                     return hrSource
                 }
                 return "Daily Biometric Engine"
@@ -958,8 +977,8 @@ public final class HealthDataService: ObservableObject {
         for (device, records) in grouped {
             let lower = device.lowercased()
             let source = DeviceSource.from(name: device)
-            let isWearable = (source == .appleWatch || source == .amazfit || source == .oneplus || source == .huawei || source == .healthKit) ||
-                             lower.contains("watch") || lower.contains("balance") || lower.contains("gt5") || lower.contains("health")
+            let isWearable = (source == .appleWatch || source == .amazfit || source == .oneplus || source == .huawei || source == .oura || source == .healthKit) ||
+                             lower.contains("watch") || lower.contains("balance") || lower.contains("gt5") || lower.contains("oura") || lower.contains("health")
             
             let isCumulative = isCumulativeStepDevice(device: device, records: records)
             

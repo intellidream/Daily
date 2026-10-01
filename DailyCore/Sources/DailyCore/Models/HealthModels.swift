@@ -870,4 +870,21 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
         case .other: return "sensor.fill"
         }
     }
+    
+    /// Identifies computational/software engines or placeholder strings that are not real physical wearables.
+    public var isVirtualEngine: Bool {
+        switch self {
+        case .other(let name):
+            let lower = name.lowercased()
+            return lower.contains("stresswatch") ||
+                   lower.contains("stress-engine") ||
+                   lower.contains("daily biometric") ||
+                   lower.contains("biometric engine") ||
+                   lower.contains("computed") ||
+                   lower.contains("bubbles") ||
+                   lower == "unknown"
+        default:
+            return false
+        }
+    }
 }

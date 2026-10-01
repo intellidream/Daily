@@ -557,5 +557,38 @@ struct HealthServiceTests {
         service.goToToday()
         #expect(service.isToday == true)
     }
+    
+    @Test func testDeviceClassificationAndVirtualEngineFiltering() throws {
+        // Physical wearables
+        let appleWatch = DeviceSource.from(name: "Apple Watch Ultra 2")
+        #expect(appleWatch == .appleWatch)
+        #expect(appleWatch.isVirtualEngine == false)
+        #expect(appleWatch.displayName == "Apple Watch")
+        
+        let ouraRing = DeviceSource.from(name: "Oura Ring Gen 3")
+        #expect(ouraRing == .oura)
+        #expect(ouraRing.isVirtualEngine == false)
+        #expect(ouraRing.displayName == "Oura Ring")
+        
+        let amazfit = DeviceSource.from(name: "Amazfit Balance")
+        #expect(amazfit == .amazfit)
+        #expect(amazfit.isVirtualEngine == false)
+        
+        // Virtual engines (must be flagged as isVirtualEngine and never appear in physical device lists)
+        let stressWatch = DeviceSource.from(name: "StressWatch Model")
+        #expect(stressWatch.isVirtualEngine == true)
+        
+        let stressWatchBare = DeviceSource.from(name: "StressWatch")
+        #expect(stressWatchBare.isVirtualEngine == true)
+        
+        let dailyBiometric = DeviceSource.from(name: "Daily Biometric Engine")
+        #expect(dailyBiometric.isVirtualEngine == true)
+        
+        let bubbles = DeviceSource.from(name: "Bubbles")
+        #expect(bubbles.isVirtualEngine == true)
+        
+        let computed = DeviceSource.from(name: "computed")
+        #expect(computed.isVirtualEngine == true)
+    }
 }
 
