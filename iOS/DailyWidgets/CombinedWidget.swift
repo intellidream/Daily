@@ -419,42 +419,45 @@ public struct CombinedWidgetView: View {
 
             // Row 2: Horizontal Stress Bar with Monkey Mascot (no word "STRESS" for extra room)
             let stress = entry.snapshot.stress
-            let stressColor = Color(hex: stress.level.hexColor)
+            let hasStress = stress.hasData
+            let stressColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
             HStack(spacing: 5) {
                 Text(stress.monkeyMood.emoji)
                     .font(.system(size: 11.5))
 
-                Text("\(stress.stressScore)")
+                Text(hasStress ? "\(stress.stressScore)" : "--")
                     .font(.system(size: 11, weight: .heavy, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundColor(hasStress ? .white : .white.opacity(0.5))
 
                 // Mini horizontal gauge
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
                             .fill(Color.white.opacity(0.12))
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color(hex: stress.level.gradientHex.first ?? "#00FFB2"),
-                                        Color(hex: stress.level.gradientHex.last ?? "#00B4D8")
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
+                        if hasStress {
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(hex: stress.level.gradientHex.first ?? "#00FFB2"),
+                                            Color(hex: stress.level.gradientHex.last ?? "#00B4D8")
+                                        ],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
                                 )
-                            )
-                            .frame(width: max(4, geo.size.width * CGFloat(min(100, max(0, stress.stressScore))) / 100.0))
+                                .frame(width: max(4, geo.size.width * CGFloat(min(100, max(0, stress.stressScore))) / 100.0))
+                        }
                     }
                 }
                 .frame(height: 4)
 
-                Text(stress.level.displayName)
+                Text(hasStress ? stress.level.displayName : "No Data")
                     .font(.system(size: 8, weight: .bold, design: .rounded))
                     .foregroundColor(stressColor)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(stressColor.opacity(0.18))
+                    .background(stressColor.opacity(hasStress ? 0.18 : 0.08))
                     .clipShape(Capsule())
             }
             .padding(.horizontal, 7)
@@ -709,20 +712,21 @@ public struct CombinedWidgetView: View {
 
                 // Stress Pill with Monkey Mascot
                 let stress = entry.snapshot.stress
-                let sColor = Color(hex: stress.level.hexColor)
+                let hasStress = stress.hasData
+                let sColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
                 HStack(spacing: 3) {
                     Text(stress.monkeyMood.emoji)
                         .font(.system(size: 9))
-                    Text("\(stress.stressScore)")
+                    Text(hasStress ? "\(stress.stressScore)" : "--")
                         .font(.system(size: 10, weight: .heavy, design: .rounded))
                         .foregroundColor(sColor)
-                    Text(stress.level.displayName)
+                    Text(hasStress ? stress.level.displayName : "No Data")
                         .font(.system(size: 8, weight: .bold, design: .rounded))
                         .foregroundColor(sColor)
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2.5)
-                .background(sColor.opacity(0.15))
+                .background(sColor.opacity(hasStress ? 0.15 : 0.08))
                 .clipShape(Capsule())
             }
             .frame(width: 104)
@@ -1168,7 +1172,8 @@ public struct CombinedWidgetView: View {
 
             // 3. Stress
             let stress = entry.snapshot.stress
-            let stressColor = Color(hex: stress.level.hexColor)
+            let hasStress = stress.hasData
+            let stressColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(stress.monkeyMood.emoji)
@@ -1177,30 +1182,32 @@ public struct CombinedWidgetView: View {
                         .font(.system(size: 10.5, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                     Spacer()
-                    Text("\(stress.stressScore)")
+                    Text(hasStress ? "\(stress.stressScore)" : "--")
                         .font(.system(size: 11, weight: .heavy, design: .rounded))
                         .foregroundColor(stressColor)
                 }
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.white.opacity(0.08))
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color(hex: stress.level.gradientHex.first ?? "#00FFB2"),
-                                        Color(hex: stress.level.gradientHex.last ?? "#00B4D8")
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
+                        if hasStress {
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(hex: stress.level.gradientHex.first ?? "#00FFB2"),
+                                            Color(hex: stress.level.gradientHex.last ?? "#00B4D8")
+                                        ],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
                                 )
-                            )
-                            .frame(width: max(3, geo.size.width * CGFloat(min(100, max(0, stress.stressScore))) / 100.0))
+                                .frame(width: max(3, geo.size.width * CGFloat(min(100, max(0, stress.stressScore))) / 100.0))
+                        }
                     }
                 }
                 .frame(height: 4)
 
-                Text(stress.level.displayName)
+                Text(hasStress ? stress.level.displayName : "No Data")
                     .font(.system(size: 8.5, weight: .bold, design: .rounded))
                     .foregroundColor(stressColor)
             }

@@ -47,23 +47,58 @@ public struct StressWidgetView: View {
 
     public var body: some View {
         Group {
-            switch family {
-            case .systemSmall:
-                smallView
-            case .systemMedium:
-                mediumView
-            case .accessoryCircular:
-                accessoryCircularView
-            case .accessoryRectangular:
-                accessoryRectangularView
-            case .accessoryInline:
-                accessoryInlineView
-            default:
-                mediumView
+            if !entry.snapshot.hasData {
+                emptyView
+            } else {
+                switch family {
+                case .systemSmall:
+                    smallView
+                case .systemMedium:
+                    mediumView
+                case .accessoryCircular:
+                    accessoryCircularView
+                case .accessoryRectangular:
+                    accessoryRectangularView
+                case .accessoryInline:
+                    accessoryInlineView
+                default:
+                    mediumView
+                }
             }
         }
         .containerBackground(WidgetColors.bgGradient, for: .widget)
         .widgetURL(URL(string: "daily://health/stress"))
+    }
+
+    private var emptyView: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Text("🐵")
+                    .font(.system(size: 13))
+                Text("STRESS")
+                    .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                    .foregroundColor(WidgetColors.fgMuted)
+                Spacer()
+            }
+            
+            Spacer(minLength: 2)
+            
+            Text("--")
+                .font(.system(size: 30, weight: .heavy, design: .rounded))
+                .foregroundColor(.white.opacity(0.4))
+            
+            Text("No Telemetry")
+                .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                .foregroundColor(WidgetColors.fgMuted)
+            
+            Text("Wear watch to track")
+                .font(.system(size: 8.5, weight: .medium))
+                .foregroundColor(WidgetColors.fgMuted.opacity(0.8))
+                .lineLimit(1)
+            
+            Spacer(minLength: 2)
+        }
+        .padding(4)
     }
 
     // =========================================================================

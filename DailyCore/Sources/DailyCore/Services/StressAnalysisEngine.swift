@@ -1,7 +1,7 @@
 import Foundation
 
 /// Autonomic nervous system (ANS) stress estimation engine modeled after clinical HRV algorithms
-/// and mobile biometric standards (such as StressWatch on Apple Watch).
+/// and mobile biometric standards.
 public enum StressAnalysisEngine {
     
     /// Default population benchmarks for healthy adults when personal longitudinal history is sparse.
@@ -9,7 +9,7 @@ public enum StressAnalysisEngine {
     public static let defaultBaselineRhr: Double = 62.0 // bpm
     
     /// Evaluates physiological telemetry and produces a unified `StressAnalysisResult`
-    /// along with an intraday hourly curve.
+    /// along with an intraday hourly curve, or `nil` if no biometric telemetry is available for the day.
     public static func calculateStress(
         targetDate: Date,
         hrvMs: Double?,
@@ -20,7 +20,13 @@ public enum StressAnalysisEngine {
         personalBaselineHrv: Double? = nil,
         personalBaselineRhr: Double? = nil,
         calendar: Calendar = .current
-    ) -> (result: StressAnalysisResult, intradayPoints: [IntradayStressPoint]) {
+    ) -> (result: StressAnalysisResult, intradayPoints: [IntradayStressPoint])? {
+        
+        // Guard against missing biometric telemetry:
+        // Valid stress calculation requires at least one genuine physiological signal (HRV or heart rate samples).
+        guard hrvMs != nil || !hrTelemetry.isEmpty else {
+            return nil
+        }
         
         let baselineHrv = personalBaselineHrv ?? defaultBaselineHrv
         let baselineRhr = restingBpm ?? personalBaselineRhr ?? defaultBaselineRhr
@@ -54,6 +60,10 @@ public enum StressAnalysisEngine {
             let isSedentary = steps < 300 // Exclude hours with brisk walking/running
             
             let hrSamples = hrByHour[hour] ?? []
+            // Only generate an intraday point if this hour had actual biometric samples
+            guard !hrSamples.isEmpty || (hrvMs != nil && steps > 0) else {
+                continue
+            }
             let avgHr: Double? = !hrSamples.isEmpty ? (hrSamples.reduce(0, +) / Double(hrSamples.count)) : nil
             
             // Hourly HRV estimation: if daytime samples exist or fallback to day baseline

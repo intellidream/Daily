@@ -49,8 +49,8 @@ public final class HealthDataService: ObservableObject {
     @Published public var currentVitals: [HealthMetricType: VitalMetricRecord] = [:]
     @Published public var historicalTrends: [HealthMetricType: [DailyMetricTrendPoint]] = [:]
     
-    // Stress Level & Mascot (StressWatch Model)
-    @Published public var currentStressScore: Int = 32
+    // Stress Level & Mascot (Autonomic Tone Model)
+    @Published public var currentStressScore: Int = 0
     @Published public var currentStressLevel: StressLevel = .calm
     @Published public var intradayStress: [IntradayStressPoint] = []
     @Published public var stressAnalysis: StressAnalysisResult? = nil
@@ -278,11 +278,11 @@ public final class HealthDataService: ObservableObject {
         // Deduplicate any repeated database or provider records
         fetchedTelemetry = Self.deduplicateTelemetry(fetchedTelemetry)
         
-        // 5. Fallback to realistic deterministic demo data if nothing recorded yet
+        // 5. Fallback to local persistent cached vitals if available, or demo data only if explicitly flagged
         if fetchedTelemetry.isEmpty && fetchedVitals.isEmpty {
             if !persistentCachedVitals.isEmpty {
                 fetchedVitals = persistentCachedVitals
-            } else {
+            } else if ProcessInfo.processInfo.arguments.contains("-demoHealth") {
                 let demo = generateDemoData(for: targetDate)
                 fetchedTelemetry = demo.telemetry
                 fetchedVitals = demo.vitals
@@ -487,7 +487,7 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 4. Process Stress Level (StressWatch physiological model)
+        // 4. Process Stress Level (Autonomic tone physiological model)
         let hrvVal = vitalsValues[.hrvSdnn] ?? vitalsValues[.hrvRmssd]
         let stressCalculation = StressAnalysisEngine.calculateStress(
             targetDate: selectedDate,
@@ -500,36 +500,64 @@ public final class HealthDataService: ObservableObject {
             personalBaselineRhr: nil,
             calendar: cal
         )
-        self.stressAnalysis = stressCalculation.result
-        self.intradayStress = stressCalculation.intradayPoints
-        self.currentStressScore = stressCalculation.result.currentScore
-        self.currentStressLevel = stressCalculation.result.currentLevel
         
-        // Ensure stress metric in vitalsMap
-        if vitalsMap[.stress] == nil {
+        if let stressCalculation = stressCalculation {
+            self.stressAnalysis = stressCalculation.result
+            self.intradayStress = stressCalculation.intradayPoints
+            self.currentStressScore = stressCalculation.result.currentScore
+            self.currentStressLevel = stressCalculation.result.currentLevel
+            
+            // Resolve honest source device
+            let resolvedSourceDevice: String = {
+                if let filter = selectedDeviceFilter, !filter.isEmpty {
+                    return filter
+                }
+                if let src = selectedDeviceSource?.displayName {
+                    return src
+                }
+                let legacyFilter: (String) -> Bool = { $0 != "StressWatch Model" && !$0.isEmpty }
+                if let hrvSource = vitalsMap[.hrvSdnn]?.sourceDevice ?? vitalsMap[.hrvRmssd]?.sourceDevice, legacyFilter(hrvSource) {
+                    return hrvSource
+                }
+                if let hrSource = self.intradayHeartRate.first(where: { $0.sourceDevice != nil && legacyFilter($0.sourceDevice!) })?.sourceDevice {
+                    return hrSource
+                }
+                return "Daily Biometric Engine"
+            }()
+            
+            // Always update stress metric in vitalsMap with fresh calculation and honest source
             let stressRecord = VitalMetricRecord(
                 userId: "stress-engine",
                 type: HealthMetricType.stress.rawValue,
                 value: Double(self.currentStressScore),
                 unit: "score",
                 date: dateKey,
-                sourceDevice: selectedDeviceFilter ?? selectedDeviceSource?.displayName ?? "StressWatch Model"
+                sourceDevice: resolvedSourceDevice
             )
             vitalsMap[.stress] = stressRecord
             vitalsValues[.stress] = Double(self.currentStressScore)
+            
+            // Update Widget Coordinator with fresh stress snapshot
+            WidgetDataCoordinator.shared.updateStressSnapshot(
+                score: stressCalculation.result.currentScore,
+                level: stressCalculation.result.currentLevel,
+                monkeyMood: stressCalculation.result.monkeyMood,
+                advice: stressCalculation.result.adviceQuote,
+                hrvMs: stressCalculation.result.currentHrvMs,
+                restingHeartRate: stressCalculation.result.restingHeartRateBpm,
+                parasympathetic: stressCalculation.result.parasympatheticPercent,
+                sympathetic: stressCalculation.result.sympatheticPercent
+            )
+        } else {
+            self.stressAnalysis = nil
+            self.intradayStress = []
+            self.currentStressScore = 0
+            self.currentStressLevel = .calm
+            vitalsMap.removeValue(forKey: .stress)
+            vitalsValues.removeValue(forKey: .stress)
+            
+            WidgetDataCoordinator.shared.clearStressSnapshot()
         }
-        
-        // Update Widget Coordinator with fresh stress snapshot
-        WidgetDataCoordinator.shared.updateStressSnapshot(
-            score: stressCalculation.result.currentScore,
-            level: stressCalculation.result.currentLevel,
-            monkeyMood: stressCalculation.result.monkeyMood,
-            advice: stressCalculation.result.adviceQuote,
-            hrvMs: stressCalculation.result.currentHrvMs,
-            restingHeartRate: stressCalculation.result.restingHeartRateBpm,
-            parasympathetic: stressCalculation.result.parasympatheticPercent,
-            sympathetic: stressCalculation.result.sympatheticPercent
-        )
         
         self.currentVitals = vitalsMap
         
@@ -685,7 +713,7 @@ public final class HealthDataService: ObservableObject {
                         case .sleepDuration: val = Double(primarySleepSession?.asleepSeconds ?? 0) / 60.0
                         case .heartRate: val = averageBpm > 0 ? averageBpm : restingBpm
                         case .activeEnergy: val = totalActiveCalories
-                        case .stress: val = Double(stressAnalysis?.stressScore ?? currentStressScore)
+                        case .stress: val = Double(stressAnalysis?.stressScore ?? 0)
                         default: val = currentVitals[m]?.value ?? 0
                         }
                     } else {

@@ -28,19 +28,24 @@ public struct StressStudioView: View {
     
     public var body: some View {
         VStack(spacing: 20) {
-            // 1. Hero Mascot & Stress Dial Card
-            heroStressCard
+            if let analysis = healthService.stressAnalysis {
+                // 1. Hero Mascot & Stress Dial Card
+                heroStressCard(analysis: analysis)
+                
+                // 2. Autonomic Balance Gauge (Sympathetic vs Parasympathetic)
+                autonomicBalanceCard(analysis: analysis)
+                
+                // 3. Biometric Physiological Drivers Grid
+                physiologicalDriversGrid(analysis: analysis)
+                
+                // 4. Intraday Stress Curve (24-Hour Timeline)
+                intradayTimelineCard(analysis: analysis)
+            } else {
+                // Dedicated Empty State when no biometric telemetry exists
+                emptyStressCard
+            }
             
-            // 2. Autonomic Balance Gauge (Sympathetic vs Parasympathetic)
-            autonomicBalanceCard
-            
-            // 3. Biometric Physiological Drivers Grid
-            physiologicalDriversGrid
-            
-            // 4. Intraday Stress Curve (24-Hour Timeline)
-            intradayTimelineCard
-            
-            // 5. Interactive Guided Breathwork Studio
+            // 5. Interactive Guided Breathwork Studio (Always available!)
             interactiveBreathingStudio
             
             // 6. Science-Backed Wisdom & Micro-Habits Card
@@ -51,13 +56,95 @@ public struct StressStudioView: View {
         }
     }
     
+    // MARK: - Empty State Card
+    
+    private var emptyStressCard: some View {
+        GlassCard(cornerRadius: 24, padding: 22) {
+            VStack(spacing: 16) {
+                HStack(alignment: .center, spacing: 18) {
+                    MonkeyMascotView(mood: .zen, size: .card, animated: true)
+                        .frame(width: 84, height: 84)
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Text("--")
+                                .font(.system(size: 42, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("/ 100")
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
+                                Text("STRESS")
+                                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
+                            }
+                        }
+                        
+                        // Status Badge Pill
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(ThemeColors.fgMutedDark)
+                                .frame(width: 8, height: 8)
+                            
+                            Text("NO TELEMETRY RECORDED")
+                                .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Capsule())
+                    }
+                    
+                    Spacer()
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.08))
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "applewatch.radiowaves.left.and.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                        Text("Autonomic Tone Telemetry")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+                    
+                    Text("Daily calculates physiological stress by correlating Heart Rate Variability (HRV) and sedentary heart rate elevation from your Apple Watch, Amazfit, or Oura Ring.")
+                        .font(.system(size: 12.5, weight: .regular))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color(hex: "#00FFB2"))
+                            .padding(.top, 2)
+                        Text("Tip: Wear your smartwatch during the day, or record an ECG or Mindfulness session on Apple Watch to sample HRV.")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.85))
+                            .lineSpacing(2)
+                    }
+                    .padding(10)
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(10)
+                }
+            }
+        }
+    }
+    
     // MARK: - 1. Hero Mascot & Stress Dial Card
     
-    private var heroStressCard: some View {
-        let score = healthService.currentStressScore
-        let level = healthService.currentStressLevel
-        let mood = healthService.stressAnalysis?.monkeyMood ?? .curious
+    private func heroStressCard(analysis: StressAnalysisResult) -> some View {
+        let score = analysis.stressScore
+        let level = analysis.stressLevel
+        let mood = analysis.monkeyMood
         let levelColor = Color(hex: level.hexColor)
+        let sourceName = healthService.currentVitals[.stress]?.sourceDevice
         
         return GlassCard(cornerRadius: 24, padding: 20) {
             VStack(spacing: 16) {
@@ -84,28 +171,48 @@ public struct StressStudioView: View {
                         }
                         
                         // Status Badge Pill
-                        HStack(spacing: 6) {
+                        HStack(spacing: 5) {
                             Circle()
                                 .fill(levelColor)
-                                .frame(width: 8, height: 8)
-                                .shadow(color: levelColor.opacity(0.8), radius: 4)
+                                .frame(width: 7, height: 7)
+                                .shadow(color: levelColor.opacity(0.8), radius: 3)
                             
                             Text(level.displayName.uppercased())
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .font(.system(size: 10.5, weight: .bold, design: .rounded))
                                 .foregroundColor(levelColor)
+                                .lineLimit(1)
                             
                             Text("•")
                                 .foregroundColor(.white.opacity(0.4))
                             
                             Text(mood.displayName)
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .font(.system(size: 10.5, weight: .medium, design: .rounded))
                                 .foregroundColor(.white.opacity(0.85))
+                                .lineLimit(1)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3.5)
                         .background(levelColor.opacity(0.15))
                         .clipShape(Capsule())
                         .overlay(Capsule().strokeBorder(levelColor.opacity(0.35), lineWidth: 1))
+                        .fixedSize()
+                        
+                        // Source Device Pill
+                        if let source = sourceName, !source.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: DeviceSource.from(name: source).systemImage)
+                                    .font(.system(size: 8.5))
+                                Text(source)
+                                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                                    .lineLimit(1)
+                            }
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Capsule())
+                            .fixedSize()
+                        }
                     }
                     
                     Spacer()
@@ -133,9 +240,9 @@ public struct StressStudioView: View {
     
     // MARK: - 2. Autonomic Balance Card
     
-    private var autonomicBalanceCard: some View {
-        let para = healthService.stressAnalysis?.parasympatheticPercent ?? 65
-        let symp = healthService.stressAnalysis?.sympatheticPercent ?? 35
+    private func autonomicBalanceCard(analysis: StressAnalysisResult) -> some View {
+        let para = analysis.parasympatheticPercent
+        let symp = analysis.sympatheticPercent
         
         return GlassCard(cornerRadius: 20, padding: 18) {
             VStack(alignment: .leading, spacing: 14) {
@@ -210,21 +317,20 @@ public struct StressStudioView: View {
     
     // MARK: - 3. Biometric Physiological Drivers Grid
     
-    private var physiologicalDriversGrid: some View {
-        let analysis = healthService.stressAnalysis
-        let baselineHrv = analysis?.baselineHrvMs ?? 45.0
-        let currentHrv = analysis?.currentHrvMs ?? 48.0
-        let hrvDelta = analysis?.hrvDeltaPercent ?? 6.0
-        let restingBpm = analysis?.restingHeartRateBpm ?? 60.0
-        let hrDelta = analysis?.heartRateElevationBpm ?? 3.0
+    private func physiologicalDriversGrid(analysis: StressAnalysisResult) -> some View {
+        let baselineHrv = analysis.baselineHrvMs
+        let currentHrv = analysis.currentHrvMs
+        let hrvDelta = analysis.hrvDeltaPercent
+        let restingBpm = analysis.restingHeartRateBpm
+        let hrDelta = analysis.heartRateElevationBpm
         
         return LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
             // Driver 1: Heart Rate Variability (SDNN)
             driverTile(
                 title: "HRV (SDNN)",
-                valueText: String(format: "%.0f ms", currentHrv),
-                deltaText: String(format: "%+.0f%% vs base", hrvDelta),
-                isPositive: hrvDelta >= 0,
+                valueText: currentHrv != nil ? String(format: "%.0f ms", currentHrv!) : "-- ms",
+                deltaText: hrvDelta != nil ? String(format: "%+.0f%% vs base", hrvDelta!) : "Baseline reference",
+                isPositive: (hrvDelta ?? 0) >= 0,
                 subtitle: "Baseline: \(Int(baselineHrv)) ms",
                 icon: "waveform.path",
                 tintColor: Color(hex: "#00E5FF")
@@ -233,7 +339,7 @@ public struct StressStudioView: View {
             // Driver 2: Resting Heart Rate
             driverTile(
                 title: "Resting Heart Rate",
-                valueText: "\(Int(restingBpm)) bpm",
+                valueText: restingBpm != nil ? "\(Int(restingBpm!)) bpm" : "-- bpm",
                 deltaText: "Baseline reference",
                 isPositive: true,
                 subtitle: "Cardiovascular floor",
@@ -244,22 +350,23 @@ public struct StressStudioView: View {
             // Driver 3: Sedentary HR Elevation
             driverTile(
                 title: "Sedentary Elevation",
-                valueText: String(format: "%+.0f bpm", hrDelta),
-                deltaText: hrDelta <= 6 ? "Calm arousal" : "Elevated tension",
-                isPositive: hrDelta <= 8,
+                valueText: hrDelta != nil ? String(format: "%+.0f bpm", hrDelta!) : "-- bpm",
+                deltaText: hrDelta != nil ? (hrDelta! <= 6 ? "Calm arousal" : "Elevated tension") : "No elevated strain",
+                isPositive: (hrDelta ?? 0) <= 8,
                 subtitle: "Resting baseline delta",
                 icon: "flame.fill",
                 tintColor: Color(hex: "#FFA726")
             )
             
             // Driver 4: Sleep Recovery Multiplier
-            let sleepScore = healthService.primarySleepSession?.sleepScore ?? 82
+            let sleepSession = healthService.primarySleepSession
+            let sleepScore = sleepSession?.sleepScore
             driverTile(
                 title: "Sleep Readiness",
-                valueText: "\(sleepScore)%",
-                deltaText: sleepScore >= 75 ? "Optimal recovery" : "Sleep debt",
-                isPositive: sleepScore >= 75,
-                subtitle: "\(healthService.primarySleepSession?.totalAsleepFormatted ?? "7h 20m") total",
+                valueText: sleepScore != nil ? "\(sleepScore!)%" : "--%",
+                deltaText: (sleepScore ?? 0) >= 75 ? "Optimal recovery" : (sleepSession != nil ? "Sleep debt" : "No sleep recorded"),
+                isPositive: (sleepScore ?? 0) >= 75,
+                subtitle: sleepSession != nil ? "\(sleepSession!.totalAsleepFormatted) total" : "Not measured",
                 icon: "moon.fill",
                 tintColor: ThemeColors.accentPurple
             )
@@ -311,9 +418,8 @@ public struct StressStudioView: View {
     
     // MARK: - 4. Intraday Stress Timeline
     
-    private var intradayTimelineCard: some View {
+    private func intradayTimelineCard(analysis: StressAnalysisResult) -> some View {
         let points = healthService.intradayStress
-        let pointsToDisplay = points.isEmpty ? generateMockTimeline() : points
         
         return GlassCard(cornerRadius: 20, padding: 18) {
             VStack(alignment: .leading, spacing: 14) {
@@ -324,43 +430,54 @@ public struct StressStudioView: View {
                     
                     Spacer()
                     
-                    let avg = healthService.stressAnalysis?.dailyAverageScore ?? 35
-                    Text("Daily Avg: \(avg)")
+                    Text("Daily Avg: \(analysis.dailyAverageScore)")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundColor(ThemeColors.fgMutedDark)
                 }
                 
-                // Hourly timeline bar graph
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .bottom, spacing: 8) {
-                        ForEach(pointsToDisplay) { pt in
-                            VStack(spacing: 4) {
-                                let barH = max(8.0, CGFloat(pt.score) * 0.7)
-                                let barColor = Color(hex: pt.level.hexColor)
-                                
-                                ZStack(alignment: .bottom) {
-                                    Capsule()
-                                        .fill(Color.white.opacity(0.08))
-                                        .frame(width: 14, height: 70)
+                if !points.isEmpty {
+                    // Hourly timeline bar graph
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .bottom, spacing: 8) {
+                            ForEach(points) { pt in
+                                VStack(spacing: 4) {
+                                    let barH = max(8.0, CGFloat(pt.score) * 0.7)
+                                    let barColor = Color(hex: pt.level.hexColor)
                                     
-                                    Capsule()
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [barColor, barColor.opacity(0.6)],
-                                                startPoint: .top,
-                                                endPoint: .bottom
+                                    ZStack(alignment: .bottom) {
+                                        Capsule()
+                                            .fill(Color.white.opacity(0.08))
+                                            .frame(width: 14, height: 70)
+                                        
+                                        Capsule()
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [barColor, barColor.opacity(0.6)],
+                                                    startPoint: .top,
+                                                    endPoint: .bottom
+                                                )
                                             )
-                                        )
-                                        .frame(width: 14, height: barH)
+                                            .frame(width: 14, height: barH)
+                                    }
+                                    
+                                    Text("\(pt.hour)")
+                                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
                                 }
-                                
-                                Text("\(pt.hour)")
-                                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
                             }
                         }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 12))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Text("Intraday hourly points populate as heart rate is sampled throughout the day.")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
+                    .padding(.vertical, 8)
                 }
             }
         }
@@ -732,21 +849,5 @@ public struct StressStudioView: View {
         stopBreathingSession()
         breathPhaseText = "Zen Restored! 🐵"
         triggerHaptic(style: .heavy)
-    }
-    
-    private func generateMockTimeline() -> [IntradayStressPoint] {
-        let cal = Calendar.current
-        let today = Date()
-        return (6...22).map { h in
-            let score = 25 + Int(sin(Double(h) / 3.0) * 20.0) + (h == 14 ? 25 : 0)
-            let clamped = min(max(score, 12), 85)
-            let hourDate = cal.date(bySettingHour: h, minute: 0, second: 0, of: today) ?? today
-            return IntradayStressPoint(
-                timestamp: hourDate,
-                hour: h,
-                score: clamped,
-                level: StressLevel.from(score: clamped)
-            )
-        }
     }
 }

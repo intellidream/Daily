@@ -40,10 +40,12 @@ public struct StressDashboardCard: View, Equatable {
     // MARK: - Small (1x1) Compact Glance
     @ViewBuilder
     private var smallContent: some View {
-        let score = healthService.currentStressScore
-        let level = healthService.currentStressLevel
-        let mood = healthService.stressAnalysis?.monkeyMood ?? .curious
-        let levelColor = Color(hex: level.hexColor)
+        let analysis = healthService.stressAnalysis
+        let hasData = analysis != nil
+        let score = analysis?.stressScore ?? 0
+        let level = analysis?.stressLevel ?? .calm
+        let mood = analysis?.monkeyMood ?? .zen
+        let levelColor = hasData ? Color(hex: level.hexColor) : ThemeColors.fgMutedDark
         
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -59,11 +61,11 @@ public struct StressDashboardCard: View, Equatable {
             Spacer(minLength: 2)
             
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(score)")
+                Text(hasData ? "\(score)" : "--")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundColor(hasData ? .white : .white.opacity(0.5))
                 
-                Text(level.displayName.uppercased())
+                Text(hasData ? level.displayName.uppercased() : "NO DATA")
                     .font(.system(size: 10, weight: .bold, design: .rounded))
                     .foregroundColor(levelColor)
             }
@@ -73,15 +75,17 @@ public struct StressDashboardCard: View, Equatable {
                 ZStack(alignment: .leading) {
                     Capsule()
                         .fill(Color.white.opacity(0.12))
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(hex: "#00FFB2"), levelColor],
-                                startPoint: .leading,
-                                endPoint: .trailing
+                    if hasData {
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: "#00FFB2"), levelColor],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                        )
-                        .frame(width: geo.size.width * CGFloat(min(max(Double(score) / 100.0, 0.08), 1.0)))
+                            .frame(width: geo.size.width * CGFloat(min(max(Double(score) / 100.0, 0.08), 1.0)))
+                    }
                 }
             }
             .frame(height: 5)
@@ -89,14 +93,14 @@ public struct StressDashboardCard: View, Equatable {
             Spacer(minLength: 2)
             
             HStack {
-                Text(mood.displayName)
+                Text(hasData ? mood.displayName : "Wear watch")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(ThemeColors.fgMutedDark)
                     .lineLimit(1)
                 
                 Spacer()
                 
-                if let hrv = healthService.stressAnalysis?.currentHrvMs {
+                if let hrv = analysis?.currentHrvMs {
                     Text("\(Int(hrv))ms")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundColor(Color(hex: "#00E5FF"))
@@ -108,14 +112,16 @@ public struct StressDashboardCard: View, Equatable {
     // MARK: - Wide (2x1) Standard Tile
     @ViewBuilder
     private var wideContent: some View {
-        let score = healthService.currentStressScore
-        let level = healthService.currentStressLevel
-        let mood = healthService.stressAnalysis?.monkeyMood ?? .curious
-        let levelColor = Color(hex: level.hexColor)
-        let para = healthService.stressAnalysis?.parasympatheticPercent ?? 65
+        let analysis = healthService.stressAnalysis
+        let hasData = analysis != nil
+        let score = analysis?.stressScore ?? 0
+        let level = analysis?.stressLevel ?? .calm
+        let mood = analysis?.monkeyMood ?? .zen
+        let levelColor = hasData ? Color(hex: level.hexColor) : ThemeColors.fgMutedDark
+        let para = analysis?.parasympatheticPercent ?? 65
         
         HStack(spacing: 16) {
-            MonkeyMascotView(mood: mood, size: .card, animated: true)
+            MonkeyMascotView(mood: mood, size: .card, animated: hasData)
                 .frame(width: 64, height: 64)
             
             VStack(alignment: .leading, spacing: 6) {
@@ -128,7 +134,7 @@ public struct StressDashboardCard: View, Equatable {
                     
                     HStack(spacing: 4) {
                         Circle().fill(levelColor).frame(width: 6, height: 6)
-                        Text(level.displayName)
+                        Text(hasData ? level.displayName : "No Data")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundColor(levelColor)
                     }
@@ -138,25 +144,41 @@ public struct StressDashboardCard: View, Equatable {
                     .clipShape(Capsule())
                 }
                 
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(score)")
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    Text("/ 100")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                if hasData {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(score)")
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("/ 100")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        
+                        Spacer()
+                        
+                        Text("\(para)% Recovery Tone")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(Color(hex: "#00FFB2"))
+                    }
+                    
+                    Text(mood.adviceQuote)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.85))
+                        .lineLimit(1)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("--")
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.5))
+                        Text("/ 100")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
+                    
+                    Text("Wear your smartwatch to track autonomic stress and HRV")
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(ThemeColors.fgMutedDark)
-                    
-                    Spacer()
-                    
-                    Text("\(para)% Recovery Tone")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundColor(Color(hex: "#00FFB2"))
+                        .lineLimit(1)
                 }
-                
-                Text(mood.adviceQuote)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.85))
-                    .lineLimit(1)
             }
         }
     }
@@ -164,10 +186,12 @@ public struct StressDashboardCard: View, Equatable {
     // MARK: - Tall (1x2) Vertical Tile
     @ViewBuilder
     private var tallContent: some View {
-        let score = healthService.currentStressScore
-        let level = healthService.currentStressLevel
-        let mood = healthService.stressAnalysis?.monkeyMood ?? .curious
-        let levelColor = Color(hex: level.hexColor)
+        let analysis = healthService.stressAnalysis
+        let hasData = analysis != nil
+        let score = analysis?.stressScore ?? 0
+        let level = analysis?.stressLevel ?? .calm
+        let mood = analysis?.monkeyMood ?? .zen
+        let levelColor = hasData ? Color(hex: level.hexColor) : ThemeColors.fgMutedDark
         
         VStack(spacing: 12) {
             HStack {
@@ -175,28 +199,28 @@ public struct StressDashboardCard: View, Equatable {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(levelColor)
                 Spacer()
-                Text(level.displayName)
+                Text(hasData ? level.displayName : "No Data")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(levelColor)
             }
             
-            MonkeyMascotView(mood: mood, size: .card, animated: true)
+            MonkeyMascotView(mood: mood, size: .card, animated: hasData)
                 .frame(width: 64, height: 64)
             
             VStack(spacing: 2) {
-                Text("\(score)")
+                Text(hasData ? "\(score)" : "--")
                     .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                Text(mood.displayName)
+                    .foregroundColor(hasData ? .white : .white.opacity(0.5))
+                Text(hasData ? mood.displayName : "Unmeasured")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(ThemeColors.fgMutedDark)
             }
             
             Divider().background(Color.white.opacity(0.08))
             
-            Text(mood.adviceQuote)
+            Text(hasData ? mood.adviceQuote : "Wear your smartwatch during the day to track real-time autonomic stress.")
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(Color.white.opacity(0.85))
+                .foregroundColor(hasData ? Color.white.opacity(0.85) : ThemeColors.fgMutedDark)
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
         }
@@ -205,17 +229,19 @@ public struct StressDashboardCard: View, Equatable {
     // MARK: - Large (2x2) Full Feature Card
     @ViewBuilder
     private var largeContent: some View {
-        let score = healthService.currentStressScore
-        let level = healthService.currentStressLevel
-        let mood = healthService.stressAnalysis?.monkeyMood ?? .curious
-        let levelColor = Color(hex: level.hexColor)
-        let para = healthService.stressAnalysis?.parasympatheticPercent ?? 65
-        let symp = healthService.stressAnalysis?.sympatheticPercent ?? 35
-        let hrv = healthService.stressAnalysis?.currentHrvMs ?? 48
+        let analysis = healthService.stressAnalysis
+        let hasData = analysis != nil
+        let score = analysis?.stressScore ?? 0
+        let level = analysis?.stressLevel ?? .calm
+        let mood = analysis?.monkeyMood ?? .zen
+        let levelColor = hasData ? Color(hex: level.hexColor) : ThemeColors.fgMutedDark
+        let para = analysis?.parasympatheticPercent ?? 65
+        let symp = analysis?.sympatheticPercent ?? 35
+        let hrv = analysis?.currentHrvMs
         
         VStack(spacing: 14) {
             HStack(spacing: 14) {
-                MonkeyMascotView(mood: mood, size: .card, animated: true)
+                MonkeyMascotView(mood: mood, size: .card, animated: hasData)
                     .frame(width: 72, height: 72)
                 
                 VStack(alignment: .leading, spacing: 4) {
@@ -224,7 +250,7 @@ public struct StressDashboardCard: View, Equatable {
                             .font(.system(size: 11, weight: .heavy, design: .rounded))
                             .foregroundColor(levelColor)
                         Spacer()
-                        Text(level.displayName.uppercased())
+                        Text(hasData ? level.displayName.uppercased() : "NO DATA")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundColor(levelColor)
                             .padding(.horizontal, 8)
@@ -234,52 +260,69 @@ public struct StressDashboardCard: View, Equatable {
                     }
                     
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("\(score)")
+                        Text(hasData ? "\(score)" : "--")
                             .font(.system(size: 34, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
+                            .foregroundColor(hasData ? .white : .white.opacity(0.5))
                         Text("/ 100")
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundColor(ThemeColors.fgMutedDark)
                         
                         Spacer()
                         
-                        Text("\(Int(hrv)) ms HRV")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundColor(Color(hex: "#00E5FF"))
+                        if let hrv = hrv {
+                            Text("\(Int(hrv)) ms HRV")
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(Color(hex: "#00E5FF"))
+                        }
                     }
                 }
             }
             
-            // Autonomic Split Bar
-            HStack(spacing: 4) {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color(hex: "#00FFB2"))
-                    .frame(height: 6)
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color(hex: "#FFA726"))
-                    .frame(width: CGFloat(symp) * 1.5, height: 6)
-            }
-            
-            HStack {
-                Text("\(para)% Rest & Digest")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundColor(Color(hex: "#00FFB2"))
-                Spacer()
-                Text("\(symp)% Arousal")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundColor(Color(hex: "#FFA726"))
-            }
-            
-            Divider().background(Color.white.opacity(0.08))
-            
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "quote.bubble.fill")
-                    .font(.system(size: 13))
-                    .foregroundColor(levelColor)
-                Text(mood.adviceQuote)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.9))
-                    .lineSpacing(2)
+            if hasData {
+                // Autonomic Split Bar
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(hex: "#00FFB2"))
+                        .frame(height: 6)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(hex: "#FFA726"))
+                        .frame(width: CGFloat(symp) * 1.5, height: 6)
+                }
+                
+                HStack {
+                    Text("\(para)% Rest & Digest")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(Color(hex: "#00FFB2"))
+                    Spacer()
+                    Text("\(symp)% Arousal")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(Color(hex: "#FFA726"))
+                }
+                
+                Divider().background(Color.white.opacity(0.08))
+                
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "quote.bubble.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(levelColor)
+                    Text(mood.adviceQuote)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.9))
+                        .lineSpacing(2)
+                }
+            } else {
+                Divider().background(Color.white.opacity(0.08))
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("No biometric telemetry recorded today.")
+                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("Daily calculates physiological stress by correlating continuous Heart Rate Variability (HRV) and sedentary heart rate elevation from your Apple Watch, Amazfit, or Oura Ring.")
+                        .font(.system(size: 11.5))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                        .lineSpacing(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

@@ -105,3 +105,20 @@ Integrated seamlessly into the Health Hub:
 - `GeminiApiService.swift`: Enhanced prompt with `stress` payload and structured JSON schema for AI-generated briefings.
 - `SmartBriefingOverlayView.swift`: Added dedicated `Stress & Mind Balance 🐵` briefing card with dynamic status badge color.
 - Deep Link: `daily://health/stress` routes directly to the Health tab and selects `.stress` subtab.
+
+---
+
+## 7. Honest Source Attribution & Unmeasured Empty States
+
+- **Purged Artificial Models**:
+  - Eliminated the artificial `"StressWatch Model"` device attribution string from `HealthDataService`, `StressAnalysisEngine`, and local caches.
+  - Dynamically attributes stress calculations to genuine source telemetry (`Apple Watch`, `Amazfit Balance`, `Oura Ring`, or `Daily Biometric Engine`).
+- **Honest Nullability & Empty States**:
+  - `StressAnalysisEngine.calculateStress(...)` returns `nil` when no valid biometric telemetry (HRV or heart rate samples) exists for the day.
+  - Completely removed synthetic mock curves (`generateMockTimeline()`) and hardcoded metric fallbacks (`45ms`, `48ms`, `82`).
+  - Gated `generateDemoData()` in `HealthDataService` behind the explicit `-demoHealth` testing flag, preventing unrecorded days from fabricating fake telemetry.
+- **Dedicated Empty State UI**:
+  - **Stress Studio**: Renders `emptyStressCard` displaying `-- / 100`, `NO TELEMETRY RECORDED`, and actionable guidance on wearing a smartwatch or recording an ECG/mindfulness session. The interactive breathwork player remains fully accessible.
+  - **Health Overview & Dashboards**: Shows clean `--` unmeasured indicators and "No Telemetry" instead of fake numbers.
+  - **iOS Widgets**: `CombinedWidget` and `StressWidget` display `--` with "No Data" badges when unmeasured, keeping widget memory clear.
+

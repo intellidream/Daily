@@ -971,12 +971,24 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         #endif
     }
     
+    public func clearStressSnapshot() {
+        let snapshot = StressWidgetSnapshot.empty
+        if let data = try? JSONEncoder().encode(snapshot) {
+            groupDefaults.set(data, forKey: stressSnapshotKey)
+            UserDefaults.standard.set(data, forKey: stressSnapshotKey)
+        }
+        
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+    }
+    
     public func fetchStressSnapshot() -> StressWidgetSnapshot {
         if let data = groupDefaults.data(forKey: stressSnapshotKey),
            let snapshot = try? JSONDecoder().decode(StressWidgetSnapshot.self, from: data) {
             return snapshot
         }
-        return StressWidgetSnapshot.placeholder
+        return StressWidgetSnapshot.empty
     }
 
     // MARK: - Combined Executive Snapshot (5 Core Pillars + Briefing)

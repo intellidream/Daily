@@ -489,10 +489,13 @@ public struct HealthMainView: View {
     }
     
     private var stressOverviewPreviewCard: some View {
-        let score = healthService.currentStressScore
-        let level = healthService.currentStressLevel
-        let mood = healthService.stressAnalysis?.monkeyMood ?? .curious
-        let levelColor = Color(hex: level.hexColor)
+        let analysis = healthService.stressAnalysis
+        let hasData = analysis != nil
+        let score = analysis?.stressScore ?? 0
+        let level = analysis?.stressLevel ?? .calm
+        let mood = analysis?.monkeyMood ?? .zen
+        let levelColor = hasData ? Color(hex: level.hexColor) : ThemeColors.fgMutedDark
+        let sourceName = healthService.currentVitals[.stress]?.sourceDevice
         
         return Button {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
@@ -508,29 +511,51 @@ public struct HealthMainView: View {
                         HStack(spacing: 6) {
                             Text("STRESS & AUTONOMIC BALANCE")
                                 .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundColor(levelColor)
+                                .foregroundColor(hasData ? levelColor : ThemeColors.fgMutedDark)
                             
                             Circle()
-                                .fill(levelColor)
+                                .fill(hasData ? levelColor : ThemeColors.fgMutedDark)
                                 .frame(width: 6, height: 6)
+                            
+                            if let source = sourceName, !source.isEmpty {
+                                Text("• \(source)")
+                                    .font(.system(size: 9.5, weight: .medium))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
+                            }
                         }
                         
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text("\(score)")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                            Text("• \(level.displayName)")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundColor(levelColor)
-                            Text("(\(mood.displayName))")
+                        if hasData {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text("\(score)")
+                                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                Text("• \(level.displayName)")
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .foregroundColor(levelColor)
+                                Text("(\(mood.displayName))")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
+                            }
+                            
+                            Text(mood.adviceQuote)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(Color.white.opacity(0.75))
+                                .lineLimit(1)
+                        } else {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text("--")
+                                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.5))
+                                Text("No Telemetry")
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
+                            }
+                            
+                            Text("Wear your smartwatch to track autonomic stress and HRV")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(ThemeColors.fgMutedDark)
+                                .lineLimit(1)
                         }
-                        
-                        Text(mood.adviceQuote)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(Color.white.opacity(0.75))
-                            .lineLimit(1)
                     }
                     
                     Spacer()

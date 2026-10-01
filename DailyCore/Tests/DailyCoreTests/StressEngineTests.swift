@@ -38,7 +38,7 @@ struct StressEngineTests {
             HourlyStepBucket(hour: cal.component(.hour, from: today), steps: 40) // Sedentary
         ]
         
-        let (result, _) = StressAnalysisEngine.calculateStress(
+        let (result, _) = try #require(StressAnalysisEngine.calculateStress(
             targetDate: today,
             hrvMs: hrv,
             hrTelemetry: hrPoints,
@@ -46,7 +46,7 @@ struct StressEngineTests {
             restingBpm: restingBpm,
             priorSleepScore: 65,
             calendar: cal
-        )
+        ))
         
         #expect(result.currentScore > 50)
         #expect(result.currentLevel == .moderate || result.currentLevel == .high)
@@ -66,7 +66,7 @@ struct StressEngineTests {
             HourlyStepBucket(hour: cal.component(.hour, from: today), steps: 120)
         ]
         
-        let (result, _) = StressAnalysisEngine.calculateStress(
+        let (result, _) = try #require(StressAnalysisEngine.calculateStress(
             targetDate: today,
             hrvMs: 75.0,
             hrTelemetry: hrPoints,
@@ -74,7 +74,7 @@ struct StressEngineTests {
             restingBpm: 54.0,
             priorSleepScore: 92,
             calendar: cal
-        )
+        ))
         
         #expect(result.currentScore <= 25)
         #expect(result.currentLevel == .restful)
@@ -97,7 +97,7 @@ struct StressEngineTests {
             HourlyStepBucket(hour: hour, steps: 2500) // Active workout!
         ]
         
-        let (_, intraday) = StressAnalysisEngine.calculateStress(
+        let (_, intraday) = try #require(StressAnalysisEngine.calculateStress(
             targetDate: today,
             hrvMs: 50.0, // Normal HRV
             hrTelemetry: hrPoints,
@@ -105,12 +105,29 @@ struct StressEngineTests {
             restingBpm: 60.0,
             priorSleepScore: 85,
             calendar: cal
-        )
+        ))
         
         let point = try #require(intraday.first { $0.hour == hour })
         #expect(!point.isSedentary)
         // Since it's gated as active movement, stress score should NOT jump to 99
         #expect(point.score < 65)
+    }
+    
+    @Test("Missing biometric telemetry returns nil instead of synthesizing fake stress")
+    func testMissingBiometricsReturnsNil() async throws {
+        let today = Date()
+        
+        // No HRV and no intraday heart rate samples
+        let calculation = StressAnalysisEngine.calculateStress(
+            targetDate: today,
+            hrvMs: nil,
+            hrTelemetry: [],
+            hourlySteps: [],
+            restingBpm: nil,
+            priorSleepScore: nil
+        )
+        
+        #expect(calculation == nil)
     }
     
     @Test("StressWidgetSnapshot round-trip encoding and decoding")

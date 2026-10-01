@@ -44,21 +44,34 @@ public struct HealthDashboardCard: View {
                 
                 Spacer()
                 
-                let stress = healthService.stressAnalysis
-                let mood = stress?.monkeyMood ?? .curious
-                let score = stress?.stressScore ?? healthService.currentStressScore
-                let stressColor = Color(hex: (stress?.stressLevel ?? healthService.currentStressLevel).hexColor)
-                HStack(spacing: 3) {
-                    Text(mood.emoji)
-                        .font(.system(size: 10.5))
-                    Text("\(score)")
-                        .font(.system(size: 10.5, weight: .heavy, design: .rounded))
-                        .foregroundColor(stressColor)
+                if let stress = healthService.stressAnalysis {
+                    let mood = stress.monkeyMood
+                    let score = stress.stressScore
+                    let stressColor = Color(hex: stress.stressLevel.hexColor)
+                    HStack(spacing: 3) {
+                        Text(mood.emoji)
+                            .font(.system(size: 10.5))
+                        Text("\(score)")
+                            .font(.system(size: 10.5, weight: .heavy, design: .rounded))
+                            .foregroundColor(stressColor)
+                    }
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(stressColor.opacity(0.16))
+                    .clipShape(Capsule())
+                } else {
+                    HStack(spacing: 3) {
+                        Text("🐵")
+                            .font(.system(size: 10))
+                        Text("--")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(Capsule())
                 }
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1.5)
-                .background(stressColor.opacity(0.16))
-                .clipShape(Capsule())
             }
             
             Spacer(minLength: 2)
@@ -230,10 +243,11 @@ public struct HealthDashboardCard: View {
                 
                 // Stress with Monkey Mascot & Status
                 let stress = healthService.stressAnalysis
-                let mood = stress?.monkeyMood ?? .curious
-                let score = stress?.stressScore ?? healthService.currentStressScore
-                let level = stress?.stressLevel ?? healthService.currentStressLevel
-                let stressColor = Color(hex: level.hexColor)
+                let hasStress = stress != nil
+                let mood = stress?.monkeyMood ?? .zen
+                let score = stress?.stressScore ?? 0
+                let level = stress?.stressLevel ?? .calm
+                let stressColor = hasStress ? Color(hex: level.hexColor) : ThemeColors.fgMutedDark
                 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 3.5) {
@@ -243,14 +257,14 @@ public struct HealthDashboardCard: View {
                             .font(.system(size: 9.5, weight: .bold))
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
-                    Text("\(score)")
+                    Text(hasStress ? "\(score)" : "--")
                         .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundColor(stressColor)
+                        .foregroundColor(hasStress ? stressColor : .white.opacity(0.5))
                     HStack(spacing: 3) {
                         Circle()
                             .fill(stressColor)
                             .frame(width: 4.5, height: 4.5)
-                        Text(level.displayName)
+                        Text(hasStress ? level.displayName : "No Data")
                             .font(.system(size: 9, weight: .medium, design: .rounded))
                             .foregroundColor(ThemeColors.fgMutedDark)
                             .lineLimit(1)
@@ -386,10 +400,11 @@ public struct HealthDashboardCard: View {
 
             // Stress Section with Mascot & Score
             let stress = healthService.stressAnalysis
-            let mood = stress?.monkeyMood ?? .curious
-            let score = stress?.stressScore ?? healthService.currentStressScore
-            let level = stress?.stressLevel ?? healthService.currentStressLevel
-            let stressColor = Color(hex: level.hexColor)
+            let hasStress = stress != nil
+            let mood = stress?.monkeyMood ?? .zen
+            let score = stress?.stressScore ?? 0
+            let level = stress?.stressLevel ?? .calm
+            let stressColor = hasStress ? Color(hex: level.hexColor) : ThemeColors.fgMutedDark
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
@@ -401,7 +416,7 @@ public struct HealthDashboardCard: View {
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
                     Spacer()
-                    Text(level.displayName)
+                    Text(hasStress ? level.displayName : "No Data")
                         .font(.system(size: 8, weight: .bold, design: .rounded))
                         .foregroundColor(stressColor)
                         .padding(.horizontal, 4.5)
@@ -409,16 +424,22 @@ public struct HealthDashboardCard: View {
                         .background(stressColor.opacity(0.15))
                         .clipShape(Capsule())
                 }
-                Text("\(score) pts")
+                Text(hasStress ? "\(score) pts" : "--")
                     .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundColor(stressColor)
+                    .foregroundColor(hasStress ? stressColor : .white.opacity(0.5))
                 
-                let hrvVal = stress?.currentHrvMs ?? 48.0
-                HStack(spacing: 3) {
-                    Image(systemName: "waveform.path")
-                        .font(.system(size: 7.5))
-                        .foregroundColor(Color(hex: "#00E5FF"))
-                    Text("HRV \(Int(hrvVal)) ms")
+                if let hrvVal = stress?.currentHrvMs {
+                    HStack(spacing: 3) {
+                        Image(systemName: "waveform.path")
+                            .font(.system(size: 7.5))
+                            .foregroundColor(Color(hex: "#00E5FF"))
+                        Text("HRV \(Int(hrvVal)) ms")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                            .lineLimit(1)
+                    }
+                } else {
+                    Text("Unmeasured")
                         .font(.system(size: 9, weight: .medium))
                         .foregroundColor(ThemeColors.fgMutedDark)
                         .lineLimit(1)
@@ -527,10 +548,11 @@ public struct HealthDashboardCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
                 let stress = healthService.stressAnalysis
-                let mood = stress?.monkeyMood ?? .curious
-                let score = stress?.stressScore ?? healthService.currentStressScore
-                let level = stress?.stressLevel ?? healthService.currentStressLevel
-                let stressColor = Color(hex: level.hexColor)
+                let hasStress = stress != nil
+                let mood = stress?.monkeyMood ?? .zen
+                let score = stress?.stressScore ?? 0
+                let level = stress?.stressLevel ?? .calm
+                let stressColor = hasStress ? Color(hex: level.hexColor) : ThemeColors.fgMutedDark
                 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 3.5) {
@@ -540,14 +562,14 @@ public struct HealthDashboardCard: View {
                             .font(.system(size: 9.5, weight: .bold))
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
-                    Text("\(score)")
+                    Text(hasStress ? "\(score)" : "--")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(stressColor)
+                        .foregroundColor(hasStress ? stressColor : .white.opacity(0.5))
                     HStack(spacing: 3) {
                         Circle()
                             .fill(stressColor)
                             .frame(width: 4.5, height: 4.5)
-                        Text(level.displayName)
+                        Text(hasStress ? level.displayName : "No Data")
                             .font(.system(size: 9, weight: .medium, design: .rounded))
                             .foregroundColor(ThemeColors.fgMutedDark)
                             .lineLimit(1)
