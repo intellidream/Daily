@@ -500,10 +500,26 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
     object Amazfit : DeviceSource("Amazfit Balance", "amazfit")
     object OnePlus : DeviceSource("OnePlus Watch 3", "oneplus")
     object Huawei : DeviceSource("Huawei Watch GT 5 Pro", "huawei")
+    object Oura : DeviceSource("Oura Ring", "oura")
     object HealthKit : DeviceSource("Apple Health", "healthkit")
     object HealthConnect : DeviceSource("Health Connect", "healthconnect")
     object Manual : DeviceSource("Manual Entry", "manual")
     data class Other(val name: String) : DeviceSource(name, name)
+
+    val isVirtualEngine: Boolean
+        get() = when (this) {
+            is Other -> {
+                val lower = name.lowercase()
+                lower.contains("stresswatch") ||
+                lower.contains("stress-engine") ||
+                lower.contains("daily biometric") ||
+                lower.contains("biometric engine") ||
+                lower.contains("computed") ||
+                lower.contains("bubbles") ||
+                lower == "unknown"
+            }
+            else -> false
+        }
 
     companion object {
         fun from(name: String?): DeviceSource {
@@ -511,6 +527,7 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
             if (clean.isEmpty()) return Other("Unknown")
             val lower = clean.lowercase()
             return when {
+                lower.contains("oura") -> Oura
                 lower.contains("healthkit") || lower.contains("apple health") || lower == "ios" -> HealthKit
                 lower.contains("apple") || lower.contains("watchos") -> AppleWatch
                 lower.contains("zepp") || lower.contains("amazfit") || lower.contains("balance") -> Amazfit

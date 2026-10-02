@@ -38,11 +38,12 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
 
-        val stressScore = app?.healthRepository?.currentStressScore?.value ?: 32
-        val stressLevel = app?.healthRepository?.currentStressLevel?.value ?: StressLevel.CALM
-        val monkeyMood = app?.healthRepository?.stressAnalysis?.value?.monkeyMood
+        val stressAnalysis = app?.healthRepository?.stressAnalysis?.value
+        val stressScore = stressAnalysis?.currentScore
+        val stressLevel = app?.healthRepository?.currentStressLevel?.value
+        val monkeyMood = stressAnalysis?.monkeyMood
         val monkeyEmoji = monkeyMood?.emoji ?: "🐵"
-        val monkeyName = monkeyMood?.displayName ?: "Curious Monkey"
+        val monkeyName = monkeyMood?.displayName ?: "Stress Monitor"
 
         provideContent {
             StressWidgetContent(
@@ -58,8 +59,8 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
     @Composable
     private fun StressWidgetContent(
         context: Context,
-        stressScore: Int,
-        stressLevel: StressLevel,
+        stressScore: Int?,
+        stressLevel: StressLevel?,
         monkeyEmoji: String,
         monkeyName: String
     ) {
@@ -68,12 +69,17 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
         }
 
         val levelColor = try {
-            Color(android.graphics.Color.parseColor(stressLevel.hexColor))
+            if (stressLevel != null) {
+                Color(android.graphics.Color.parseColor(stressLevel.hexColor))
+            } else {
+                Color(0xFF8E9BAE)
+            }
         } catch (_: Exception) {
             Color(0xFFFFB703)
         }
 
         val protocol = when {
+            stressScore == null -> "Sync biometrics to measure stress"
             stressScore > 75 -> "Box Breathing (4-4-4-4)"
             stressScore > 50 -> "Take a 3-min screen break"
             stressScore > 25 -> "Hydrate & steady rhythm"
@@ -113,7 +119,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = stressLevel.displayName,
+                            text = stressLevel?.displayName ?: "NO DATA",
                             style = TextStyle(
                                 color = ColorProvider(levelColor),
                                 fontSize = 10.sp,
@@ -130,29 +136,31 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Text(
-                        text = "$stressScore",
+                        text = if (stressScore != null) "$stressScore" else "--",
                         style = TextStyle(
                             color = ColorProvider(Color.White),
                             fontSize = 32.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
-                    Spacer(modifier = GlanceModifier.width(4.dp))
-                    Text(
-                        text = "/ 100",
-                        style = TextStyle(
-                            color = ColorProvider(Color(0xFF8E9BAE)),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Normal
+                    if (stressScore != null) {
+                        Spacer(modifier = GlanceModifier.width(4.dp))
+                        Text(
+                            text = "/ 100",
+                            style = TextStyle(
+                                color = ColorProvider(Color(0xFF8E9BAE)),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Normal
+                            )
                         )
-                    )
+                    }
                 }
 
                 Spacer(modifier = GlanceModifier.height(6.dp))
 
                 // Advice & protocol
                 Text(
-                    text = "$monkeyName: $protocol",
+                    text = if (stressScore != null) "$monkeyName: $protocol" else "Wear smartwatch: $protocol",
                     style = TextStyle(
                         color = ColorProvider(Color(0xFFE2E8F0)),
                         fontSize = 11.sp,

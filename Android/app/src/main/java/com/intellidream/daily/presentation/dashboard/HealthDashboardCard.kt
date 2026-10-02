@@ -90,7 +90,8 @@ fun HealthDashboardCard(
                 totalSteps = totalSteps,
                 totalActiveCalories = totalActiveCalories,
                 averageBpm = averageBpm,
-                sleepAsleepFormatted = primarySleep?.totalAsleepFormatted
+                sleepAsleepFormatted = primarySleep?.totalAsleepFormatted,
+                stressAnalysis = stressAnalysis
             )
             DashboardWidgetSize.Wide -> WideHealthContent(
                 totalSteps = totalSteps,
@@ -128,7 +129,8 @@ private fun SmallHealthContent(
     totalSteps: Int,
     totalActiveCalories: Double,
     averageBpm: Double,
-    sleepAsleepFormatted: String?
+    sleepAsleepFormatted: String?,
+    stressAnalysis: com.intellidream.daily.model.StressAnalysisResult? = null
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -158,22 +160,47 @@ private fun SmallHealthContent(
                 )
             }
 
-            if (averageBpm > 0) {
+            if (stressAnalysis != null) {
+                val mood = stressAnalysis.monkeyMood
+                val score = stressAnalysis.currentScore
+                val stressColor = Color(android.graphics.Color.parseColor(stressAnalysis.currentLevel.hexColor))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(stressColor.copy(alpha = 0.16f))
+                        .padding(horizontal = 5.dp, vertical = 1.5.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ShowChart,
-                        contentDescription = null,
-                        tint = ThemeColors.accentPink,
-                        modifier = Modifier.size(10.dp)
+                    Text(
+                        text = mood.emoji,
+                        fontSize = 10.5.sp
                     )
                     Text(
-                        text = "${averageBpm.roundToInt()}",
-                        fontSize = 11.sp,
+                        text = "$score",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Black,
+                        color = stressColor
+                    )
+                }
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.06f))
+                        .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                ) {
+                    Text(
+                        text = "🐵",
+                        fontSize = 10.sp
+                    )
+                    Text(
+                        text = "--",
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = ThemeColors.accentPink
+                        color = ThemeColors.fgMutedDark
                     )
                 }
             }
@@ -511,8 +538,13 @@ private fun WideHealthContent(
             )
 
             // Stress Column
-            val mood = stressAnalysis?.monkeyMood ?: com.intellidream.daily.model.MonkeyMood.CURIOUS
-            val levelColor = Color(android.graphics.Color.parseColor(stressLevel.hexColor))
+            val isUnmeasured = stressAnalysis == null
+            val mood = stressAnalysis?.monkeyMood
+            val levelColor = if (!isUnmeasured) {
+                Color(android.graphics.Color.parseColor(stressLevel.hexColor))
+            } else {
+                ThemeColors.fgMutedDark
+            }
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -523,7 +555,7 @@ private fun WideHealthContent(
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     Text(
-                        text = mood.emoji,
+                        text = mood?.emoji ?: "🐵",
                         fontSize = 9.sp
                     )
                     Text(
@@ -534,10 +566,10 @@ private fun WideHealthContent(
                     )
                 }
                 Text(
-                    text = "$stressScore",
+                    text = if (!isUnmeasured) "$stressScore" else "--",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = levelColor
+                    color = if (!isUnmeasured) levelColor else Color.White.copy(alpha = 0.4f)
                 )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -550,7 +582,7 @@ private fun WideHealthContent(
                             .background(levelColor)
                     )
                     Text(
-                        text = stressLevel.displayName,
+                        text = if (!isUnmeasured) stressLevel.displayName else "No Data",
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Medium,
                         color = ThemeColors.fgMutedDark,

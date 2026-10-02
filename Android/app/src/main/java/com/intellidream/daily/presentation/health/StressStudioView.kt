@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDropDown
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.FormatQuote
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -88,6 +90,7 @@ fun StressStudioView(
     stressAnalysis: StressAnalysisResult?,
     intradayStress: List<IntradayStressPoint>,
     primarySleep: SleepSession?,
+    sourceDevice: String? = null,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -249,27 +252,33 @@ fun StressStudioView(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Hero Mascot & Stress Dial Card
-        HeroStressCard(
-            score = stressScore,
-            level = stressLevel,
-            analysis = stressAnalysis
-        )
+        if (stressAnalysis != null) {
+            // 1. Hero Mascot & Stress Dial Card
+            HeroStressCard(
+                score = stressScore,
+                level = stressLevel,
+                analysis = stressAnalysis,
+                sourceDevice = sourceDevice
+            )
 
-        // 2. Autonomic Balance Card (Sympathetic vs Parasympathetic)
-        AutonomicBalanceCard(analysis = stressAnalysis)
+            // 2. Autonomic Balance Card (Sympathetic vs Parasympathetic)
+            AutonomicBalanceCard(analysis = stressAnalysis)
 
-        // 3. Biometric Physiological Drivers Grid (2x2 with fixed 104dp height)
-        PhysiologicalDriversGrid(
-            analysis = stressAnalysis,
-            primarySleep = primarySleep
-        )
+            // 3. Biometric Physiological Drivers Grid (2x2 with fixed 104dp height)
+            PhysiologicalDriversGrid(
+                analysis = stressAnalysis,
+                primarySleep = primarySleep
+            )
 
-        // 4. Intraday Stress Curve (24-Hour Timeline)
-        IntradayTimelineCard(
-            intraday = intradayStress,
-            dailyAverage = stressAnalysis?.dailyAverageScore ?: stressScore
-        )
+            // 4. Intraday Stress Curve (24-Hour Timeline)
+            IntradayTimelineCard(
+                intraday = intradayStress,
+                dailyAverage = stressAnalysis.dailyAverageScore
+            )
+        } else {
+            // Dedicated Empty State when no biometric telemetry exists
+            EmptyStressCard()
+        }
 
         // 5. Interactive Guided Breathwork Studio
         InteractiveBreathworkCard(
@@ -294,13 +303,154 @@ fun StressStudioView(
     }
 }
 
+// MARK: - Empty State Card
+
+@Composable
+private fun EmptyStressCard() {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 24.dp,
+        padding = 22.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(84.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MonkeyMascotView(
+                        mood = MonkeyMood.ZEN,
+                        size = MonkeySize.CARD,
+                        animated = true
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "--",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 42.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "/ 100",
+                                color = ThemeColors.fgMutedDark,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "STRESS",
+                                color = ThemeColors.fgMutedDark,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+
+                    // Status Badge Pill
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.06f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(ThemeColors.fgMutedDark)
+                        )
+
+                        Text(
+                            text = "NO TELEMETRY RECORDED",
+                            color = ThemeColors.fgMutedDark,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color = Color.White.copy(alpha = 0.08f),
+                thickness = 1.dp
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Watch,
+                        contentDescription = null,
+                        tint = ThemeColors.accentCyan,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        text = "Autonomic Tone Telemetry",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                Text(
+                    text = "Daily calculates physiological stress by correlating Heart Rate Variability (HRV) and sedentary heart rate elevation from your smartwatch, Amazfit, or Oura Ring.",
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = ThemeColors.fgMutedDark,
+                    lineHeight = 18.sp
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color(0xFF00FFB2),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Tip: Wear your smartwatch during the day, or record an ECG session to sample HRV.",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.85f),
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
 // MARK: - 1. Hero Mascot & Stress Dial Card
 
 @Composable
 private fun HeroStressCard(
     score: Int,
     level: StressLevel,
-    analysis: StressAnalysisResult?
+    analysis: StressAnalysisResult?,
+    sourceDevice: String? = null
 ) {
     val mood = analysis?.monkeyMood ?: MonkeyMood.fromLevel(level)
     val levelColor = Color(android.graphics.Color.parseColor(level.hexColor))
@@ -360,16 +510,16 @@ private fun HeroStressCard(
                     // Status Badge Pill
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(levelColor.copy(alpha = 0.15f))
                             .border(1.dp, levelColor.copy(alpha = 0.35f), CircleShape)
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .padding(horizontal = 9.dp, vertical = 3.5.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(8.dp)
+                                .size(7.dp)
                                 .clip(CircleShape)
                                 .background(levelColor)
                         )
@@ -377,22 +527,50 @@ private fun HeroStressCard(
                         Text(
                             text = level.displayName.uppercase(),
                             color = levelColor,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
                         )
 
                         Text(
                             text = "•",
                             color = Color.White.copy(alpha = 0.4f),
-                            fontSize = 11.sp
+                            fontSize = 10.5.sp
                         )
 
                         Text(
                             text = mood.displayName,
                             color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
                         )
+                    }
+
+                    // Source Device Pill
+                    if (!sourceDevice.isNullOrEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.06f))
+                                .padding(horizontal = 7.dp, vertical = 2.5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Watch,
+                                contentDescription = null,
+                                tint = ThemeColors.fgMutedDark,
+                                modifier = Modifier.size(9.dp)
+                            )
+                            Text(
+                                text = sourceDevice,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ThemeColors.fgMutedDark,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }

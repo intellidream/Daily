@@ -98,6 +98,7 @@ fun HealthMainView(
     val totalSteps by repository.totalStepsToday.collectAsState()
     val totalActiveCalories by repository.totalActiveCalories.collectAsState()
     val averageBpm by repository.averageBpm.collectAsState()
+    val latestBpm by repository.latestBpm.collectAsState()
     val minBpm by repository.minBpm.collectAsState()
     val maxBpm by repository.maxBpm.collectAsState()
     val restingBpm by repository.restingBpm.collectAsState()
@@ -276,6 +277,7 @@ fun HealthMainView(
                                 totalSteps = totalSteps,
                                 totalActiveCalories = totalActiveCalories,
                                 averageBpm = averageBpm,
+                                latestBpm = latestBpm,
                                 hourlySteps = hourlySteps,
                                 primarySleep = primarySleep,
                                 currentVitals = currentVitals,
@@ -295,7 +297,8 @@ fun HealthMainView(
                                 stressLevel = currentStressLevel,
                                 stressAnalysis = stressAnalysis,
                                 intradayStress = intradayStress,
-                                primarySleep = primarySleep
+                                primarySleep = primarySleep,
+                                sourceDevice = currentVitals[HealthMetricType.STRESS]?.sourceDevice
                             )
 
                             HealthSubTab.VITALS -> VitalsSection(
@@ -624,6 +627,7 @@ private fun OverviewSection(
     totalSteps: Int,
     totalActiveCalories: Double,
     averageBpm: Double,
+    latestBpm: Double? = null,
     hourlySteps: List<com.intellidream.daily.model.HourlyStepBucket>,
     primarySleep: SleepSession?,
     currentVitals: Map<HealthMetricType, com.intellidream.daily.model.VitalMetricRecord>,
@@ -634,7 +638,8 @@ private fun OverviewSection(
         ActivityHeroCard(
             totalSteps = totalSteps,
             totalActiveCalories = totalActiveCalories,
-            averageBpm = averageBpm
+            averageBpm = averageBpm,
+            latestBpm = latestBpm
         )
 
         // Hourly Step Cadence
@@ -660,7 +665,8 @@ private fun OverviewSection(
 private fun ActivityHeroCard(
     totalSteps: Int,
     totalActiveCalories: Double,
-    averageBpm: Double
+    averageBpm: Double,
+    latestBpm: Double? = null
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -765,8 +771,9 @@ private fun ActivityHeroCard(
                             fontWeight = FontWeight.Medium,
                             color = ThemeColors.fgMutedDark
                         )
+                        val displayBpm = latestBpm ?: if (averageBpm > 0) averageBpm else null
                         Text(
-                            text = if (averageBpm > 0) "${averageBpm.roundToInt()} bpm" else "--",
+                            text = if (displayBpm != null && displayBpm > 0) "${displayBpm.roundToInt()} bpm" else "--",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = ThemeColors.accentPink

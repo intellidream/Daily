@@ -119,6 +119,9 @@ class HealthDataRepository(
     private val _averageBpm = MutableStateFlow(0.0)
     val averageBpm: StateFlow<Double> = _averageBpm.asStateFlow()
 
+    private val _latestBpm = MutableStateFlow<Double?>(null)
+    val latestBpm: StateFlow<Double?> = _latestBpm.asStateFlow()
+
     private val _minBpm = MutableStateFlow(0.0)
     val minBpm: StateFlow<Double> = _minBpm.asStateFlow()
 
@@ -313,15 +316,21 @@ class HealthDataRepository(
         for (t in cachedTelemetry) {
             val d = t.sourceDevice
             if (!d.isNullOrEmpty()) {
-                devSet.add(d)
-                srcSet.add(DeviceSource.from(d))
+                val src = DeviceSource.from(d)
+                if (!src.isVirtualEngine) {
+                    devSet.add(d)
+                    srcSet.add(src)
+                }
             }
         }
         for (v in cachedVitals) {
             val d = v.sourceDevice
             if (!d.isNullOrEmpty()) {
-                devSet.add(d)
-                srcSet.add(DeviceSource.from(d))
+                val src = DeviceSource.from(d)
+                if (!src.isVirtualEngine) {
+                    devSet.add(d)
+                    srcSet.add(src)
+                }
             }
         }
         _availableDevices.value = devSet.toList().sorted()
@@ -348,12 +357,15 @@ class HealthDataRepository(
             vitals = vitals.filter { it.sourceDevice?.contains(filterDevice, ignoreCase = true) == true }
         }
 
-        // Vitals map
+        // Vitals map (filtering virtual computational engines)
         val vitalsMap = mutableMapOf<HealthMetricType, VitalMetricRecord>()
         val vitalsValues = mutableMapOf<HealthMetricType, Double>()
         for (v in vitals) {
             val type = v.metricType
             if (type != null) {
+                if (v.sourceDevice != null && DeviceSource.from(v.sourceDevice).isVirtualEngine) {
+                    continue
+                }
                 vitalsMap[type] = v
                 vitalsValues[type] = v.value
             }
@@ -432,6 +444,7 @@ class HealthDataRepository(
         }
         val sortedHrPoints = hrPoints.sortedBy { it.timestamp }
         _intradayHeartRate.value = sortedHrPoints
+        _latestBpm.value = sortedHrPoints.lastOrNull()?.bpm
 
         if (sortedHrPoints.isNotEmpty()) {
             val bpms = sortedHrPoints.map { it.bpm }
@@ -487,7 +500,7 @@ class HealthDataRepository(
 
         // 4. Process Stress using StressAnalysisEngine
         val hrvVal = vitalsValues[HealthMetricType.HRV_SDNN] ?: vitalsValues[HealthMetricType.HRV_RMSSD]
-        val (stressResult, intradayPoints) = StressAnalysisEngine.calculateStress(
+        val stressCalculation = StressAnalysisEngine.calculateStress(
             targetDate = targetDate,
             hrvMs = hrvVal,
             hrTelemetry = sortedHrPoints,
@@ -495,22 +508,40 @@ class HealthDataRepository(
             restingBpm = _restingBpm.value.takeIf { it > 0 },
             priorSleepScore = _primarySleepSession.value?.sleepScore
         )
-        _currentStressScore.value = stressResult.currentScore
-        _currentStressLevel.value = stressResult.currentLevel
-        _stressAnalysis.value = stressResult
-        _intradayStress.value = intradayPoints
 
-        // Store computed stress in vitalsMap
-        val stressRecord = VitalMetricRecord(
-            userId = "computed",
-            type = "stress",
-            value = stressResult.currentScore.toDouble(),
-            unit = "pts",
-            date = dateKey,
-            sourceDevice = "Stress Engine"
-        )
-        vitalsMap[HealthMetricType.STRESS] = stressRecord
-        vitalsValues[HealthMetricType.STRESS] = stressResult.currentScore.toDouble()
+        if (stressCalculation != null) {
+            val (stressResult, intradayPoints) = stressCalculation
+            _currentStressScore.value = stressResult.currentScore
+            _currentStressLevel.value = stressResult.currentLevel
+            _stressAnalysis.value = stressResult
+            _intradayStress.value = intradayPoints
+
+            // Resolve honest source device
+            val resolvedSourceDevice = filterDevice
+                ?: filterSource?.displayName
+                ?: vitalsMap[HealthMetricType.HRV_SDNN]?.sourceDevice?.takeIf { !DeviceSource.from(it).isVirtualEngine }
+                ?: vitalsMap[HealthMetricType.HRV_RMSSD]?.sourceDevice?.takeIf { !DeviceSource.from(it).isVirtualEngine }
+                ?: sortedHrPoints.lastOrNull { it.sourceDevice != null && !DeviceSource.from(it.sourceDevice).isVirtualEngine }?.sourceDevice
+                ?: "Daily Biometric Engine"
+
+            val stressRecord = VitalMetricRecord(
+                userId = currentUserId,
+                type = "stress",
+                value = stressResult.currentScore.toDouble(),
+                unit = "pts",
+                date = dateKey,
+                sourceDevice = resolvedSourceDevice
+            )
+            vitalsMap[HealthMetricType.STRESS] = stressRecord
+            vitalsValues[HealthMetricType.STRESS] = stressResult.currentScore.toDouble()
+        } else {
+            _currentStressScore.value = 0
+            _currentStressLevel.value = StressLevel.CALM
+            _stressAnalysis.value = null
+            _intradayStress.value = emptyList()
+            vitalsMap.remove(HealthMetricType.STRESS)
+            vitalsValues.remove(HealthMetricType.STRESS)
+        }
 
         _currentVitals.value = vitalsMap
     }

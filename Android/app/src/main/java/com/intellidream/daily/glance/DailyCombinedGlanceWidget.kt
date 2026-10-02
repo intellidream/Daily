@@ -42,9 +42,10 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         val sleepSession = app?.healthRepository?.primarySleepSession?.value
         val sleepFormatted = sleepSession?.totalAsleepFormatted ?: "--"
         val sleepScore = sleepSession?.sleepScore
-        val stressScore = app?.healthRepository?.currentStressScore?.value ?: 32
-        val stressLevel = app?.healthRepository?.currentStressLevel?.value?.displayName ?: "Calm"
-        val monkeyMood = app?.healthRepository?.stressAnalysis?.value?.monkeyMood
+        val stressAnalysis = app?.healthRepository?.stressAnalysis?.value
+        val stressScore = stressAnalysis?.currentScore
+        val stressLevel = app?.healthRepository?.currentStressLevel?.value?.displayName
+        val monkeyMood = stressAnalysis?.monkeyMood
         val monkeyEmoji = monkeyMood?.emoji ?: "🐵"
         val waterMl = app?.habitsRepository?.waterTotalToday?.value ?: 0.0
         val waterLiters = "%.1fL".format(Locale.US, waterMl / 1000.0)
@@ -69,8 +70,8 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         steps: Int,
         sleepFormatted: String,
         sleepScore: Int?,
-        stressScore: Int,
-        stressLevel: String,
+        stressScore: Int?,
+        stressLevel: String?,
         monkeyEmoji: String,
         waterLiters: String
     ) {
@@ -208,7 +209,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         )
                         Spacer(modifier = GlanceModifier.height(2.dp))
                         Text(
-                            text = "$stressScore $monkeyEmoji",
+                            text = if (stressScore != null) "$stressScore $monkeyEmoji" else "--",
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
                                 fontSize = 14.sp,

@@ -27,7 +27,7 @@ object StressAnalysisEngine {
 
     /**
      * Evaluates physiological telemetry and produces a unified [StressAnalysisResult]
-     * along with an intraday hourly curve.
+     * along with an intraday hourly curve, or null if no biometric telemetry is available for the day.
      */
     fun calculateStress(
         targetDate: Date,
@@ -39,7 +39,13 @@ object StressAnalysisEngine {
         personalBaselineHrv: Double? = null,
         personalBaselineRhr: Double? = null,
         calendar: Calendar = Calendar.getInstance()
-    ): Pair<StressAnalysisResult, List<IntradayStressPoint>> {
+    ): Pair<StressAnalysisResult, List<IntradayStressPoint>>? {
+
+        // Guard against missing biometric telemetry:
+        // Valid stress calculation requires at least one genuine physiological signal (HRV or heart rate samples).
+        if (hrvMs == null && hrTelemetry.isEmpty()) {
+            return null
+        }
 
         val baselineHrv = personalBaselineHrv ?: DEFAULT_BASELINE_HRV
         val baselineRhr = restingBpm ?: personalBaselineRhr ?: DEFAULT_BASELINE_RHR
@@ -76,6 +82,10 @@ object StressAnalysisEngine {
             val isSedentary = steps < 300 // Exclude hours with brisk walking/running
 
             val hrSamples = hrByHour[hour] ?: emptyList()
+            // Only generate an intraday point if this hour had actual biometric samples
+            if (hrSamples.isEmpty() && (hrvMs == null || steps == 0)) {
+                continue
+            }
             val avgHr: Double? = if (hrSamples.isNotEmpty()) hrSamples.sum() / hrSamples.size.toDouble() else null
 
             // Hourly HRV estimation: if daytime samples exist or fallback to day baseline

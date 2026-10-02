@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
@@ -307,9 +308,15 @@ fun DailyRootScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
+                .statusBarsPadding(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            when (selectedTab) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 760.dp)
+            ) {
+                when (selectedTab) {
                 NavigationTab.Dashboard -> {
                     DashboardView(
                         userProfile = userProfile,
@@ -452,6 +459,7 @@ fun DailyRootScreen(
                 }
             }
         }
+    }
 
         // Floating Glass Capsule Navigation at the bottom
         FloatingGlassCapsule(
