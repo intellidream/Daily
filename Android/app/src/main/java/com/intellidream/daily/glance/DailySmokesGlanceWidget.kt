@@ -8,10 +8,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.LinearProgressIndicator
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
@@ -21,10 +24,12 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -32,7 +37,8 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
-import java.util.Date
+import com.intellidream.daily.model.HabitLogRecord
+import kotlin.math.max
 
 class DailySmokesGlanceWidget : GlanceAppWidget() {
 
@@ -40,18 +46,15 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
         val app = runCatching { DailyApp.instance }.getOrNull()
 
         val todayTotal = app?.habitsRepository?.smokesTotalToday?.value ?: 0
-        val baseline = app?.habitsRepository?.smokesSettings?.value?.baselineDailyCount ?: 20
-        val breakdown = app?.habitsRepository?.smokesTypeBreakdown?.value ?: emptyList()
-        val latestLog = app?.habitsRepository?.selectedDateSmokesLogs?.value?.maxByOrNull { it.loggedAt }
-        val lastSmokeTime = latestLog?.loggedAt
+        val baseline = app?.habitsRepository?.smokesSettings?.value?.baselineDailyCount ?: 15
+        val logs = app?.habitsRepository?.selectedDateSmokesLogs?.value ?: emptyList()
 
         provideContent {
             SmokesWidgetContent(
                 context = context,
                 todayTotal = todayTotal,
                 baseline = baseline,
-                breakdown = breakdown,
-                lastSmokeTime = lastSmokeTime
+                logs = logs
             )
         }
     }
@@ -61,8 +64,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
         context: Context,
         todayTotal: Int,
         baseline: Int,
-        breakdown: List<com.intellidream.daily.model.HabitDrinkBreakdown>,
-        lastSmokeTime: Long?
+        logs: List<HabitLogRecord>
     ) {
         val launchIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -70,131 +72,230 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
             putExtra(MainActivity.EXTRA_HABIT_SUBTAB, "smokes")
         }
 
-        val safeBaseline = if (baseline > 0) baseline else 20
-        val ratio = todayTotal.toFloat() / safeBaseline.toFloat()
-        val progress = ratio.coerceIn(0f, 1f)
+        val safeBaseline = max(baseline, 1)
+        val progressRatio = todayTotal.toFloat() / safeBaseline.toFloat()
 
-        val healthColor = when {
-            todayTotal == 0 -> Color(0xFF00E676)
-            ratio <= 0.40f -> Color(0xFF10B981)
-            ratio <= 0.75f -> Color(0xFFFFB800)
-            ratio <= 1.0f -> Color(0xFFF97316)
-            else -> Color(0xFFEF4444)
+        // Ring color based on harm reduction performance
+        val ringColorInt = when {
+            progressRatio <= 0.60f -> android.graphics.Color.parseColor("#00E676") // Green
+            progressRatio <= 0.90f -> android.graphics.Color.parseColor("#00E5FF") // Cyan
+            progressRatio <= 1.00f -> android.graphics.Color.parseColor("#FFB703") // Amber
+            else -> android.graphics.Color.parseColor("#EF4444")                  // Red
+        }
+        val lungColorInt = when {
+            progressRatio <= 0.70f -> android.graphics.Color.parseColor("#38BDF8")
+            progressRatio <= 1.00f -> android.graphics.Color.parseColor("#FB923C")
+            else -> android.graphics.Color.parseColor("#F87171")
         }
 
-        val elapsedText = if (lastSmokeTime != null && todayTotal > 0) {
-            val diffSec = maxOf(0L, (System.currentTimeMillis() - lastSmokeTime) / 1000L)
-            val hours = diffSec / 3600
-            val minutes = (diffSec % 3600) / 60
-            if (hours > 0) "${hours}h ${minutes}m ago" else "${minutes}m ago"
-        } else if (todayTotal == 0) {
-            "Clean today!"
-        } else {
-            "--"
-        }
+        val formattedTime = if (logs.isNotEmpty()) {
+            val lastLog = logs.maxByOrNull { it.loggedAt }
+            if (lastLog != null) {
+                val diffMs = max(0L, System.currentTimeMillis() - lastLog.loggedAt)
+                val diffMin = diffMs / 60000L
+                if (diffMin < 60) "${diffMin}m ago" else "${diffMin / 60}h ago"
+            } else "--"
+        } else "Clear today"
+
+        val accentPurple = Color(0xFFA855F7)
+        val accentOrange = Color(0xFFF97316)
+        val accentRed = Color(0xFFEF4444)
+        val accentBlue = Color(0xFF3B82F6)
+        val textMuted = Color(0xFF8E9BAE)
+
+        val gaugeBitmap = WidgetVisualGraphics.createSmokesGaugeBitmap(
+            sizePx = 200,
+            todayTotal = todayTotal,
+            baseline = safeBaseline,
+            ringColorInt = ringColorInt,
+            lungColorInt = lungColorInt,
+            strokeWidthPx = 18f
+        )
 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .cornerRadius(22.dp)
-                .background(Color(0xFF0F131C))
-                .padding(14.dp)
-                .clickable(actionStartActivity(launchIntent))
+                .cornerRadius(24.dp)
+                .background(Color(0xFF140B10))
+                .padding(12.dp)
         ) {
-            Column(
+            Row(
                 modifier = GlanceModifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Header Row
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                // LEFT: Large Circle with Anatomical Lungs and Count
+                Box(
+                    modifier = GlanceModifier
+                        .size(92.dp)
+                        .clickable(actionStartActivity(launchIntent)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "🫁 SMOKES & CRAVINGS",
-                        style = TextStyle(
-                            color = ColorProvider(healthColor),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Image(
+                        provider = ImageProvider(gaugeBitmap),
+                        contentDescription = "Smokes Health Gauge",
+                        modifier = GlanceModifier.size(92.dp)
                     )
-                    Spacer(modifier = GlanceModifier.defaultWeight())
-                    Box(
-                        modifier = GlanceModifier
-                            .cornerRadius(12.dp)
-                            .background(healthColor.copy(alpha = 0.20f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = GlanceModifier.padding(top = 22.dp)
                     ) {
                         Text(
-                            text = elapsedText,
+                            text = "$todayTotal",
                             style = TextStyle(
-                                color = ColorProvider(healthColor),
-                                fontSize = 10.sp,
+                                color = ColorProvider(Color.White),
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
                     }
                 }
 
-                Spacer(modifier = GlanceModifier.height(8.dp))
+                Spacer(modifier = GlanceModifier.width(10.dp))
 
-                // Metric Count Display
-                Row(
-                    verticalAlignment = Alignment.Bottom
+                // RIGHT: Header (Base · Time · Flame) & 2x2 Buttons Grid
+                Column(
+                    modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "$todayTotal",
-                        style = TextStyle(
-                            color = ColorProvider(Color.White),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold
+                    // Header Row: Baseline + Time + Flame Icon
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity(launchIntent)),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "$baseline ",
+                                style = TextStyle(
+                                    color = ColorProvider(Color.White),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                            Text(
+                                text = "base",
+                                style = TextStyle(
+                                    color = ColorProvider(textMuted),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            )
+                        }
+
+                        Spacer(modifier = GlanceModifier.width(4.dp))
+                        Text(
+                            text = "·",
+                            style = TextStyle(color = ColorProvider(textMuted), fontSize = 10.sp)
                         )
-                    )
-                    Spacer(modifier = GlanceModifier.width(4.dp))
-                    Text(
-                        text = "/ $safeBaseline max",
-                        style = TextStyle(
-                            color = ColorProvider(Color(0xFF8E9BAE)),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Normal
+                        Spacer(modifier = GlanceModifier.width(4.dp))
+
+                        Text(
+                            text = formattedTime,
+                            style = TextStyle(
+                                color = ColorProvider(Color(0xFFE2E8F0)),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
-                    )
+
+                        Spacer(modifier = GlanceModifier.defaultWeight())
+
+                        Text(
+                            text = "🔥",
+                            style = TextStyle(fontSize = 12.sp)
+                        )
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(8.dp))
+
+                    // 2x2 Action Buttons Grid (Matches iOS 1:1)
+                    // Top: Cgr (Purple) & Rol (Orange)
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ActionButtonPill(
+                            label = "Cgr",
+                            textColor = accentPurple,
+                            bgColor = accentPurple.copy(alpha = 0.16f),
+                            modifier = GlanceModifier.defaultWeight().height(26.dp)
+                                .clickable(
+                                    actionRunCallback<LogSmokeActionCallback>(
+                                        actionParametersOf(LogSmokeActionCallback.SmokeTypeKey to "Cgr")
+                                    )
+                                )
+                        )
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        ActionButtonPill(
+                            label = "Rol",
+                            textColor = accentOrange,
+                            bgColor = accentOrange.copy(alpha = 0.16f),
+                            modifier = GlanceModifier.defaultWeight().height(26.dp)
+                                .clickable(
+                                    actionRunCallback<LogSmokeActionCallback>(
+                                        actionParametersOf(LogSmokeActionCallback.SmokeTypeKey to "Rol")
+                                    )
+                                )
+                        )
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(4.dp))
+
+                    // Bottom: Cig (Red) & Heat (Blue)
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ActionButtonPill(
+                            label = "Cig",
+                            textColor = accentRed,
+                            bgColor = accentRed.copy(alpha = 0.16f),
+                            modifier = GlanceModifier.defaultWeight().height(26.dp)
+                                .clickable(
+                                    actionRunCallback<LogSmokeActionCallback>(
+                                        actionParametersOf(LogSmokeActionCallback.SmokeTypeKey to "Cig")
+                                    )
+                                )
+                        )
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        ActionButtonPill(
+                            label = "Heat",
+                            textColor = accentBlue,
+                            bgColor = accentBlue.copy(alpha = 0.16f),
+                            modifier = GlanceModifier.defaultWeight().height(26.dp)
+                                .clickable(
+                                    actionRunCallback<LogSmokeActionCallback>(
+                                        actionParametersOf(LogSmokeActionCallback.SmokeTypeKey to "Heat")
+                                    )
+                                )
+                        )
+                    }
                 }
-
-                Spacer(modifier = GlanceModifier.height(8.dp))
-
-                // Progress Indicator
-                LinearProgressIndicator(
-                    progress = progress,
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .cornerRadius(3.dp),
-                    color = ColorProvider(healthColor),
-                    backgroundColor = ColorProvider(Color.White.copy(alpha = 0.12f))
-                )
-
-                Spacer(modifier = GlanceModifier.height(8.dp))
-
-                // Footer Breakdown
-                val subtitle = if (breakdown.isNotEmpty()) {
-                    breakdown.take(3).joinToString(" · ") { "${it.drink}: ${it.amount.toInt()}" }
-                } else if (todayTotal == 0) {
-                    "Lungs recovering · Zero cravings logged"
-                } else {
-                    "Cigarettes: $todayTotal"
-                }
-
-                Text(
-                    text = subtitle,
-                    style = TextStyle(
-                        color = ColorProvider(Color(0xFF8E9BAE)),
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Normal
-                    ),
-                    maxLines = 1
-                )
             }
+        }
+    }
+
+    @Composable
+    private fun ActionButtonPill(
+        label: String,
+        textColor: Color,
+        bgColor: Color,
+        modifier: GlanceModifier
+    ) {
+        Box(
+            modifier = modifier
+                .cornerRadius(13.dp)
+                .background(bgColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = TextStyle(
+                    color = ColorProvider(textColor),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            )
         }
     }
 }

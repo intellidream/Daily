@@ -20,6 +20,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -32,6 +33,9 @@ import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
 import com.intellidream.daily.model.TagDoStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
@@ -61,131 +65,198 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
             putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_TAGDOS)
         }
 
+        val accentPurple = Color(0xFFA855F7)
         val accentCyan = Color(0xFF00E5FF)
-        val accentBlue = Color(0xFF3B82F6)
+        val accentAmber = Color(0xFFFFB703)
+        val accentGreen = Color(0xFF00E676)
+        val textMuted = Color(0xFF8E9BAE)
+        val dividerColor = Color.White.copy(alpha = 0.12f)
 
-        val firstStream = streams.firstOrNull()
-        val secondStream = if (streams.size > 1) streams[1] else null
-        val nextReminder = streams.mapNotNull { it.streamReminder }
-            .filter { it > System.currentTimeMillis() }
-            .minOrNull()
-            ?.let { java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it)) }
+        val stream1 = streams.firstOrNull()
+        val stream2 = if (streams.size > 1) streams[1] else null
+
+        val drivingPill = stream1?.drivingPill?.rawText ?: "All clear"
+        val stream1Reminder = stream1?.streamReminder?.let {
+            if (it > System.currentTimeMillis()) SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it)) else null
+        }
 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .cornerRadius(22.dp)
-                .background(Color(0xFF07111E))
-                .padding(14.dp)
+                .cornerRadius(24.dp)
+                .background(Color(0xFF0F0B1E))
+                .padding(12.dp)
                 .clickable(actionStartActivity(launchIntent))
         ) {
-            Column(
+            Row(
                 modifier = GlanceModifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Header Row
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
+                // LEFT COLUMN: Header + Driving Hero Tag Pill + Reminder
+                Column(
+                    modifier = GlanceModifier.width(112.dp).fillMaxHeight(),
+                    horizontalAlignment = Alignment.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "📋 TAGDOS TASKS",
-                        style = TextStyle(
-                            color = ColorProvider(accentCyan),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "📋", style = TextStyle(fontSize = 12.sp))
+                        Spacer(modifier = GlanceModifier.width(3.dp))
+                        Text(
+                            text = "TAGDOS",
+                            style = TextStyle(
+                                color = ColorProvider(accentPurple),
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
-                    )
-                    Spacer(modifier = GlanceModifier.defaultWeight())
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(5.dp))
+
+                    // Driving Pill Hero
                     Box(
                         modifier = GlanceModifier
-                            .cornerRadius(12.dp)
-                            .background(accentCyan.copy(alpha = 0.20f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .fillMaxWidth()
+                            .cornerRadius(10.dp)
+                            .background(accentPurple.copy(alpha = 0.16f))
+                            .padding(horizontal = 7.dp, vertical = 4.dp)
                     ) {
-                        Text(
-                            text = "$totalActive Active",
-                            style = TextStyle(
-                                color = ColorProvider(accentCyan),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = drivingPill,
+                                    style = TextStyle(
+                                        color = ColorProvider(Color.White),
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    maxLines = 1
+                                )
+                                Spacer(modifier = GlanceModifier.width(2.dp))
+                                Text(text = "⭐", style = TextStyle(fontSize = 8.sp))
+                            }
+                            Spacer(modifier = GlanceModifier.height(1.dp))
+                            Text(
+                                text = stream1?.displayTitle ?: "Daily Ops",
+                                style = TextStyle(
+                                    color = ColorProvider(textMuted),
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                maxLines = 1
                             )
-                        )
+                        }
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(4.dp))
+
+                    // Reminder or Active Count Pill
+                    if (stream1Reminder != null) {
+                        Box(
+                            modifier = GlanceModifier
+                                .cornerRadius(8.dp)
+                                .background(accentCyan.copy(alpha = 0.16f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "🔔 $stream1Reminder",
+                                style = TextStyle(
+                                    color = ColorProvider(accentCyan),
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = GlanceModifier
+                                .cornerRadius(8.dp)
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "$totalActive Active",
+                                style = TextStyle(
+                                    color = ColorProvider(accentCyan),
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = GlanceModifier.height(8.dp))
+                Spacer(modifier = GlanceModifier.width(8.dp))
 
-                // Primary Stream Row
-                if (firstStream != null) {
-                    val pillsText = firstStream.activePills.take(5).joinToString("  ") { "[${it.rawText}]" }
-                    Column(modifier = GlanceModifier.fillMaxWidth()) {
-                        Text(
-                            text = firstStream.displayTitle,
-                            style = TextStyle(
-                                color = ColorProvider(Color.White),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
+                // Vertical Divider
+                Box(
+                    modifier = GlanceModifier
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(dividerColor)
+                ) {}
+
+                Spacer(modifier = GlanceModifier.width(8.dp))
+
+                // RIGHT COLUMN: Stream 1 & Stream 2 Pipelines
+                Column(
+                    modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Stream 1 Pipeline
+                    if (stream1 != null) {
+                        val pillsChain = stream1.activePills.take(3).joinToString(" ➔ ") { it.rawText }
+                        Column(modifier = GlanceModifier.fillMaxWidth()) {
+                            Text(
+                                text = stream1.displayTitle,
+                                style = TextStyle(
+                                    color = ColorProvider(Color.White),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                maxLines = 1
                             )
-                        )
-                        Spacer(modifier = GlanceModifier.height(2.dp))
-                        Text(
-                            text = if (pillsText.isNotBlank()) pillsText else "All tasks completed",
-                            style = TextStyle(
-                                color = ColorProvider(Color(0xFF00E5FF)),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            maxLines = 1
-                        )
+                            Spacer(modifier = GlanceModifier.height(2.dp))
+                            Text(
+                                text = if (pillsChain.isNotBlank()) pillsChain else "No active tags",
+                                style = TextStyle(
+                                    color = ColorProvider(accentCyan),
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(8.dp))
+
+                    // Stream 2 Pipeline
+                    if (stream2 != null) {
+                        val pillsChain = stream2.activePills.take(3).joinToString(" ➔ ") { it.rawText }
+                        Column(modifier = GlanceModifier.fillMaxWidth()) {
+                            Text(
+                                text = stream2.displayTitle,
+                                style = TextStyle(
+                                    color = ColorProvider(Color(0xFFCBD5E1)),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                maxLines = 1
+                            )
+                            Spacer(modifier = GlanceModifier.height(1.dp))
+                            Text(
+                                text = if (pillsChain.isNotBlank()) pillsChain else "No active tags",
+                                style = TextStyle(
+                                    color = ColorProvider(accentAmber),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
-
-                Spacer(modifier = GlanceModifier.height(6.dp))
-
-                // Secondary Stream Row
-                if (secondStream != null) {
-                    val pillsText = secondStream.activePills.take(4).joinToString("  ") { "[${it.rawText}]" }
-                    Column(modifier = GlanceModifier.fillMaxWidth()) {
-                        Text(
-                            text = secondStream.displayTitle,
-                            style = TextStyle(
-                                color = ColorProvider(Color(0xFF8E9BAE)),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        )
-                        Spacer(modifier = GlanceModifier.height(1.dp))
-                        Text(
-                            text = if (pillsText.isNotBlank()) pillsText else "All tasks completed",
-                            style = TextStyle(
-                                color = ColorProvider(Color(0xFF38BDF8)),
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Normal
-                            ),
-                            maxLines = 1
-                        )
-                    }
-                }
-
-                Spacer(modifier = GlanceModifier.height(6.dp))
-
-                // Footer Reminder
-                val footerText = if (!nextReminder.isNullOrBlank()) {
-                    "⏰ Next reminder at $nextReminder"
-                } else {
-                    "Tap to manage mental tags & quick notes"
-                }
-
-                Text(
-                    text = footerText,
-                    style = TextStyle(
-                        color = ColorProvider(Color(0xFF8E9BAE)),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Normal
-                    ),
-                    maxLines = 1
-                )
             }
         }
     }

@@ -8,9 +8,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
@@ -20,6 +22,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -32,12 +35,13 @@ import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
 import com.intellidream.daily.model.ParsedSmartLedger
+import java.util.Locale
+import kotlin.math.abs
 
 class DailyMoneyGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
-
         val parsedLedger = app?.smartLedgerRepository?.parsedLedger?.value
 
         provideContent {
@@ -60,58 +64,71 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
 
         val netWorth = ledger?.netWorth ?: 0.0
         val netWorthEUR = ledger?.formattedNetWorthEUR ?: "~0 €"
-        val formattedNetWorth = ledger?.formattedBadge(netWorth) ?: "0 Lei"
         val incoming = ledger?.incomingTotal ?: 0.0
         val outgoing = ledger?.outgoingTotal ?: 0.0
 
-        val accentGreen = Color(0xFF00E676)
-        val accentBlue = Color(0xFF3B82F6)
-        val accentOrange = Color(0xFFFF7043)
+        val allItems = ledger?.sections?.flatMap { it.items } ?: emptyList()
+        val cardItem = allItems.firstOrNull { it.displayName.contains("Card", ignoreCase = true) || it.key.contains("Card", ignoreCase = true) }
+        val cashItem = allItems.firstOrNull { it.displayName.contains("Cash", ignoreCase = true) || it.key.contains("Cash", ignoreCase = true) }
+        val cardAmt = cardItem?.calculatedAmount ?: 0.0
+        val cashAmt = cashItem?.calculatedAmount ?: 0.0
 
-        // Find top 2 outgoing expense items
-        val outgoingSection = ledger?.sections?.firstOrNull { it.name.equals("Outgoing", ignoreCase = true) }
-        val topItems = outgoingSection?.items
-            ?.filter { !it.isPureNote && it.rawAmount > 0 }
-            ?.sortedByDescending { it.rawAmount }
-            ?.take(2)
-            ?: emptyList()
+        val accentGreen = Color(0xFF00E676)
+        val accentCyan = Color(0xFF00E5FF)
+        val accentPink = Color(0xFFF43F5E)
+        val textMuted = Color(0xFF8E9BAE)
+        val dividerColor = Color.White.copy(alpha = 0.12f)
+
+        fun formatCompact(v: Double): String {
+            val a = abs(v)
+            return when {
+                a >= 1_000_000 -> String.format(Locale.US, "%.1fM", v / 1_000_000.0)
+                a >= 1000 -> String.format(Locale.US, "%.1fk", v / 1000.0)
+                else -> String.format(Locale.US, "%.0f", v)
+            }
+        }
 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .cornerRadius(22.dp)
-                .background(Color(0xFF07141C))
-                .padding(14.dp)
-                .clickable(actionStartActivity(launchIntent))
+                .cornerRadius(24.dp)
+                .background(Color(0xFF071418))
+                .padding(12.dp)
         ) {
             Column(
                 modifier = GlanceModifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Header Row
+                // Header: Wallet icon on left, EUR badge on right
                 Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
+                    modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity(launchIntent)),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "💳 SMART LEDGER",
-                        style = TextStyle(
-                            color = ColorProvider(accentGreen),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "👛", style = TextStyle(fontSize = 13.sp))
+                        Spacer(modifier = GlanceModifier.width(4.dp))
+                        Text(
+                            text = "SMART LEDGER",
+                            style = TextStyle(
+                                color = ColorProvider(accentGreen),
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
-                    )
+                    }
+
                     Spacer(modifier = GlanceModifier.defaultWeight())
+
                     Box(
                         modifier = GlanceModifier
-                            .cornerRadius(12.dp)
-                            .background(accentGreen.copy(alpha = 0.18f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .cornerRadius(10.dp)
+                            .background(accentCyan.copy(alpha = 0.16f))
+                            .padding(horizontal = 7.dp, vertical = 2.dp)
                     ) {
                         Text(
                             text = netWorthEUR,
                             style = TextStyle(
-                                color = ColorProvider(accentGreen),
+                                color = ColorProvider(accentCyan),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -121,65 +138,193 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
 
                 Spacer(modifier = GlanceModifier.height(8.dp))
 
-                // Net Worth Display
+                // 3 Columns: NET WORTH | FLOW (IN/OUT) | LIQUID (Matches iOS 1:1)
                 Row(
-                    verticalAlignment = Alignment.Bottom
+                    modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity(launchIntent)),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = formattedNetWorth,
-                        style = TextStyle(
-                            color = ColorProvider(Color.White),
-                            fontSize = 26.sp,
-                            fontWeight = FontWeight.Bold
+                    // Column 1: NET WORTH
+                    Column(
+                        modifier = GlanceModifier.defaultWeight(),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "NET WORTH",
+                            style = TextStyle(
+                                color = ColorProvider(textMuted),
+                                fontSize = 7.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
-                    )
+                        Spacer(modifier = GlanceModifier.height(1.dp))
+                        Text(
+                            text = "${formatCompact(netWorth)} Lei",
+                            style = TextStyle(
+                                color = ColorProvider(Color.White),
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            maxLines = 1
+                        )
+                    }
+
+                    // Vertical Divider 1
+                    Box(
+                        modifier = GlanceModifier
+                            .width(1.dp)
+                            .height(26.dp)
+                            .background(dividerColor)
+                    ) {}
+
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+
+                    // Column 2: FLOW (IN/OUT)
+                    Column(
+                        modifier = GlanceModifier.defaultWeight(),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "FLOW (IN/OUT)",
+                            style = TextStyle(
+                                color = ColorProvider(textMuted),
+                                fontSize = 7.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Spacer(modifier = GlanceModifier.height(1.dp))
+                        Text(
+                            text = "+${formatCompact(incoming)} / -${formatCompact(outgoing)}",
+                            style = TextStyle(
+                                color = ColorProvider(Color.White),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            maxLines = 1
+                        )
+                    }
+
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+
+                    // Vertical Divider 2
+                    Box(
+                        modifier = GlanceModifier
+                            .width(1.dp)
+                            .height(26.dp)
+                            .background(dividerColor)
+                    ) {}
+
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+
+                    // Column 3: LIQUID
+                    Column(
+                        modifier = GlanceModifier.defaultWeight(),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "LIQUID",
+                            style = TextStyle(
+                                color = ColorProvider(textMuted),
+                                fontSize = 7.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Spacer(modifier = GlanceModifier.height(1.dp))
+                        Text(
+                            text = "Crd ${formatCompact(cardAmt)} · Csh ${formatCompact(cashAmt)}",
+                            style = TextStyle(
+                                color = ColorProvider(accentCyan),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            maxLines = 1
+                        )
+                    }
                 }
 
-                Spacer(modifier = GlanceModifier.height(8.dp))
+                Spacer(modifier = GlanceModifier.height(10.dp))
 
-                // Cash Flow Row: In vs Out
+                // 3 Smart Interactive Quick Adjust Buttons (Matches iOS 1:1)
                 Row(
                     modifier = GlanceModifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "In: +${incoming.toInt()}k",
-                        style = TextStyle(
-                            color = ColorProvider(accentBlue),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    // -100 Crd
+                    AdjustButtonPill(
+                        label = "-100 Crd",
+                        textColor = accentPink,
+                        bgColor = accentPink.copy(alpha = 0.16f),
+                        modifier = GlanceModifier.defaultWeight().height(26.dp)
+                            .clickable(
+                                actionRunCallback<AdjustLedgerActionCallback>(
+                                    actionParametersOf(
+                                        AdjustLedgerActionCallback.AccountKey to "Card",
+                                        AdjustLedgerActionCallback.DeltaKey to -100.0
+                                    )
+                                )
+                            )
                     )
-                    Spacer(modifier = GlanceModifier.width(12.dp))
-                    Text(
-                        text = "Out: -${outgoing.toInt()}k",
-                        style = TextStyle(
-                            color = ColorProvider(accentOrange),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+
+                    // -100 Csh
+                    AdjustButtonPill(
+                        label = "-100 Csh",
+                        textColor = accentPink,
+                        bgColor = accentPink.copy(alpha = 0.16f),
+                        modifier = GlanceModifier.defaultWeight().height(26.dp)
+                            .clickable(
+                                actionRunCallback<AdjustLedgerActionCallback>(
+                                    actionParametersOf(
+                                        AdjustLedgerActionCallback.AccountKey to "Cash",
+                                        AdjustLedgerActionCallback.DeltaKey to -100.0
+                                    )
+                                )
+                            )
+                    )
+
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+
+                    // +100 Crd
+                    AdjustButtonPill(
+                        label = "+100 Crd",
+                        textColor = accentGreen,
+                        bgColor = accentGreen.copy(alpha = 0.16f),
+                        modifier = GlanceModifier.defaultWeight().height(26.dp)
+                            .clickable(
+                                actionRunCallback<AdjustLedgerActionCallback>(
+                                    actionParametersOf(
+                                        AdjustLedgerActionCallback.AccountKey to "Card",
+                                        AdjustLedgerActionCallback.DeltaKey to 100.0
+                                    )
+                                )
+                            )
                     )
                 }
-
-                Spacer(modifier = GlanceModifier.height(6.dp))
-
-                // Footer top spending allocations
-                val subtitle = if (topItems.isNotEmpty()) {
-                    topItems.joinToString(" · ") { "${it.displayName}: ${it.formattedRawAmount}" }
-                } else {
-                    "Tap to edit ledger & allocate budget"
-                }
-
-                Text(
-                    text = subtitle,
-                    style = TextStyle(
-                        color = ColorProvider(Color(0xFF8E9BAE)),
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Normal
-                    ),
-                    maxLines = 1
-                )
             }
+        }
+    }
+
+    @Composable
+    private fun AdjustButtonPill(
+        label: String,
+        textColor: Color,
+        bgColor: Color,
+        modifier: GlanceModifier
+    ) {
+        Box(
+            modifier = modifier
+                .cornerRadius(13.dp)
+                .background(bgColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = TextStyle(
+                    color = ColorProvider(textColor),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            )
         }
     }
 }

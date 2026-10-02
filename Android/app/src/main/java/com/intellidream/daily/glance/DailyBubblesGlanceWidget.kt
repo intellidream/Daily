@@ -8,10 +8,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.LinearProgressIndicator
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
@@ -21,10 +24,12 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -32,7 +37,9 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
+import com.intellidream.daily.model.HabitDrinkBreakdown
 import java.util.Locale
+import kotlin.math.max
 
 class DailyBubblesGlanceWidget : GlanceAppWidget() {
 
@@ -58,7 +65,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
         context: Context,
         todayMl: Double,
         goalMl: Double,
-        breakdown: List<com.intellidream.daily.model.HabitDrinkBreakdown>
+        breakdown: List<HabitDrinkBreakdown>
     ) {
         val launchIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -71,110 +78,239 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
         val progressPercent = (progress * 100).toInt()
 
         val accentCyan = Color(0xFF00E5FF)
-        val accentMint = Color(0xFF00FFB2)
+        val accentGreen = Color(0xFF00E676)
+        val coffeeYellow = Color(0xFFF59E0B)
+        val teaGreen = Color(0xFF84CC16)
+        val textMuted = Color(0xFF8E9BAE)
+
+        // Convert breakdown for Canvas rendering
+        val breakdownPairs = breakdown.map { item ->
+            val colorInt = runCatching { android.graphics.Color.parseColor(item.hexColor) }
+                .getOrDefault(android.graphics.Color.parseColor("#00E5FF"))
+            item.amount to colorInt
+        }
+
+        val arcBitmap = WidgetVisualGraphics.createMultiDrinkArcBitmap(
+            sizePx = 200,
+            todayMl = todayMl,
+            goalMl = safeGoal,
+            breakdown = breakdownPairs,
+            strokeWidthPx = 18f
+        )
 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .cornerRadius(22.dp)
-                .background(Color(0xFF071224))
-                .padding(14.dp)
-                .clickable(actionStartActivity(launchIntent))
+                .cornerRadius(24.dp)
+                .background(Color(0xFF06101E))
+                .padding(12.dp)
         ) {
-            Column(
+            Row(
                 modifier = GlanceModifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Header Row
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
+                // LEFT: Circular Hero with Center Metric Overlay
+                Box(
+                    modifier = GlanceModifier
+                        .size(92.dp)
+                        .clickable(actionStartActivity(launchIntent)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(arcBitmap),
+                        contentDescription = "Hydration Progress Ring",
+                        modifier = GlanceModifier.size(92.dp)
+                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = String.format(Locale.US, "%,d", todayMl.toInt()),
+                            style = TextStyle(
+                                color = ColorProvider(Color.White),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "of ${safeGoal.toInt()} ml",
+                            style = TextStyle(
+                                color = ColorProvider(textMuted),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Spacer(modifier = GlanceModifier.width(10.dp))
+
+                // RIGHT: Header (Percentage + Icon), Breakdown, and 2x2 Buttons Grid
+                Column(
+                    modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "💧 BUBBLES HYDRATION",
-                        style = TextStyle(
-                            color = ColorProvider(accentCyan),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                    Spacer(modifier = GlanceModifier.defaultWeight())
-                    Box(
-                        modifier = GlanceModifier
-                            .cornerRadius(12.dp)
-                            .background(accentCyan.copy(alpha = 0.20f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    // Header Row: Percentage on left, Drop icon on right
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity(launchIntent)),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "$progressPercent%",
                             style = TextStyle(
                                 color = ColorProvider(accentCyan),
-                                fontSize = 10.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
+                        Spacer(modifier = GlanceModifier.defaultWeight())
+                        Text(
+                            text = "💧",
+                            style = TextStyle(
+                                fontSize = 12.sp
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(3.dp))
+
+                    // Liquid Breakdown Pill Row
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity(launchIntent)),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (breakdown.isNotEmpty()) {
+                            breakdown.take(2).forEachIndexed { idx, item ->
+                                if (idx > 0) Spacer(modifier = GlanceModifier.width(6.dp))
+                                val itemColor = runCatching {
+                                    Color(android.graphics.Color.parseColor(item.hexColor))
+                                }.getOrDefault(accentCyan)
+                                Text(
+                                    text = "${item.amount.toInt()} ml",
+                                    style = TextStyle(
+                                        color = ColorProvider(itemColor),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "${todayMl.toInt()} ml logged",
+                                style = TextStyle(
+                                    color = ColorProvider(accentCyan),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(6.dp))
+
+                    // 2x2 Interactive Action Buttons Grid (Matches iOS 1:1)
+                    // Row 1: 300 (Water) & 150 (Water)
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ActionButtonPill(
+                            label = "300",
+                            textColor = accentCyan,
+                            bgColor = accentCyan.copy(alpha = 0.16f),
+                            modifier = GlanceModifier.defaultWeight().height(26.dp)
+                                .clickable(
+                                    actionRunCallback<LogWaterActionCallback>(
+                                        actionParametersOf(
+                                            LogWaterActionCallback.AmountKey to 300.0,
+                                            LogWaterActionCallback.DrinkKey to "Water"
+                                        )
+                                    )
+                                )
+                        )
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        ActionButtonPill(
+                            label = "150",
+                            textColor = accentCyan,
+                            bgColor = accentCyan.copy(alpha = 0.16f),
+                            modifier = GlanceModifier.defaultWeight().height(26.dp)
+                                .clickable(
+                                    actionRunCallback<LogWaterActionCallback>(
+                                        actionParametersOf(
+                                            LogWaterActionCallback.AmountKey to 150.0,
+                                            LogWaterActionCallback.DrinkKey to "Water"
+                                        )
+                                    )
+                                )
+                        )
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(4.dp))
+
+                    // Row 2: 100 (Coffee) & 200 (Tea)
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ActionButtonPill(
+                            label = "100",
+                            textColor = coffeeYellow,
+                            bgColor = coffeeYellow.copy(alpha = 0.16f),
+                            modifier = GlanceModifier.defaultWeight().height(26.dp)
+                                .clickable(
+                                    actionRunCallback<LogWaterActionCallback>(
+                                        actionParametersOf(
+                                            LogWaterActionCallback.AmountKey to 100.0,
+                                            LogWaterActionCallback.DrinkKey to "Coffee"
+                                        )
+                                    )
+                                )
+                        )
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        ActionButtonPill(
+                            label = "200",
+                            textColor = teaGreen,
+                            bgColor = teaGreen.copy(alpha = 0.16f),
+                            modifier = GlanceModifier.defaultWeight().height(26.dp)
+                                .clickable(
+                                    actionRunCallback<LogWaterActionCallback>(
+                                        actionParametersOf(
+                                            LogWaterActionCallback.AmountKey to 200.0,
+                                            LogWaterActionCallback.DrinkKey to "Tea"
+                                        )
+                                    )
+                                )
+                        )
                     }
                 }
-
-                Spacer(modifier = GlanceModifier.height(8.dp))
-
-                // Score / Amount Display
-                Row(
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Text(
-                        text = String.format(Locale.US, "%,d", todayMl.toInt()),
-                        style = TextStyle(
-                            color = ColorProvider(Color.White),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                    Spacer(modifier = GlanceModifier.width(4.dp))
-                    Text(
-                        text = "/ ${String.format(Locale.US, "%,d", safeGoal.toInt())} ml",
-                        style = TextStyle(
-                            color = ColorProvider(Color(0xFF8E9BAE)),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Normal
-                        )
-                    )
-                }
-
-                Spacer(modifier = GlanceModifier.height(8.dp))
-
-                // Progress Indicator
-                LinearProgressIndicator(
-                    progress = progress,
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .cornerRadius(3.dp),
-                    color = ColorProvider(accentCyan),
-                    backgroundColor = ColorProvider(Color.White.copy(alpha = 0.12f))
-                )
-
-                Spacer(modifier = GlanceModifier.height(8.dp))
-
-                // Footer Breakdown or Encouragement
-                val subtitle = if (breakdown.isNotEmpty()) {
-                    breakdown.take(3).joinToString(" · ") { "${it.drink}: ${it.amount.toInt()}ml" }
-                } else if (todayMl > 0) {
-                    "Water: ${todayMl.toInt()} ml"
-                } else {
-                    "Tap to log your first drink of the day"
-                }
-
-                Text(
-                    text = subtitle,
-                    style = TextStyle(
-                        color = ColorProvider(Color(0xFF8E9BAE)),
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Normal
-                    ),
-                    maxLines = 1
-                )
             }
+        }
+    }
+
+    @Composable
+    private fun ActionButtonPill(
+        label: String,
+        textColor: Color,
+        bgColor: Color,
+        modifier: GlanceModifier
+    ) {
+        Box(
+            modifier = modifier
+                .cornerRadius(13.dp)
+                .background(bgColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = TextStyle(
+                    color = ColorProvider(textColor),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            )
         }
     }
 }
