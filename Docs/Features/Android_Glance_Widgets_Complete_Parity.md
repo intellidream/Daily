@@ -7,37 +7,51 @@ This document outlines the complete implementation of the native Android Widget 
 
 ## 1. Widget Architecture & Design System
 
-Every widget is implemented as a Jetpack Glance AppWidget backed by a Glance Receiver and configured via XML AppWidgetProvider metadata:
+Every widget is implemented as a Jetpack Glance AppWidget backed by a Glance Receiver and configured via XML AppWidgetProvider metadata with **`SizeMode.Responsive`** supporting distinct Small, Medium, and Large views:
 
 | Widget Name | Target Feature Hub | iOS Equivalent | Key Metrics & Glance Visual Elements |
 |---|---|---|---|
-| **Daily Combined Glance Widget** | Health & Executive Hub | `CombinedWidget` | Left hero column (Sleep score gauge + net worth pill + stress mascot pill), right column with 3 metric tiles (Water, Smokes, Tagdos) with color-coded status badges and instant hub launch. |
-| **Daily Stress Glance Widget** | Health -> Stress Studio | `StressWidget` | Real-time Stress Score (0-100) circular gauge, Autonomic Balance bar (Parasympathetic Rest vs Sympathetic Active dual gradient capsule), mascot emoji chip, biometric rating pills (HRV, BPM), monkey wisdom card, and studio link. |
-| **Daily Bubbles Glance Widget** | Habits -> Bubbles | `BubblesWidget` | Segmented multi-drink arc hero ring on left with intake/goal inside, percentage pill + drop icon on top right, color-coded drink breakdown pills (Water, Coffee, Tea), and 2x2 interactive quick-log buttons (`300`, `150`, `100`, `200`). |
-| **Daily Smokes Glance Widget** | Habits -> Smokes | `SmokesWidget` | Anatomical vector lungs circular hero on left with count inside, baseline, elapsed time ago, flame badge, and 2x2 interactive quick-log buttons (`Cgr`, `Rol`, `Cig`, `Heat`). |
-| **Daily Sleep Studio Glance Widget** | Health -> Sleep | `SleepWidget` | Radial sleep score gradient ring on left with duration and `${score} pts` capsule, bedtime/wake schedule, multi-stage proportional hypnogram bar (Deep, REM, Light, Awake), 4 mini stage pills, and device badge. |
-| **Daily Money Glance Widget** | Finances -> SmartLedger | `MoneyWidget` | 3-column architecture (`NET WORTH`, `FLOW IN/OUT`, `LIQUID`) with dividers and quick adjust action buttons (`-100 Crd`, `-100 Csh`, `+100 Crd`). |
-| **Daily Tagdos Glance Widget** | Tagdos & Notes Hub | `TagdosWidget` | `TAGDOS` header, `FOCUS TAG` hero card with starred driving pill and stream title, reminder badge, and Stream 1 / Stream 2 queued tags chains (`➔`). |
+| **Daily Combined Glance Widget** | Health & Executive Hub | `CombinedWidget` | **Small**: Hero sleep ring + vital metrics. **Medium**: Hero metrics column + 3 dual-tile cards (Water, Smokes, Finances/Tagdos). **Large**: Full 4-quadrant executive dashboard matching iOS `.systemLarge`. |
+| **Daily Stress Glance Widget** | Health -> Stress Studio | `StressWidget` | **Small**: Stress gauge ring (0-100), autonomic balance score, mascot mood badge. **Medium**: Radial gauge + autonomic tone bar + biometric rating pills (HRV, BPM) + mascot quote card. |
+| **Daily Bubbles Glance Widget** | Habits -> Bubbles | `BubblesWidget` | **Small**: Multi-drink segmented arc + intake / goal + percentage pill. **Medium**: Segmented ring + Water/Coffee/Tea pills + 2x2 quick-log buttons. **Large**: Detailed breakdown chart + progress analytics + hydration schedule. |
+| **Daily Smokes Glance Widget** | Habits -> Smokes | `SmokesWidget` | **Small**: Vector lungs hero + count/baseline + flame icon. **Medium**: Vector lungs + time ago + cost breakdown + 2x2 quick-log buttons (`Cgr`, `Rol`, `Cig`, `Heat`). **Large**: Complete smoking timeline + cessation financial tracker. |
+| **Daily Sleep Studio Glance Widget** | Health -> Sleep | `SleepWidget` | **Small**: Radial sleep score gradient ring + duration + sleep quality rating. **Medium**: Sleep score + schedule + proportional hypnogram bar (Deep, REM, Light, Awake). **Large**: Deep architecture analysis + restorative ratio + resting HR/HRV telemetry. |
+| **Daily Money Glance Widget** | Finances -> SmartLedger | `MoneyWidget` | **Small**: Net worth (Lei + EUR) + card/cash badges. **Medium**: 3-column architecture (`NET WORTH`, `FLOW IN/OUT`, `LIQUID`) with quick adjustments (`-100 Crd`, `+100 Crd`). **Large**: Full ledger category breakdown + top outgoings list. |
+| **Daily Tagdos Glance Widget** | Tagdos & Notes Hub | `TagdosWidget` | **Small**: Driving priority tag pill + active count + reminder pill. **Medium**: Stream 1 & Stream 2 queued tags chains (`➔`) with priority color badges. **Large**: Multi-stream queue view with active memo snippets. |
 
 ---
 
-## 2. Canvas Graphics Engine (`WidgetVisualGraphics.kt`)
+## 2. Canvas Graphics & Vector Iconography Engine (`WidgetVisualGraphics.kt`)
 
-Because Jetpack Glance lacks native `Canvas` drawing composables, Daily implements a dedicated high-DPI anti-aliased bitmap graphics rendering engine (`com.intellidream.daily.glance.WidgetVisualGraphics`):
+Because Jetpack Glance does not support arbitrary custom canvas composables in standard layout declarations, Daily implements a dedicated high-DPI anti-aliased bitmap vector graphics engine (`com.intellidream.daily.glance.WidgetVisualGraphics`):
 
-1. **`createMultiDrinkArcBitmap`**: Renders segmented circular arc rings with start/sweep angles corresponding to Water (`#38BDF8`), Coffee (`#D97706`), and Tea (`#10B981`) intake proportions against the daily target.
-2. **`createSmokesGaugeBitmap`**: Renders a circular recovery ring combined with true anatomical vector lungs and bronchial tree (exact cubic bezier curves ported directly from iOS `WidgetVectorLungsShape` and `WidgetVectorLungsBronchiShape`).
-3. **`createSleepScoreRingBitmap`**: Renders an angular gradient circular arc (Violet `#8B5CF6` to Indigo `#6366F1`) reflecting restorative sleep score percentages.
-4. **`createSleepHypnogramBarBitmap`**: Renders a proportional multi-stage hypnogram bar with rounded capsule corners, allocating widths to Deep sleep (`#8B5CF6`), REM (`#38BDF8`), Light (`#60A5FA`), and Awake (`#F59E0B`).
-5. **`createStressGaugeBitmap`**: Renders a circular stress score gauge arc with dynamic color shifting (Emerald `#10B981` -> Amber `#F59E0B` -> Rose `#EF4444`).
-6. **`createAutonomicBalanceBarBitmap`**: Renders a dual gradient capsule representing Parasympathetic Rest (Teal `#14B8A6`) versus Sympathetic Active (Amber `#F59E0B`) tone.
-7. **`createMiniMetricGaugeBitmap`**: Renders mini circular gauges with background track and progress stroke for high-density combined widgets.
+1. **Native SF-Symbol Port Vector Icons (`WidgetIconType`)**:
+   - `FLAME`: Multi-tier flame glyph with inner spark core.
+   - `DROP`: Slender fluid water drop with specular highlight.
+   - `MOON`, `MOON_STARS`, `MOON_ZZZ`: Celestial crescent with sleep zzz indicators.
+   - `WALLET`, `CREDIT_CARD`: Financial leather wallet with metallic clasp and payment card with security chip and magnetic stripe.
+   - `CHECKLIST`, `BELL`, `SPARKLES`, `HEART`, `ECG`, `APPLE_WATCH`, `CHEVRON_RIGHT`, `ARROW_RIGHT`: Crisp anti-aliased native Canvas paths.
+2. **`createVectorLungsBitmap`**: Isolated anatomical lungs + bronchial tree using exact cubic bezier curves matching iOS `WidgetVectorLungsShape` and `WidgetVectorLungsBronchiShape`.
+3. **`createMultiDrinkArcBitmap`**: Segmented circular arc rings with start/sweep angles corresponding to Water (`#00E5FF`), Coffee (`#F59E0B`), and Tea (`#84CC16`) intake proportions against the daily target.
+4. **`createSleepScoreRingBitmap`**: Angular gradient circular arc (Cyan `#00E5FF` to Emerald `#10B981`) reflecting restorative sleep score percentages.
+5. **`createSleepHypnogramBarBitmap`**: Proportional multi-stage hypnogram bar with rounded capsule corners, allocating widths to Deep sleep (`#8B5CF6`), REM (`#3B82F6`), Light (`#00E5FF`), and Awake (`#EF4444`).
+6. **`createStressGaugeBitmap`**: Circular stress score gauge arc with dynamic color shifting (Emerald `#10B981` -> Amber `#FFB800` -> Rose `#EF4444`).
+7. **`createAutonomicBalanceBarBitmap`**: Dual gradient capsule representing Parasympathetic Rest (Teal `#00E5FF` -> Green `#00FFB2`) versus Sympathetic Active tone.
+8. **`createLinearProgressBarBitmap`**: High-performance anti-aliased linear bar for progress telemetry.
+9. **`createMiniMetricGaugeBitmap`**: Mini circular gauges with background track and progress stroke for high-density combined widgets.
 
-All bitmaps are rendered at 2.5x density scale with `Paint.ANTI_ALIAS_FLAG`, ensuring crisp rendering on high-DPI displays (including Google Pixel 9 Pro 120Hz LTPO and Samsung Galaxy Z Fold 7 inner/outer displays).
+All bitmaps are rendered with `Paint.ANTI_ALIAS_FLAG` at device-scaled pixel densities, ensuring crisp rendering on high-DPI displays (including Google Pixel 9 Pro 120Hz LTPO and Samsung Galaxy Z Fold 7 inner/outer displays).
 
 ---
 
-## 3. Interactive Quick Actions (`WidgetActionCallbacks.kt`)
+## 3. Responsive Multi-Size Support (`SizeMode.Responsive`)
+
+All 7 widgets implement `SizeMode.Responsive` targeting:
+- `SMALL_BOX` (120.dp x 100.dp): Compact 2x2 grid cell with high-contrast focal metrics.
+- `MEDIUM_BOX` (240.dp x 100.dp): Standard 4x2 widget row balancing hero gauges with structured metadata pills and interactive buttons.
+- `LARGE_BOX` (240.dp x 200.dp): Comprehensive 4x4 card displaying extended hypnograms, itemized lists, and multi-stream queues.
+
+Each widget dynamically selects its layout based on `LocalSize.current.width` and `LocalSize.current.height`.
 
 Android Glance widgets feature 1-tap direct logging without needing to open the app:
 
