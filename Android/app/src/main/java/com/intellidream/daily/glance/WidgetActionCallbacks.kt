@@ -82,3 +82,15 @@ class AdjustLedgerActionCallback : ActionCallback {
         val DeltaKey = ActionParameters.Key<Double>("delta")
     }
 }
+
+object WidgetUpdateHelper {
+    suspend fun updateAllWidgets(context: Context) {
+        runCatching { DailyBubblesGlanceWidget().updateAll(context) }
+        runCatching { DailySmokesGlanceWidget().updateAll(context) }
+        runCatching { DailySleepGlanceWidget().updateAll(context) }
+        runCatching { DailyStressGlanceWidget().updateAll(context) }
+        runCatching { DailyMoneyGlanceWidget().updateAll(context) }
+        runCatching { DailyTagdosGlanceWidget().updateAll(context) }
+        runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+    }
+}

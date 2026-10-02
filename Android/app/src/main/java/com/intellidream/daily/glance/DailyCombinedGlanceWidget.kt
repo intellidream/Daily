@@ -17,6 +17,7 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
@@ -117,7 +118,8 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                 Box(
                     modifier = GlanceModifier
                         .fillMaxSize()
-                        .background(R.drawable.widget_background)
+                        .appWidgetBackground()
+                        .background(ImageProvider(R.drawable.widget_background))
                         .cornerRadius(22.dp)
                         .clickable(actionStartActivity(launchIntent))
                 ) {

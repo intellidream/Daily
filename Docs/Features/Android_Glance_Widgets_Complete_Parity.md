@@ -107,8 +107,39 @@ val launchIntent = Intent(context, MainActivity::class.java).apply {
 3. **Emulator (`Medium_Phone_API_36.1` / API 36)**:
    - Verified installation of `com.intellidream.daily.debug`.
    - Verified registration of all 7 widget providers via `adb shell dumpsys appwidget`.
+   - Verified live visual rendering on home screen across 4 home screen pages:
+     - `DailyCombinedGlanceWidget` (Daily Executive with hero sleep ring, vital telemetry, water/smokes/stress pills).
+     - `DailySmokesGlanceWidget` (Vector lung health gauge, breakdown indicators, quick-action logging buttons).
+     - `DailyBubblesGlanceWidget` (Hydration progress ring, volume breakdown, quick-log buttons).
+     - `DailySleepGlanceWidget` (Sleep score ring, sleep architecture hypnogram bar, timing telemetry).
+     - `DailyStressGlanceWidget` (Circular stress score ring, autonomic balance tone, HRV telemetry).
+     - `DailyMoneyGlanceWidget` (Net worth in Lei and EUR, deposits, liquid cash/card breakdown, outgoing allocations).
+     - `DailyTagdosGlanceWidget` (Active stream tags, priority badges, scheduled reminders).
    - Verified deep-link routing into Habits (Smokes & Bubbles), Health (Sleep & Stress), Finances (SmartLedger), and Tagdos (Notes).
 4. **Physical Device Deployment**:
    - Deployed and verified live on **Google Pixel 9 Pro** (`caiman` via wireless adb `adb-48231FDAP0011V-Ma9KPE`).
-   - Verified all 7 widgets registered in `dumpsys appwidget` on physical Pixel 9 Pro.
-   - APK built and ready for physical **Samsung Galaxy Z Fold 7**.
+   - Verified all 7 widgets registered and actively rendering RemoteViews in `dumpsys appwidget` on physical Pixel 9 Pro.
+   - APK built and ready for physical **Samsung Galaxy S25 Edge / Z Fold 7**.
+
+---
+
+## 7. Troubleshooting & RemoteViews Inflation Hardening
+
+### "Can't load widget" Root Cause Analysis
+During initial deployment, the Android Launcher reported **"Can't load widget"** when trying to inflate widgets. Logcat revealed the following fatal exception in `RemoteViews`:
+```text
+Caused by: android.content.res.Resources$NotFoundException: Can't find ColorStateList from drawable resource ID #0x7f060035
+    at android.content.res.ResourcesImpl.loadColorStateList(ResourcesImpl.java:1284)
+    at android.content.res.Resources.getColor(Resources.java:1098)
+    at android.content.Context.getColor(Context.java:1227)
+    at android.widget.RemoteViews$ResourceReflectionAction.getParameterValue(RemoteViews.java:3666)
+```
+
+**Why it happened**:
+In Jetpack Glance, `GlanceModifier.background(resId: Int)` is annotated with `@ColorRes`. When passing `R.drawable.widget_background` as a raw integer, Kotlin resolved the `@ColorRes` overload. Jetpack Glance translated this into `RemoteViewsCompat.setViewBackgroundColorResource()`, which instructed the launcher to call `context.getColor(resId)`. Because `widget_background.xml` is a `<shape>` drawable rather than a `<color>`, Android threw `Resources$NotFoundException`, failing inflation.
+
+### Solution Applied Across All 7 Widgets:
+1. **Explicit `ImageProvider`**: Wrapped the drawable in `ImageProvider(R.drawable.widget_background)`. This instructs Jetpack Glance to invoke `RemoteViewsCompat.setViewBackgroundResource()`, safely dispatching `view.setBackgroundResource(R.drawable.widget_background)` to Android's View system.
+2. **`appWidgetBackground()` Modifier**: Added `GlanceModifier.appWidgetBackground()` to the root container of all 7 widgets (`DailyCombined`, `DailySmokes`, `DailyBubbles`, `DailySleep`, `DailyStress`, `DailyMoney`, `DailyTagdos`). This marks the background element for system outline clipping and smooth transitions on Android 12+.
+3. **`WidgetUpdateHelper`**: Implemented `WidgetUpdateHelper.updateAllWidgets(context)` called during application startup (`DailyApp.onCreate`) and `MainActivity.onResume` to keep all placed widgets synchronized with the Room database.
+4. **Programmatic Pinning Support (`EXTRA_PIN_WIDGET`)**: Added direct support in `MainActivity` for pinning any widget to the home screen via `AppWidgetManager.requestPinAppWidget()`.

@@ -130,6 +130,8 @@ class DailyApp : Application() {
                     }
                 }
             )
+
+            com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@DailyApp)
         }
     }
 

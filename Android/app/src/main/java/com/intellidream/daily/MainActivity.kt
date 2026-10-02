@@ -241,6 +241,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch {
+            com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@MainActivity)
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -249,6 +256,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun processNavigationIntent(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_PIN_WIDGET)?.let { widgetType ->
+            val appWidgetManager = getSystemService(android.appwidget.AppWidgetManager::class.java)
+            if (appWidgetManager?.isRequestPinAppWidgetSupported == true) {
+                val receiverClass = when (widgetType.lowercase()) {
+                    "smokes" -> com.intellidream.daily.glance.DailySmokesGlanceReceiver::class.java
+                    "bubbles" -> com.intellidream.daily.glance.DailyBubblesGlanceReceiver::class.java
+                    "sleep" -> com.intellidream.daily.glance.DailySleepGlanceReceiver::class.java
+                    "stress" -> com.intellidream.daily.glance.DailyStressGlanceReceiver::class.java
+                    "money" -> com.intellidream.daily.glance.DailyMoneyGlanceReceiver::class.java
+                    "tagdos" -> com.intellidream.daily.glance.DailyTagdosGlanceReceiver::class.java
+                    else -> com.intellidream.daily.glance.DailyCombinedGlanceReceiver::class.java
+                }
+                val provider = android.content.ComponentName(this, receiverClass)
+                appWidgetManager.requestPinAppWidget(provider, null, null)
+            }
+        }
+
         val tabKey = intent?.getStringExtra(EXTRA_TARGET_TAB) ?: return
         val target = when (tabKey) {
             TAB_HEALTH -> NavigationTab.Health
@@ -295,6 +319,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_TARGET_TAB = "extra_target_tab"
         const val EXTRA_HEALTH_SUBTAB = "extra_health_subtab"
         const val EXTRA_HABIT_SUBTAB = "extra_habit_subtab"
+        const val EXTRA_PIN_WIDGET = "extra_pin_widget"
 
         const val TAB_DASHBOARD = "dashboard"
         const val TAB_HEALTH = "health"
