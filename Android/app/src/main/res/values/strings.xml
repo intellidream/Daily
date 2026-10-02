@@ -5,4 +5,14 @@
     <string name="widget_combined_description">At-a-glance health, habits, and stress overview</string>
     <string name="widget_stress_title">Daily Stress Studio</string>
     <string name="widget_stress_description">Real-time autonomic stress score and monkey mood</string>
+    <string name="widget_bubbles_title">Bubbles Hydration</string>
+    <string name="widget_bubbles_description">Track daily water intake, goal progress, and drinks breakdown</string>
+    <string name="widget_smokes_title">Smokes &amp; Cravings</string>
+    <string name="widget_smokes_description">Smoking cessation tracker, elapsed time, and lung health gauge</string>
+    <string name="widget_sleep_title">Sleep Studio</string>
+    <string name="widget_sleep_description">Sleep recovery score, duration, stages, and quality verdict</string>
+    <string name="widget_money_title">Smart Ledger Finances</string>
+    <string name="widget_money_description">Financial net worth, monthly cash flow, and spending ledger</string>
+    <string name="widget_tagdos_title">TagDoS Notes &amp; Tasks</string>
+    <string name="widget_tagdos_description">Active task pills, mental streams, and quick memos</string>
 </resources>

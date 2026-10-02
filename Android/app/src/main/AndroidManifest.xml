@@ -33,6 +33,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -85,6 +86,60 @@
                 android:resource="@xml/daily_stress_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".glance.DailyBubblesGlanceReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_bubbles_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".glance.DailySmokesGlanceReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_smokes_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".glance.DailySleepGlanceReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_sleep_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".glance.DailyMoneyGlanceReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_money_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".glance.DailyTagdosGlanceReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_tagdos_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

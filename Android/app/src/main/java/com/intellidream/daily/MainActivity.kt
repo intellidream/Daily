@@ -75,11 +75,14 @@ class MainActivity : ComponentActivity() {
     private val newsRepository by lazy { DailyApp.instance.newsRepository }
     private val smartBriefingRepository by lazy { DailyApp.instance.smartBriefingRepository }
 
+    private var selectedTab by mutableStateOf(NavigationTab.Dashboard)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         handleIntentData(intent)
+        processNavigationIntent(intent)
 
         setContent {
             val authState by authRepository.sessionState.collectAsState()
@@ -222,6 +225,8 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     },
+                                    selectedTab = selectedTab,
+                                    onSelectTab = { selectedTab = it },
                                     onOpenCustomize = { showCustomize = true },
                                     onOpenSettings = { showSettings = true },
                                     onUpdateSettings = { transform ->
@@ -238,7 +243,40 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleIntentData(intent)
+        processNavigationIntent(intent)
+    }
+
+    private fun processNavigationIntent(intent: Intent?) {
+        val tabKey = intent?.getStringExtra(EXTRA_TARGET_TAB) ?: return
+        val target = when (tabKey) {
+            TAB_HEALTH -> NavigationTab.Health
+            TAB_HABITS -> NavigationTab.Habits
+            TAB_FINANCES -> NavigationTab.Finances
+            TAB_TAGDOS -> NavigationTab.Tagdos
+            TAB_WEATHER -> NavigationTab.Weather
+            TAB_NEWS -> NavigationTab.News
+            else -> NavigationTab.Dashboard
+        }
+        selectedTab = target
+
+        intent.getStringExtra(EXTRA_HEALTH_SUBTAB)?.let { sub ->
+            when (sub) {
+                "stress" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.STRESS)
+                "sleep" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.SLEEP)
+                "vitals" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.VITALS)
+                "trends" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.TRENDS)
+                else -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.OVERVIEW)
+            }
+        }
+
+        intent.getStringExtra(EXTRA_HABIT_SUBTAB)?.let { sub ->
+            when (sub) {
+                "smokes" -> habitsRepository.switchHabit(com.intellidream.daily.model.HabitType.SMOKES)
+                else -> habitsRepository.switchHabit(com.intellidream.daily.model.HabitType.WATER)
+            }
+        }
     }
 
     private fun handleIntentData(intent: Intent?) {
@@ -251,6 +289,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_TARGET_TAB = "extra_target_tab"
+        const val EXTRA_HEALTH_SUBTAB = "extra_health_subtab"
+        const val EXTRA_HABIT_SUBTAB = "extra_habit_subtab"
+
+        const val TAB_DASHBOARD = "dashboard"
+        const val TAB_HEALTH = "health"
+        const val TAB_HABITS = "habits"
+        const val TAB_FINANCES = "finances"
+        const val TAB_TAGDOS = "tagdos"
+        const val TAB_WEATHER = "weather"
+        const val TAB_NEWS = "news"
     }
 }
 
@@ -278,14 +330,14 @@ fun DailyRootScreen(
     onRefreshWeather: () -> Unit,
     onSelectManualLocation: (Double, Double, String) -> Unit,
     onResetToAutoLocation: () -> Unit,
+    selectedTab: NavigationTab = NavigationTab.Dashboard,
+    onSelectTab: (NavigationTab) -> Unit = {},
     onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit = {}
 ) {
-    var selectedTab by remember { mutableStateOf(NavigationTab.Dashboard) }
-
     BackHandler(enabled = selectedTab != NavigationTab.Dashboard) {
-        selectedTab = NavigationTab.Dashboard
+        onSelectTab(NavigationTab.Dashboard)
     }
 
     LaunchedEffect(userProfile) {
@@ -337,12 +389,12 @@ fun DailyRootScreen(
                         onOpenCustomize = onOpenCustomize,
                         onOpenSettings = onOpenSettings,
                         onUpdateSettings = onUpdateSettings,
-                        onNavigateToHabits = { selectedTab = NavigationTab.Habits },
-                        onNavigateToHealth = { selectedTab = NavigationTab.Health },
-                        onNavigateToFinances = { selectedTab = NavigationTab.Finances },
-                        onNavigateToTagdos = { selectedTab = NavigationTab.Tagdos },
-                        onNavigateToNews = { selectedTab = NavigationTab.News },
-                        onNavigateToWeather = { selectedTab = NavigationTab.Weather },
+                        onNavigateToHabits = { onSelectTab(NavigationTab.Habits) },
+                        onNavigateToHealth = { onSelectTab(NavigationTab.Health) },
+                        onNavigateToFinances = { onSelectTab(NavigationTab.Finances) },
+                        onNavigateToTagdos = { onSelectTab(NavigationTab.Tagdos) },
+                        onNavigateToNews = { onSelectTab(NavigationTab.News) },
+                        onNavigateToWeather = { onSelectTab(NavigationTab.Weather) },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                     )
                 }
@@ -358,7 +410,7 @@ fun DailyRootScreen(
                         errorMessage = weatherError,
                         settings = settings,
                         weatherRepository = weatherRepository,
-                        onNavigateBack = { selectedTab = NavigationTab.Dashboard },
+                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
                         onRefreshWeather = onRefreshWeather,
                         onSelectManualLocation = onSelectManualLocation,
                         onResetToAutoLocation = onResetToAutoLocation
@@ -368,32 +420,32 @@ fun DailyRootScreen(
                     com.intellidream.daily.presentation.finances.FinancesMainView(
                         smartLedgerRepository = smartLedgerRepository,
                         financeDataRepository = financeDataRepository,
-                        onNavigateBack = { selectedTab = NavigationTab.Dashboard }
+                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
                     )
                 }
                 NavigationTab.Habits -> {
                     com.intellidream.daily.presentation.habits.HabitsMainView(
                         repository = habitsRepository,
-                        onNavigateBack = { selectedTab = NavigationTab.Dashboard }
+                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
                     )
                 }
                 NavigationTab.Health -> {
                     com.intellidream.daily.presentation.health.HealthMainView(
                         repository = healthRepository,
-                        onNavigateBack = { selectedTab = NavigationTab.Dashboard }
+                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
                     )
                 }
                 NavigationTab.Tagdos -> {
                     com.intellidream.daily.presentation.tagdos.TagdosNotesHubView(
                         repository = tagdosRepository,
-                        onNavigateBack = { selectedTab = NavigationTab.Dashboard }
+                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
                     )
                 }
                 NavigationTab.News -> {
                     com.intellidream.daily.presentation.news.NewsFeedView(
                         repository = newsRepository,
                         settings = settings,
-                        onNavigateBack = { selectedTab = NavigationTab.Dashboard }
+                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
                     )
                 }
                 else -> {
@@ -464,7 +516,7 @@ fun DailyRootScreen(
         // Floating Glass Capsule Navigation at the bottom
         FloatingGlassCapsule(
             selectedTab = selectedTab,
-            onTabSelected = { selectedTab = it },
+            onTabSelected = onSelectTab,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()

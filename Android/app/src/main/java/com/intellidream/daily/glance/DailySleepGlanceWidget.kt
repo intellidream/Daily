@@ -11,6 +11,7 @@ import androidx.glance.GlanceModifier
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
@@ -31,68 +32,54 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
-import com.intellidream.daily.model.StressLevel
+import com.intellidream.daily.model.SleepSession
 
-class DailyStressGlanceWidget : GlanceAppWidget() {
+class DailySleepGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
 
-        val stressAnalysis = app?.healthRepository?.stressAnalysis?.value
-        val stressScore = stressAnalysis?.currentScore
-        val stressLevel = app?.healthRepository?.currentStressLevel?.value
-        val monkeyMood = stressAnalysis?.monkeyMood
-        val monkeyEmoji = monkeyMood?.emoji ?: "🐵"
-        val monkeyName = monkeyMood?.displayName ?: "Stress Monitor"
+        val sleepSession = app?.healthRepository?.primarySleepSession?.value
+        val verdict = app?.healthRepository?.sleepRecoveryVerdict?.value
 
         provideContent {
-            StressWidgetContent(
+            SleepWidgetContent(
                 context = context,
-                stressScore = stressScore,
-                stressLevel = stressLevel,
-                monkeyEmoji = monkeyEmoji,
-                monkeyName = monkeyName
+                session = sleepSession,
+                verdict = verdict
             )
         }
     }
 
     @Composable
-    private fun StressWidgetContent(
+    private fun SleepWidgetContent(
         context: Context,
-        stressScore: Int?,
-        stressLevel: StressLevel?,
-        monkeyEmoji: String,
-        monkeyName: String
+        session: SleepSession?,
+        verdict: com.intellidream.daily.model.SleepRecoveryVerdict?
     ) {
         val launchIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HEALTH)
-            putExtra(MainActivity.EXTRA_HEALTH_SUBTAB, "stress")
+            putExtra(MainActivity.EXTRA_HEALTH_SUBTAB, "sleep")
         }
 
-        val levelColor = try {
-            if (stressLevel != null) {
-                Color(android.graphics.Color.parseColor(stressLevel.hexColor))
-            } else {
-                Color(0xFF8E9BAE)
-            }
-        } catch (_: Exception) {
-            Color(0xFFFFB703)
-        }
+        val hasData = session != null && session.sleepScore > 0
+        val score = session?.takeIf { it.sleepScore > 0 }?.sleepScore
+        val durationFormatted = session?.totalAsleepFormatted ?: "--"
+        val efficiency = session?.takeIf { it.sleepScore > 0 }?.efficiencyPercent
 
-        val protocol = when {
-            stressScore == null -> "Sync biometrics to measure stress"
-            stressScore > 75 -> "Box Breathing (4-4-4-4)"
-            stressScore > 50 -> "Take a 3-min screen break"
-            stressScore > 25 -> "Hydrate & steady rhythm"
-            else -> "Peak recovery & flow state"
-        }
+        val accentIndigo = Color(0xFF8B5CF6)
+        val accentCyan = Color(0xFF00E5FF)
+        val verdictColor = verdict?.let {
+            runCatching { Color(android.graphics.Color.parseColor(it.status.hexColor)) }.getOrNull()
+        } ?: if (hasData) accentIndigo else Color(0xFF8E9BAE)
+        val verdictTitle = verdict?.status?.displayName?.uppercase(java.util.Locale.US) ?: if (hasData) "RECOVERY" else "NO DATA"
 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
                 .cornerRadius(22.dp)
-                .background(Color(0xFF0D1520))
+                .background(Color(0xFF0C0E1E))
                 .padding(14.dp)
                 .clickable(actionStartActivity(launchIntent))
         ) {
@@ -106,9 +93,9 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "$monkeyEmoji STRESS STUDIO",
+                        text = "🌙 SLEEP STUDIO",
                         style = TextStyle(
-                            color = ColorProvider(levelColor),
+                            color = ColorProvider(accentIndigo),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -117,13 +104,13 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .cornerRadius(12.dp)
-                            .background(levelColor.copy(alpha = 0.20f))
+                            .background(verdictColor.copy(alpha = 0.20f))
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = stressLevel?.displayName ?: "NO DATA",
+                            text = verdictTitle,
                             style = TextStyle(
-                                color = ColorProvider(levelColor),
+                                color = ColorProvider(verdictColor),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -133,19 +120,19 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
 
                 Spacer(modifier = GlanceModifier.height(8.dp))
 
-                // Score Display
+                // Score / Duration Display
                 Row(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Text(
-                        text = if (stressScore != null) "$stressScore" else "--",
+                        text = if (score != null) "$score" else "--",
                         style = TextStyle(
                             color = ColorProvider(Color.White),
-                            fontSize = 32.sp,
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
-                    if (stressScore != null) {
+                    if (score != null) {
                         Spacer(modifier = GlanceModifier.width(4.dp))
                         Text(
                             text = "/ 100",
@@ -156,25 +143,56 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             )
                         )
                     }
+                    Spacer(modifier = GlanceModifier.defaultWeight())
+                    Text(
+                        text = if (efficiency != null) "$durationFormatted · $efficiency% eff" else durationFormatted,
+                        style = TextStyle(
+                            color = ColorProvider(accentCyan),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
                 }
 
-                Spacer(modifier = GlanceModifier.height(6.dp))
+                Spacer(modifier = GlanceModifier.height(8.dp))
 
-                // Advice & protocol
+                // Progress Indicator
+                val progress = if (score != null) (score.toFloat() / 100f).coerceIn(0f, 1f) else 0f
+                LinearProgressIndicator(
+                    progress = progress,
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .cornerRadius(3.dp),
+                    color = ColorProvider(accentIndigo),
+                    backgroundColor = ColorProvider(Color.White.copy(alpha = 0.12f))
+                )
+
+                Spacer(modifier = GlanceModifier.height(8.dp))
+
+                // Footer breakdown / advice
+                val subtitle = if (session != null && hasData) {
+                    val deepFormatted = session.deepFormatted
+                    val remFormatted = session.remFormatted
+                    "Deep: $deepFormatted · REM: $remFormatted"
+                } else {
+                    "Wear smartwatch overnight to record sleep"
+                }
+
                 Text(
-                    text = if (stressScore != null) "$monkeyName: $protocol" else "Wear smartwatch: $protocol",
+                    text = subtitle,
                     style = TextStyle(
-                        color = ColorProvider(Color(0xFFE2E8F0)),
-                        fontSize = 11.sp,
+                        color = ColorProvider(Color(0xFF8E9BAE)),
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Normal
                     ),
-                    maxLines = 2
+                    maxLines = 1
                 )
             }
         }
     }
 }
 
-class DailyStressGlanceReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = DailyStressGlanceWidget()
+class DailySleepGlanceReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = DailySleepGlanceWidget()
 }

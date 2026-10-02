@@ -31,68 +31,56 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
-import com.intellidream.daily.model.StressLevel
+import com.intellidream.daily.model.ParsedSmartLedger
 
-class DailyStressGlanceWidget : GlanceAppWidget() {
+class DailyMoneyGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
 
-        val stressAnalysis = app?.healthRepository?.stressAnalysis?.value
-        val stressScore = stressAnalysis?.currentScore
-        val stressLevel = app?.healthRepository?.currentStressLevel?.value
-        val monkeyMood = stressAnalysis?.monkeyMood
-        val monkeyEmoji = monkeyMood?.emoji ?: "🐵"
-        val monkeyName = monkeyMood?.displayName ?: "Stress Monitor"
+        val parsedLedger = app?.smartLedgerRepository?.parsedLedger?.value
 
         provideContent {
-            StressWidgetContent(
+            MoneyWidgetContent(
                 context = context,
-                stressScore = stressScore,
-                stressLevel = stressLevel,
-                monkeyEmoji = monkeyEmoji,
-                monkeyName = monkeyName
+                ledger = parsedLedger
             )
         }
     }
 
     @Composable
-    private fun StressWidgetContent(
+    private fun MoneyWidgetContent(
         context: Context,
-        stressScore: Int?,
-        stressLevel: StressLevel?,
-        monkeyEmoji: String,
-        monkeyName: String
+        ledger: ParsedSmartLedger?
     ) {
         val launchIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HEALTH)
-            putExtra(MainActivity.EXTRA_HEALTH_SUBTAB, "stress")
+            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_FINANCES)
         }
 
-        val levelColor = try {
-            if (stressLevel != null) {
-                Color(android.graphics.Color.parseColor(stressLevel.hexColor))
-            } else {
-                Color(0xFF8E9BAE)
-            }
-        } catch (_: Exception) {
-            Color(0xFFFFB703)
-        }
+        val netWorth = ledger?.netWorth ?: 0.0
+        val netWorthEUR = ledger?.formattedNetWorthEUR ?: "~0 €"
+        val formattedNetWorth = ledger?.formattedBadge(netWorth) ?: "0 Lei"
+        val incoming = ledger?.incomingTotal ?: 0.0
+        val outgoing = ledger?.outgoingTotal ?: 0.0
 
-        val protocol = when {
-            stressScore == null -> "Sync biometrics to measure stress"
-            stressScore > 75 -> "Box Breathing (4-4-4-4)"
-            stressScore > 50 -> "Take a 3-min screen break"
-            stressScore > 25 -> "Hydrate & steady rhythm"
-            else -> "Peak recovery & flow state"
-        }
+        val accentGreen = Color(0xFF00E676)
+        val accentBlue = Color(0xFF3B82F6)
+        val accentOrange = Color(0xFFFF7043)
+
+        // Find top 2 outgoing expense items
+        val outgoingSection = ledger?.sections?.firstOrNull { it.name.equals("Outgoing", ignoreCase = true) }
+        val topItems = outgoingSection?.items
+            ?.filter { !it.isPureNote && it.rawAmount > 0 }
+            ?.sortedByDescending { it.rawAmount }
+            ?.take(2)
+            ?: emptyList()
 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
                 .cornerRadius(22.dp)
-                .background(Color(0xFF0D1520))
+                .background(Color(0xFF07141C))
                 .padding(14.dp)
                 .clickable(actionStartActivity(launchIntent))
         ) {
@@ -106,9 +94,9 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "$monkeyEmoji STRESS STUDIO",
+                        text = "💳 SMART LEDGER",
                         style = TextStyle(
-                            color = ColorProvider(levelColor),
+                            color = ColorProvider(accentGreen),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -117,13 +105,13 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .cornerRadius(12.dp)
-                            .background(levelColor.copy(alpha = 0.20f))
+                            .background(accentGreen.copy(alpha = 0.18f))
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = stressLevel?.displayName ?: "NO DATA",
+                            text = netWorthEUR,
                             style = TextStyle(
-                                color = ColorProvider(levelColor),
+                                color = ColorProvider(accentGreen),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -133,48 +121,69 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
 
                 Spacer(modifier = GlanceModifier.height(8.dp))
 
-                // Score Display
+                // Net Worth Display
                 Row(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Text(
-                        text = if (stressScore != null) "$stressScore" else "--",
+                        text = formattedNetWorth,
                         style = TextStyle(
                             color = ColorProvider(Color.White),
-                            fontSize = 32.sp,
+                            fontSize = 26.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
-                    if (stressScore != null) {
-                        Spacer(modifier = GlanceModifier.width(4.dp))
-                        Text(
-                            text = "/ 100",
-                            style = TextStyle(
-                                color = ColorProvider(Color(0xFF8E9BAE)),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Normal
-                            )
+                }
+
+                Spacer(modifier = GlanceModifier.height(8.dp))
+
+                // Cash Flow Row: In vs Out
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "In: +${incoming.toInt()}k",
+                        style = TextStyle(
+                            color = ColorProvider(accentBlue),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
                         )
-                    }
+                    )
+                    Spacer(modifier = GlanceModifier.width(12.dp))
+                    Text(
+                        text = "Out: -${outgoing.toInt()}k",
+                        style = TextStyle(
+                            color = ColorProvider(accentOrange),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
                 }
 
                 Spacer(modifier = GlanceModifier.height(6.dp))
 
-                // Advice & protocol
+                // Footer top spending allocations
+                val subtitle = if (topItems.isNotEmpty()) {
+                    topItems.joinToString(" · ") { "${it.displayName}: ${it.formattedRawAmount}" }
+                } else {
+                    "Tap to edit ledger & allocate budget"
+                }
+
                 Text(
-                    text = if (stressScore != null) "$monkeyName: $protocol" else "Wear smartwatch: $protocol",
+                    text = subtitle,
                     style = TextStyle(
-                        color = ColorProvider(Color(0xFFE2E8F0)),
-                        fontSize = 11.sp,
+                        color = ColorProvider(Color(0xFF8E9BAE)),
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Normal
                     ),
-                    maxLines = 2
+                    maxLines = 1
                 )
             }
         }
     }
 }
 
-class DailyStressGlanceReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = DailyStressGlanceWidget()
+class DailyMoneyGlanceReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = DailyMoneyGlanceWidget()
 }
