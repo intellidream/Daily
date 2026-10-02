@@ -1,7 +1,7 @@
 # Android 16/17 Parity, Biometric Integrity, and Foldable Optimization
 
 ## Overview
-This document outlines the architectural enhancements and parity updates delivered to the native Android app (`com.intellidream.daily`), bringing it to 1:1 functional and visual alignment with the iOS gold standard while adhering to modern Android 16/17 standards and foldable responsiveness (specifically optimized for Google Pixel 9 Pro and Samsung Galaxy Z Fold 7).
+This document outlines the architectural enhancements and parity updates delivered to the native Android app (`com.intellidream.daily`), bringing it to 1:1 functional and visual alignment with the iOS gold standard while adhering to modern Android 16/17 standards and foldable responsiveness (specifically optimized for Google Pixel 9 Pro and Samsung Galaxy Z Fold 8 "RADAR").
 
 ---
 
@@ -86,7 +86,7 @@ Previously, when biometric telemetry (HRV, heart rate, sleep) was absent (such a
    - Added `android:enableOnBackInvokedCallback="true"` to `<application>` in `AndroidManifest.xml`.
    - Native compose `BackHandler` hooks seamlessly into Android 14/15/16 predictive back gesture transitions.
 
-2. **Foldable & Tablet Responsiveness (Samsung Galaxy Z Fold 7)**:
+2. **Foldable & Tablet Responsiveness (Samsung Galaxy Z Fold 8 "RADAR")**:
    - In `MainActivity.kt`, the root tab container (`DailyRootScreen`) wraps all main screen views with:
      ```kotlin
      Box(
@@ -103,7 +103,7 @@ Previously, when biometric telemetry (HRV, heart rate, sleep) was absent (such a
      }
      ```
    - On standard phones (e.g., Pixel 9 Pro ~412dp), content spans 100% width naturally.
-   - On unfolded foldables (Galaxy Z Fold 7 ~800dp) and tablets, the interface remains centered, preventing excessive horizontal stretch and maintaining optimal typography and card proportions.
+   - On unfolded foldables (Galaxy Z Fold 8 ~800dp) and tablets, the interface remains centered, preventing excessive horizontal stretch and maintaining optimal typography and card proportions.
    - Floating Glass Capsule navigation remains centered at `Alignment.BottomCenter` with `wrapContentWidth()`.
 
 ---
@@ -115,5 +115,5 @@ Previously, when biometric telemetry (HRV, heart rate, sleep) was absent (such a
 | **Gradle Unit Tests** | `core-health:test`, `core-model:test` | **PASS** (100%) |
 | **Android Emulator** | `Medium_Phone_API_36.1` (Android 16 API 36) | **PASS** (Verified visually, screenshots captured) |
 | **Google Pixel 9 Pro** | Physical Device (`caiman` / wireless adb) | **PASS** (Installed `app-debug.apk` & launched live) |
-| **Samsung Galaxy Z Fold 7** | Physical Device (`SM_F966B`) | Build verified (`app-debug.apk` ready for pairing/push) |
+| **Samsung Galaxy Z Fold 8 ("RADAR")** | Physical Device (`SM-F971B` / wireless adb) | **PASS** (Installed `app-debug.apk` & launched live) |
 | **iOS Core & App** | Gold Standard (`iOS/`, `DailyCore/`, `DailyWidgets/`) | **0 bytes touched** (Zero regressions) |

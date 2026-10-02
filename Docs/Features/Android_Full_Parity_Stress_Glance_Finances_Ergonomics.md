@@ -5,7 +5,7 @@
 This release brings the native Android app (`com.intellidream.daily`) to 1:1 visual, architectural, and ergonomic parity with the iOS gold standard (`DailyCore` & iOS app), adhering strictly to:
 - **Zero iOS file modifications** (100% preservation of iOS and DailyCore sources).
 - **Zero regressions** to Android Room entities, DAOs, Supabase auth/sync, and Health Connect integrations.
-- **Simulator First, Physical Device Delivery**: Rigorously verified on Android emulator (`Medium_Phone_API_36.1`), built and deployed live via `adb` to physical **Samsung Galaxy Z Fold 7** (`SM_F966B`).
+- **Simulator First, Physical Device Delivery**: Rigorously verified on Android emulator (`Medium_Phone_API_36.1`), built and deployed live via `adb` to physical **Google Pixel 9 Pro** and **Samsung Galaxy Z Fold 8 ("RADAR")**.
 
 ---
 
@@ -115,5 +115,5 @@ This release brings the native Android app (`com.intellidream.daily`) to 1:1 vis
 | Gradle Test Suite | `./gradlew test` | **PASSED** | 120 actionable tasks, 0 failures across all modules |
 | Debug APK Build | `./gradlew assembleDebug` | **PASSED** | Generated `app-debug.apk` cleanly |
 | Android Emulator | `emulator-5558` | **VERIFIED** | Stress Studio, 4-col Health card, Finances steppers, Tagdos swipe, Glance providers |
-| Samsung Galaxy Z Fold 7 | `SM_F966B` (adb wireless) | **DEPLOYED & VERIFIED** | Streamed install Success, PID running, 0 crashes in logcat |
-| Google Pixel 9 Pro | Physical delivery target | **READY** | Build packaged and verified for immediate deployment |
+| Samsung Galaxy Z Fold 8 ("RADAR") | `SM-F971B` (adb wireless) | **DEPLOYED & VERIFIED** | Streamed install Success, PID running, 0 crashes in logcat |
+| Google Pixel 9 Pro | `caiman` (adb wireless) | **DEPLOYED & VERIFIED** | Streamed install Success, PID running, 0 crashes in logcat |

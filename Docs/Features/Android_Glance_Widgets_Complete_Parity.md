@@ -40,7 +40,7 @@ Because Jetpack Glance does not support arbitrary custom canvas composables in s
 8. **`createLinearProgressBarBitmap`**: High-performance anti-aliased linear bar for progress telemetry.
 9. **`createMiniMetricGaugeBitmap`**: Mini circular gauges with background track and progress stroke for high-density combined widgets.
 
-All bitmaps are rendered with `Paint.ANTI_ALIAS_FLAG` at device-scaled pixel densities, ensuring crisp rendering on high-DPI displays (including Google Pixel 9 Pro 120Hz LTPO and Samsung Galaxy Z Fold 7 inner/outer displays).
+All bitmaps are rendered with `Paint.ANTI_ALIAS_FLAG` at device-scaled pixel densities, ensuring crisp rendering on high-DPI displays (including Google Pixel 9 Pro 120Hz LTPO and Samsung Galaxy Z Fold 8 inner/outer displays).
 
 ---
 
@@ -118,8 +118,9 @@ val launchIntent = Intent(context, MainActivity::class.java).apply {
    - Verified deep-link routing into Habits (Smokes & Bubbles), Health (Sleep & Stress), Finances (SmartLedger), and Tagdos (Notes).
 4. **Physical Device Deployment**:
    - Deployed and verified live on **Google Pixel 9 Pro** (`caiman` via wireless adb `adb-48231FDAP0011V-Ma9KPE`).
-   - Verified all 7 widgets registered and actively rendering RemoteViews in `dumpsys appwidget` on physical Pixel 9 Pro.
-   - APK built and ready for physical **Samsung Galaxy S25 Edge / Z Fold 7**.
+   - Deployed and verified live on **Samsung Galaxy Z Fold 8 ("RADAR")** (`SM-F971B` via wireless adb `192.168.3.64:43525`).
+   - Verified all 7 widgets registered and actively recognized in `dumpsys appwidget` across physical devices.
+   - APK built and ready for physical **Samsung Galaxy S25 Edge** (if connected). Note: Galaxy Z Fold 7 has been retired.
 
 ---
 
