@@ -401,9 +401,11 @@ private fun StreamPipelineRow(stream: TagDoStream, maxPills: Int) {
             }
         }
 
-        // Row of pills
+        // Row of pills (horizontally scrollable/swipeable like iOS)
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             val pills = stream.activePills.take(maxPills)
@@ -509,10 +511,12 @@ private fun TallTagdosContent(
                     }
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        stream.activePills.take(4).forEach { pill ->
+                        stream.activePills.take(8).forEach { pill ->
                             MiniPillBadge(pill = pill)
                         }
                     }

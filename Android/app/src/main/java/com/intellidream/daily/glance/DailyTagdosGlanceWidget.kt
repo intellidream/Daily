@@ -2,6 +2,7 @@ package com.intellidream.daily.glance
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -37,8 +38,12 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
 import com.intellidream.daily.R
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class WidgetStream(
     val id: String,
@@ -67,45 +72,71 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val stream1 = WidgetStream(
-            id = "s1",
-            title = "Daily Ops",
-            drivingPillText = "MG",
-            drivingPillType = "standard",
-            activePillsCount = 12,
-            reminderTime = "17:30",
-            pills = listOf(
-                "MG" to "standard",
-                "GM" to "standard",
-                "TG" to "standard",
-                "FSH" to "standard",
-                "LDL" to "standard",
-                "C\$T" to "financial",
-                "DUB" to "standard",
-                "14" to "temporalOrMetric"
-            )
-        )
+        val app = runCatching { DailyApp.instance }.getOrNull()
+        val repoStreams = app?.tagdosRepository?.streams?.value ?: emptyList()
 
-        val stream2 = WidgetStream(
-            id = "s2",
-            title = "Work & Code",
-            drivingPillText = "WRK",
-            drivingPillType = "standard",
-            activePillsCount = 8,
-            reminderTime = "11:00",
-            pills = listOf(
-                "WRK" to "standard",
-                "PRJ" to "standard",
-                "REV" to "standard",
-                "MET" to "standard"
+        val streams = if (repoStreams.isNotEmpty()) {
+            repoStreams.map { s ->
+                val pills = s.activePills.map { it.rawText to it.type.name.lowercase(Locale.ROOT) }
+                val driving = s.drivingPill?.rawText ?: (pills.firstOrNull()?.first ?: "TAG")
+                val drivingType = s.drivingPill?.type?.name?.lowercase(Locale.ROOT) ?: "standard"
+                val reminderTime = s.streamReminder?.let {
+                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
+                }
+                WidgetStream(
+                    id = s.id,
+                    title = s.displayTitle,
+                    drivingPillText = driving,
+                    drivingPillType = drivingType,
+                    activePillsCount = s.activePills.size,
+                    reminderTime = reminderTime,
+                    pills = pills
+                )
+            }
+        } else {
+            val s1 = WidgetStream(
+                id = "s1",
+                title = "Daily Ops",
+                drivingPillText = "MG",
+                drivingPillType = "standard",
+                activePillsCount = 12,
+                reminderTime = "17:30",
+                pills = listOf(
+                    "MG" to "standard",
+                    "GM" to "standard",
+                    "TG" to "standard",
+                    "FSH" to "standard",
+                    "LDL" to "standard",
+                    "C\$T" to "financial",
+                    "DUB" to "standard",
+                    "14" to "temporalOrMetric"
+                )
             )
-        )
+            val s2 = WidgetStream(
+                id = "s2",
+                title = "Work & Code",
+                drivingPillText = "WRK",
+                drivingPillType = "standard",
+                activePillsCount = 8,
+                reminderTime = "11:00",
+                pills = listOf(
+                    "WRK" to "standard",
+                    "PRJ" to "standard",
+                    "REV" to "standard",
+                    "MET" to "standard"
+                )
+            )
+            listOf(s1, s2)
+        }
 
-        val streams = listOf(stream1, stream2)
-        val totalActivePills = 20
-        val nextReminderFormatted = "17:30"
+        val stream1 = streams.firstOrNull() ?: WidgetStream("s1", "Stream 1", "TAG", "standard", 0, null, emptyList())
+        val stream2 = streams.getOrNull(1) ?: WidgetStream("s2", "Stream 2", "TAG", "standard", 0, null, emptyList())
+        val totalActivePills = streams.sumOf { it.activePillsCount }
+        val nextReminderFormatted = streams.firstNotNullOfOrNull { it.reminderTime }
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_TAGDOS"
+            data = Uri.parse("daily://tagdos")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_TAGDOS)
         }
@@ -275,7 +306,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                                 text = driving,
                                 style = TextStyle(
                                     color = ColorProvider(pillColor),
-                                    fontSize = 20.sp,
+                                    fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )

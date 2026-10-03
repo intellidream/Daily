@@ -46,6 +46,7 @@ class HabitsRepository(
 ) {
     var syncHandler: HabitSyncHandler? = null
     var currentUserId: String = "guest"
+    var onWaterLogged: ((amountMl: Double, timestamp: Long) -> Unit)? = null
 
     // State
     private val _selectedDate = MutableStateFlow(getStartOfDay(System.currentTimeMillis()))
@@ -374,6 +375,7 @@ class HabitsRepository(
         scope.launch {
             dao.insert(HabitLogEntity.fromRecord(record))
             syncHandler?.pushLog(record)
+            onWaterLogged?.invoke(totalAmount, logTime)
         }
     }
 

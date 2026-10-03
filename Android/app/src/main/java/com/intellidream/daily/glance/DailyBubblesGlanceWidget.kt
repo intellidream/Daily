@@ -2,6 +2,7 @@ package com.intellidream.daily.glance
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -88,6 +89,8 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
         if (teaMl > 0) breakdown.add(teaMl to android.graphics.Color.parseColor("#84CC16"))
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_HABITS_WATER"
+            data = Uri.parse("daily://habits/bubbles")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HABITS)
             putExtra(MainActivity.EXTRA_HABIT_SUBTAB, "water")
@@ -146,11 +149,11 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
         breakdown: List<Pair<Double, Int>>
     ) {
         val ringBitmap = WidgetVisualGraphics.createMultiDrinkArcBitmap(
-            sizePx = 180,
+            sizePx = 220,
             todayMl = todayMl,
             goalMl = goalMl,
             breakdown = breakdown,
-            strokeWidthPx = 16f
+            strokeWidthPx = 18f
         )
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.DROP,
@@ -182,7 +185,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.Top
                 ) {
                     Box(
-                        modifier = GlanceModifier.size(72.dp),
+                        modifier = GlanceModifier.size(84.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -197,7 +200,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                                 text = "${todayMl.toInt()}",
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 17.sp,
+                                    fontSize = 20.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -205,7 +208,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                                 text = "/ ${goalMl.toInt()} ml",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0x99FFFFFF)),
-                                    fontSize = 9.5.sp,
+                                    fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
@@ -219,13 +222,13 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         modifier = GlanceModifier
                             .background(Color(0x2E00E5FF))
                             .cornerRadius(12.dp)
-                            .padding(horizontal = 5.5.dp, vertical = 2.5.dp)
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
                     ) {
                         Text(
                             text = "${(progressPercent * 100).toInt()}%",
                             style = TextStyle(
                                 color = ColorProvider(Color(0xFF00E5FF)),
-                                fontSize = 9.5.sp,
+                                fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -284,7 +287,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
         breakdown: List<Pair<Double, Int>>
     ) {
         val ringBitmap = WidgetVisualGraphics.createMultiDrinkArcBitmap(
-            sizePx = 215,
+            sizePx = 230,
             todayMl = todayMl,
             goalMl = goalMl,
             breakdown = breakdown,
@@ -300,9 +303,9 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
             modifier = GlanceModifier.fillMaxSize().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Hero: 86x86 Circle
+            // Left Hero: 92x92 Circle
             Box(
-                modifier = GlanceModifier.size(86.dp),
+                modifier = GlanceModifier.size(92.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -317,7 +320,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         text = "${todayMl.toInt()}",
                         style = TextStyle(
                             color = ColorProvider(Color.White),
-                            fontSize = 19.sp,
+                            fontSize = 21.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -432,11 +435,11 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
         breakdown: List<Pair<Double, Int>>
     ) {
         val ringBitmap = WidgetVisualGraphics.createMultiDrinkArcBitmap(
-            sizePx = 270,
+            sizePx = 280,
             todayMl = todayMl,
             goalMl = goalMl,
             breakdown = breakdown,
-            strokeWidthPx = 26f
+            strokeWidthPx = 22f
         )
         val dropIcon = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.DROP,
@@ -484,9 +487,9 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 108x108 Gauge
+                // 118x118 Gauge
                 Box(
-                    modifier = GlanceModifier.size(108.dp),
+                    modifier = GlanceModifier.size(118.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(

@@ -39,11 +39,20 @@ import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -78,7 +87,7 @@ import java.util.Locale
  * Comprehensive interactive hub for TagDoS mental tag pipelines and quick notes.
  * 1:1 Kotlin port of iOS [TagdosNotesHubView.swift].
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TagdosNotesHubView(
     repository: TagdosRepository,
@@ -99,6 +108,19 @@ fun TagdosNotesHubView(
     var showingReminderPicker by remember { mutableStateOf(false) }
     var showingRenameSheet by remember { mutableStateOf(false) }
 
+    val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+    val pullRefreshState = rememberPullToRefreshState()
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            coroutineScope.launch {
+                repository.syncWithSupabase()
+                pullRefreshState.endRefresh()
+            }
+        }
+    }
+
     val isNotesTab = selectedStreamIndex >= streams.size
     val currentStream = if (!isNotesTab && selectedStreamIndex < streams.size) streams[selectedStreamIndex] else null
 
@@ -112,6 +134,7 @@ fun TagdosNotesHubView(
         modifier = Modifier
             .fillMaxSize()
             .background(brush = ThemeColors.backgroundGradient)
+            .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
         Column(
             modifier = Modifier
@@ -414,6 +437,14 @@ fun TagdosNotesHubView(
                 Spacer(modifier = Modifier.height(30.dp))
             }
         }
+
+        // Pull to refresh indicator inside BoxScope
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            containerColor = Color(0xFF0D182E),
+            contentColor = ThemeColors.accentCyan
+        )
     }
 
     // MARK: - Bottom Sheets & Modals

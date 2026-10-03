@@ -26,9 +26,9 @@ import kotlin.math.abs
 fun Modifier.calmBoundedSwipeGesture(
     currentIndex: Int,
     maxIndex: Int,
-    edgeGuardDp: Dp = 60.dp,
-    minDistanceDp: Dp = 50.dp,
-    horizontalDominanceRatio: Float = 1.6f,
+    edgeGuardDp: Dp = 20.dp,
+    minDistanceDp: Dp = 40.dp,
+    horizontalDominanceRatio: Float = 1.4f,
     onIndexChange: (Int) -> Unit
 ): Modifier = composed {
     val haptic = LocalHapticFeedback.current
@@ -41,7 +41,7 @@ fun Modifier.calmBoundedSwipeGesture(
             val down = awaitFirstDown(requireUnconsumed = false)
             val startX = down.position.x
 
-            // Edge guard: ignore if starting too close to screen edges
+            // Edge guard: ignore if starting directly at screen edge (preserves system back gesture)
             if (startX < edgeGuardPx) {
                 return@awaitEachGesture
             }
@@ -61,11 +61,13 @@ fun Modifier.calmBoundedSwipeGesture(
 
                     if (!hasTriggered && abs(totalDx) > minDistancePx) {
                         if (abs(totalDx) > abs(totalDy) * horizontalDominanceRatio) {
-                            if (totalDx > 0 && currentIndex < maxIndex) {
+                            // Swiping left (drag to left, negative dx) -> advances to NEXT tab (+1)
+                            if (totalDx < 0 && currentIndex < maxIndex) {
                                 hasTriggered = true
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onIndexChange(currentIndex + 1)
-                            } else if (totalDx < 0 && currentIndex > 0) {
+                            // Swiping right (drag to right, positive dx) -> goes back to PREVIOUS tab (-1)
+                            } else if (totalDx > 0 && currentIndex > 0) {
                                 hasTriggered = true
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onIndexChange(currentIndex - 1)

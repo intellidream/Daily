@@ -60,7 +60,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.intellidream.daily.database.HabitsRepository
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
@@ -103,10 +109,21 @@ fun HabitsMainView(
     var showGuidanceSheet by remember { mutableStateOf(false) }
     var showDatePickerDialog by remember { mutableStateOf(false) }
     var isTimelineExpanded by remember { mutableStateOf(true) }
+    var selectedHeatmapCell by remember { mutableStateOf<HabitConsistencyCell?>(null) }
 
     val currentLogs = if (activeHabit == HabitType.WATER) waterLogs else smokesLogs
     val isToday = repository.isSelectedDateToday()
     val dateTitle = repository.getFormattedDateTitle()
+
+    val haptic = LocalHapticFeedback.current
+    val pullRefreshState = rememberPullToRefreshState()
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            repository.syncLogs()
+            pullRefreshState.endRefresh()
+        }
+    }
 
     LaunchedEffect(activeHabit) {
         repository.syncLogs()
@@ -114,21 +131,26 @@ fun HabitsMainView(
 
     val habitIndex = if (activeHabit == HabitType.WATER) 0 else 1
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .calmBoundedSwipeGesture(
-                currentIndex = habitIndex,
-                maxIndex = 1,
-                onIndexChange = { newIdx ->
-                    if (newIdx == 0) repository.switchHabit(HabitType.WATER)
-                    else repository.switchHabit(HabitType.SMOKES)
-                }
-            )
-            .padding(horizontal = 20.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .calmBoundedSwipeGesture(
+                    currentIndex = habitIndex,
+                    maxIndex = 1,
+                    onIndexChange = { newIdx ->
+                        if (newIdx == 0) repository.switchHabit(HabitType.WATER)
+                        else repository.switchHabit(HabitType.SMOKES)
+                    }
+                )
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
         Spacer(modifier = Modifier.height(12.dp))
 
         // Top Header Day Navigator & Actions
@@ -626,8 +648,19 @@ fun HabitsMainView(
                             verticalArrangement = Arrangement.Bottom,
                             modifier = Modifier.height(100.dp)
                         ) {
+                            val labelText = if (activeHabit == HabitType.WATER) {
+                                if (day.value >= 1000.0) {
+                                    val liters = day.value / 1000.0
+                                    if (liters % 1.0 == 0.0) "${liters.toInt()}L" else String.format(Locale.US, "%.1fL", liters)
+                                } else {
+                                    "${day.value.toInt()}ml"
+                                }
+                            } else {
+                                "${day.value.toInt()}"
+                            }
+
                             Text(
-                                text = if (activeHabit == HabitType.WATER) "${(day.value / 1000).toInt()}k" else "${day.value.toInt()}",
+                                text = labelText,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ThemeColors.textSecondary
@@ -687,6 +720,48 @@ fun HabitsMainView(
                     )
                 }
 
+                // Interactive detail pill if cell tapped
+                AnimatedVisibility(
+                    visible = selectedHeatmapCell != null,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    selectedHeatmapCell?.let { cell ->
+                        Column {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(ThemeColors.accentCyan.copy(alpha = 0.15f))
+                                    .clickable {
+                                        repository.selectDate(cell.date)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = cell.tooltip,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "View Day →",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ThemeColors.accentCyan
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Heatmap Grid: 16 columns of 7 days
@@ -716,11 +791,20 @@ fun HabitsMainView(
                                     }
                                 }
 
+                                val isSelected = selectedHeatmapCell?.dateKey == cell.dateKey
+
                                 Box(
                                     modifier = Modifier
                                         .size(14.dp)
                                         .clip(RoundedCornerShape(3.dp))
                                         .background(cellColor)
+                                        .then(
+                                            if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(3.dp))
+                                            else Modifier
+                                        )
+                                        .clickable {
+                                            selectedHeatmapCell = if (selectedHeatmapCell?.dateKey == cell.dateKey) null else cell
+                                        }
                                 )
                             }
                         }
@@ -731,6 +815,14 @@ fun HabitsMainView(
 
         Spacer(modifier = Modifier.height(100.dp)) // Space for bottom navigation capsule
     }
+
+    PullToRefreshContainer(
+        state = pullRefreshState,
+        modifier = Modifier.align(Alignment.TopCenter),
+        containerColor = Color(0xFF0D182E),
+        contentColor = ThemeColors.accentCyan
+    )
+}
 
     // Guidance Sheet Modal
     if (showGuidanceSheet) {

@@ -2,6 +2,7 @@ package com.intellidream.daily.glance
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -94,6 +95,8 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
         val formattedTime = WidgetVisualGraphics.formatCompactTimeAgo(lastSmokeDate)
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_HABITS_SMOKES"
+            data = Uri.parse("daily://habits/smokes")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HABITS)
             putExtra(MainActivity.EXTRA_HABIT_SUBTAB, "smokes")
@@ -154,11 +157,11 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
     ) {
         val progress = if (baseline > 0) min(todayTotal.toFloat() / baseline.toFloat(), 1f) else 0f
         val ringBitmap = WidgetVisualGraphics.createCircularProgressRingBitmap(
-            sizePx = 180,
+            sizePx = 220,
             progress = progress,
             ringColorInt = ringColorInt,
             startColorInt = android.graphics.Color.parseColor("#00E676"),
-            strokeWidthPx = 16f
+            strokeWidthPx = 18f
         )
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.FLAME,
@@ -190,7 +193,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.Top
                 ) {
                     Box(
-                        modifier = GlanceModifier.size(72.dp),
+                        modifier = GlanceModifier.size(84.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -205,7 +208,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                                 text = "$todayTotal",
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 17.sp,
+                                    fontSize = 21.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -213,7 +216,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                                 text = "/ $baseline",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0x99FFFFFF)),
-                                    fontSize = 9.5.sp,
+                                    fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
@@ -280,14 +283,14 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
     ) {
         val progress = if (baseline > 0) min(todayTotal.toFloat() / baseline.toFloat(), 1f) else 0f
         val ringBitmap = WidgetVisualGraphics.createCircularProgressRingBitmap(
-            sizePx = 215,
+            sizePx = 230,
             progress = progress,
             ringColorInt = ringColorInt,
             strokeWidthPx = 18f
         )
         val lungsBitmap = WidgetVisualGraphics.createVectorLungsBitmap(
-            widthPx = 80,
-            heightPx = 80,
+            widthPx = 90,
+            heightPx = 90,
             lungColorInt = lungColorInt
         )
         val flameIcon = WidgetVisualGraphics.createVectorIconBitmap(
@@ -300,9 +303,9 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
             modifier = GlanceModifier.fillMaxSize().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Hero: 86x86 Circle with Anatomical Lungs and Count Below
+            // Left Hero: 92x92 Circle with Anatomical Lungs and Count Below
             Box(
-                modifier = GlanceModifier.size(86.dp),
+                modifier = GlanceModifier.size(92.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -316,14 +319,14 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                     Image(
                         provider = ImageProvider(lungsBitmap),
                         contentDescription = null,
-                        modifier = GlanceModifier.size(32.dp)
+                        modifier = GlanceModifier.size(36.dp)
                     )
                     Spacer(modifier = GlanceModifier.height(1.dp))
                     Text(
                         text = "$todayTotal",
                         style = TextStyle(
                             color = ColorProvider(Color.White),
-                            fontSize = 16.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -449,14 +452,14 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
     ) {
         val progress = if (baseline > 0) min(todayTotal.toFloat() / baseline.toFloat(), 1f) else 0f
         val ringBitmap = WidgetVisualGraphics.createCircularProgressRingBitmap(
-            sizePx = 270,
+            sizePx = 280,
             progress = progress,
             ringColorInt = ringColorInt,
             strokeWidthPx = 24f
         )
         val lungsBitmap = WidgetVisualGraphics.createVectorLungsBitmap(
-            widthPx = 110,
-            heightPx = 110,
+            widthPx = 120,
+            heightPx = 120,
             lungColorInt = lungColorInt
         )
         val flameIcon = WidgetVisualGraphics.createVectorIconBitmap(
@@ -505,9 +508,9 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 108x108 Gauge with 44x44 Lungs
+                // 118x118 Gauge with 48x48 Lungs
                 Box(
-                    modifier = GlanceModifier.size(108.dp),
+                    modifier = GlanceModifier.size(118.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
@@ -521,14 +524,14 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                         Image(
                             provider = ImageProvider(lungsBitmap),
                             contentDescription = null,
-                            modifier = GlanceModifier.size(44.dp)
+                            modifier = GlanceModifier.size(48.dp)
                         )
                         Spacer(modifier = GlanceModifier.height(2.dp))
                         Text(
                             text = "$todayTotal",
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
-                                fontSize = 20.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )

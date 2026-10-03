@@ -2,6 +2,7 @@ package com.intellidream.daily.glance
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -106,6 +107,8 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
         val sympatheticPercent = (100 - parasympatheticPercent)
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_HEALTH_STRESS"
+            data = Uri.parse("daily://health/stress")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HEALTH)
             putExtra(MainActivity.EXTRA_HEALTH_SUBTAB, "stress")
@@ -170,10 +173,10 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
         hrvMs: Double
     ) {
         val gaugeBitmap = WidgetVisualGraphics.createStressGaugeBitmap(
-            sizePx = 140,
+            sizePx = 200,
             score = stressScore,
             levelColorInt = android.graphics.Color.parseColor(levelColorHex),
-            strokeWidthPx = 12f
+            strokeWidthPx = 18f
         )
         val balanceBitmap = WidgetVisualGraphics.createAutonomicBalanceBarBitmap(
             widthPx = 240,
@@ -243,7 +246,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                 contentAlignment = Alignment.Center
             ) {
                 Box(
-                    modifier = GlanceModifier.size(52.dp),
+                    modifier = GlanceModifier.size(76.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
@@ -258,7 +261,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             text = "$stressScore",
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
-                                fontSize = 16.sp,
+                                fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -266,7 +269,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             text = "/100",
                             style = TextStyle(
                                 color = ColorProvider(Color(0x80FFFFFF)),
-                                fontSize = 8.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -365,10 +368,10 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
         rhr: Double
     ) {
         val gaugeBitmap = WidgetVisualGraphics.createStressGaugeBitmap(
-            sizePx = 160,
+            sizePx = 190,
             score = stressScore,
             levelColorInt = android.graphics.Color.parseColor(levelColorHex),
-            strokeWidthPx = 14f
+            strokeWidthPx = 16f
         )
         val balanceBitmap = WidgetVisualGraphics.createAutonomicBalanceBarBitmap(
             widthPx = 280,
@@ -396,9 +399,9 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
             modifier = GlanceModifier.fillMaxSize().padding(11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Column (width 108.dp): Mascot + Gauge + Autonomic Balance
+            // Left Column (width 118.dp): Mascot + Gauge + Autonomic Balance
             Column(
-                modifier = GlanceModifier.width(108.dp),
+                modifier = GlanceModifier.width(118.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header
@@ -426,7 +429,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
 
                 // Circular Gauge
                 Box(
-                    modifier = GlanceModifier.size(58.dp),
+                    modifier = GlanceModifier.size(74.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
@@ -441,7 +444,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             text = "$stressScore",
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
-                                fontSize = 18.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -449,7 +452,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             text = "STRESS",
                             style = TextStyle(
                                 color = ColorProvider(Color(0x80FFFFFF)),
-                                fontSize = 7.5.sp,
+                                fontSize = 8.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )

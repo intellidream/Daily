@@ -16,7 +16,9 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.intellidream.daily.model.HealthTelemetryRecord
 import com.intellidream.daily.model.SleepStageType
+import androidx.health.connect.client.units.Volume
 import java.time.Instant
+import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.Calendar
 import java.util.Date
@@ -48,8 +50,28 @@ class HealthConnectManager(private val context: Context) {
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getReadPermission(OxygenSaturationRecord::class),
-        HealthPermission.getReadPermission(HydrationRecord::class)
+        HealthPermission.getReadPermission(HydrationRecord::class),
+        HealthPermission.getWritePermission(HydrationRecord::class)
     )
+
+    suspend fun writeHydrationRecord(amountMl: Double, timestamp: Long = System.currentTimeMillis()): Boolean {
+        val client = healthConnectClient ?: return false
+        return try {
+            val instant = Instant.ofEpochMilli(timestamp)
+            val record = HydrationRecord(
+                startTime = instant,
+                endTime = instant.plusSeconds(60),
+                startZoneOffset = ZoneOffset.systemDefault().rules.getOffset(instant),
+                endZoneOffset = ZoneOffset.systemDefault().rules.getOffset(instant),
+                volume = Volume.milliliters(amountMl)
+            )
+            client.insertRecords(listOf(record))
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("HealthConnectManager", "Failed to write hydration to Health Connect", e)
+            false
+        }
+    }
 
     suspend fun hasAllPermissions(): Boolean {
         val client = healthConnectClient ?: return false
@@ -294,6 +316,102 @@ class HealthConnectManager(private val context: Context) {
             android.util.Log.w("HealthConnectManager", "Error querying Health Connect records", e)
         }
 
+        return telemetry
+    }
+
+    /**
+     * Reads local health telemetry from Health Connect between two dates.
+     * Efficiently captures steps, sleep, active energy, heart rate, and hydration across multi-day ranges for Trends.
+     */
+    suspend fun fetchTelemetryForDateRange(startDate: Date, endDate: Date): List<HealthTelemetryRecord> {
+        val client = healthConnectClient ?: return emptyList()
+        val startTime = Instant.ofEpochMilli(startDate.time)
+        val endTime = Instant.ofEpochMilli(endDate.time)
+        val timeFilter = TimeRangeFilter.between(startTime, endTime)
+        val telemetry = mutableListOf<HealthTelemetryRecord>()
+
+        try {
+            // Steps
+            val steps = client.readRecords(ReadRecordsRequest(StepsRecord::class, timeFilter))
+            for (record in steps.records) {
+                telemetry.add(
+                    HealthTelemetryRecord(
+                        userId = "local_health_connect",
+                        type = "steps",
+                        value = record.count.toDouble(),
+                        unit = "count",
+                        startTime = record.startTime.toEpochMilli(),
+                        endTime = record.endTime.toEpochMilli(),
+                        sourceDevice = record.metadata.dataOrigin.packageName
+                    )
+                )
+            }
+            // Sleep Sessions
+            val sleep = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, timeFilter))
+            for (record in sleep.records) {
+                val durMin = ChronoUnit.MINUTES.between(record.startTime, record.endTime).toDouble()
+                telemetry.add(
+                    HealthTelemetryRecord(
+                        userId = "local_health_connect",
+                        type = "sleep",
+                        value = durMin,
+                        unit = "minutes",
+                        startTime = record.startTime.toEpochMilli(),
+                        endTime = record.endTime.toEpochMilli(),
+                        sourceDevice = record.metadata.dataOrigin.packageName
+                    )
+                )
+            }
+            // Active Calories
+            val cals = client.readRecords(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, timeFilter))
+            for (record in cals.records) {
+                telemetry.add(
+                    HealthTelemetryRecord(
+                        userId = "local_health_connect",
+                        type = "active_energy",
+                        value = record.energy.inKilocalories,
+                        unit = "kcal",
+                        startTime = record.startTime.toEpochMilli(),
+                        endTime = record.endTime.toEpochMilli(),
+                        sourceDevice = record.metadata.dataOrigin.packageName
+                    )
+                )
+            }
+            // Heart Rate
+            val hr = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, timeFilter))
+            for (record in hr.records) {
+                for (sample in record.samples) {
+                    telemetry.add(
+                        HealthTelemetryRecord(
+                            userId = "local_health_connect",
+                            type = "heart_rate",
+                            value = sample.beatsPerMinute.toDouble(),
+                            unit = "bpm",
+                            startTime = sample.time.toEpochMilli(),
+                            endTime = sample.time.toEpochMilli(),
+                            sourceDevice = record.metadata.dataOrigin.packageName
+                        )
+                    )
+                }
+            }
+            // Hydration
+            val hyd = client.readRecords(ReadRecordsRequest(HydrationRecord::class, timeFilter))
+            for (record in hyd.records) {
+                telemetry.add(
+                    HealthTelemetryRecord(
+                        userId = "local_health_connect",
+                        type = "hydration",
+                        value = record.volume.inMilliliters,
+                        unit = "ml",
+                        startTime = record.startTime.toEpochMilli(),
+                        endTime = record.endTime.toEpochMilli(),
+                        sourceDevice = record.metadata.dataOrigin.packageName
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("HealthConnectManager", "Error querying date range Health Connect records", e)
+        }
         return telemetry
     }
 }

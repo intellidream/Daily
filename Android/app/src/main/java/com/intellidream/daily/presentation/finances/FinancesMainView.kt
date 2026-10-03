@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +40,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.intellidream.daily.database.FinanceDataRepository
 import com.intellidream.daily.database.SmartLedgerRepository
 import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
@@ -46,6 +55,7 @@ import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.FinanceSubTab
 import com.intellidream.daily.model.SmartLedgerItem
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FinancesMainView(
     smartLedgerRepository: SmartLedgerRepository,
@@ -65,11 +75,25 @@ fun FinancesMainView(
     var showingAddItemSheet by remember { mutableStateOf(false) }
     var targetSectionForNewItem by remember { mutableStateOf("Outgoing") }
 
+    val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+    val pullRefreshState = rememberPullToRefreshState()
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            coroutineScope.launch {
+                kotlinx.coroutines.delay(400)
+                pullRefreshState.endRefresh()
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(brush = ThemeColors.backgroundGradient)
             .statusBarsPadding()
+            .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header Bar
@@ -254,5 +278,12 @@ fun FinancesMainView(
                 onDismiss = { showingAddItemSheet = false }
             )
         }
+
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            containerColor = Color(0xFF0D182E),
+            contentColor = ThemeColors.accentGreen
+        )
     }
 }

@@ -503,6 +503,13 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
     object Oura : DeviceSource("Oura Ring", "oura")
     object HealthKit : DeviceSource("Apple Health", "healthkit")
     object HealthConnect : DeviceSource("Health Connect", "healthconnect")
+    object Fitbit : DeviceSource("Fitbit", "fitbit")
+    object SamsungHealth : DeviceSource("Samsung Health", "samsunghealth")
+    object PixelWatch : DeviceSource("Pixel Watch", "pixelwatch")
+    object Garmin : DeviceSource("Garmin", "garmin")
+    object Whoop : DeviceSource("Whoop", "whoop")
+    object Withings : DeviceSource("Withings", "withings")
+    object Polar : DeviceSource("Polar", "polar")
     object Manual : DeviceSource("Manual Entry", "manual")
     data class Other(val name: String) : DeviceSource(name, name)
 
@@ -527,14 +534,26 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
             if (clean.isEmpty()) return Other("Unknown")
             val lower = clean.lowercase()
             return when {
+                lower.contains("fitbit") -> Fitbit
+                lower.contains("shealth") || lower.contains("samsung") || lower.contains("galaxy watch") -> SamsungHealth
+                lower.contains("wear.companion") || lower.contains("pixel watch") || lower.contains("google.android.wearable") -> PixelWatch
+                lower.contains("google.android.apps.fitness") || lower.contains("google fit") -> HealthConnect
+                lower.contains("garmin") -> Garmin
+                lower.contains("whoop") -> Whoop
+                lower.contains("withings") -> Withings
+                lower.contains("polar") -> Polar
                 lower.contains("oura") -> Oura
                 lower.contains("healthkit") || lower.contains("apple health") || lower == "ios" -> HealthKit
                 lower.contains("apple") || lower.contains("watchos") -> AppleWatch
-                lower.contains("zepp") || lower.contains("amazfit") || lower.contains("balance") -> Amazfit
-                lower.contains("oneplus") || lower.contains("wearos") -> OnePlus
+                lower.contains("zepp") || lower.contains("amazfit") || lower.contains("huami") || lower.contains("balance") -> Amazfit
+                lower.contains("oneplus") || lower.contains("wearos") || lower.contains("heytap") || lower.contains("oppo") -> OnePlus
                 lower.contains("huawei") || lower.contains("harmony") || lower.contains("gt5") -> Huawei
                 lower.contains("health connect") || lower.contains("healthconnect") || lower == "android" -> HealthConnect
                 lower.contains("manual") -> Manual
+                clean.startsWith("com.") || clean.startsWith("org.") -> {
+                    val lastSegment = clean.substringAfterLast('.').replaceFirstChar { it.uppercase() }
+                    Other(lastSegment)
+                }
                 else -> Other(clean)
             }
         }

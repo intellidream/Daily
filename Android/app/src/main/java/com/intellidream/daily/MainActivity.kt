@@ -54,7 +54,10 @@ import com.intellidream.daily.model.ForecastItem
 import com.intellidream.daily.model.ForecastResponse
 import com.intellidream.daily.model.UserProfile
 import com.intellidream.daily.model.WeatherResponse
+import androidx.compose.ui.platform.LocalConfiguration
+import com.intellidream.daily.location.AndroidLocationManager
 import com.intellidream.daily.network.WeatherRepository
+import com.intellidream.daily.network.WeatherRepository.CoordinatesResult
 import com.intellidream.daily.presentation.LoginScreen
 import com.intellidream.daily.presentation.SettingsScreen
 import com.intellidream.daily.presentation.dashboard.CustomizeDashboardScreen
@@ -80,6 +83,31 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Wire resilient hardware GPS location provider
+        weatherRepository.gpsLocationProvider = {
+            if (AndroidLocationManager.hasLocationPermission(this@MainActivity)) {
+                val coords = AndroidLocationManager.getCurrentCoordinates(this@MainActivity)
+                if (coords != null) {
+                    val municipality = AndroidLocationManager.reverseGeocode(this@MainActivity, coords.first, coords.second)
+                    CoordinatesResult(
+                        lat = coords.first,
+                        lon = coords.second,
+                        cityName = municipality ?: "Current Location",
+                        source = LocationSource.GPS
+                    )
+                } else null
+            } else null
+        }
+
+        // Wire cross-module hydration logging to Health Connect
+        habitsRepository.onWaterLogged = { amountMl, timestamp ->
+            lifecycleScope.launch {
+                try {
+                    healthRepository.healthConnectManager.writeHydrationRecord(amountMl, timestamp)
+                } catch (_: Exception) {}
+            }
+        }
 
         handleIntentData(intent)
         processNavigationIntent(intent)
@@ -256,7 +284,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun processNavigationIntent(intent: Intent?) {
-        intent?.getStringExtra(EXTRA_PIN_WIDGET)?.let { widgetType ->
+        if (intent == null) return
+
+        intent.getStringExtra(EXTRA_PIN_WIDGET)?.let { widgetType ->
             val appWidgetManager = getSystemService(android.appwidget.AppWidgetManager::class.java)
             if (appWidgetManager?.isRequestPinAppWidgetSupported == true) {
                 val receiverClass = when (widgetType.lowercase()) {
@@ -273,32 +303,76 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        val tabKey = intent?.getStringExtra(EXTRA_TARGET_TAB) ?: return
-        val target = when (tabKey) {
-            TAB_HEALTH -> NavigationTab.Health
-            TAB_HABITS -> NavigationTab.Habits
-            TAB_FINANCES -> NavigationTab.Finances
-            TAB_TAGDOS -> NavigationTab.Tagdos
-            TAB_WEATHER -> NavigationTab.Weather
-            TAB_NEWS -> NavigationTab.News
-            else -> NavigationTab.Dashboard
-        }
-        selectedTab = target
-
-        intent.getStringExtra(EXTRA_HEALTH_SUBTAB)?.let { sub ->
-            when (sub) {
-                "stress" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.STRESS)
-                "sleep" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.SLEEP)
-                "vitals" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.VITALS)
-                "trends" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.TRENDS)
-                else -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.OVERVIEW)
+        // 1. Deep Link URI Handling (e.g. daily://habits/water, daily://health/sleep, daily://health/stress)
+        intent.data?.let { uri ->
+            if (uri.scheme == "daily") {
+                val host = uri.host?.lowercase(java.util.Locale.ROOT) ?: ""
+                val path = uri.path?.lowercase(java.util.Locale.ROOT) ?: ""
+                when {
+                    host.contains("habit") || path.contains("water") || path.contains("bubble") || path.contains("smoke") -> {
+                        selectedTab = NavigationTab.Habits
+                        if (path.contains("smoke") || host.contains("smoke")) {
+                            habitsRepository.switchHabit(com.intellidream.daily.model.HabitType.SMOKES)
+                        } else {
+                            habitsRepository.switchHabit(com.intellidream.daily.model.HabitType.WATER)
+                        }
+                    }
+                    host.contains("health") || path.contains("sleep") || path.contains("stress") -> {
+                        selectedTab = NavigationTab.Health
+                        if (path.contains("sleep")) {
+                            healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.SLEEP)
+                        } else if (path.contains("stress")) {
+                            healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.STRESS)
+                        }
+                    }
+                    host.contains("finance") || host.contains("money") || path.contains("money") -> {
+                        selectedTab = NavigationTab.Finances
+                    }
+                    host.contains("tagdos") || path.contains("tagdos") -> {
+                        selectedTab = NavigationTab.Tagdos
+                    }
+                    host.contains("weather") -> {
+                        selectedTab = NavigationTab.Weather
+                    }
+                    host.contains("news") -> {
+                        selectedTab = NavigationTab.News
+                    }
+                    else -> {
+                        selectedTab = NavigationTab.Dashboard
+                    }
+                }
             }
         }
 
-        intent.getStringExtra(EXTRA_HABIT_SUBTAB)?.let { sub ->
-            when (sub) {
-                "smokes" -> habitsRepository.switchHabit(com.intellidream.daily.model.HabitType.SMOKES)
-                else -> habitsRepository.switchHabit(com.intellidream.daily.model.HabitType.WATER)
+        // 2. Extra Keys Handling
+        val tabKey = intent.getStringExtra(EXTRA_TARGET_TAB)
+        if (tabKey != null) {
+            val target = when (tabKey) {
+                TAB_HEALTH -> NavigationTab.Health
+                TAB_HABITS -> NavigationTab.Habits
+                TAB_FINANCES -> NavigationTab.Finances
+                TAB_TAGDOS -> NavigationTab.Tagdos
+                TAB_WEATHER -> NavigationTab.Weather
+                TAB_NEWS -> NavigationTab.News
+                else -> NavigationTab.Dashboard
+            }
+            selectedTab = target
+
+            intent.getStringExtra(EXTRA_HEALTH_SUBTAB)?.let { sub ->
+                when (sub) {
+                    "stress" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.STRESS)
+                    "sleep" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.SLEEP)
+                    "vitals" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.VITALS)
+                    "trends" -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.TRENDS)
+                    else -> healthRepository.setActiveSubTab(com.intellidream.daily.model.HealthSubTab.OVERVIEW)
+                }
+            }
+
+            intent.getStringExtra(EXTRA_HABIT_SUBTAB)?.let { sub ->
+                when (sub) {
+                    "smokes" -> habitsRepository.switchHabit(com.intellidream.daily.model.HabitType.SMOKES)
+                    else -> habitsRepository.switchHabit(com.intellidream.daily.model.HabitType.WATER)
+                }
             }
         }
     }
@@ -381,6 +455,9 @@ fun DailyRootScreen(
             .fillMaxSize()
             .background(brush = ThemeColors.backgroundGradient)
     ) {
+        val configuration = LocalConfiguration.current
+        val maxContentWidth = if (configuration.screenWidthDp >= 900) 1080.dp else if (configuration.screenWidthDp >= 600) 900.dp else 760.dp
+
         // Main Tab Content
         Box(
             modifier = Modifier
@@ -391,7 +468,7 @@ fun DailyRootScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .widthIn(max = 760.dp)
+                    .widthIn(max = maxContentWidth)
             ) {
                 when (selectedTab) {
                 NavigationTab.Dashboard -> {

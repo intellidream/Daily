@@ -58,6 +58,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.ui.focus.onFocusChanged
@@ -279,8 +280,20 @@ fun NewsFeedView(
                         )
                     }
                 } else {
+                    val tabs = NewsSubTab.entries
+                    val currentTabIndex = tabs.indexOf(activeSubTab).coerceAtLeast(0)
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .calmBoundedSwipeGesture(
+                                currentIndex = currentTabIndex,
+                                maxIndex = tabs.lastIndex,
+                                onIndexChange = { newIdx ->
+                                    if (newIdx in tabs.indices) {
+                                        activeSubTab = tabs[newIdx]
+                                    }
+                                }
+                            ),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(bottom = 90.dp)
                     ) {

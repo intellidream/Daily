@@ -2,6 +2,7 @@ package com.intellidream.daily.glance
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -86,6 +87,8 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
         val formattedEUR = WidgetVisualGraphics.formatCompactEUR(netWorthEUR)
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_FINANCES_MONEY"
+            data = Uri.parse("daily://finances/money")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_FINANCES)
         }
@@ -174,7 +177,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                             text = "${WidgetVisualGraphics.formatCompactNumber(netWorthLei)} Lei",
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
-                                fontSize = 16.sp,
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -216,7 +219,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         text = "Card ${WidgetVisualGraphics.formatCompactNumber(cardAmount)}",
                         style = TextStyle(
                             color = ColorProvider(Color(0xFF00E5FF)),
-                            fontSize = 10.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -225,7 +228,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         text = "Cash ${WidgetVisualGraphics.formatCompactNumber(cashAmount)}",
                         style = TextStyle(
                             color = ColorProvider(Color(0xFF00E676)),
-                            fontSize = 10.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -243,7 +246,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         color = Color(0xFFFF2D55),
                         account = "Card",
                         delta = -100.0,
-                        height = 24.dp,
+                        height = 26.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                     Spacer(modifier = GlanceModifier.width(4.dp))
@@ -252,7 +255,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         color = Color(0xFF00E676),
                         account = "Card",
                         delta = 100.0,
-                        height = 24.dp,
+                        height = 26.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                 }

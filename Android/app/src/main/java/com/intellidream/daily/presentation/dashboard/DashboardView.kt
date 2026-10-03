@@ -29,21 +29,28 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,6 +70,7 @@ import com.intellidream.daily.model.UserProfile
 import com.intellidream.daily.model.WeatherResponse
 import com.intellidream.daily.presentation.briefing.SmartBriefingBottomSheet
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardView(
     userProfile: UserProfile?,
@@ -101,6 +109,24 @@ fun DashboardView(
     val smokesTotal by habitsRepository.smokesTotalToday.collectAsState()
     val smokesSettings by habitsRepository.smokesSettings.collectAsState()
 
+    val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+    val pullRefreshState = rememberPullToRefreshState()
+
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            coroutineScope.launch {
+                onRefreshWeather()
+                habitsRepository.syncLogs(habitsRepository.currentUserId)
+                healthRepository.loadDataForSelectedDate(forceRefresh = true)
+                tagdosRepository.syncWithSupabase()
+                newsRepository.loadAllNews(forceRefresh = true)
+                pullRefreshState.endRefresh()
+            }
+        }
+    }
+
     fun updateWidgetSize(widgetId: String, newSize: DashboardWidgetSize) {
         onUpdateSettings { s ->
             s.copy(
@@ -124,11 +150,45 @@ fun DashboardView(
         }
     }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 110.dp)
+    val configuration = LocalConfiguration.current
+    val isFoldableOrTablet = configuration.screenWidthDp >= 600
+
+    val renderWidget: @Composable (DashboardWidgetConfig, () -> Unit) -> Unit = { config, onLongClick ->
+        DashboardWidgetRenderer(
+            config = config,
+            weather = weather,
+            forecast = forecast,
+            hourlyForecasts = hourlyForecasts,
+            locationName = locationName,
+            isWeatherLoading = isWeatherLoading,
+            settings = settings,
+            habitsRepository = habitsRepository,
+            healthRepository = healthRepository,
+            smartLedgerRepository = smartLedgerRepository,
+            financeDataRepository = financeDataRepository,
+            tagdosRepository = tagdosRepository,
+            newsRepository = newsRepository,
+            onRefreshWeather = onRefreshWeather,
+            onNavigateToHabits = onNavigateToHabits,
+            onNavigateToHealth = onNavigateToHealth,
+            onNavigateToFinances = onNavigateToFinances,
+            onNavigateToTagdos = onNavigateToTagdos,
+            onNavigateToNews = onNavigateToNews,
+            onNavigateToWeather = onNavigateToWeather,
+            onLongClick = onLongClick
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 110.dp)
+        ) {
         // 1. Signature Liquid Glass Header Greeting with Live Sync Avatar, Date Badge & Actions
         item(key = "header_greeting") {
             HeaderGreetingView(
@@ -139,142 +199,75 @@ fun DashboardView(
             )
         }
 
-        // 2. Coalesced Rows with Long-Press Context Menu Support
-        items(
-            items = rows,
-            key = { it.id }
-        ) { row ->
-            val renderWidget: @Composable (DashboardWidgetConfig, () -> Unit) -> Unit = { config, onLongClick ->
-                DashboardWidgetRenderer(
-                    config = config,
-                    weather = weather,
-                    forecast = forecast,
-                    hourlyForecasts = hourlyForecasts,
-                    locationName = locationName,
-                    isWeatherLoading = isWeatherLoading,
-                    settings = settings,
-                    habitsRepository = habitsRepository,
-                    healthRepository = healthRepository,
-                    smartLedgerRepository = smartLedgerRepository,
-                    financeDataRepository = financeDataRepository,
-                    tagdosRepository = tagdosRepository,
-                    newsRepository = newsRepository,
-                    onRefreshWeather = onRefreshWeather,
-                    onNavigateToHabits = onNavigateToHabits,
-                    onNavigateToHealth = onNavigateToHealth,
-                    onNavigateToFinances = onNavigateToFinances,
-                    onNavigateToTagdos = onNavigateToTagdos,
-                    onNavigateToNews = onNavigateToNews,
-                    onNavigateToWeather = onNavigateToWeather,
-                    onLongClick = onLongClick
+        // 2. Coalesced Rows with Foldable Dual-Column & Phone Layout Support
+        if (isFoldableOrTablet) {
+            val leftWidgets = visibleWidgets.filterIndexed { index, _ -> index % 2 == 0 }
+            val rightWidgets = visibleWidgets.filterIndexed { index, _ -> index % 2 == 1 }
+            val leftRows = DashboardRowBuilder.buildRows(leftWidgets)
+            val rightRows = DashboardRowBuilder.buildRows(rightWidgets)
+
+            item(key = "foldable_dual_columns") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        leftRows.forEach { row ->
+                            DashboardRowItem(
+                                row = row,
+                                visibleWidgets = visibleWidgets,
+                                onUpdateWidgetSize = ::updateWidgetSize,
+                                onMoveWidget = ::moveWidget,
+                                onOpenCustomize = onOpenCustomize,
+                                renderWidget = renderWidget
+                            )
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        rightRows.forEach { row ->
+                            DashboardRowItem(
+                                row = row,
+                                visibleWidgets = visibleWidgets,
+                                onUpdateWidgetSize = ::updateWidgetSize,
+                                onMoveWidget = ::moveWidget,
+                                onOpenCustomize = onOpenCustomize,
+                                renderWidget = renderWidget
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            items(
+                items = rows,
+                key = { it.id }
+            ) { row ->
+                DashboardRowItem(
+                    row = row,
+                    visibleWidgets = visibleWidgets,
+                    onUpdateWidgetSize = ::updateWidgetSize,
+                    onMoveWidget = ::moveWidget,
+                    onOpenCustomize = onOpenCustomize,
+                    renderWidget = renderWidget
                 )
             }
-
-            when (row) {
-                is DashboardRow.Full -> {
-                    WidgetWithContextMenu(
-                        config = row.config,
-                        allWidgets = visibleWidgets,
-                        onUpdateSize = { newSize -> updateWidgetSize(row.config.id, newSize) },
-                        onMoveUp = { moveWidget(row.config.id, -1) },
-                        onMoveDown = { moveWidget(row.config.id, 1) },
-                        onOpenCustomize = onOpenCustomize
-                    ) { onLongClick ->
-                        renderWidget(row.config, onLongClick)
-                    }
-                }
-
-                is DashboardRow.Pair -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            WidgetWithContextMenu(
-                                config = row.left,
-                                allWidgets = visibleWidgets,
-                                onUpdateSize = { newSize -> updateWidgetSize(row.left.id, newSize) },
-                                onMoveUp = { moveWidget(row.left.id, -1) },
-                                onMoveDown = { moveWidget(row.left.id, 1) },
-                                onOpenCustomize = onOpenCustomize
-                            ) { onLongClick ->
-                                renderWidget(row.left, onLongClick)
-                            }
-                        }
-                        Box(modifier = Modifier.weight(1f)) {
-                            WidgetWithContextMenu(
-                                config = row.right,
-                                allWidgets = visibleWidgets,
-                                onUpdateSize = { newSize -> updateWidgetSize(row.right.id, newSize) },
-                                onMoveUp = { moveWidget(row.right.id, -1) },
-                                onMoveDown = { moveWidget(row.right.id, 1) },
-                                onOpenCustomize = onOpenCustomize
-                            ) { onLongClick ->
-                                renderWidget(row.right, onLongClick)
-                            }
-                        }
-                    }
-                }
-
-                is DashboardRow.TallWithSmalls -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            WidgetWithContextMenu(
-                                config = row.tall,
-                                allWidgets = visibleWidgets,
-                                onUpdateSize = { newSize -> updateWidgetSize(row.tall.id, newSize) },
-                                onMoveUp = { moveWidget(row.tall.id, -1) },
-                                onMoveDown = { moveWidget(row.tall.id, 1) },
-                                onOpenCustomize = onOpenCustomize
-                            ) { onLongClick ->
-                                renderWidget(row.tall, onLongClick)
-                            }
-                        }
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            row.smalls.forEach { smallConfig ->
-                                WidgetWithContextMenu(
-                                    config = smallConfig,
-                                    allWidgets = visibleWidgets,
-                                    onUpdateSize = { newSize -> updateWidgetSize(smallConfig.id, newSize) },
-                                    onMoveUp = { moveWidget(smallConfig.id, -1) },
-                                    onMoveDown = { moveWidget(smallConfig.id, 1) },
-                                    onOpenCustomize = onOpenCustomize
-                                ) { onLongClick ->
-                                    renderWidget(smallConfig, onLongClick)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                is DashboardRow.SingleSmall -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            WidgetWithContextMenu(
-                                config = row.config,
-                                allWidgets = visibleWidgets,
-                                onUpdateSize = { newSize -> updateWidgetSize(row.config.id, newSize) },
-                                onMoveUp = { moveWidget(row.config.id, -1) },
-                                onMoveDown = { moveWidget(row.config.id, 1) },
-                                onOpenCustomize = onOpenCustomize
-                            ) { onLongClick ->
-                                renderWidget(row.config, onLongClick)
-                            }
-                        }
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
         }
+    }
+
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            containerColor = Color(0xFF0D182E),
+            contentColor = ThemeColors.accentCyan
+        )
     }
 
     val shouldAutoShowBriefing by smartBriefingRepository.shouldPresentMorningAutomatically.collectAsState()
@@ -436,6 +429,118 @@ private fun WidgetWithContextMenu(
                     onOpenCustomize()
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun DashboardRowItem(
+    row: DashboardRow,
+    visibleWidgets: List<DashboardWidgetConfig>,
+    onUpdateWidgetSize: (String, DashboardWidgetSize) -> Unit,
+    onMoveWidget: (String, Int) -> Unit,
+    onOpenCustomize: () -> Unit,
+    renderWidget: @Composable (DashboardWidgetConfig, () -> Unit) -> Unit
+) {
+    when (row) {
+        is DashboardRow.Full -> {
+            WidgetWithContextMenu(
+                config = row.config,
+                allWidgets = visibleWidgets,
+                onUpdateSize = { newSize -> onUpdateWidgetSize(row.config.id, newSize) },
+                onMoveUp = { onMoveWidget(row.config.id, -1) },
+                onMoveDown = { onMoveWidget(row.config.id, 1) },
+                onOpenCustomize = onOpenCustomize
+            ) { onLongClick ->
+                renderWidget(row.config, onLongClick)
+            }
+        }
+        is DashboardRow.Pair -> {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    WidgetWithContextMenu(
+                        config = row.left,
+                        allWidgets = visibleWidgets,
+                        onUpdateSize = { newSize -> onUpdateWidgetSize(row.left.id, newSize) },
+                        onMoveUp = { onMoveWidget(row.left.id, -1) },
+                        onMoveDown = { onMoveWidget(row.left.id, 1) },
+                        onOpenCustomize = onOpenCustomize
+                    ) { onLongClick ->
+                        renderWidget(row.left, onLongClick)
+                    }
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    WidgetWithContextMenu(
+                        config = row.right,
+                        allWidgets = visibleWidgets,
+                        onUpdateSize = { newSize -> onUpdateWidgetSize(row.right.id, newSize) },
+                        onMoveUp = { onMoveWidget(row.right.id, -1) },
+                        onMoveDown = { onMoveWidget(row.right.id, 1) },
+                        onOpenCustomize = onOpenCustomize
+                    ) { onLongClick ->
+                        renderWidget(row.right, onLongClick)
+                    }
+                }
+            }
+        }
+        is DashboardRow.TallWithSmalls -> {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    WidgetWithContextMenu(
+                        config = row.tall,
+                        allWidgets = visibleWidgets,
+                        onUpdateSize = { newSize -> onUpdateWidgetSize(row.tall.id, newSize) },
+                        onMoveUp = { onMoveWidget(row.tall.id, -1) },
+                        onMoveDown = { onMoveWidget(row.tall.id, 1) },
+                        onOpenCustomize = onOpenCustomize
+                    ) { onLongClick ->
+                        renderWidget(row.tall, onLongClick)
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    row.smalls.forEach { smallConfig ->
+                        WidgetWithContextMenu(
+                            config = smallConfig,
+                            allWidgets = visibleWidgets,
+                            onUpdateSize = { newSize -> onUpdateWidgetSize(smallConfig.id, newSize) },
+                            onMoveUp = { onMoveWidget(smallConfig.id, -1) },
+                            onMoveDown = { onMoveWidget(smallConfig.id, 1) },
+                            onOpenCustomize = onOpenCustomize
+                        ) { onLongClick ->
+                            renderWidget(smallConfig, onLongClick)
+                        }
+                    }
+                }
+            }
+        }
+        is DashboardRow.SingleSmall -> {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    WidgetWithContextMenu(
+                        config = row.config,
+                        allWidgets = visibleWidgets,
+                        onUpdateSize = { newSize -> onUpdateWidgetSize(row.config.id, newSize) },
+                        onMoveUp = { onMoveWidget(row.config.id, -1) },
+                        onMoveDown = { onMoveWidget(row.config.id, 1) },
+                        onOpenCustomize = onOpenCustomize
+                    ) { onLongClick ->
+                        renderWidget(row.config, onLongClick)
+                    }
+                }
+                Spacer(modifier = Modifier.weight(1f))
+            }
         }
     }
 }

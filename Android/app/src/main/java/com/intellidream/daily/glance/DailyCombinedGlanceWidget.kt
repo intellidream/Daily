@@ -2,6 +2,7 @@ package com.intellidream.daily.glance
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -108,8 +109,56 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         val tagdosFocus = firstActivePill ?: "Fix brief auto-open"
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_DASHBOARD"
+            data = Uri.parse("daily://dashboard")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_DASHBOARD)
+        }
+
+        val habitsWaterIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_HABITS_WATER"
+            data = Uri.parse("daily://habits/bubbles")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HABITS)
+            putExtra(MainActivity.EXTRA_HABIT_SUBTAB, "water")
+        }
+
+        val habitsSmokesIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_HABITS_SMOKES"
+            data = Uri.parse("daily://habits/smokes")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HABITS)
+            putExtra(MainActivity.EXTRA_HABIT_SUBTAB, "smokes")
+        }
+
+        val healthSleepIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_HEALTH_SLEEP"
+            data = Uri.parse("daily://health/sleep")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HEALTH)
+            putExtra(MainActivity.EXTRA_HEALTH_SUBTAB, "sleep")
+        }
+
+        val healthStressIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_HEALTH_STRESS"
+            data = Uri.parse("daily://health/stress")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HEALTH)
+            putExtra(MainActivity.EXTRA_HEALTH_SUBTAB, "stress")
+        }
+
+        val financesMoneyIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_FINANCES_MONEY"
+            data = Uri.parse("daily://finances/money")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_FINANCES)
+        }
+
+        val tagdosIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_TAGDOS"
+            data = Uri.parse("daily://tagdos")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_TAGDOS)
         }
 
         provideContent {
@@ -142,7 +191,13 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                             stressLevel = stressLevel,
                             stressEmoji = stressEmoji,
                             stressColor = stressColor,
-                            tagdosFocus = tagdosFocus
+                            tagdosFocus = tagdosFocus,
+                            sleepIntent = healthSleepIntent,
+                            waterIntent = habitsWaterIntent,
+                            smokesIntent = habitsSmokesIntent,
+                            stressIntent = healthStressIntent,
+                            moneyIntent = financesMoneyIntent,
+                            tagdosIntent = tagdosIntent
                         )
                         size.width >= 240.dp -> MediumCombinedLayout(
                             waterMl = waterMl,
@@ -159,7 +214,13 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                             stressLevel = stressLevel,
                             stressEmoji = stressEmoji,
                             stressColor = stressColor,
-                            tagdosFocus = tagdosFocus
+                            tagdosFocus = tagdosFocus,
+                            sleepIntent = healthSleepIntent,
+                            waterIntent = habitsWaterIntent,
+                            smokesIntent = habitsSmokesIntent,
+                            stressIntent = healthStressIntent,
+                            moneyIntent = financesMoneyIntent,
+                            tagdosIntent = tagdosIntent
                         )
                         else -> SmallCombinedLayout(
                             waterMl = waterMl,
@@ -174,7 +235,13 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                             stressLevel = stressLevel,
                             stressEmoji = stressEmoji,
                             stressColor = stressColor,
-                            tagdosFocus = tagdosFocus
+                            tagdosFocus = tagdosFocus,
+                            sleepIntent = healthSleepIntent,
+                            waterIntent = habitsWaterIntent,
+                            smokesIntent = habitsSmokesIntent,
+                            stressIntent = healthStressIntent,
+                            moneyIntent = financesMoneyIntent,
+                            tagdosIntent = tagdosIntent
                         )
                     }
                 }
@@ -199,7 +266,13 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         stressLevel: String,
         stressEmoji: String,
         stressColor: Color,
-        tagdosFocus: String
+        tagdosFocus: String,
+        sleepIntent: Intent,
+        waterIntent: Intent,
+        smokesIntent: Intent,
+        stressIntent: Intent,
+        moneyIntent: Intent,
+        tagdosIntent: Intent
     ) {
         val sleepGauge = WidgetVisualGraphics.createMiniMetricGaugeBitmap(
             sizePx = 90,
@@ -234,13 +307,22 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Sleep Ring
-                MiniProgressRing(sleepGauge, "$sleepScore%", totalAsleep, moonIcon, GlanceModifier.defaultWeight())
+                MiniProgressRing(
+                    sleepGauge, "$sleepScore%", totalAsleep, moonIcon,
+                    GlanceModifier.defaultWeight().clickable(actionStartActivity(sleepIntent))
+                )
                 Spacer(modifier = GlanceModifier.width(4.dp))
                 // Water Ring
-                MiniProgressRing(waterGauge, "${(waterPercent * 100).toInt()}%", "${waterMl.toInt()} ml", dropIcon, GlanceModifier.defaultWeight())
+                MiniProgressRing(
+                    waterGauge, "${(waterPercent * 100).toInt()}%", "${waterMl.toInt()} ml", dropIcon,
+                    GlanceModifier.defaultWeight().clickable(actionStartActivity(waterIntent))
+                )
                 Spacer(modifier = GlanceModifier.width(4.dp))
                 // Smokes Ring
-                MiniProgressRing(smokesGauge, "$smokesCount", "of $smokesBase", flameIcon, GlanceModifier.defaultWeight())
+                MiniProgressRing(
+                    smokesGauge, "$smokesCount", "of $smokesBase", flameIcon,
+                    GlanceModifier.defaultWeight().clickable(actionStartActivity(smokesIntent))
+                )
             }
 
             Spacer(modifier = GlanceModifier.defaultWeight())
@@ -252,6 +334,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                     .background(Color(0x14FFFFFF))
                     .cornerRadius(8.dp)
                     .padding(horizontal = 7.dp, vertical = 4.5.dp)
+                    .clickable(actionStartActivity(stressIntent))
             ) {
                 Row(
                     modifier = GlanceModifier.fillMaxWidth(),
@@ -312,6 +395,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .background(Color(0x14FFFFFF))
                         .cornerRadius(8.dp)
                         .padding(horizontal = 7.dp, vertical = 5.dp)
+                        .clickable(actionStartActivity(moneyIntent))
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
@@ -336,6 +420,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .background(Color(0x14FFFFFF))
                         .cornerRadius(8.dp)
                         .padding(horizontal = 7.dp, vertical = 5.dp)
+                        .clickable(actionStartActivity(tagdosIntent))
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -374,7 +459,13 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         stressLevel: String,
         stressEmoji: String,
         stressColor: Color,
-        tagdosFocus: String
+        tagdosFocus: String,
+        sleepIntent: Intent,
+        waterIntent: Intent,
+        smokesIntent: Intent,
+        stressIntent: Intent,
+        moneyIntent: Intent,
+        tagdosIntent: Intent
     ) {
         val sleepGauge = WidgetVisualGraphics.createMiniMetricGaugeBitmap(
             sizePx = 130,
@@ -396,7 +487,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
             ) {
                 // Sleep Arc
                 Box(
-                    modifier = GlanceModifier.size(52.dp),
+                    modifier = GlanceModifier.size(52.dp).clickable(actionStartActivity(sleepIntent)),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
@@ -424,6 +515,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .background(Color(0x14FFFFFF))
                         .cornerRadius(12.dp)
                         .padding(horizontal = 7.dp, vertical = 2.5.dp)
+                        .clickable(actionStartActivity(moneyIntent))
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
@@ -445,6 +537,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .background(stressColor.copy(alpha = 0.15f))
                         .cornerRadius(12.dp)
                         .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .clickable(actionStartActivity(stressIntent))
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(text = stressEmoji, style = TextStyle(fontSize = 9.sp))
@@ -475,6 +568,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .background(Color(0x14FFFFFF))
                         .cornerRadius(11.dp)
                         .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .clickable(actionStartActivity(waterIntent))
                 ) {
                     Column {
                         Row(
@@ -522,6 +616,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .background(Color(0x14FFFFFF))
                         .cornerRadius(11.dp)
                         .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .clickable(actionStartActivity(smokesIntent))
                 ) {
                     Row(
                         modifier = GlanceModifier.fillMaxWidth(),
@@ -554,6 +649,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .background(Color(0x14FFFFFF))
                         .cornerRadius(11.dp)
                         .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .clickable(actionStartActivity(tagdosIntent))
                 ) {
                     Row(
                         modifier = GlanceModifier.fillMaxWidth(),
@@ -596,7 +692,13 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         stressLevel: String,
         stressEmoji: String,
         stressColor: Color,
-        tagdosFocus: String
+        tagdosFocus: String,
+        sleepIntent: Intent,
+        waterIntent: Intent,
+        smokesIntent: Intent,
+        stressIntent: Intent,
+        moneyIntent: Intent,
+        tagdosIntent: Intent
     ) {
         val sleepGauge = WidgetVisualGraphics.createMiniMetricGaugeBitmap(
             sizePx = 130,
@@ -639,7 +741,10 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
 
                 Spacer(modifier = GlanceModifier.defaultWeight())
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = GlanceModifier.clickable(actionStartActivity(moneyIntent)),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Image(
                         provider = ImageProvider(cardIcon),
                         contentDescription = null,
@@ -668,6 +773,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                     .background(Color(0x14FFFFFF))
                     .cornerRadius(14.dp)
                     .padding(11.dp)
+                    .clickable(actionStartActivity(sleepIntent))
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
@@ -726,10 +832,10 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
             // Habits Row: Water, Smokes, Stress
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 // Water
-                HabitTile("Water", "${waterMl.toInt()} ml", "${(waterPercent * 100).toInt()}%", dropIcon, Color(0xFF3B82F6), GlanceModifier.defaultWeight())
+                HabitTile("Water", "${waterMl.toInt()} ml", "${(waterPercent * 100).toInt()}%", dropIcon, Color(0xFF3B82F6), GlanceModifier.defaultWeight().clickable(actionStartActivity(waterIntent)))
                 Spacer(modifier = GlanceModifier.width(8.dp))
                 // Smokes
-                HabitTile("Smokes", "$smokesCount", "Limit $smokesBase", flameIcon, Color(smokesRingColorInt), GlanceModifier.defaultWeight())
+                HabitTile("Smokes", "$smokesCount", "Limit $smokesBase", flameIcon, Color(smokesRingColorInt), GlanceModifier.defaultWeight().clickable(actionStartActivity(smokesIntent)))
                 Spacer(modifier = GlanceModifier.width(8.dp))
                 // Stress
                 Box(
@@ -738,6 +844,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .background(Color(0x14FFFFFF))
                         .cornerRadius(12.dp)
                         .padding(9.dp)
+                        .clickable(actionStartActivity(stressIntent))
                 ) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -762,6 +869,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                     .background(Color(0x14FFFFFF))
                     .cornerRadius(13.dp)
                     .padding(11.dp)
+                    .clickable(actionStartActivity(tagdosIntent))
             ) {
                 Column {
                     Row(modifier = GlanceModifier.fillMaxWidth()) {

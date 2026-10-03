@@ -191,6 +191,8 @@ class WeatherRepository(
         refreshWeather(force = true, unitSystem = unitSystem, onSuccess = onSuccess)
     }
 
+    var gpsLocationProvider: (suspend () -> CoordinatesResult?)? = null
+
     private suspend fun getResilientCoordinates(): CoordinatesResult {
         // 1. Check in-memory coordinates if within cache TTL
         val cached = lastCoordinates
@@ -198,7 +200,15 @@ class WeatherRepository(
             return CoordinatesResult(cached.first, cached.second, _currentLocationName.value, _locationSource.value)
         }
 
-        // 2. IP Geolocation fallback (freeipapi.com)
+        // 2. Try hardware GPS provider
+        try {
+            val gpsResult = gpsLocationProvider?.invoke()
+            if (gpsResult != null) {
+                return gpsResult
+            }
+        } catch (_: Exception) {}
+
+        // 3. IP Geolocation fallback (freeipapi.com)
         try {
             val ipInfo: IpLocationResponse = httpClient.get(ipUrl).body()
             val lat = ipInfo.latitude
@@ -210,7 +220,7 @@ class WeatherRepository(
             // Ignore IP failure and fall back
         }
 
-        // 3. Fallback coordinates (Bucharest / New York default)
+        // 4. Fallback coordinates (Bucharest / New York default)
         return CoordinatesResult(44.4268, 26.1025, "Bucharest", LocationSource.Unknown)
     }
 

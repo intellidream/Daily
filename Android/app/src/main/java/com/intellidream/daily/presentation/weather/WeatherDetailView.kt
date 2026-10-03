@@ -33,13 +33,26 @@ import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.intellidream.daily.location.AndroidLocationManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -64,6 +77,7 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeatherDetailView(
     weather: WeatherResponse?,
@@ -84,17 +98,54 @@ fun WeatherDetailView(
 ) {
     var showingSearchSheet by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+
+    val haptic = LocalHapticFeedback.current
+    val pullRefreshState = rememberPullToRefreshState()
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onRefreshWeather()
+            pullRefreshState.endRefresh()
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) {
+            onRefreshWeather()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (isAutoLocation && !AndroidLocationManager.hasLocationPermission(context)) {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
 
     val unitSymbol = settings.weatherUnitSystem.tempSymbol
     val speedUnit = if (settings.weatherUnitSystem == com.intellidream.daily.model.WeatherUnitSystem.Metric) "m/s" else "mph"
     val dateFormatter = remember { SimpleDateFormat("EEE, MMM d", Locale.getDefault()) }
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+        ) {
         // Top Location Bar
         TopLocationBar(
             cityName = locationName,
@@ -115,6 +166,79 @@ fun WeatherDetailView(
                 .padding(bottom = 110.dp), // Clear floating navigation capsule
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+            // Location Permission Prompt Banner if needed
+            if (isAutoLocation && locationSource != LocationSource.GPS && !AndroidLocationManager.hasLocationPermission(context)) {
+                GlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                        .clickable {
+                            permissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        },
+                    cornerRadius = 16.dp,
+                    padding = 14.dp
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(ThemeColors.accentCyan.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.MyLocation,
+                                contentDescription = null,
+                                tint = ThemeColors.accentCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Enable Exact GPS Location",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Get hyper-local temperature, precipitation & radar",
+                                color = Color.White.copy(alpha = 0.65f),
+                                fontSize = 12.sp
+                            )
+                        }
+                        GlassButton(
+                            onClick = {
+                                permissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            },
+                            cornerRadius = 10.dp,
+                            paddingHorizontal = 12.dp,
+                            paddingVertical = 6.dp
+                        ) {
+                            Text(
+                                text = "Allow",
+                                color = ThemeColors.accentCyan,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+
             if (weather != null) {
                 // Hero Weather Card
                 HeroWeatherCard(
@@ -155,6 +279,14 @@ fun WeatherDetailView(
                 )
             }
         }
+    }
+
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            containerColor = Color(0xFF0D182E),
+            contentColor = ThemeColors.accentCyan
+        )
     }
 
     if (showingSearchSheet) {
@@ -566,16 +698,9 @@ private fun LoadingCard() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            CircularProgressIndicator(
-                color = ThemeColors.accentCyan,
-                strokeWidth = 3.dp,
-                modifier = Modifier.size(36.dp)
-            )
-            Text(
-                text = "Fetching live atmospheric telemetry...",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
+            DailyLiquidLoadingIndicator(
+                size = 52.dp,
+                label = "Measuring atmospheric telemetry..."
             )
         }
     }

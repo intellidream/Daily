@@ -2,6 +2,7 @@ package com.intellidream.daily.glance
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -100,6 +101,8 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
         val sourceDevice = session?.sourceDevice?.takeIf { it.isNotBlank() } ?: "Pixel Watch"
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_OPEN_HEALTH_SLEEP"
+            data = Uri.parse("daily://health/sleep")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HEALTH)
             putExtra(MainActivity.EXTRA_HEALTH_SUBTAB, "sleep")
@@ -181,9 +184,9 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
         efficiencyPercent: Int
     ) {
         val ringBitmap = WidgetVisualGraphics.createSleepScoreRingBitmap(
-            sizePx = 180,
+            sizePx = 220,
             score = sleepScore,
-            strokeWidthPx = 16f
+            strokeWidthPx = 18f
         )
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.MOON_STARS,
@@ -225,7 +228,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.Top
                 ) {
                     Box(
-                        modifier = GlanceModifier.size(72.dp),
+                        modifier = GlanceModifier.size(84.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -240,7 +243,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                                 text = "$sleepScore",
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 17.sp,
+                                    fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -248,7 +251,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                                 text = "/ 100",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0x99FFFFFF)),
-                                    fontSize = 9.5.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
@@ -367,7 +370,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
         sourceDevice: String
     ) {
         val ringBitmap = WidgetVisualGraphics.createSleepScoreRingBitmap(
-            sizePx = 200,
+            sizePx = 225,
             score = sleepScore,
             strokeWidthPx = 18f
         )
@@ -394,9 +397,9 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
             modifier = GlanceModifier.fillMaxSize().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Hero: 78x78 Radial Sleep Score Ring
+            // Left Hero: 88x88 Radial Sleep Score Ring
             Box(
-                modifier = GlanceModifier.size(78.dp),
+                modifier = GlanceModifier.size(88.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -411,7 +414,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                         text = totalAsleepFormatted,
                         style = TextStyle(
                             color = ColorProvider(Color.White),
-                            fontSize = 14.5.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -426,7 +429,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                             text = "$sleepScore pts",
                             style = TextStyle(
                                 color = ColorProvider(Color(0xFF00E5FF)),
-                                fontSize = 9.5.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -571,7 +574,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
         sourceDevice: String
     ) {
         val ringBitmap = WidgetVisualGraphics.createSleepScoreRingBitmap(
-            sizePx = 220,
+            sizePx = 240,
             score = sleepScore,
             strokeWidthPx = 20f
         )
@@ -689,7 +692,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
-                    modifier = GlanceModifier.size(82.dp),
+                    modifier = GlanceModifier.size(92.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
@@ -704,7 +707,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                             text = "$sleepScore",
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
-                                fontSize = 24.sp,
+                                fontSize = 26.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )

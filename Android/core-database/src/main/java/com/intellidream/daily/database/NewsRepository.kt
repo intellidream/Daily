@@ -202,10 +202,10 @@ class NewsRepository(
     }
 
     suspend fun loadAllNews(forceRefresh: Boolean = false) = withContext(Dispatchers.IO) {
-        if (!forceRefresh) {
-            val cached = feedCache["all_news"]
-            if (cached != null && cached.first.isNotEmpty() && System.currentTimeMillis() - cached.second < cacheDurationMillis) {
-                _articles.value = cached.first
+        val cached = feedCache["all_news"]
+        if (cached != null && cached.first.isNotEmpty()) {
+            _articles.value = cached.first
+            if (!forceRefresh && System.currentTimeMillis() - cached.second < cacheDurationMillis) {
                 return@withContext
             }
         }
@@ -220,8 +220,8 @@ class NewsRepository(
                 activeFeeds.map { feed ->
                     async {
                         try {
-                            fetchFeedItems(feed).take(3)
-                        } catch (_: Exception) {
+                            fetchFeedItems(feed).take(4)
+                        } catch (_: Throwable) {
                             emptyList()
                         }
                     }
@@ -234,7 +234,7 @@ class NewsRepository(
             } else if (_articles.value.isEmpty()) {
                 _errorMessage.value = "Unable to load latest news briefings."
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             if (_articles.value.isEmpty()) {
                 _errorMessage.value = "Unable to load latest news briefings."
             }
@@ -250,12 +250,16 @@ class NewsRepository(
         }
         val body = syncHandler?.fetchUrl(targetUrl) ?: downloadString(targetUrl) ?: return@withContext emptyList()
 
-        if (feed.type == FeedType.WpJson || targetUrl.contains("wp-json", ignoreCase = true)) {
-            val parser = WpJsonParser(feed)
-            parser.parse(body)
-        } else {
-            val parser = FeedParser(feed)
-            parser.parse(body)
+        try {
+            if (feed.type == FeedType.WpJson || targetUrl.contains("wp-json", ignoreCase = true)) {
+                val parser = WpJsonParser(feed)
+                parser.parse(body)
+            } else {
+                val parser = FeedParser(feed)
+                parser.parse(body)
+            }
+        } catch (_: Throwable) {
+            emptyList()
         }
     }
 
@@ -267,7 +271,7 @@ class NewsRepository(
             } else {
                 article
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             article
         }
     }
@@ -280,8 +284,8 @@ class NewsRepository(
                 val url = URL(currentUrl)
                 val conn = url.openConnection() as HttpURLConnection
                 conn.instanceFollowRedirects = true
-                conn.connectTimeout = 10000
-                conn.readTimeout = 10000
+                conn.connectTimeout = 4000
+                conn.readTimeout = 5000
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36")
                 conn.setRequestProperty("Accept", "application/rss+xml, application/atom+xml, application/json, text/xml, text/html, */*")
                 val responseCode = conn.responseCode

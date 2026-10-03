@@ -45,9 +45,16 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Watch
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -82,6 +89,7 @@ import java.util.Locale
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HealthMainView(
     repository: HealthDataRepository,
@@ -123,7 +131,7 @@ fun HealthMainView(
 
     LaunchedEffect(Unit) {
         if (repository.healthConnectManager.isAvailable) {
-            hasHealthPermissions = repository.healthConnectManager.hasAnyPermissions()
+            hasHealthPermissions = repository.healthConnectManager.hasAllPermissions()
         }
     }
 
@@ -136,6 +144,16 @@ fun HealthMainView(
         }
     }
 
+    val haptic = LocalHapticFeedback.current
+    val pullRefreshState = rememberPullToRefreshState()
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            repository.loadDataForSelectedDate(forceRefresh = true)
+            pullRefreshState.endRefresh()
+        }
+    }
+
     val tabs = HealthSubTab.entries
     val currentTabIndex = tabs.indexOf(activeSubTab)
 
@@ -143,6 +161,7 @@ fun HealthMainView(
         modifier = modifier
             .fillMaxSize()
             .background(ThemeColors.backgroundGradient)
+            .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header Bar
@@ -324,6 +343,20 @@ fun HealthMainView(
                 }
             }
         }
+
+        if (isLoading && currentVitals.isEmpty()) {
+            DailyLiquidLoadingIndicator(
+                label = "Syncing Health Telemetry...",
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            containerColor = Color(0xFF0D182E),
+            contentColor = ThemeColors.accentCyan
+        )
     }
 }
 

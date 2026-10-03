@@ -2,6 +2,8 @@ package com.intellidream.daily.presentation.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -670,10 +672,12 @@ private fun LargeFinancesContent(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                topOutgoing.take(3).forEach { item ->
+                topOutgoing.forEach { item ->
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
