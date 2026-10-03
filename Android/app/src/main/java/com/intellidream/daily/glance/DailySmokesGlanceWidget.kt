@@ -53,15 +53,7 @@ class DailySmokesGlanceReceiver : GlanceAppWidgetReceiver() {
 
 class DailySmokesGlanceWidget : GlanceAppWidget() {
 
-    companion object {
-        private val SMALL_BOX = DpSize(120.dp, 100.dp)
-        private val MEDIUM_BOX = DpSize(240.dp, 100.dp)
-        private val LARGE_BOX = DpSize(240.dp, 200.dp)
-    }
-
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(SMALL_BOX, MEDIUM_BOX, LARGE_BOX)
-    )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
@@ -114,7 +106,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.height >= 180.dp -> LargeSmokesLayout(
+                        size.width >= 220.dp && size.height >= 180.dp -> LargeSmokesLayout(
                             todayTotal = todayTotal,
                             baseline = baseline,
                             cigsCount = cigsCount,
@@ -126,7 +118,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                             ringColorInt = ringColorInt,
                             lungColorInt = lungColorInt
                         )
-                        size.width >= 240.dp -> MediumSmokesLayout(
+                        size.width >= 220.dp -> MediumSmokesLayout(
                             todayTotal = todayTotal,
                             baseline = baseline,
                             formattedTime = formattedTime,
@@ -134,6 +126,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                             lungColorInt = lungColorInt
                         )
                         else -> SmallSmokesLayout(
+                            size = size,
                             todayTotal = todayTotal,
                             baseline = baseline,
                             formattedTime = formattedTime,
@@ -150,18 +143,23 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
     // =========================================================================
     @androidx.compose.runtime.Composable
     private fun SmallSmokesLayout(
+        size: DpSize,
         todayTotal: Int,
         baseline: Int,
         formattedTime: String,
         ringColorInt: Int
     ) {
         val progress = if (baseline > 0) min(todayTotal.toFloat() / baseline.toFloat(), 1f) else 0f
+        val availW = size.width.value - 34f
+        val availH = size.height.value - 48f
+        val ringSize = min(availW, availH).coerceIn(98f, 120f).dp
+        val bitmapPx = (ringSize.value * 2.5f).toInt().coerceAtLeast(240)
         val ringBitmap = WidgetVisualGraphics.createCircularProgressRingBitmap(
-            sizePx = 220,
+            sizePx = bitmapPx,
             progress = progress,
             ringColorInt = ringColorInt,
             startColorInt = android.graphics.Color.parseColor("#00E676"),
-            strokeWidthPx = 18f
+            strokeWidthPx = 24f
         )
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.FLAME,
@@ -193,7 +191,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.Top
                 ) {
                     Box(
-                        modifier = GlanceModifier.size(84.dp),
+                        modifier = GlanceModifier.size(ringSize),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -208,7 +206,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                                 text = "$todayTotal",
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 21.sp,
+                                    fontSize = 24.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -216,7 +214,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                                 text = "/ $baseline",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0x99FFFFFF)),
-                                    fontSize = 10.5.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
@@ -230,13 +228,13 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                         modifier = GlanceModifier
                             .background(Color(0x1FFFFFFF))
                             .cornerRadius(12.dp)
-                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
                     ) {
                         Text(
                             text = formattedTime,
                             style = TextStyle(
                                 color = ColorProvider(Color(0xE6FFFFFF)),
-                                fontSize = 9.5.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -254,7 +252,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                         label = "Cig",
                         color = Color(0xFFEF4444),
                         smokeType = "Cigarette",
-                        height = 26.dp,
+                        height = 28.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                     Spacer(modifier = GlanceModifier.width(4.dp))
@@ -262,7 +260,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                         label = "Heat",
                         color = Color(0xFF3B82F6),
                         smokeType = "Heated",
-                        height = 26.dp,
+                        height = 28.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                 }

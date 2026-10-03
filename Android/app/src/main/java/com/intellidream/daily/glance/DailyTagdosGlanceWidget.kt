@@ -61,15 +61,7 @@ class DailyTagdosGlanceReceiver : GlanceAppWidgetReceiver() {
 
 class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
-    companion object {
-        private val SMALL_BOX = DpSize(120.dp, 100.dp)
-        private val MEDIUM_BOX = DpSize(240.dp, 100.dp)
-        private val LARGE_BOX = DpSize(240.dp, 200.dp)
-    }
-
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(SMALL_BOX, MEDIUM_BOX, LARGE_BOX)
-    )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
@@ -153,12 +145,12 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.height >= 180.dp -> LargeTagdosLayout(
+                        size.width >= 220.dp && size.height >= 180.dp -> LargeTagdosLayout(
                             streams = streams,
                             totalActivePills = totalActivePills,
                             nextReminderFormatted = nextReminderFormatted
                         )
-                        size.width >= 240.dp -> MediumTagdosLayout(
+                        size.width >= 220.dp -> MediumTagdosLayout(
                             stream1 = stream1,
                             stream2 = stream2
                         )

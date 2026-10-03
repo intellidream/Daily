@@ -44,6 +44,7 @@ import com.intellidream.daily.R
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 class DailySleepGlanceReceiver : GlanceAppWidgetReceiver() {
@@ -52,15 +53,7 @@ class DailySleepGlanceReceiver : GlanceAppWidgetReceiver() {
 
 class DailySleepGlanceWidget : GlanceAppWidget() {
 
-    companion object {
-        private val SMALL_BOX = DpSize(120.dp, 100.dp)
-        private val MEDIUM_BOX = DpSize(240.dp, 100.dp)
-        private val LARGE_BOX = DpSize(240.dp, 200.dp)
-    }
-
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(SMALL_BOX, MEDIUM_BOX, LARGE_BOX)
-    )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
@@ -120,7 +113,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.height >= 180.dp -> LargeSleepLayout(
+                        size.width >= 220.dp && size.height >= 180.dp -> LargeSleepLayout(
                             sleepScore = sleepScore,
                             totalAsleepFormatted = totalAsleepFormatted,
                             timeInBedFormatted = timeInBedFormatted,
@@ -141,7 +134,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                             hrvMs = hrvMs,
                             sourceDevice = sourceDevice
                         )
-                        size.width >= 240.dp -> MediumSleepLayout(
+                        size.width >= 220.dp -> MediumSleepLayout(
                             sleepScore = sleepScore,
                             totalAsleepFormatted = totalAsleepFormatted,
                             timeInBedFormatted = timeInBedFormatted,
@@ -160,6 +153,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                             sourceDevice = sourceDevice
                         )
                         else -> SmallSleepLayout(
+                            size = size,
                             sleepScore = sleepScore,
                             totalAsleepFormatted = totalAsleepFormatted,
                             bedtimeFormatted = bedtimeFormatted,
@@ -177,16 +171,21 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
     // =========================================================================
     @androidx.compose.runtime.Composable
     private fun SmallSleepLayout(
+        size: DpSize,
         sleepScore: Int,
         totalAsleepFormatted: String,
         bedtimeFormatted: String,
         wakeTimeFormatted: String,
         efficiencyPercent: Int
     ) {
+        val availW = size.width.value - 34f
+        val availH = size.height.value - 48f
+        val ringSize = min(availW, availH).coerceIn(98f, 120f).dp
+        val bitmapPx = (ringSize.value * 2.5f).toInt().coerceAtLeast(240)
         val ringBitmap = WidgetVisualGraphics.createSleepScoreRingBitmap(
-            sizePx = 220,
+            sizePx = bitmapPx,
             score = sleepScore,
-            strokeWidthPx = 18f
+            strokeWidthPx = 24f
         )
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.MOON_STARS,
@@ -228,7 +227,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.Top
                 ) {
                     Box(
-                        modifier = GlanceModifier.size(84.dp),
+                        modifier = GlanceModifier.size(ringSize),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -243,7 +242,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                                 text = "$sleepScore",
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 22.sp,
+                                    fontSize = 25.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -251,7 +250,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                                 text = "/ 100",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0x99FFFFFF)),
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
@@ -265,13 +264,13 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                         modifier = GlanceModifier
                             .background(Color(0x2E8B5CF6))
                             .cornerRadius(12.dp)
-                            .padding(horizontal = 5.5.dp, vertical = 2.5.dp)
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
                     ) {
                         Text(
                             text = totalAsleepFormatted,
                             style = TextStyle(
                                 color = ColorProvider(Color(0xFFA855F7)),
-                                fontSize = 9.5.sp,
+                                fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -289,9 +288,9 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .defaultWeight()
-                            .height(24.dp)
+                            .height(26.dp)
                             .background(Color(0x248B5CF6))
-                            .cornerRadius(12.dp)
+                            .cornerRadius(13.dp)
                             .padding(horizontal = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -299,14 +298,14 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                             Image(
                                 provider = ImageProvider(moonIcon),
                                 contentDescription = null,
-                                modifier = GlanceModifier.size(8.dp)
+                                modifier = GlanceModifier.size(9.dp)
                             )
                             Spacer(modifier = GlanceModifier.width(2.dp))
                             Text(
                                 text = "$bedtimeFormatted-$wakeTimeFormatted",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0xFFA855F7)),
-                                    fontSize = 8.5.sp,
+                                    fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -319,9 +318,9 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .defaultWeight()
-                            .height(24.dp)
+                            .height(26.dp)
                             .background(Color(0x2400E5FF))
-                            .cornerRadius(12.dp)
+                            .cornerRadius(13.dp)
                             .padding(horizontal = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -329,7 +328,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                             Image(
                                 provider = ImageProvider(sparklesIcon),
                                 contentDescription = null,
-                                modifier = GlanceModifier.size(8.dp)
+                                modifier = GlanceModifier.size(9.dp)
                             )
                             Spacer(modifier = GlanceModifier.width(2.dp))
                             Text(
@@ -755,52 +754,55 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
 
             Spacer(modifier = GlanceModifier.height(10.dp))
 
-            // Proportional Stage Architecture Header & Bar
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "STAGE ARCHITECTURE",
-                    style = TextStyle(
-                        color = ColorProvider(Color(0x73FFFFFF)),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
+            // Proportional Stage Architecture Section
+            Column(modifier = GlanceModifier.fillMaxWidth()) {
+                // Header & Bar
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "STAGE ARCHITECTURE",
+                        style = TextStyle(
+                            color = ColorProvider(Color(0x73FFFFFF)),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     )
-                )
-                Spacer(modifier = GlanceModifier.defaultWeight())
-                Text(
-                    text = "$restorativePercent% Restorative",
-                    style = TextStyle(
-                        color = ColorProvider(Color(0xFFA855F7)),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
+                    Spacer(modifier = GlanceModifier.defaultWeight())
+                    Text(
+                        text = "$restorativePercent% Restorative",
+                        style = TextStyle(
+                            color = ColorProvider(Color(0xFFA855F7)),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     )
+                }
+
+                Spacer(modifier = GlanceModifier.height(4.dp))
+
+                Image(
+                    provider = ImageProvider(hypnogramBitmap),
+                    contentDescription = null,
+                    modifier = GlanceModifier.fillMaxWidth().height(10.dp)
                 )
-            }
 
-            Spacer(modifier = GlanceModifier.height(4.dp))
+                Spacer(modifier = GlanceModifier.height(8.dp))
 
-            Image(
-                provider = ImageProvider(hypnogramBitmap),
-                contentDescription = null,
-                modifier = GlanceModifier.fillMaxWidth().height(10.dp)
-            )
-
-            Spacer(modifier = GlanceModifier.height(8.dp))
-
-            // 4-Column Stage Breakdown Grid
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                LargeStageCard("Deep", deepFormatted, "20%", Color(0xFF6366F1), GlanceModifier.defaultWeight())
-                Spacer(modifier = GlanceModifier.width(6.dp))
-                LargeStageCard("REM", remFormatted, "22%", Color(0xFF8B5CF6), GlanceModifier.defaultWeight())
-                Spacer(modifier = GlanceModifier.width(6.dp))
-                LargeStageCard("Light", lightFormatted, "58%", Color(0xFF00E5FF), GlanceModifier.defaultWeight())
-                Spacer(modifier = GlanceModifier.width(6.dp))
-                LargeStageCard("Awake", awakeFormatted, "7%", Color(0xFFEF4444), GlanceModifier.defaultWeight())
+                // 4-Column Stage Breakdown Grid
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LargeStageCard("Deep", deepFormatted, "20%", Color(0xFF6366F1), GlanceModifier.defaultWeight())
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    LargeStageCard("REM", remFormatted, "22%", Color(0xFF8B5CF6), GlanceModifier.defaultWeight())
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    LargeStageCard("Light", lightFormatted, "58%", Color(0xFF00E5FF), GlanceModifier.defaultWeight())
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    LargeStageCard("Awake", awakeFormatted, "7%", Color(0xFFEF4444), GlanceModifier.defaultWeight())
+                }
             }
 
             Spacer(modifier = GlanceModifier.defaultWeight())

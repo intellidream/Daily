@@ -41,7 +41,7 @@ import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
 import com.intellidream.daily.R
-import kotlinx.coroutines.flow.firstOrNull
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 class DailyStressGlanceReceiver : GlanceAppWidgetReceiver() {
@@ -50,14 +50,7 @@ class DailyStressGlanceReceiver : GlanceAppWidgetReceiver() {
 
 class DailyStressGlanceWidget : GlanceAppWidget() {
 
-    companion object {
-        private val SMALL_BOX = DpSize(120.dp, 100.dp)
-        private val MEDIUM_BOX = DpSize(240.dp, 100.dp)
-    }
-
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(SMALL_BOX, MEDIUM_BOX)
-    )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
@@ -125,7 +118,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                         .cornerRadius(22.dp)
                         .clickable(actionStartActivity(launchIntent))
                 ) {
-                    if (size.width >= 240.dp) {
+                    if (size.width >= 220.dp) {
                         MediumStressLayout(
                             stressScore = stressScore,
                             levelName = levelName,
@@ -141,6 +134,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                         )
                     } else {
                         SmallStressLayout(
+                            size = size,
                             stressScore = stressScore,
                             levelName = levelName,
                             levelColor = levelColor,
@@ -162,6 +156,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
     // =========================================================================
     @androidx.compose.runtime.Composable
     private fun SmallStressLayout(
+        size: DpSize,
         stressScore: Int,
         levelName: String,
         levelColor: Color,
@@ -172,15 +167,19 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
         sympatheticPercent: Int,
         hrvMs: Double
     ) {
+        val availW = size.width.value - 40f
+        val availH = size.height.value - 68f
+        val gaugeSize = min(availW, availH).coerceIn(92f, 110f).dp
+        val bitmapPx = (gaugeSize.value * 2.5f).toInt().coerceAtLeast(240)
         val gaugeBitmap = WidgetVisualGraphics.createStressGaugeBitmap(
-            sizePx = 200,
+            sizePx = bitmapPx,
             score = stressScore,
             levelColorInt = android.graphics.Color.parseColor(levelColorHex),
-            strokeWidthPx = 18f
+            strokeWidthPx = 22f
         )
         val balanceBitmap = WidgetVisualGraphics.createAutonomicBalanceBarBitmap(
-            widthPx = 240,
-            heightPx = 8,
+            widthPx = 280,
+            heightPx = 10,
             parasympatheticPct = parasympatheticPercent,
             sympatheticPct = sympatheticPercent
         )
@@ -246,7 +245,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                 contentAlignment = Alignment.Center
             ) {
                 Box(
-                    modifier = GlanceModifier.size(76.dp),
+                    modifier = GlanceModifier.size(gaugeSize),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
@@ -261,7 +260,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             text = "$stressScore",
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
-                                fontSize = 24.sp,
+                                fontSize = 26.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -269,7 +268,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             text = "/100",
                             style = TextStyle(
                                 color = ColorProvider(Color(0x80FFFFFF)),
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )

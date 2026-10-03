@@ -51,15 +51,7 @@ class DailyMoneyGlanceReceiver : GlanceAppWidgetReceiver() {
 
 class DailyMoneyGlanceWidget : GlanceAppWidget() {
 
-    companion object {
-        private val SMALL_BOX = DpSize(120.dp, 100.dp)
-        private val MEDIUM_BOX = DpSize(240.dp, 100.dp)
-        private val LARGE_BOX = DpSize(240.dp, 200.dp)
-    }
-
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(SMALL_BOX, MEDIUM_BOX, LARGE_BOX)
-    )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
@@ -105,7 +97,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.height >= 180.dp -> LargeMoneyLayout(
+                        size.width >= 220.dp && size.height >= 180.dp -> LargeMoneyLayout(
                             netWorthLei = netWorthLei,
                             netWorthEUR = netWorthEUR,
                             depositsTotal = depositsTotal,
@@ -113,7 +105,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                             cashAmount = cashAmount,
                             topOutgoing = topOutgoing
                         )
-                        size.width >= 240.dp -> MediumMoneyLayout(
+                        size.width >= 220.dp -> MediumMoneyLayout(
                             netWorthLei = netWorthLei,
                             formattedEUR = formattedEUR,
                             incomingTotal = incomingTotal,
@@ -505,21 +497,24 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
 
             Spacer(modifier = GlanceModifier.defaultWeight())
 
-            // Divider
-            Box(modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(Color(0x1FFFFFFF))) {}
+            // Bottom Actions Panel
+            Column(modifier = GlanceModifier.fillMaxWidth()) {
+                // Divider
+                Box(modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(Color(0x1FFFFFFF))) {}
 
-            Spacer(modifier = GlanceModifier.height(10.dp))
+                Spacer(modifier = GlanceModifier.height(10.dp))
 
-            // Quick Adjust Action Grid (3 buttons, height 32.dp)
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                MoneyActionButton("-100 Card", Color(0xFFFF2D55), "Card", -100.0, 32.dp, GlanceModifier.defaultWeight())
-                Spacer(modifier = GlanceModifier.width(6.dp))
-                MoneyActionButton("-100 Cash", Color(0xFFFF2D55), "Cash", -100.0, 32.dp, GlanceModifier.defaultWeight())
-                Spacer(modifier = GlanceModifier.width(6.dp))
-                MoneyActionButton("+100 Card", Color(0xFF00E676), "Card", 100.0, 32.dp, GlanceModifier.defaultWeight())
+                // Quick Adjust Action Grid (3 buttons, height 32.dp)
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MoneyActionButton("-100 Card", Color(0xFFFF2D55), "Card", -100.0, 32.dp, GlanceModifier.defaultWeight())
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    MoneyActionButton("-100 Cash", Color(0xFFFF2D55), "Cash", -100.0, 32.dp, GlanceModifier.defaultWeight())
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    MoneyActionButton("+100 Card", Color(0xFF00E676), "Card", 100.0, 32.dp, GlanceModifier.defaultWeight())
+                }
             }
         }
     }

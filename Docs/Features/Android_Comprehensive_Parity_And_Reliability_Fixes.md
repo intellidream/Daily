@@ -89,20 +89,31 @@ This document details the architectural refactoring, reliability fixes, and UX p
   - `DailyTagdosGlanceWidget`: `action = "...ACTION_OPEN_TAGDOS"`, `data = Uri.parse("daily://tagdos")`
   - `DailyCombinedGlanceWidget`: Multi-quadrant clickable tiles linking to Sleep Studio, Water, Smokes, Stress, TagDoS, and Net Worth independently.
 
-### Geometry & Visual Hierarchy Polish
-- **Enlarged Progress Rings**: Increased gauge sizes on Small widgets from 72dp/52dp up to 84dp/76dp, filling unused negative space while maintaining comfortable padding.
-- **Enhanced Typography**: Boosted metric font sizes (up to 24–26sp bold) and refined high-contrast colors matching the iOS glassmorphic style.
+### Geometry & Visual Hierarchy Polish (Small Widgets Progress Rings Overhaul)
+- **Eliminated Wasted Negative Space**:
+  - Replaced rigid `SizeMode.Responsive` with `SizeMode.Exact` across all 7 Glance widget providers (`DailyBubblesGlanceWidget`, `DailySmokesGlanceWidget`, `DailySleepGlanceWidget`, `DailyStressGlanceWidget`, `DailyCombinedGlanceWidget`, `DailyMoneyGlanceWidget`, `DailyTagdosGlanceWidget`). This provides real-time launcher cell measurements and removes 160dp cell dead-zones.
+  - Updated provider XML specifications (`targetCellWidth="2"`, `targetCellHeight="2"`, `minWidth="130dp"`, `minHeight="110dp"`, `minResizeWidth="130dp"`, `minResizeHeight="110dp"`) for tight 2x2 launcher grid snapping.
+- **Enlarged Progress Rings & Gauges**:
+  - **Bubbles Small**: Dynamic progress ring scaled to `min(availW, availH).coerceIn(98f, 120f).dp` with 24px stroke and bold 22sp metric text, alongside integrated quick intake chips (+100, +150, +300 ml).
+  - **Smokes Small**: Dynamic progress ring scaled to `min(availW, availH).coerceIn(98f, 120f).dp` with 24px stroke, 24sp counter, elapsed time badge, cigarette/heat quick-log buttons, and subtle flame watermark.
+  - **Sleep Small**: Sleep score ring scaled to `min(availW, availH).coerceIn(98f, 120f).dp` with 24px stroke and 25sp bold score typography.
+  - **Stress Small**: Arc gauge expanded to `min(availW - 40f, availH - 68f).coerceIn(92f, 110f).dp` with 22px stroke and 26sp score.
+  - **Combined Small**: Upgraded mini-gauge to 130px canvas and mini-ring to 42dp with bold 12sp indicators.
+- **Glance RemoteViews 10-Child Container Limit Fix**:
+  - Discovered and resolved Android RemoteViews hard constraint (`Column container cannot have more than 10 elements`). Wrapped stage breakdowns in `DailySleepGlanceWidget` and bottom actions in `DailyMoneyGlanceWidget` into semantic sub-Columns, reducing direct parent children to <= 9 and ensuring 100% crash-free widget translation.
 
 ---
 
 ## 8. Verification & Telemetry
 1. **Compilation & Unit Tests**:
-   - `:app:compileDebugKotlin` passed with 0 errors.
+   - `:app:compileDebugKotlin` and `:app:assembleDebug` passed with 0 errors.
    - `:core-model:testDebugUnitTest` and all subproject unit tests passed (123 tasks).
-2. **Emulator Verification (`emulator-5554`)**:
+2. **Emulator Verification (`emulator-5554` - Medium_Phone_API_36.1)**:
    - Location permission prompted and verified with live weather updates ("Grefoaicele").
    - News feed loaded 64 stories; article reader extracted content flawlessly without crashes.
    - Pull-to-refresh animated smoothly with dark glass container.
    - Subtab swiping in News verified in both directions.
    - Water logged and rendered in timeline, 7-day bars, and 16-week heatmap.
    - TagDoS home screen widget verified live with interactive deep linking directly into the Tagdos hub.
+   - Small Glance widgets (Bubbles, Smokes, Sleep, Stress, Combined, Money, TagDoS) verified pinned to home screen with enlarged progress rings and zero wasted whitespace.
+

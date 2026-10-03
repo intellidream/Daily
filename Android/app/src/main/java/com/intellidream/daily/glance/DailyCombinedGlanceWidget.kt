@@ -54,15 +54,7 @@ class DailyCombinedGlanceReceiver : GlanceAppWidgetReceiver() {
 
 class DailyCombinedGlanceWidget : GlanceAppWidget() {
 
-    companion object {
-        private val SMALL_BOX = DpSize(120.dp, 100.dp)
-        private val MEDIUM_BOX = DpSize(240.dp, 100.dp)
-        private val LARGE_BOX = DpSize(240.dp, 200.dp)
-    }
-
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(SMALL_BOX, MEDIUM_BOX, LARGE_BOX)
-    )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
@@ -173,7 +165,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.height >= 180.dp -> LargeCombinedLayout(
+                        size.width >= 220.dp && size.height >= 180.dp -> LargeCombinedLayout(
                             waterMl = waterMl,
                             goalMl = goalMl,
                             waterPercent = waterPercent,
@@ -199,7 +191,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                             moneyIntent = financesMoneyIntent,
                             tagdosIntent = tagdosIntent
                         )
-                        size.width >= 240.dp -> MediumCombinedLayout(
+                        size.width >= 220.dp -> MediumCombinedLayout(
                             waterMl = waterMl,
                             goalMl = goalMl,
                             waterPercent = waterPercent,
@@ -275,22 +267,22 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         tagdosIntent: Intent
     ) {
         val sleepGauge = WidgetVisualGraphics.createMiniMetricGaugeBitmap(
-            sizePx = 90,
+            sizePx = 130,
             progress = sleepScore / 100f,
             colorInt = android.graphics.Color.parseColor("#00E5FF"),
-            strokeWidthPx = 8f
+            strokeWidthPx = 12f
         )
         val waterGauge = WidgetVisualGraphics.createMiniMetricGaugeBitmap(
-            sizePx = 90,
+            sizePx = 130,
             progress = waterPercent.toFloat(),
             colorInt = android.graphics.Color.parseColor("#3B82F6"),
-            strokeWidthPx = 8f
+            strokeWidthPx = 12f
         )
         val smokesGauge = WidgetVisualGraphics.createMiniMetricGaugeBitmap(
-            sizePx = 90,
+            sizePx = 130,
             progress = min(smokesCount.toFloat() / max(smokesBase, 1), 1f),
             colorInt = smokesRingColorInt,
-            strokeWidthPx = 8f
+            strokeWidthPx = 12f
         )
 
         val moonIcon = WidgetVisualGraphics.createVectorIconBitmap(WidgetIconType.MOON, 20, android.graphics.Color.parseColor("#00E5FF"))
@@ -910,7 +902,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
-                modifier = GlanceModifier.size(36.dp),
+                modifier = GlanceModifier.size(42.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -920,20 +912,20 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                 )
                 Text(
                     text = valueText,
-                    style = TextStyle(color = ColorProvider(Color.White), fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                    style = TextStyle(color = ColorProvider(Color.White), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 )
             }
-            Spacer(modifier = GlanceModifier.height(2.dp))
+            Spacer(modifier = GlanceModifier.height(2.5.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
                     provider = ImageProvider(iconBitmap),
                     contentDescription = null,
-                    modifier = GlanceModifier.size(7.dp)
+                    modifier = GlanceModifier.size(8.5.dp)
                 )
-                Spacer(modifier = GlanceModifier.width(2.dp))
+                Spacer(modifier = GlanceModifier.width(2.5.dp))
                 Text(
                     text = labelText,
-                    style = TextStyle(color = ColorProvider(Color(0xBFFFFFFF)), fontSize = 7.5.sp, fontWeight = FontWeight.Medium)
+                    style = TextStyle(color = ColorProvider(Color(0xBFFFFFFF)), fontSize = 8.5.sp, fontWeight = FontWeight.Medium)
                 )
             }
         }

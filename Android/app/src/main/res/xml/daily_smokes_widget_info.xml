@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="180dp"
+    android:minWidth="130dp"
     android:minHeight="110dp"
-    android:targetCellWidth="3"
+    android:targetCellWidth="2"
     android:targetCellHeight="2"
+    android:minResizeWidth="130dp"
+    android:minResizeHeight="110dp"
     android:maxResizeWidth="500dp"
     android:maxResizeHeight="400dp"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/widget_smokes_description"
     android:updatePeriodMillis="1800000" />
+

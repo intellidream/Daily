@@ -53,15 +53,8 @@ class DailyBubblesGlanceReceiver : GlanceAppWidgetReceiver() {
 
 class DailyBubblesGlanceWidget : GlanceAppWidget() {
 
-    companion object {
-        private val SMALL_BOX = DpSize(120.dp, 100.dp)
-        private val MEDIUM_BOX = DpSize(240.dp, 100.dp)
-        private val LARGE_BOX = DpSize(240.dp, 200.dp)
-    }
+    override val sizeMode: SizeMode = SizeMode.Exact
 
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(SMALL_BOX, MEDIUM_BOX, LARGE_BOX)
-    )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
@@ -108,7 +101,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.height >= 180.dp -> LargeBubblesLayout(
+                        size.width >= 220.dp && size.height >= 180.dp -> LargeBubblesLayout(
                             todayMl = todayMl,
                             goalMl = goalMl,
                             progressPercent = progressPercent,
@@ -117,7 +110,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                             teaMl = teaMl,
                             breakdown = breakdown
                         )
-                        size.width >= 240.dp -> MediumBubblesLayout(
+                        size.width >= 220.dp -> MediumBubblesLayout(
                             todayMl = todayMl,
                             goalMl = goalMl,
                             progressPercent = progressPercent,
@@ -127,6 +120,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                             breakdown = breakdown
                         )
                         else -> SmallBubblesLayout(
+                            size = size,
                             todayMl = todayMl,
                             goalMl = goalMl,
                             progressPercent = progressPercent,
@@ -143,17 +137,22 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
     // =========================================================================
     @androidx.compose.runtime.Composable
     private fun SmallBubblesLayout(
+        size: DpSize,
         todayMl: Double,
         goalMl: Double,
         progressPercent: Double,
         breakdown: List<Pair<Double, Int>>
     ) {
+        val availW = size.width.value - 34f
+        val availH = size.height.value - 48f
+        val ringSize = min(availW, availH).coerceIn(98f, 120f).dp
+        val bitmapPx = (ringSize.value * 2.5f).toInt().coerceAtLeast(240)
         val ringBitmap = WidgetVisualGraphics.createMultiDrinkArcBitmap(
-            sizePx = 220,
+            sizePx = bitmapPx,
             todayMl = todayMl,
             goalMl = goalMl,
             breakdown = breakdown,
-            strokeWidthPx = 18f
+            strokeWidthPx = 24f
         )
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.DROP,
@@ -185,7 +184,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.Top
                 ) {
                     Box(
-                        modifier = GlanceModifier.size(84.dp),
+                        modifier = GlanceModifier.size(ringSize),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -200,7 +199,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                                 text = "${todayMl.toInt()}",
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 20.sp,
+                                    fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -208,7 +207,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                                 text = "/ ${goalMl.toInt()} ml",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0x99FFFFFF)),
-                                    fontSize = 10.5.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
@@ -228,7 +227,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                             text = "${(progressPercent * 100).toInt()}%",
                             style = TextStyle(
                                 color = ColorProvider(Color(0xFF00E5FF)),
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -247,7 +246,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         amount = 100.0,
                         drinkType = "Coffee",
                         color = Color(0xFFF59E0B),
-                        height = 26.dp,
+                        height = 28.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                     Spacer(modifier = GlanceModifier.width(4.dp))
@@ -256,7 +255,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         amount = 150.0,
                         drinkType = "Water",
                         color = Color(0xFF00E5FF),
-                        height = 26.dp,
+                        height = 28.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                     Spacer(modifier = GlanceModifier.width(4.dp))
@@ -265,7 +264,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         amount = 300.0,
                         drinkType = "Water",
                         color = Color(0xFF00E5FF),
-                        height = 26.dp,
+                        height = 28.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                 }
