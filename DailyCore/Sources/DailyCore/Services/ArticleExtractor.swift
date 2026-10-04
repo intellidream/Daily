@@ -121,7 +121,8 @@ public final class ArticleExtractor: @unchecked Sendable {
         
         let junkClassPatterns = [
             "marketing", "upnext", "up-next", "card-marketing", "teaser", "related",
-            "recommendation", "social", "ad-", "advertisement", "newsletter", "promo", "comment"
+            "recommendation", "recomand", "social", "ad-", "advertisement", "newsletter",
+            "promo", "comment", "box-article-newsletter", "card-articles"
         ]
         
         for pattern in articlePatterns {
@@ -146,13 +147,22 @@ public final class ArticleExtractor: @unchecked Sendable {
                     let containerHtml = ns.substring(with: match.range(at: 1))
                     let cleanContainer = sanitizeBodyHtml(containerHtml)
                     
-                    // Score candidate
+                    // Score candidate with semantic weighting
                     let charCount = cleanContainer.count
                     let pCount = countOccurrences(of: "<p>", in: cleanContainer)
                     let commaCount = countOccurrences(of: ",", in: cleanContainer)
-                    let score = charCount + (pCount * 60) + (commaCount * 5)
                     
-                    if score > bestScore && charCount > 300 {
+                    var semanticBonus = 0
+                    if openingTag.contains("articlebody") {
+                        semanticBonus = 1500
+                    } else if openingTag.hasPrefix("<article") {
+                        semanticBonus = 500
+                    }
+                    
+                    let score = charCount + (pCount * 60) + (commaCount * 5) + semanticBonus
+                    
+                    // Parity with Android: allow short articles if they have paragraphs or > 80 chars
+                    if score > bestScore && (charCount > 80 || pCount >= 1) {
                         bestScore = score
                         bestCandidate = cleanContainer
                     }
@@ -369,8 +379,23 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         extractor: ArticleExtractor
     ) async -> NewsArticle? {
         guard let url = URL(string: urlString) else { return nil }
+        
+        // Strip scripts and noscripts before loading into headless WebKit
+        // to prevent third-party cookie banners, trackers, and ad scripts from executing
+        // and injecting synthetic cookie consent tables into the DOM.
+        var sanitizedHtml = html.replacingOccurrences(
+            of: "<script[^>]*>[\\s\\S]*?</script>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        sanitizedHtml = sanitizedHtml.replacingOccurrences(
+            of: "<noscript[^>]*>[\\s\\S]*?</noscript>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        
         let wv = getOrCreateWebView()
-        wv.loadHTMLString(html, baseURL: url)
+        wv.loadHTMLString(sanitizedHtml, baseURL: url)
         
         let startTime = Date()
         while wv.isLoading && Date().timeIntervalSince(startTime) < 2.5 {
@@ -383,13 +408,58 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         (function() {
             try {
                 var doc = document.cloneNode(true);
-                var article = new Readability(doc).parse();
+                
+                // Prune tracking, cookie consent, and advertising noise containers
+                var junkSelectors = [
+                    "[id*='cookie']", "[class*='cookie']",
+                    "[id*='consent']", "[class*='consent']",
+                    "[id*='gdpr']", "[class*='gdpr']",
+                    ".card-marketing", ".cookie-script",
+                    "[id*='adocean']", "[class*='adocean']",
+                    ".recommendations", ".recomandam",
+                    "[class*='newsletter']", "[id*='newsletter']",
+                    "[class*='subscribe']", "[id*='subscribe']",
+                    ".box-article-newsletter", ".card-articles"
+                ];
+                junkSelectors.forEach(function(sel) {
+                    try {
+                        var els = doc.querySelectorAll(sel);
+                        for (var i = 0; i < els.length; i++) {
+                            els[i].remove();
+                        }
+                    } catch(e) {}
+                });
+                
+                // Prune standalone recommendation or newsletter boxes that don't contain the article body
+                try {
+                    var boxes = doc.querySelectorAll(".box, section, div, aside");
+                    for (var b = 0; b < boxes.length; b++) {
+                        var box = boxes[b];
+                        var txt = (box.textContent || "").toLowerCase();
+                        if ((txt.includes("recomand") || txt.includes("newsletter") || txt.includes("abonează-te")) && 
+                            !box.querySelector("[itemprop='articleBody']")) {
+                            box.remove();
+                        }
+                    }
+                } catch(e) {}
+                
+                var article = new Readability(doc, { charThreshold: 40 }).parse();
                 if (article && article.content) {
+                    var finalContent = article.content;
+                    try {
+                        var tempDiv = doc.createElement("div");
+                        tempDiv.innerHTML = article.content;
+                        var explicitBody = tempDiv.querySelector("[itemprop='articleBody']");
+                        if (explicitBody && explicitBody.textContent.trim().length > 40) {
+                            finalContent = explicitBody.innerHTML;
+                        }
+                    } catch(e) {}
+                    
                     return JSON.stringify({
                         title: article.title || "",
                         byline: article.byline || "",
                         excerpt: article.excerpt || "",
-                        content: article.content || ""
+                        content: finalContent || ""
                     });
                 }
             } catch(e) {
@@ -405,7 +475,7 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
                   let data = jsonStr.data(using: .utf8),
                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   var content = dict["content"] as? String,
-                  content.count > 150 else {
+                  content.count > 50 else {
                 return nil
             }
             
@@ -426,6 +496,12 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             if let featImg = ogImage, !content.isEmpty {
                 content = extractor.deduplicateFeaturedImage(content: content, featuredImage: featImg)
             }
+            
+            // Clean empty wrapper tags or empty links left after image deduplication
+            content = content.replacingOccurrences(of: "<a[^>]*>\\s*</a>", with: "", options: .regularExpression)
+            content = content.replacingOccurrences(of: "<p>\\s*</p>", with: "", options: .regularExpression)
+            content = content.replacingOccurrences(of: "(?:<hr\\s*/?>\\s*)+$", with: "", options: [.regularExpression, .caseInsensitive])
+            content = content.trimmingCharacters(in: .whitespacesAndNewlines)
             
             // Optimize Miro Medium CDN images inside the content
             content = extractor.optimizeMediumImagesInHtml(content)

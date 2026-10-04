@@ -24,6 +24,19 @@ public struct NewsFeedView: View {
     
     public init(onNavigateBack: (() -> Void)? = nil) {
         self.onNavigateBack = onNavigateBack
+        if ProcessInfo.processInfo.arguments.contains("-testOpenRepublicaReader") {
+            let republicaArticle = NewsArticle(
+                id: "https://republica.ro/se-pare-ca-am-murit",
+                title: "Se pare că am murit",
+                link: "https://republica.ro/se-pare-ca-am-murit",
+                publishDate: Date(),
+                imageUrl: "https://assets.republica.ro/20160112/900x600/bc60b65453c3b2f1bde7a2ccf8702886926c32c0.png",
+                description: "Circulă pe facebook un clip cu titlul: „Lumânări pentru ziaristul CTP”...",
+                author: "Cristian Tudor Popescu",
+                publicationName: "Republica"
+            )
+            self._selectedArticleForReader = State(initialValue: republicaArticle)
+        }
     }
     
     // Filtered articles based on sub-tab and search query

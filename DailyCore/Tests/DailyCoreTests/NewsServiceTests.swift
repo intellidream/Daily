@@ -273,4 +273,62 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertEqual(hour, 17)
         XCTAssertEqual(minute, 11)
     }
+    
+    // MARK: - 9. Short Article Extraction & Cookie Script Pruning (Republica Parity)
+    
+    func testRepublicaShortArticleExtraction() async throws {
+        let url = "https://republica.ro/se-pare-ca-am-murit"
+        let article = try await ArticleExtractor.shared.extract(from: url)
+        
+        XCTAssertTrue(article.title.contains("Se pare că am murit"))
+        XCTAssertEqual(article.author, "Cristian Tudor Popescu")
+        XCTAssertNotNil(article.imageUrl)
+        
+        guard let content = article.content else {
+            XCTFail("Article content should not be nil")
+            return
+        }
+        
+        // Ensure core editorial content is extracted
+        XCTAssertTrue(content.contains("Circulă pe facebook un clip cu titlul: „Lumânări pentru ziaristul CTP”"))
+        XCTAssertTrue(content.contains("Veșnica pomenire, veșnica pomenire!"))
+        
+        // Ensure third-party cookie consent tables & marketing boxes were pruned
+        XCTAssertFalse(content.contains("_cc_id"))
+        XCTAssertFalse(content.contains("cookie-script"))
+        XCTAssertFalse(content.contains("Cookie"))
+        XCTAssertFalse(content.contains("cookie"))
+        XCTAssertFalse(content.contains("Îți recomandăm"))
+        XCTAssertFalse(content.contains("newsletter"))
+    }
+    
+    func testHeuristicFallbackShortArticleExtraction() {
+        let shortHtml = """
+        <html>
+        <head><title>Short Flash News</title></head>
+        <body>
+            <div id="cookie-banner">Please accept cookies: table of 500 characters of cookie data...</div>
+            <div class="card-marketing">Sign up for habits newsletter today!</div>
+            <div itemprop="articleBody">
+                <p>This is a brief breaking news announcement under 200 characters.</p>
+                <p>Stay tuned for ongoing updates throughout the evening.</p>
+            </div>
+            <div class="recommendations">
+                <article>Recommended story 1</article>
+                <article>Recommended story 2</article>
+            </div>
+        </body>
+        </html>
+        """
+        
+        let article = ArticleExtractor.shared.parseHtml(shortHtml, url: "https://example.com/breaking")
+        XCTAssertEqual(article.title, "Short Flash News")
+        guard let content = article.content else {
+            XCTFail("Content must not be nil")
+            return
+        }
+        XCTAssertTrue(content.contains("This is a brief breaking news announcement under 200 characters."))
+        XCTAssertFalse(content.contains("cookie-banner"))
+        XCTAssertFalse(content.contains("Recommended story"))
+    }
 }

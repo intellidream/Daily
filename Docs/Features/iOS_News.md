@@ -236,5 +236,41 @@ Shared between iOS and upcoming macOS apps without any UIKit dependencies:
 5. **Cross-Platform Parity**:
    - Implemented the identical fix and fallback mechanism in Android's `FeedParser.kt`, backed by unit tests in `NewsParsersTest.kt`.
 
+---
 
+## 7. Headless Reader Extraction & Short Article Engine (Republica Cookie Consent Resolution)
 
+### 7.1 Issue & Root Cause Analysis
+- **Problem**: Short articles from Republica.ro (such as Cristian Tudor Popescu's commentary *"Se pare că am murit"*, ~330 characters) failed to open properly in the iOS distraction-free reader—instead of editorial prose, the reader displayed a massive table detailing third-party cookie scripts (`_cc_id`, `_cc_cc`, `_cc_aud`, `cookie-script.com`). Conversely, the Android app extracted the article cleanly without issues.
+- **Root Cause Investigation**:
+  1. **WebKit Script Execution**: In `HeadlessReadabilityParser.swift`, raw HTML was directly loaded into headless `WKWebView` with `prefs.allowsContentJavaScript = true`. Republica's page references `//eu.cookie-script.com/s/33c0ba250e0fdfe7d609b481faabd908.js`. In WebKit, this script dynamically executed and synthesized thousands of characters of cookie consent tables directly into the DOM. (Android uses regex/string parsing and strips `<script>` blocks upfront, so the cookie script never ran on Android).
+  2. **Mozilla Readability 500-Character Threshold Rejection**: Mozilla Readability (`readability.min.js`) enforces `DEFAULT_CHAR_THRESHOLD = 500`. CTP's short article contains ~330 characters. Because its text length was under 500 characters, Readability rejected attempt 1, progressively stripped its safety flags (`FLAG_STRIP_UNLIKELYS`, `FLAG_WEIGHT_CLASSES`, `FLAG_CLEAN_CONDITIONALLY`), and sorted candidate attempts by text length (`b.textLength - a.textLength`). The largest container found was the dynamically injected cookie consent table!
+  3. **Unsanitized Marketing & Recommendation DOM Containers**: Even with scripts disabled, Readability's loose fallback sweeps captured outer `<main>` wrappers containing habits marketing cards, newsletter forms, and recommendation boxes.
+  4. **Heuristic Fallback 300-Char Floor**: In `ArticleExtractor.extractMainContent()`, candidate containers were discarded if `charCount <= 300`, whereas Android permitted candidates with `charCount > 100 || pCount >= 1`. Furthermore, `<main>` was scored purely by raw text volume, allowing recommendations to outweigh canonical `<div itemprop="articleBody">`.
+
+### 7.2 Architectural Resolution
+1. **Pre-WebKit Script & Noscript Pruning**:
+   - Strips all `<script[^>]*>[\\s\\S]*?</script>` and `<noscript[^>]*>[\\s\\S]*?</noscript>` blocks from the HTML string before passing to `wv.loadHTMLString(sanitizedHtml, baseURL: url)`. Third-party tracking and cookie consent scripts cannot execute or mutate the DOM.
+2. **Pre-Readability DOM Pruning**:
+   - Injected JavaScript prunes tracking, cookie banner, and advertising selectors (`[id*='cookie']`, `[class*='cookie']`, `[id*='consent']`, `[class*='consent']`, `[id*='gdpr']`, `[class*='gdpr']`, `.card-marketing`, `.cookie-script`, `[id*='adocean']`, `.box-article-newsletter`, `.card-articles`).
+   - Prunes standalone recommendation and newsletter boxes (`.box`, `section`, `aside`) whose text matches "recomand", "newsletter", or "abonează-te" unless they enclose the article body.
+3. **Calibrated Readability Character Threshold**:
+   - Instantiates `new Readability(doc, { charThreshold: 40 })`, enabling concise news flashes and short editorial columns (40–500 characters) to pass on attempt 1 without triggering loose unpruned fallbacks.
+4. **Canonical Schema.org ArticleBody Isolation**:
+   - If Readability parses an outer container that wraps an explicit `[itemprop='articleBody']` containing valid text (> 40 chars), the extractor isolates `explicitBody.innerHTML`, eliminating extraneous article headers (e.g. timestamps) and trailing `<hr>` tags.
+5. **Post-Processing Cleanup**:
+   - Cleans orphan empty links (`<a[^>]*>\\s*</a>`) left after featured image deduplication, empty paragraph tags, and trailing `<hr>` dividers.
+6. **Heuristic Fallback Android Parity**:
+   - In `extractMainContent()`, added semantic container scoring bonus (`itemprop="articleBody"` +1500, `<article>` +500).
+   - Expanded junk class patterns to filter `recomand`, `box-article-newsletter`, and `card-articles`.
+   - Adjusted candidate acceptance threshold to `(charCount > 80 || pCount >= 1)`, matching Android.
+
+### 7.3 Verification & Quality Assurance
+- **Unit Tests**:
+  - `testRepublicaShortArticleExtraction`: Validates extraction of `https://republica.ro/se-pare-ca-am-murit`. Verifies title (*"Se pare că am murit"*), author (*"Cristian Tudor Popescu"*), editorial prose (*"Circulă pe facebook un clip..."*), and absence of cookie strings (`_cc_id`, `cookie-script`, `Cookie`, `Îți recomandăm`).
+  - `testHeuristicFallbackShortArticleExtraction`: Validates that the heuristic fallback correctly scores and extracts short articles (< 200 chars) while ignoring cookie banners and recommendation boxes.
+  - Full suite of 52 tests across `DailyCoreTests` passing with 0 failures.
+- **Simulator Live Inspection**:
+  - Verified live in `SimulaPhone` via `-startTabNews -testOpenRepublicaReader`. Visual screenshot confirmed clean author byline, featured image, and crisp prose formatting with zero cookie or recommendation artifacts.
+- **Device Compilation**:
+  - Verified compilation and code signing against `generic/platform=iOS` (`DerivedData-device/Build/Products/Debug-iphoneos/Daily.app`).
