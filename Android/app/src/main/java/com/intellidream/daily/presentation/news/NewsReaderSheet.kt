@@ -58,6 +58,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,8 +78,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.intellidream.daily.database.NewsRepository
 import com.intellidream.daily.designsystem.DailyAsyncImage
 import com.intellidream.daily.designsystem.ThemeColors
@@ -83,6 +87,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun NewsReaderSheet(
@@ -106,6 +111,7 @@ fun NewsReaderSheet(
     val isReadLater = repository.isReadLater(currentArticle.link)
     val isFavorite = repository.isFavorite(currentArticle.link)
     val coroutineScope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(currentArticle.link) {
         isLoadingFull = true
@@ -119,28 +125,62 @@ fun NewsReaderSheet(
         isLoadingFull = false
     }
 
-    Dialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
+        sheetState = sheetState,
+        containerColor = Color(if (isDark) 0xFF1A1423 else 0xFFEDE5D9),
+        contentColor = if (isDark) Color.White else Color(0xFF1C1B1F),
+        tonalElevation = 0.dp,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.5.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.40f))
+                )
+            }
+        },
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        modifier = Modifier.fillMaxHeight(0.96f)
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(if (isDark) 0xFF1A1423 else 0xFFEDE5D9))
-                .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Top Glass Toolbar
+            // Top Glass Toolbar with vertical swipe-to-dismiss gesture
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { _, dragAmount ->
+                            if (dragAmount > 12f) {
+                                coroutineScope.launch {
+                                    sheetState.hide()
+                                    onDismiss()
+                                }
+                            }
+                        }
+                    }
+            ) {
                 ReaderTopToolbar(
                     article = currentArticle,
                     isReadLater = isReadLater,
                     isFavorite = isFavorite,
                     fontSizeMultiplier = fontSizeMultiplier,
-                    onDismiss = onDismiss,
+                    onDismiss = {
+                        coroutineScope.launch {
+                            sheetState.hide()
+                            onDismiss()
+                        }
+                    },
                     onToggleReadLater = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         coroutineScope.launch {
@@ -174,62 +214,90 @@ fun NewsReaderSheet(
                         }
                     }
                 )
+            }
 
-                // Article Body Content
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) {
-                    if (isLoadingFull) {
-                        DailyLiquidLoadingIndicator(
-                            color = ThemeColors.accentCyan,
-                            size = 44.dp,
-                            label = "Extracting Distraction-Free Article...",
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        val readerHtml = remember(currentArticle, isDark, fontSizeMultiplier) {
-                            generateReaderHtml(currentArticle, isDark, fontSizeMultiplier)
-                        }
-
-                        AndroidView(
-                            factory = { ctx ->
-                                WebView(ctx).apply {
-                                    setBackgroundColor(0x00000000)
-                                    settings.javaScriptEnabled = true
-                                    settings.domStorageEnabled = true
-                                    webViewClient = WebViewClient()
-                                    tag = "${currentArticle.link}_${readerHtml.hashCode()}"
-                                    loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
-                                }
-                            },
-                            update = { webView ->
-                                val key = "${currentArticle.link}_${readerHtml.hashCode()}"
-                                if (webView.tag != key) {
-                                    webView.tag = key
-                                    webView.loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
+            // Article Body Content
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (isLoadingFull) {
+                    DailyLiquidLoadingIndicator(
+                        color = ThemeColors.accentCyan,
+                        size = 44.dp,
+                        label = "Extracting Distraction-Free Article...",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    val readerHtml = remember(currentArticle, isDark, fontSizeMultiplier) {
+                        generateReaderHtml(currentArticle, isDark, fontSizeMultiplier)
                     }
 
-                    // Floating Bottom Recommendations Bar
-                    if (recommendations.isNotEmpty()) {
-                        FloatingRecommendationsBar(
-                            recommendations = recommendations,
-                            isExpanded = showRecommendations,
-                            onToggleExpand = { showRecommendations = !showRecommendations },
-                            onSelectRecommendation = { currentArticle = it },
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                        )
-                    }
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                setBackgroundColor(0x00000000)
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
+                                webViewClient = WebViewClient()
+                                tag = "${currentArticle.link}_${readerHtml.hashCode()}"
+                                loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
+                            }
+                        },
+                        update = { webView ->
+                            val key = "${currentArticle.link}_${readerHtml.hashCode()}"
+                            if (webView.tag != key) {
+                                webView.tag = key
+                                webView.loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                // Floating Bottom Recommendations Bar
+                if (recommendations.isNotEmpty()) {
+                    FloatingRecommendationsBar(
+                        recommendations = recommendations,
+                        isExpanded = showRecommendations,
+                        onToggleExpand = { showRecommendations = !showRecommendations },
+                        onSelectRecommendation = { currentArticle = it },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ReaderActionButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = Color.White.copy(alpha = 0.10f),
+    iconTint: Color = Color.White,
+    iconSize: androidx.compose.ui.unit.Dp = 16.dp
+) {
+    Box(
+        modifier = modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(backgroundColor)
+            .border(0.5.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = iconTint,
+            modifier = Modifier.size(iconSize)
+        )
     }
 }
 
@@ -260,20 +328,14 @@ private fun ReaderTopToolbar(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Dismiss Button
-        IconButton(
+        ReaderActionButton(
             onClick = onDismiss,
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.08f))
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Close,
-                contentDescription = "Dismiss",
-                tint = Color.White,
-                modifier = Modifier.size(18.dp)
-            )
-        }
+            icon = Icons.Rounded.Close,
+            contentDescription = "Dismiss",
+            backgroundColor = Color.White.copy(alpha = 0.10f),
+            iconTint = Color.White,
+            iconSize = 18.dp
+        )
 
         // Publication Title (horizontal scroll for long names)
         Row(
@@ -302,60 +364,43 @@ private fun ReaderTopToolbar(
             )
         }
 
-        // Read Later Toggle
-        IconButton(
-            onClick = onToggleReadLater,
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(
-                    if (isReadLater) ThemeColors.accentCyan.copy(alpha = 0.20f)
-                    else Color.White.copy(alpha = 0.08f)
-                )
+        // Action Buttons Row (Grouped with explicit 10.dp spacing to prevent overlap)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = if (isReadLater) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+            // Read Later Toggle
+            ReaderActionButton(
+                onClick = onToggleReadLater,
+                icon = if (isReadLater) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
                 contentDescription = "Read Later",
-                tint = if (isReadLater) ThemeColors.accentCyan else Color.White.copy(alpha = 0.85f),
-                modifier = Modifier.size(16.dp)
+                backgroundColor = if (isReadLater) ThemeColors.accentCyan.copy(alpha = 0.22f)
+                else Color.White.copy(alpha = 0.10f),
+                iconTint = if (isReadLater) ThemeColors.accentCyan else Color.White.copy(alpha = 0.85f),
+                iconSize = 16.dp
             )
-        }
 
-        // Favorite Toggle
-        IconButton(
-            onClick = onToggleFavorite,
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(
-                    if (isFavorite) Color(0xFFFFD700).copy(alpha = 0.20f)
-                    else Color.White.copy(alpha = 0.08f)
-                )
-        ) {
-            Icon(
-                imageVector = if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+            // Favorite Toggle
+            ReaderActionButton(
+                onClick = onToggleFavorite,
+                icon = if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
                 contentDescription = "Favorite",
-                tint = if (isFavorite) Color(0xFFFFD700) else Color.White.copy(alpha = 0.85f),
-                modifier = Modifier.size(16.dp)
+                backgroundColor = if (isFavorite) Color(0xFFFFD700).copy(alpha = 0.22f)
+                else Color.White.copy(alpha = 0.10f),
+                iconTint = if (isFavorite) Color(0xFFFFD700) else Color.White.copy(alpha = 0.85f),
+                iconSize = 16.dp
             )
-        }
 
-        // More Options Menu
-        Box {
-            IconButton(
-                onClick = { showMenu = true },
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.08f))
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.MoreVert,
+            // More Options Menu
+            Box {
+                ReaderActionButton(
+                    onClick = { showMenu = true },
+                    icon = Icons.Rounded.MoreVert,
                     contentDescription = "Options",
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    backgroundColor = Color.White.copy(alpha = 0.10f),
+                    iconTint = Color.White,
+                    iconSize = 18.dp
                 )
-            }
 
             DropdownMenu(
                 expanded = showMenu,
@@ -474,6 +519,7 @@ private fun ReaderTopToolbar(
             }
         }
     }
+}
 }
 
 @Composable

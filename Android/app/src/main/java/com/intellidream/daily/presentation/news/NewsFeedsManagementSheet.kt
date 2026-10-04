@@ -81,6 +81,9 @@ fun NewsFeedsManagementSheet(
     onDismiss: () -> Unit
 ) {
     val feeds by repository.feeds.collectAsState()
+    val distinctFeeds = remember(feeds) {
+        feeds.distinctBy { repository.normalizeFeedUrl(it.url) }
+    }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
 
@@ -254,7 +257,7 @@ fun NewsFeedsManagementSheet(
                             )
 
                             searchResults.forEach { result ->
-                                val isSubscribed = feeds.any { it.url == result.url }
+                                val isSubscribed = distinctFeeds.any { repository.normalizeFeedUrl(it.url) == repository.normalizeFeedUrl(result.url) }
 
                                 GlassCard(cornerRadius = 14.dp, padding = 12.dp) {
                                     Row(
@@ -488,14 +491,14 @@ fun NewsFeedsManagementSheet(
                     // Subscriptions List
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "YOUR SUBSCRIPTIONS (${feeds.size})",
+                            text = "YOUR SUBSCRIPTIONS (${distinctFeeds.size})",
                             color = ThemeColors.accentCyan,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.6.sp
                         )
 
-                        feeds.forEach { feed ->
+                        distinctFeeds.forEach { feed ->
                             GlassCard(cornerRadius = 14.dp, padding = 12.dp) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),

@@ -104,3 +104,46 @@ A comprehensive stress test was executed against the top 5 articles of all 18 de
   - App PID: 29746.
   - Memory: 91% free heap (20MB / 256MB).
   - Zero crashes, zero runtime exceptions.
+
+---
+
+## 5. Feed Sources Deduplication, Button Overlap & Drag-to-Dismiss Parity (Update)
+
+### A. Root Cause & Architecture: Feed Sources Duplication
+1. **Non-deterministic Seeds & Trailing Slash Differences**:
+   - `FeedSource` generated random `UUID.randomUUID().toString()` by default for seeds, meaning each local seed had a distinct local UUID.
+   - `syncWithSupabase(userId)` pulled remote subscriptions with Supabase UUIDs. Because URL matching was not normalized (e.g. `economica.net/rss` vs `economica.net/feed`, or `zf.ro/rss/` vs `zf.ro/rss`), and because Room's primary key is `id`, conflicting rows with different IDs were inserted via `INSERT OR REPLACE` into the SQLite database as brand-new rows instead of replacing existing seeds.
+   - Over multiple runs, every default source was duplicated in Room.
+2. **Resolution & Self-Healing Database**:
+   - Introduced `normalizeFeedUrl(url: String)` which trims, lowercases, strips trailing slashes, and resolves legacy URL redirects (such as `economica.net/rss` -> `economica.net/feed`).
+   - Assigned deterministic constant IDs to `defaultFeeds` (`seed_republica`, `seed_digi24`, `seed_zf`, etc.).
+   - In `observeDb(userId)`: Grouped Room entities by `normalizeFeedUrl`. If duplicates are detected, Room automatically self-heals by deleting redundant IDs via `dao.deleteSubscriptionPermanently(id)` and retaining the single preferred remote/canonical entity.
+   - In `syncWithSupabase`: Replaces conflicting local IDs cleanly, purging obsolete local IDs prior to inserting remote IDs.
+   - In `NewsFeedsManagementSheet.kt`: Evaluates `distinctFeeds = remember(feeds) { feeds.distinctBy { repository.normalizeFeedUrl(it.url) } }` and guards search subscriptions against duplicate additions.
+
+### B. Root Cause & Architecture: Reader Top-Right Button Overlap
+1. **Touch Target Expansion Collision**:
+   - In Material 3, `IconButton` enforces `minimumInteractiveComponentSize` (48.dp by default).
+   - Although `.size(32.dp)` and `.background(...)` was passed, the visual bounds and ripple container expanded to 46-48.dp while `Arrangement.spacedBy(10.dp)` spaced component origins by only 42.dp (32+10).
+   - This caused an exact 11-pixel (4dp) overlap across all 3 action buttons (Bookmark, Favorite, Options), creating a Venn-diagram intersection.
+2. **Resolution**:
+   - Built a dedicated `ReaderActionButton` composable with a rigid 34.dp circle (`Modifier.size(34.dp).clip(CircleShape).background(...).border(...)`).
+   - Grouped the right actions inside a dedicated `Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically)`.
+   - Guaranteed minimum gap between circles: exactly 10.dp, completely eliminating any overlap.
+
+### C. Drag-Down to Dismiss Article Sheet (iOS Parity)
+1. **Modal Architecture Upgrade**:
+   - Migrated from a static full-screen `Dialog` to `ModalBottomSheet(skipPartiallyExpanded = true)`.
+   - Added an iOS-style centered drag pill handle (`40.dp x 4.5.dp`, rounded `CircleShape`) and top rounded corners (24.dp).
+   - Added a vertical drag gesture listener (`detectVerticalDragGestures`) on the glass toolbar container that triggers `sheetState.hide()` and `onDismiss()` when swiped downward by >12px.
+   - Preserves all 3 dismiss pathways: drag down anywhere on the header/handle, tap close button `(X)`, or system Back gesture.
+
+### D. Verification Summary
+- **Android Emulator (`Medium_Phone_API_36.1`)**:
+  - Feeds Editor: Exactly 18 clean, non-duplicated subscriptions displayed.
+  - Reader Sheet: Zero button overlap (verified via pixel-by-pixel inspection of `verified_buttons_crop.png` and `all_3_buttons.png`).
+  - Gesture: Swiping down on drag handle and toolbar fluidly dismisses the article reader.
+- **Physical Device: Google Pixel 9 Pro ("TRAPPER")**:
+  - Installed and verified live over ADB wireless (`192.168.3.8:46477`).
+  - Zero crashes in logcat.
+

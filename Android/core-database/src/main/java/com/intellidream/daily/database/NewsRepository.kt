@@ -129,7 +129,31 @@ class NewsRepository(
         subsJob = scope.launch {
             dao.observeSubscriptions(userId).collect { entities ->
                 if (entities.isNotEmpty()) {
-                    _feeds.value = entities.map { entity ->
+                    // Group by normalized URL to detect and heal any duplicate entries in Room
+                    val grouped = entities.groupBy { normalizeFeedUrl(it.url) }
+                    val distinctEntities = mutableListOf<RssSubscriptionEntity>()
+                    val redundantIds = mutableListOf<String>()
+
+                    for ((_, group) in grouped) {
+                        if (group.size == 1) {
+                            distinctEntities.add(group.first())
+                        } else {
+                            // Pick preferred entity: remote Supabase ID (not starting with "seed_") or first
+                            val preferred = group.firstOrNull { !it.id.startsWith("seed_") } ?: group.first()
+                            distinctEntities.add(preferred)
+                            group.filter { it.id != preferred.id }.forEach { redundantIds.add(it.id) }
+                        }
+                    }
+
+                    if (redundantIds.isNotEmpty()) {
+                        scope.launch {
+                            for (id in redundantIds) {
+                                dao.deleteSubscriptionPermanently(id)
+                            }
+                        }
+                    }
+
+                    _feeds.value = distinctEntities.map { entity ->
                         val feed = entity.toFeedSource()
                         if (feed.url.contains("economica.net/rss")) {
                             feed.copy(url = "https://www.economica.net/feed")
@@ -418,6 +442,11 @@ class NewsRepository(
     // MARK: - Feed Management
 
     suspend fun addFeed(name: String, url: String, category: FeedCategory, userId: String = currentUserId) {
+        val norm = normalizeFeedUrl(url)
+        val existing = _feeds.value.firstOrNull { normalizeFeedUrl(it.url) == norm }
+        if (existing != null) {
+            return
+        }
         val type = if (url.contains("wp-json", ignoreCase = true)) FeedType.WpJson else FeedType.Rss
         val newFeed = FeedSource(
             name = name,
@@ -529,12 +558,15 @@ class NewsRepository(
             val remoteSubs = handler.pullSubscriptions(userId)
             if (remoteSubs.isNotEmpty()) {
                 val localEntities = dao.getSubscriptions(userId)
-                val localMap = localEntities.associateBy { it.url.lowercase() }
+                val localMap = localEntities.associateBy { normalizeFeedUrl(it.url) }
 
                 val toInsert = mutableListOf<RssSubscriptionEntity>()
+                val obsoleteLocalIds = mutableListOf<String>()
+
                 for (remote in remoteSubs) {
-                    val local = localMap[remote.url.lowercase()]
-                    if (local == null || local.isDeleted != remote.isDeleted || local.name != remote.name) {
+                    val normUrl = normalizeFeedUrl(remote.url)
+                    val local = localMap[normUrl]
+                    if (local == null) {
                         toInsert.add(
                             RssSubscriptionEntity(
                                 id = remote.id,
@@ -549,7 +581,36 @@ class NewsRepository(
                                 syncedAt = System.currentTimeMillis()
                             )
                         )
+                    } else if (local.id != remote.id) {
+                        obsoleteLocalIds.add(local.id)
+                        toInsert.add(
+                            RssSubscriptionEntity(
+                                id = remote.id,
+                                userId = userId,
+                                name = remote.name,
+                                url = remote.url,
+                                iconUrl = remote.iconUrl,
+                                category = remote.category,
+                                displayOrder = remote.displayOrder,
+                                isDeleted = remote.isDeleted,
+                                createdAt = local.createdAt,
+                                syncedAt = System.currentTimeMillis()
+                            )
+                        )
+                    } else if (local.isDeleted != remote.isDeleted || local.name != remote.name) {
+                        toInsert.add(
+                            local.copy(
+                                name = remote.name,
+                                isDeleted = remote.isDeleted,
+                                category = remote.category,
+                                displayOrder = remote.displayOrder,
+                                syncedAt = System.currentTimeMillis()
+                            )
+                        )
                     }
+                }
+                for (oldId in obsoleteLocalIds) {
+                    dao.deleteSubscriptionPermanently(oldId)
                 }
                 if (toInsert.isNotEmpty()) {
                     dao.upsertSubscriptions(toInsert)
@@ -635,33 +696,46 @@ class NewsRepository(
         } catch (_: Exception) {}
     }
 
+    fun normalizeFeedUrl(url: String): String = Companion.normalizeFeedUrl(url)
+
     companion object {
+        fun normalizeFeedUrl(url: String): String {
+            var u = url.trim().lowercase()
+            if (u.endsWith("/")) {
+                u = u.dropLast(1)
+            }
+            if (u.contains("economica.net/rss")) {
+                u = u.replace("economica.net/rss", "economica.net/feed")
+            }
+            return u
+        }
+
         val defaultFeeds: List<FeedSource> = listOf(
             // 🇷🇴 Local
-            FeedSource(name = "Republica", url = "https://republica.ro/rss", category = FeedCategory.Local, displayOrder = 0),
-            FeedSource(name = "Digi24", url = "https://www.digi24.ro/rss", category = FeedCategory.Local, displayOrder = 1),
-            FeedSource(name = "Ziarul Financiar", url = "https://www.zf.ro/rss/", category = FeedCategory.Local, displayOrder = 2),
-            FeedSource(name = "HotNews", url = "https://www.hotnews.ro/rss", category = FeedCategory.Local, displayOrder = 3),
-            FeedSource(name = "Biziday", url = "https://www.biziday.ro/feed/", category = FeedCategory.Local, displayOrder = 4),
-            FeedSource(name = "Economica.net", url = "https://www.economica.net/feed", category = FeedCategory.Local, displayOrder = 5),
+            FeedSource(id = "seed_republica", name = "Republica", url = "https://republica.ro/rss", category = FeedCategory.Local, displayOrder = 0),
+            FeedSource(id = "seed_digi24", name = "Digi24", url = "https://www.digi24.ro/rss", category = FeedCategory.Local, displayOrder = 1),
+            FeedSource(id = "seed_zf", name = "Ziarul Financiar", url = "https://www.zf.ro/rss/", category = FeedCategory.Local, displayOrder = 2),
+            FeedSource(id = "seed_hotnews", name = "HotNews", url = "https://www.hotnews.ro/rss", category = FeedCategory.Local, displayOrder = 3),
+            FeedSource(id = "seed_biziday", name = "Biziday", url = "https://www.biziday.ro/feed/", category = FeedCategory.Local, displayOrder = 4),
+            FeedSource(id = "seed_economica", name = "Economica.net", url = "https://www.economica.net/feed", category = FeedCategory.Local, displayOrder = 5),
 
             // 📈 Markets
-            FeedSource(name = "CNBC", url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", category = FeedCategory.Markets, displayOrder = 6),
-            FeedSource(name = "The Economist", url = "https://www.economist.com/finance-and-economics/rss.xml", category = FeedCategory.Markets, displayOrder = 7),
+            FeedSource(id = "seed_cnbc", name = "CNBC", url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", category = FeedCategory.Markets, displayOrder = 6),
+            FeedSource(id = "seed_economist", name = "The Economist", url = "https://www.economist.com/finance-and-economics/rss.xml", category = FeedCategory.Markets, displayOrder = 7),
 
             // 🌍 World
-            FeedSource(name = "BBC News", url = "https://feeds.bbci.co.uk/news/rss.xml", category = FeedCategory.World, displayOrder = 8),
-            FeedSource(name = "NPR", url = "https://feeds.npr.org/1001/rss.xml", category = FeedCategory.World, displayOrder = 9),
-            FeedSource(name = "Politico Europe", url = "https://www.politico.eu/feed/", category = FeedCategory.World, displayOrder = 10),
-            FeedSource(name = "Deutsche Welle", url = "https://rss.dw.com/rdf/rss-en-all", category = FeedCategory.World, displayOrder = 11),
-            FeedSource(name = "Google News", url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", category = FeedCategory.World, displayOrder = 12),
+            FeedSource(id = "seed_bbc", name = "BBC News", url = "https://feeds.bbci.co.uk/news/rss.xml", category = FeedCategory.World, displayOrder = 8),
+            FeedSource(id = "seed_npr", name = "NPR", url = "https://feeds.npr.org/1001/rss.xml", category = FeedCategory.World, displayOrder = 9),
+            FeedSource(id = "seed_politico", name = "Politico Europe", url = "https://www.politico.eu/feed/", category = FeedCategory.World, displayOrder = 10),
+            FeedSource(id = "seed_dw", name = "Deutsche Welle", url = "https://rss.dw.com/rdf/rss-en-all", category = FeedCategory.World, displayOrder = 11),
+            FeedSource(id = "seed_google_news", name = "Google News", url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", category = FeedCategory.World, displayOrder = 12),
 
             // 💡 Tech
-            FeedSource(name = "TechCrunch", url = "https://techcrunch.com/feed/", category = FeedCategory.Tech, displayOrder = 13),
-            FeedSource(name = "The Verge", url = "https://www.theverge.com/rss/index.xml", category = FeedCategory.Tech, displayOrder = 14),
-            FeedSource(name = "Ars Technica", url = "https://feeds.arstechnica.com/arstechnica/index", category = FeedCategory.Tech, displayOrder = 15),
-            FeedSource(name = "Zona IT", url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", type = FeedType.WpJson, category = FeedCategory.Tech, displayOrder = 16),
-            FeedSource(name = "Windows Central", url = "https://www.windowscentral.com/feeds.xml", category = FeedCategory.Tech, displayOrder = 17)
+            FeedSource(id = "seed_techcrunch", name = "TechCrunch", url = "https://techcrunch.com/feed/", category = FeedCategory.Tech, displayOrder = 13),
+            FeedSource(id = "seed_theverge", name = "The Verge", url = "https://www.theverge.com/rss/index.xml", category = FeedCategory.Tech, displayOrder = 14),
+            FeedSource(id = "seed_arstechnica", name = "Ars Technica", url = "https://feeds.arstechnica.com/arstechnica/index", category = FeedCategory.Tech, displayOrder = 15),
+            FeedSource(id = "seed_zonait", name = "Zona IT", url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", type = FeedType.WpJson, category = FeedCategory.Tech, displayOrder = 16),
+            FeedSource(id = "seed_windowscentral", name = "Windows Central", url = "https://www.windowscentral.com/feeds.xml", category = FeedCategory.Tech, displayOrder = 17)
         )
     }
 }
