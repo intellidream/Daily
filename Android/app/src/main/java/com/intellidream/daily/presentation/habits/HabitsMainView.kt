@@ -69,7 +69,6 @@ import com.intellidream.daily.database.HabitsRepository
 import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.ThemeColors
-import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
 import com.intellidream.daily.model.HabitConsistencyCell
 import com.intellidream.daily.model.HabitLogRecord
 import com.intellidream.daily.model.HabitTrendDay
@@ -139,14 +138,6 @@ fun HabitsMainView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .calmBoundedSwipeGesture(
-                    currentIndex = habitIndex,
-                    maxIndex = 1,
-                    onIndexChange = { newIdx ->
-                        if (newIdx == 0) repository.switchHabit(HabitType.WATER)
-                        else repository.switchHabit(HabitType.SMOKES)
-                    }
-                )
                 .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -816,12 +807,14 @@ fun HabitsMainView(
         Spacer(modifier = Modifier.height(100.dp)) // Space for bottom navigation capsule
     }
 
-    PullToRefreshContainer(
-        state = pullRefreshState,
-        modifier = Modifier.align(Alignment.TopCenter),
-        containerColor = Color(0xFF0D182E),
-        contentColor = ThemeColors.accentCyan
-    )
+    if (pullRefreshState.isRefreshing || pullRefreshState.verticalOffset > 0.5f) {
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            containerColor = Color(0xFF0D182E),
+            contentColor = ThemeColors.accentCyan
+        )
+    }
 }
 
     // Guidance Sheet Modal

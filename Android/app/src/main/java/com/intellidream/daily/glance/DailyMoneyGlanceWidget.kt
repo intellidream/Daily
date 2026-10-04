@@ -97,7 +97,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.width >= 220.dp && size.height >= 180.dp -> LargeMoneyLayout(
+                        size.width >= 200.dp && size.height >= 215.dp -> LargeMoneyLayout(
                             netWorthLei = netWorthLei,
                             netWorthEUR = netWorthEUR,
                             depositsTotal = depositsTotal,
@@ -105,7 +105,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                             cashAmount = cashAmount,
                             topOutgoing = topOutgoing
                         )
-                        size.width >= 220.dp -> MediumMoneyLayout(
+                        size.width >= 200.dp -> MediumMoneyLayout(
                             netWorthLei = netWorthLei,
                             formattedEUR = formattedEUR,
                             incomingTotal = incomingTotal,
@@ -137,27 +137,27 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
     ) {
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.WALLET,
-            sizePx = 140,
+            sizePx = 120,
             colorInt = android.graphics.Color.parseColor("#00E676"),
-            opacity = 0.14f
+            opacity = 0.07f
         )
 
         Box(modifier = GlanceModifier.fillMaxSize()) {
-            // Trailing Watermark Wallet
+            // Trailing Subtle Watermark Wallet
             Box(
-                modifier = GlanceModifier.fillMaxSize().padding(end = 6.dp),
+                modifier = GlanceModifier.fillMaxSize().padding(end = 2.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Image(
                     provider = ImageProvider(watermarkBitmap),
                     contentDescription = null,
-                    modifier = GlanceModifier.size(59.dp)
+                    modifier = GlanceModifier.size(46.dp)
                 )
             }
 
             // Foreground Content
             Column(
-                modifier = GlanceModifier.fillMaxSize().padding(11.dp)
+                modifier = GlanceModifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp)
             ) {
                 // Top Section: Net Worth on Left, EUR pill in Top-Right
                 Row(
@@ -169,7 +169,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                             text = "${WidgetVisualGraphics.formatCompactNumber(netWorthLei)} Lei",
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
-                                fontSize = 18.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -189,7 +189,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .background(Color(0x2E00E5FF))
-                            .cornerRadius(12.dp)
+                            .cornerRadius(10.dp)
                             .padding(horizontal = 5.5.dp, vertical = 2.5.dp)
                     ) {
                         Text(
@@ -211,7 +211,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         text = "Card ${WidgetVisualGraphics.formatCompactNumber(cardAmount)}",
                         style = TextStyle(
                             color = ColorProvider(Color(0xFF00E5FF)),
-                            fontSize = 11.5.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -220,7 +220,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         text = "Cash ${WidgetVisualGraphics.formatCompactNumber(cashAmount)}",
                         style = TextStyle(
                             color = ColorProvider(Color(0xFF00E676)),
-                            fontSize = 11.5.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -238,7 +238,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         color = Color(0xFFFF2D55),
                         account = "Card",
                         delta = -100.0,
-                        height = 26.dp,
+                        height = 24.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                     Spacer(modifier = GlanceModifier.width(4.dp))
@@ -247,7 +247,7 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
                         color = Color(0xFF00E676),
                         account = "Card",
                         delta = 100.0,
-                        height = 26.dp,
+                        height = 24.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                 }

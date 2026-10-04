@@ -3,6 +3,7 @@ package com.intellidream.daily.glance
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import java.util.Locale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -118,8 +119,8 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                         .cornerRadius(22.dp)
                         .clickable(actionStartActivity(launchIntent))
                 ) {
-                    if (size.width >= 220.dp) {
-                        MediumStressLayout(
+                    when {
+                        size.width >= 200.dp && size.height >= 215.dp -> LargeStressLayout(
                             stressScore = stressScore,
                             levelName = levelName,
                             levelColor = levelColor,
@@ -132,8 +133,20 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             hrvMs = hrvMs,
                             rhr = rhr
                         )
-                    } else {
-                        SmallStressLayout(
+                        size.width >= 200.dp -> MediumStressLayout(
+                            stressScore = stressScore,
+                            levelName = levelName,
+                            levelColor = levelColor,
+                            levelColorHex = levelColorHex,
+                            monkeyEmoji = monkeyEmoji,
+                            monkeyMoodTitle = monkeyMoodTitle,
+                            adviceSnippet = adviceSnippet,
+                            parasympatheticPercent = parasympatheticPercent,
+                            sympatheticPercent = sympatheticPercent,
+                            hrvMs = hrvMs,
+                            rhr = rhr
+                        )
+                        else -> SmallStressLayout(
                             size = size,
                             stressScore = stressScore,
                             levelName = levelName,
@@ -167,15 +180,12 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
         sympatheticPercent: Int,
         hrvMs: Double
     ) {
-        val availW = size.width.value - 40f
-        val availH = size.height.value - 68f
-        val gaugeSize = min(availW, availH).coerceIn(92f, 110f).dp
-        val bitmapPx = (gaugeSize.value * 2.5f).toInt().coerceAtLeast(240)
+        val gaugeSize = 50.dp
         val gaugeBitmap = WidgetVisualGraphics.createStressGaugeBitmap(
-            sizePx = bitmapPx,
+            sizePx = 130,
             score = stressScore,
             levelColorInt = android.graphics.Color.parseColor(levelColorHex),
-            strokeWidthPx = 22f
+            strokeWidthPx = 12f
         )
         val balanceBitmap = WidgetVisualGraphics.createAutonomicBalanceBarBitmap(
             widthPx = 280,
@@ -188,14 +198,9 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
             sizePx = 20,
             colorInt = android.graphics.Color.parseColor("#00E5FF")
         )
-        val arrowIcon = WidgetVisualGraphics.createVectorIconBitmap(
-            icon = WidgetIconType.ARROW_RIGHT,
-            sizePx = 18,
-            colorInt = android.graphics.Color.parseColor(levelColorHex)
-        )
 
         Column(
-            modifier = GlanceModifier.fillMaxSize().padding(11.dp)
+            modifier = GlanceModifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)
         ) {
             // Header: Monkey + STRESS + Status Pill
             Row(
@@ -237,7 +242,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                 }
             }
 
-            Spacer(modifier = GlanceModifier.height(4.dp))
+            Spacer(modifier = GlanceModifier.height(3.dp))
 
             // Center Circular Score Gauge
             Box(
@@ -260,7 +265,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             text = "$stressScore",
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
-                                fontSize = 26.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -268,7 +273,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                             text = "/100",
                             style = TextStyle(
                                 color = ColorProvider(Color(0x80FFFFFF)),
-                                fontSize = 11.sp,
+                                fontSize = 8.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -276,7 +281,7 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                 }
             }
 
-            Spacer(modifier = GlanceModifier.height(4.dp))
+            Spacer(modifier = GlanceModifier.height(3.dp))
 
             // Autonomic Balance Mini-Bar
             Row(
@@ -312,39 +317,25 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
 
             Spacer(modifier = GlanceModifier.defaultWeight())
 
-            // Bottom Metric Snippet
-            Box(
-                modifier = GlanceModifier
-                    .fillMaxWidth()
-                    .background(Color(0x14FFFFFF))
-                    .cornerRadius(6.dp)
-                    .padding(horizontal = 6.dp, vertical = 3.dp)
+            // Bottom Metric: Clean HRV snippet
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        provider = ImageProvider(ecgIcon),
-                        contentDescription = null,
-                        modifier = GlanceModifier.size(7.5.dp)
+                Image(
+                    provider = ImageProvider(ecgIcon),
+                    contentDescription = null,
+                    modifier = GlanceModifier.size(8.dp)
+                )
+                Spacer(modifier = GlanceModifier.width(3.dp))
+                Text(
+                    text = "${hrvMs.toInt()} ms HRV",
+                    style = TextStyle(
+                        color = ColorProvider(Color(0xE6FFFFFF)),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = GlanceModifier.width(3.dp))
-                    Text(
-                        text = "${hrvMs.toInt()} ms HRV",
-                        style = TextStyle(
-                            color = ColorProvider(Color(0xE6FFFFFF)),
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                    Spacer(modifier = GlanceModifier.defaultWeight())
-                    Image(
-                        provider = ImageProvider(arrowIcon),
-                        contentDescription = null,
-                        modifier = GlanceModifier.size(7.dp)
-                    )
-                }
+                )
             }
         }
     }
@@ -586,6 +577,251 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
                         contentDescription = null,
                         modifier = GlanceModifier.size(7.5.dp)
                     )
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // MARK: - 3. LARGE LAYOUT (systemLarge: 4x4)
+    // =========================================================================
+    @androidx.compose.runtime.Composable
+    private fun LargeStressLayout(
+        stressScore: Int,
+        levelName: String,
+        levelColor: Color,
+        levelColorHex: String,
+        monkeyEmoji: String,
+        monkeyMoodTitle: String,
+        adviceSnippet: String,
+        parasympatheticPercent: Int,
+        sympatheticPercent: Int,
+        hrvMs: Double,
+        rhr: Double
+    ) {
+        val gaugeBitmap = WidgetVisualGraphics.createStressGaugeBitmap(
+            sizePx = 230,
+            score = stressScore,
+            levelColorInt = android.graphics.Color.parseColor(levelColorHex),
+            strokeWidthPx = 18f
+        )
+        val balanceBitmap = WidgetVisualGraphics.createAutonomicBalanceBarBitmap(
+            widthPx = 320,
+            heightPx = 12,
+            parasympatheticPct = parasympatheticPercent,
+            sympatheticPct = sympatheticPercent
+        )
+        val ecgIcon = WidgetVisualGraphics.createVectorIconBitmap(
+            icon = WidgetIconType.ECG,
+            sizePx = 24,
+            colorInt = android.graphics.Color.parseColor("#00E5FF")
+        )
+        val heartIcon = WidgetVisualGraphics.createVectorIconBitmap(
+            icon = WidgetIconType.HEART,
+            sizePx = 24,
+            colorInt = android.graphics.Color.parseColor("#EF4444")
+        )
+        val arrowIcon = WidgetVisualGraphics.createVectorIconBitmap(
+            icon = WidgetIconType.ARROW_RIGHT,
+            sizePx = 20,
+            colorInt = android.graphics.Color.parseColor("#00E5FF")
+        )
+
+        Column(
+            modifier = GlanceModifier.fillMaxSize().padding(14.dp)
+        ) {
+            // Header: Monkey + Title + Level badge
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = monkeyEmoji, style = TextStyle(fontSize = 18.sp))
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    Text(
+                        text = "AUTONOMIC STRESS STUDIO",
+                        style = TextStyle(
+                            color = ColorProvider(Color(0xFF00E5FF)),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+
+                Spacer(modifier = GlanceModifier.defaultWeight())
+
+                Box(
+                    modifier = GlanceModifier
+                        .background(levelColor.copy(alpha = 0.18f))
+                        .cornerRadius(12.dp)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = levelName.uppercase(Locale.ROOT),
+                        style = TextStyle(
+                            color = ColorProvider(levelColor),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = GlanceModifier.height(10.dp))
+
+            // Upper Section: 86dp Gauge + Telemetry column
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Circular Gauge
+                Box(
+                    modifier = GlanceModifier.size(86.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(gaugeBitmap),
+                        contentDescription = null,
+                        modifier = GlanceModifier.fillMaxSize()
+                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "$stressScore",
+                            style = TextStyle(
+                                color = ColorProvider(Color.White),
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Text(
+                            text = "/ 100",
+                            style = TextStyle(
+                                color = ColorProvider(Color(0x80FFFFFF)),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = GlanceModifier.width(14.dp))
+
+                // Telemetry cards: HRV & Resting HR
+                Column(modifier = GlanceModifier.defaultWeight()) {
+                    Box(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .background(Color(0x14FFFFFF))
+                            .cornerRadius(10.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(provider = ImageProvider(ecgIcon), contentDescription = null, modifier = GlanceModifier.size(12.dp))
+                            Spacer(modifier = GlanceModifier.width(6.dp))
+                            Text(
+                                text = "HRV: ${hrvMs.toInt()} ms",
+                                style = TextStyle(color = ColorProvider(Color.White), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(6.dp))
+
+                    Box(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .background(Color(0x14FFFFFF))
+                            .cornerRadius(10.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(provider = ImageProvider(heartIcon), contentDescription = null, modifier = GlanceModifier.size(12.dp))
+                            Spacer(modifier = GlanceModifier.width(6.dp))
+                            Text(
+                                text = "Resting: ${rhr.toInt()} bpm",
+                                style = TextStyle(color = ColorProvider(Color.White), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = GlanceModifier.height(10.dp))
+
+            // Autonomic Balance Section
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .background(Color(0x14FFFFFF))
+                    .cornerRadius(10.dp)
+                    .padding(10.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Parasympathetic $parasympatheticPercent%",
+                            style = TextStyle(color = ColorProvider(Color(0xFF00E5FF)), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        )
+                        Spacer(modifier = GlanceModifier.defaultWeight())
+                        Text(
+                            text = "Sympathetic $sympatheticPercent%",
+                            style = TextStyle(color = ColorProvider(Color(0xFFF97316)), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        )
+                    }
+                    Spacer(modifier = GlanceModifier.height(4.dp))
+                    Image(
+                        provider = ImageProvider(balanceBitmap),
+                        contentDescription = null,
+                        modifier = GlanceModifier.fillMaxWidth().height(5.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = GlanceModifier.height(8.dp))
+
+            // Monkey Clinical Coach Card
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .defaultWeight()
+                    .background(Color(0xCC061020))
+                    .cornerRadius(10.dp)
+                    .padding(10.dp)
+            ) {
+                Column {
+                    Text(
+                        text = monkeyMoodTitle,
+                        style = TextStyle(color = ColorProvider(levelColor), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(modifier = GlanceModifier.height(3.dp))
+                    Text(
+                        text = adviceSnippet,
+                        style = TextStyle(color = ColorProvider(Color(0xE0FFFFFF)), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                    )
+                }
+            }
+
+            Spacer(modifier = GlanceModifier.height(8.dp))
+
+            // Bottom CTA
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .background(Color(0x2400E5FF))
+                    .cornerRadius(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Take a Breath · Open Stress Studio",
+                        style = TextStyle(color = ColorProvider(Color(0xFF00E5FF)), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    Image(provider = ImageProvider(arrowIcon), contentDescription = null, modifier = GlanceModifier.size(10.dp))
                 }
             }
         }

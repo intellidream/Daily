@@ -113,7 +113,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.width >= 220.dp && size.height >= 180.dp -> LargeSleepLayout(
+                        size.width >= 200.dp && size.height >= 215.dp -> LargeSleepLayout(
                             sleepScore = sleepScore,
                             totalAsleepFormatted = totalAsleepFormatted,
                             timeInBedFormatted = timeInBedFormatted,
@@ -134,7 +134,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                             hrvMs = hrvMs,
                             sourceDevice = sourceDevice
                         )
-                        size.width >= 220.dp -> MediumSleepLayout(
+                        size.width >= 200.dp -> MediumSleepLayout(
                             sleepScore = sleepScore,
                             totalAsleepFormatted = totalAsleepFormatted,
                             timeInBedFormatted = timeInBedFormatted,
@@ -178,48 +178,45 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
         wakeTimeFormatted: String,
         efficiencyPercent: Int
     ) {
-        val availW = size.width.value - 34f
-        val availH = size.height.value - 48f
-        val ringSize = min(availW, availH).coerceIn(98f, 120f).dp
-        val bitmapPx = (ringSize.value * 2.5f).toInt().coerceAtLeast(240)
+        val ringSize = 72.dp
         val ringBitmap = WidgetVisualGraphics.createSleepScoreRingBitmap(
-            sizePx = bitmapPx,
+            sizePx = 180,
             score = sleepScore,
-            strokeWidthPx = 24f
+            strokeWidthPx = 16f
         )
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.MOON_STARS,
-            sizePx = 140,
+            sizePx = 120,
             colorInt = android.graphics.Color.parseColor("#8B5CF6"),
-            opacity = 0.14f
+            opacity = 0.07f
         )
         val moonIcon = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.MOON,
-            sizePx = 24,
+            sizePx = 20,
             colorInt = android.graphics.Color.parseColor("#8B5CF6")
         )
         val sparklesIcon = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.SPARKLES,
-            sizePx = 24,
+            sizePx = 20,
             colorInt = android.graphics.Color.parseColor("#00E5FF")
         )
 
         Box(modifier = GlanceModifier.fillMaxSize()) {
-            // Trailing Watermark Moon & Stars
+            // Trailing Subtle Watermark Moon & Stars
             Box(
-                modifier = GlanceModifier.fillMaxSize().padding(end = 6.dp),
+                modifier = GlanceModifier.fillMaxSize().padding(end = 2.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Image(
                     provider = ImageProvider(watermarkBitmap),
                     contentDescription = null,
-                    modifier = GlanceModifier.size(59.dp)
+                    modifier = GlanceModifier.size(46.dp)
                 )
             }
 
             // Foreground Content
             Column(
-                modifier = GlanceModifier.fillMaxSize().padding(11.dp)
+                modifier = GlanceModifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp)
             ) {
                 // Top Section: Radial Score Ring on Left, Sleep Duration in Top-Right
                 Row(
@@ -242,7 +239,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                                 text = "$sleepScore",
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 25.sp,
+                                    fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -250,7 +247,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                                 text = "/ 100",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0x99FFFFFF)),
-                                    fontSize = 11.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
@@ -263,14 +260,14 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .background(Color(0x2E8B5CF6))
-                            .cornerRadius(12.dp)
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                            .cornerRadius(10.dp)
+                            .padding(horizontal = 5.5.dp, vertical = 2.5.dp)
                     ) {
                         Text(
                             text = totalAsleepFormatted,
                             style = TextStyle(
                                 color = ColorProvider(Color(0xFFA855F7)),
-                                fontSize = 10.5.sp,
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -288,9 +285,9 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .defaultWeight()
-                            .height(26.dp)
+                            .height(24.dp)
                             .background(Color(0x248B5CF6))
-                            .cornerRadius(13.dp)
+                            .cornerRadius(12.dp)
                             .padding(horizontal = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -298,14 +295,14 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                             Image(
                                 provider = ImageProvider(moonIcon),
                                 contentDescription = null,
-                                modifier = GlanceModifier.size(9.dp)
+                                modifier = GlanceModifier.size(8.dp)
                             )
                             Spacer(modifier = GlanceModifier.width(2.dp))
                             Text(
                                 text = "$bedtimeFormatted-$wakeTimeFormatted",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0xFFA855F7)),
-                                    fontSize = 9.sp,
+                                    fontSize = 8.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -318,9 +315,9 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .defaultWeight()
-                            .height(26.dp)
+                            .height(24.dp)
                             .background(Color(0x2400E5FF))
-                            .cornerRadius(13.dp)
+                            .cornerRadius(12.dp)
                             .padding(horizontal = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -328,7 +325,7 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                             Image(
                                 provider = ImageProvider(sparklesIcon),
                                 contentDescription = null,
-                                modifier = GlanceModifier.size(9.dp)
+                                modifier = GlanceModifier.size(8.dp)
                             )
                             Spacer(modifier = GlanceModifier.width(2.dp))
                             Text(

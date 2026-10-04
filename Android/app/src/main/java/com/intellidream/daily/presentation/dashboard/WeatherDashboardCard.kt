@@ -28,7 +28,7 @@ import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.WbCloudy
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.WbTwilight
-import androidx.compose.material3.CircularProgressIndicator
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -193,10 +193,9 @@ private fun SmallWeatherContent(
                 }
             }
         } else if (isLoading) {
-            CircularProgressIndicator(
+            DailyLiquidLoadingIndicator(
                 color = ThemeColors.accentCyan,
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(24.dp)
+                size = 24.dp
             )
             Text(
                 text = "Loading...",
@@ -329,10 +328,9 @@ private fun WideWeatherContent(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(vertical = 12.dp)
             ) {
-                CircularProgressIndicator(
+                DailyLiquidLoadingIndicator(
                     color = ThemeColors.accentCyan,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(20.dp)
+                    size = 20.dp
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(

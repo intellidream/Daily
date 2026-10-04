@@ -165,7 +165,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.width >= 220.dp && size.height >= 180.dp -> LargeCombinedLayout(
+                        size.width >= 200.dp && size.height >= 215.dp -> LargeCombinedLayout(
                             waterMl = waterMl,
                             goalMl = goalMl,
                             waterPercent = waterPercent,
@@ -191,7 +191,7 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                             moneyIntent = financesMoneyIntent,
                             tagdosIntent = tagdosIntent
                         )
-                        size.width >= 220.dp -> MediumCombinedLayout(
+                        size.width >= 200.dp -> MediumCombinedLayout(
                             waterMl = waterMl,
                             goalMl = goalMl,
                             waterPercent = waterPercent,
@@ -267,164 +267,222 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         tagdosIntent: Intent
     ) {
         val sleepGauge = WidgetVisualGraphics.createMiniMetricGaugeBitmap(
-            sizePx = 130,
+            sizePx = 90,
             progress = sleepScore / 100f,
             colorInt = android.graphics.Color.parseColor("#00E5FF"),
-            strokeWidthPx = 12f
+            strokeWidthPx = 9f
         )
-        val waterGauge = WidgetVisualGraphics.createMiniMetricGaugeBitmap(
-            sizePx = 130,
-            progress = waterPercent.toFloat(),
-            colorInt = android.graphics.Color.parseColor("#3B82F6"),
-            strokeWidthPx = 12f
-        )
-        val smokesGauge = WidgetVisualGraphics.createMiniMetricGaugeBitmap(
-            sizePx = 130,
-            progress = min(smokesCount.toFloat() / max(smokesBase, 1), 1f),
-            colorInt = smokesRingColorInt,
-            strokeWidthPx = 12f
-        )
-
-        val moonIcon = WidgetVisualGraphics.createVectorIconBitmap(WidgetIconType.MOON, 20, android.graphics.Color.parseColor("#00E5FF"))
-        val dropIcon = WidgetVisualGraphics.createVectorIconBitmap(WidgetIconType.DROP, 20, android.graphics.Color.parseColor("#3B82F6"))
+        val sparklesIcon = WidgetVisualGraphics.createVectorIconBitmap(WidgetIconType.SPARKLES, 20, android.graphics.Color.parseColor("#00E5FF"))
+        val dropIcon = WidgetVisualGraphics.createVectorIconBitmap(WidgetIconType.DROP, 20, android.graphics.Color.parseColor("#00E5FF"))
         val flameIcon = WidgetVisualGraphics.createVectorIconBitmap(WidgetIconType.FLAME, 20, smokesRingColorInt)
         val cardIcon = WidgetVisualGraphics.createVectorIconBitmap(WidgetIconType.CREDIT_CARD, 20, android.graphics.Color.parseColor("#00E676"))
 
         Column(
-            modifier = GlanceModifier.fillMaxSize().padding(9.dp)
+            modifier = GlanceModifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp)
         ) {
-            // Row 1: 3 Mini Progress Rings (Sleep, Water, Smokes)
+            // Header Row: Daily + Status Pill
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Sleep Ring
-                MiniProgressRing(
-                    sleepGauge, "$sleepScore%", totalAsleep, moonIcon,
-                    GlanceModifier.defaultWeight().clickable(actionStartActivity(sleepIntent))
-                )
-                Spacer(modifier = GlanceModifier.width(4.dp))
-                // Water Ring
-                MiniProgressRing(
-                    waterGauge, "${(waterPercent * 100).toInt()}%", "${waterMl.toInt()} ml", dropIcon,
-                    GlanceModifier.defaultWeight().clickable(actionStartActivity(waterIntent))
-                )
-                Spacer(modifier = GlanceModifier.width(4.dp))
-                // Smokes Ring
-                MiniProgressRing(
-                    smokesGauge, "$smokesCount", "of $smokesBase", flameIcon,
-                    GlanceModifier.defaultWeight().clickable(actionStartActivity(smokesIntent))
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        provider = ImageProvider(sparklesIcon),
+                        contentDescription = null,
+                        modifier = GlanceModifier.size(11.dp)
+                    )
+                    Spacer(modifier = GlanceModifier.width(4.dp))
+                    Text(
+                        text = "Daily",
+                        style = TextStyle(
+                            color = ColorProvider(Color.White),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+
+                Spacer(modifier = GlanceModifier.defaultWeight())
+
+                // Stress/Status pill
+                Box(
+                    modifier = GlanceModifier
+                        .background(stressColor.copy(alpha = 0.18f))
+                        .cornerRadius(10.dp)
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                        .clickable(actionStartActivity(stressIntent))
+                ) {
+                    Text(
+                        text = "$stressEmoji $stressLevel",
+                        style = TextStyle(
+                            color = ColorProvider(stressColor),
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
             }
 
-            Spacer(modifier = GlanceModifier.defaultWeight())
+            Spacer(modifier = GlanceModifier.height(4.dp))
 
-            // Row 2: Horizontal Stress Bar with Monkey Mascot
+            // Sleep Hero Row: 36dp Ring + Sleep details
+            Row(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .clickable(actionStartActivity(sleepIntent)),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = GlanceModifier.size(36.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(sleepGauge),
+                        contentDescription = null,
+                        modifier = GlanceModifier.fillMaxSize()
+                    )
+                    Text(
+                        text = "$sleepScore",
+                        style = TextStyle(
+                            color = ColorProvider(Color.White),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+
+                Spacer(modifier = GlanceModifier.width(8.dp))
+
+                Column {
+                    Text(
+                        text = totalAsleep,
+                        style = TextStyle(
+                            color = ColorProvider(Color.White),
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    Text(
+                        text = "Sleep Quality",
+                        style = TextStyle(
+                            color = ColorProvider(Color(0xFF00E5FF)),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = GlanceModifier.height(4.dp))
+
+            // Tagdos Focus Chip
             Box(
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .background(Color(0x14FFFFFF))
-                    .cornerRadius(8.dp)
-                    .padding(horizontal = 7.dp, vertical = 4.5.dp)
-                    .clickable(actionStartActivity(stressIntent))
+                    .cornerRadius(7.dp)
+                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                    .clickable(actionStartActivity(tagdosIntent))
             ) {
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = stressEmoji, style = TextStyle(fontSize = 11.5.sp))
-                    Spacer(modifier = GlanceModifier.width(4.dp))
-                    Text(
-                        text = "$stressScore",
-                        style = TextStyle(color = ColorProvider(Color.White), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    )
-                    Spacer(modifier = GlanceModifier.width(6.dp))
-
-                    // Mini Bar
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = GlanceModifier
-                            .defaultWeight()
-                            .height(4.dp)
-                            .background(Color(0x1FFFFFFF))
-                            .cornerRadius(2.dp)
-                    ) {
-                        Box(
-                            modifier = GlanceModifier
-                                .fillMaxHeight()
-                                .width((40).dp)
-                                .background(stressColor)
-                                .cornerRadius(2.dp)
-                        ) {}
-                    }
-
-                    Spacer(modifier = GlanceModifier.width(6.dp))
-
-                    Box(
-                        modifier = GlanceModifier
-                            .background(stressColor.copy(alpha = 0.18f))
-                            .cornerRadius(8.dp)
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .background(Color(0x33A855F7))
+                            .cornerRadius(4.dp)
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
                     ) {
                         Text(
-                            text = stressLevel,
-                            style = TextStyle(color = ColorProvider(stressColor), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            text = "Focus",
+                            style = TextStyle(
+                                color = ColorProvider(Color(0xFFA855F7)),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
                     }
+                    Spacer(modifier = GlanceModifier.width(4.dp))
+                    Text(
+                        text = tagdosFocus,
+                        style = TextStyle(
+                            color = ColorProvider(Color(0xE6FFFFFF)),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        maxLines = 1
+                    )
                 }
             }
 
             Spacer(modifier = GlanceModifier.defaultWeight())
 
-            // Row 3: Combined Money (EUR) & Tagdos Focus
+            // Bottom 3 Quick Status Capsules (Water, Smokes, Money EUR)
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Money in EUR
+                // Water Capsule
                 Box(
                     modifier = GlanceModifier
                         .defaultWeight()
+                        .height(24.dp)
                         .background(Color(0x14FFFFFF))
-                        .cornerRadius(8.dp)
-                        .padding(horizontal = 7.dp, vertical = 5.dp)
-                        .clickable(actionStartActivity(moneyIntent))
+                        .cornerRadius(12.dp)
+                        .padding(horizontal = 4.dp)
+                        .clickable(actionStartActivity(waterIntent)),
+                    contentAlignment = Alignment.Center
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            provider = ImageProvider(cardIcon),
-                            contentDescription = null,
-                            modifier = GlanceModifier.size(8.5.dp)
-                        )
-                        Spacer(modifier = GlanceModifier.width(3.5.dp))
+                        Image(provider = ImageProvider(dropIcon), contentDescription = null, modifier = GlanceModifier.size(8.dp))
+                        Spacer(modifier = GlanceModifier.width(2.5.dp))
                         Text(
-                            text = formattedNetWorthEUR,
-                            style = TextStyle(color = ColorProvider(Color.White), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            text = "${waterMl.toInt()} ml",
+                            style = TextStyle(color = ColorProvider(Color.White), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         )
                     }
                 }
 
-                Spacer(modifier = GlanceModifier.width(5.dp))
+                Spacer(modifier = GlanceModifier.width(4.dp))
 
-                // Right: TagDoS Focus
+                // Smokes Capsule
                 Box(
                     modifier = GlanceModifier
                         .defaultWeight()
+                        .height(24.dp)
                         .background(Color(0x14FFFFFF))
-                        .cornerRadius(8.dp)
-                        .padding(horizontal = 7.dp, vertical = 5.dp)
-                        .clickable(actionStartActivity(tagdosIntent))
+                        .cornerRadius(12.dp)
+                        .padding(horizontal = 4.dp)
+                        .clickable(actionStartActivity(smokesIntent)),
+                    contentAlignment = Alignment.Center
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = GlanceModifier
-                                .size(4.5.dp)
-                                .background(Color(0xFFA855F7))
-                                .cornerRadius(2.25.dp)
-                        ) {}
-                        Spacer(modifier = GlanceModifier.width(4.dp))
+                        Image(provider = ImageProvider(flameIcon), contentDescription = null, modifier = GlanceModifier.size(8.dp))
+                        Spacer(modifier = GlanceModifier.width(2.5.dp))
                         Text(
-                            text = tagdosFocus,
-                            style = TextStyle(color = ColorProvider(Color(0xEBFFFFFF)), fontSize = 9.5.sp, fontWeight = FontWeight.Medium)
+                            text = "$smokesCount",
+                            style = TextStyle(color = ColorProvider(Color.White), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+
+                Spacer(modifier = GlanceModifier.width(4.dp))
+
+                // Money Capsule
+                Box(
+                    modifier = GlanceModifier
+                        .defaultWeight()
+                        .height(24.dp)
+                        .background(Color(0x14FFFFFF))
+                        .cornerRadius(12.dp)
+                        .padding(horizontal = 4.dp)
+                        .clickable(actionStartActivity(moneyIntent)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(provider = ImageProvider(cardIcon), contentDescription = null, modifier = GlanceModifier.size(8.dp))
+                        Spacer(modifier = GlanceModifier.width(2.5.dp))
+                        Text(
+                            text = formattedNetWorthEUR,
+                            style = TextStyle(color = ColorProvider(Color.White), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         )
                     }
                 }

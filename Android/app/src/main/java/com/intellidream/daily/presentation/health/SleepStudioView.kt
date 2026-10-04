@@ -38,6 +38,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.DeviceSource
@@ -48,6 +53,7 @@ import com.intellidream.daily.model.SleepRecoveryVerdict
 import com.intellidream.daily.model.SleepSession
 import com.intellidream.daily.model.SleepStageType
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SleepStudioView(
     session: SleepSession?,
@@ -58,6 +64,15 @@ fun SleepStudioView(
     onScrollToHypnogram: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    val handleScrollToHypnogram: () -> Unit = {
+        onScrollToHypnogram()
+        scope.launch {
+            bringIntoViewRequester.bringIntoView()
+        }
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -66,7 +81,7 @@ fun SleepStudioView(
             // 1. Hero Sleep Score & Schedule Card
             HeroSleepScoreCard(
                 session = session,
-                onScoreRingTapped = onScrollToHypnogram
+                onScoreRingTapped = handleScrollToHypnogram
             )
 
             // 2. Recovery Verdict & Readiness Card
@@ -85,7 +100,9 @@ fun SleepStudioView(
             }
 
             // 5. Clinical Hypnogram Container Card
-            HypnogramContainerCard(session = session)
+            Box(modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoViewRequester)) {
+                HypnogramContainerCard(session = session)
+            }
 
             // 6. Sleep Architecture Breakdown Grid
             ArchitectureMetricsGrid(session = session)

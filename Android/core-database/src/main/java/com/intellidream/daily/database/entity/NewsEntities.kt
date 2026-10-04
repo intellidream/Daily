@@ -179,3 +179,74 @@ data class SavedArticleEntity(
         }
     }
 }
+
+@Entity(
+    tableName = "rss_cached_articles",
+    indices = [
+        Index(value = ["feed_url"]),
+        Index(value = ["publish_date"])
+    ]
+)
+data class CachedFeedArticleEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "link")
+    val link: String,
+
+    @ColumnInfo(name = "feed_url")
+    val feedUrl: String,
+
+    @ColumnInfo(name = "title")
+    val title: String,
+
+    @ColumnInfo(name = "publish_date")
+    val publishDate: Long,
+
+    @ColumnInfo(name = "image_url")
+    val imageUrl: String? = null,
+
+    @ColumnInfo(name = "description")
+    val description: String? = null,
+
+    @ColumnInfo(name = "author")
+    val author: String? = null,
+
+    @ColumnInfo(name = "publication_name")
+    val publicationName: String? = null,
+
+    @ColumnInfo(name = "publication_icon_url")
+    val publicationIconUrl: String? = null,
+
+    @ColumnInfo(name = "cached_at")
+    val cachedAt: Long = System.currentTimeMillis()
+) {
+    fun toNewsArticle(): NewsArticle {
+        return NewsArticle(
+            id = link,
+            title = title,
+            link = link,
+            publishDate = publishDate,
+            imageUrl = imageUrl,
+            description = description,
+            author = author,
+            publicationName = publicationName,
+            publicationIconUrl = publicationIconUrl
+        )
+    }
+
+    companion object {
+        fun fromNewsArticle(article: NewsArticle, feedUrl: String): CachedFeedArticleEntity {
+            return CachedFeedArticleEntity(
+                link = article.link,
+                feedUrl = feedUrl,
+                title = article.title,
+                publishDate = article.publishDate,
+                imageUrl = article.imageUrl,
+                description = article.description,
+                author = article.author,
+                publicationName = article.publicationName,
+                publicationIconUrl = article.publicationIconUrl,
+                cachedAt = System.currentTimeMillis()
+            )
+        }
+    }
+}

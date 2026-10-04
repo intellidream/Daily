@@ -101,7 +101,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.width >= 220.dp && size.height >= 180.dp -> LargeBubblesLayout(
+                        size.width >= 200.dp && size.height >= 215.dp -> LargeBubblesLayout(
                             todayMl = todayMl,
                             goalMl = goalMl,
                             progressPercent = progressPercent,
@@ -110,7 +110,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                             teaMl = teaMl,
                             breakdown = breakdown
                         )
-                        size.width >= 220.dp -> MediumBubblesLayout(
+                        size.width >= 200.dp -> MediumBubblesLayout(
                             todayMl = todayMl,
                             goalMl = goalMl,
                             progressPercent = progressPercent,
@@ -143,40 +143,37 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
         progressPercent: Double,
         breakdown: List<Pair<Double, Int>>
     ) {
-        val availW = size.width.value - 34f
-        val availH = size.height.value - 48f
-        val ringSize = min(availW, availH).coerceIn(98f, 120f).dp
-        val bitmapPx = (ringSize.value * 2.5f).toInt().coerceAtLeast(240)
+        val ringSize = 72.dp
         val ringBitmap = WidgetVisualGraphics.createMultiDrinkArcBitmap(
-            sizePx = bitmapPx,
+            sizePx = 180,
             todayMl = todayMl,
             goalMl = goalMl,
             breakdown = breakdown,
-            strokeWidthPx = 24f
+            strokeWidthPx = 16f
         )
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.DROP,
-            sizePx = 140,
+            sizePx = 120,
             colorInt = android.graphics.Color.parseColor("#00E5FF"),
-            opacity = 0.14f
+            opacity = 0.07f
         )
 
         Box(modifier = GlanceModifier.fillMaxSize()) {
-            // Trailing Watermark Drop
+            // Trailing Subtle Watermark Drop
             Box(
-                modifier = GlanceModifier.fillMaxSize().padding(end = 6.dp),
+                modifier = GlanceModifier.fillMaxSize().padding(end = 2.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Image(
                     provider = ImageProvider(watermarkBitmap),
                     contentDescription = null,
-                    modifier = GlanceModifier.size(59.dp)
+                    modifier = GlanceModifier.size(46.dp)
                 )
             }
 
             // Foreground Content
             Column(
-                modifier = GlanceModifier.fillMaxSize().padding(11.dp)
+                modifier = GlanceModifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp)
             ) {
                 // Top Section: Circle Hero on Left, Percentage in Top-Right
                 Row(
@@ -199,7 +196,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                                 text = "${todayMl.toInt()}",
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 22.sp,
+                                    fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -207,7 +204,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                                 text = "/ ${goalMl.toInt()} ml",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0x99FFFFFF)),
-                                    fontSize = 11.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
@@ -220,14 +217,14 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .background(Color(0x2E00E5FF))
-                            .cornerRadius(12.dp)
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                            .cornerRadius(10.dp)
+                            .padding(horizontal = 5.5.dp, vertical = 2.5.dp)
                     ) {
                         Text(
                             text = "${(progressPercent * 100).toInt()}%",
                             style = TextStyle(
                                 color = ColorProvider(Color(0xFF00E5FF)),
-                                fontSize = 11.sp,
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -246,7 +243,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         amount = 100.0,
                         drinkType = "Coffee",
                         color = Color(0xFFF59E0B),
-                        height = 28.dp,
+                        height = 26.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                     Spacer(modifier = GlanceModifier.width(4.dp))
@@ -255,7 +252,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         amount = 150.0,
                         drinkType = "Water",
                         color = Color(0xFF00E5FF),
-                        height = 28.dp,
+                        height = 26.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                     Spacer(modifier = GlanceModifier.width(4.dp))
@@ -264,7 +261,7 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
                         amount = 300.0,
                         drinkType = "Water",
                         color = Color(0xFF00E5FF),
-                        height = 28.dp,
+                        height = 26.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                 }

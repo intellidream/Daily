@@ -46,7 +46,6 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Watch
 import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
-import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -182,17 +181,7 @@ fun HealthMainView(
 
             // Scrollable Content
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .calmBoundedSwipeGesture(
-                        currentIndex = currentTabIndex,
-                        maxIndex = tabs.lastIndex,
-                        onIndexChange = { newIdx ->
-                            if (newIdx in tabs.indices) {
-                                repository.setActiveSubTab(tabs[newIdx])
-                            }
-                        }
-                    ),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -351,12 +340,14 @@ fun HealthMainView(
             )
         }
 
-        PullToRefreshContainer(
-            state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter),
-            containerColor = Color(0xFF0D182E),
-            contentColor = ThemeColors.accentCyan
-        )
+        if (pullRefreshState.isRefreshing || pullRefreshState.verticalOffset > 0.5f) {
+            PullToRefreshContainer(
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = Color(0xFF0D182E),
+                contentColor = ThemeColors.accentCyan
+            )
+        }
     }
 }
 

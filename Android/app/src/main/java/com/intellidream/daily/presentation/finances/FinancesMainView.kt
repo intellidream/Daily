@@ -50,7 +50,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.intellidream.daily.database.FinanceDataRepository
 import com.intellidream.daily.database.SmartLedgerRepository
-import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.FinanceSubTab
 import com.intellidream.daily.model.SmartLedgerItem
@@ -193,15 +192,6 @@ fun FinancesMainView(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .calmBoundedSwipeGesture(
-                        currentIndex = currentTabIndex,
-                        maxIndex = tabs.lastIndex,
-                        onIndexChange = { newIdx ->
-                            if (newIdx in tabs.indices) {
-                                financeDataRepository.setActiveSubTab(tabs[newIdx])
-                            }
-                        }
-                    )
                     .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -279,11 +269,13 @@ fun FinancesMainView(
             )
         }
 
-        PullToRefreshContainer(
-            state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter),
-            containerColor = Color(0xFF0D182E),
-            contentColor = ThemeColors.accentGreen
-        )
+        if (pullRefreshState.isRefreshing || pullRefreshState.verticalOffset > 0.5f) {
+            PullToRefreshContainer(
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = Color(0xFF0D182E),
+                contentColor = ThemeColors.accentGreen
+            )
+        }
     }
 }

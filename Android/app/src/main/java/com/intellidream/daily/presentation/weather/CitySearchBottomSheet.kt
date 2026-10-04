@@ -23,7 +23,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.CircularProgressIndicator
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -157,10 +157,9 @@ fun CitySearchBottomSheet(
                 },
                 trailingIcon = {
                     if (isSearching) {
-                        CircularProgressIndicator(
+                        DailyLiquidLoadingIndicator(
                             color = ThemeColors.accentCyan,
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(18.dp)
+                            size = 18.dp
                         )
                     } else if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {

@@ -20,9 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.ChatBubble
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.rounded.Close
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -371,10 +371,9 @@ private fun SleepAIChatBottomSheet(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.padding(start = 8.dp)
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = ThemeColors.accentCyan,
-                                strokeWidth = 2.dp
+                            DailyLiquidLoadingIndicator(
+                                size = 16.dp,
+                                color = ThemeColors.accentCyan
                             )
                             Text(
                                 text = "Analyzing sleep architecture...",

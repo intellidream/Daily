@@ -66,6 +66,13 @@ class HealthDataRepository(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) {
     var currentUserId: String = "local_user"
+        set(value) {
+            val changed = field != value
+            field = value
+            if (changed) {
+                loadDataForSelectedDate(forceRefresh = false)
+            }
+        }
 
     // MARK: - Published State
 
@@ -290,9 +297,15 @@ class HealthDataRepository(
 
                 if (remoteTelemetry.isNotEmpty()) {
                     telemetry.addAll(remoteTelemetry)
+                    withContext(Dispatchers.IO) {
+                        telemetryDao.insertRecords(remoteTelemetry.map { HealthTelemetryEntity.fromRecord(it) })
+                    }
                 }
                 if (remoteVitals.isNotEmpty()) {
                     vitals.addAll(remoteVitals)
+                    withContext(Dispatchers.IO) {
+                        vitalsDao.insertVitals(remoteVitals.map { VitalMetricEntity.fromRecord(it) })
+                    }
                 }
 
                 if (telemetry.isNotEmpty() || vitals.isNotEmpty()) {

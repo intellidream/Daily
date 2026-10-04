@@ -42,7 +42,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.TextFields
-import androidx.compose.material3.CircularProgressIndicator
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -182,24 +182,12 @@ fun NewsReaderSheet(
                         .fillMaxWidth()
                 ) {
                     if (isLoadingFull) {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator(
-                                color = ThemeColors.accentCyan,
-                                strokeWidth = 3.dp,
-                                modifier = Modifier.size(36.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Extracting Distraction-Free Article...",
-                                color = ThemeColors.textSecondary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        DailyLiquidLoadingIndicator(
+                            color = ThemeColors.accentCyan,
+                            size = 44.dp,
+                            label = "Extracting Distraction-Free Article...",
+                            modifier = Modifier.fillMaxSize()
+                        )
                     } else {
                         val readerHtml = remember(currentArticle, isDark, fontSizeMultiplier) {
                             generateReaderHtml(currentArticle, isDark, fontSizeMultiplier)

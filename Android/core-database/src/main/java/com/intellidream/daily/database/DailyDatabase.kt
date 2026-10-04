@@ -13,6 +13,7 @@ import com.intellidream.daily.database.entity.HabitLogEntity
 import com.intellidream.daily.database.entity.HealthTelemetryEntity
 import com.intellidream.daily.database.entity.SmartLedgerEntity
 import com.intellidream.daily.database.dao.NewsDao
+import com.intellidream.daily.database.entity.CachedFeedArticleEntity
 import com.intellidream.daily.database.entity.RssSubscriptionEntity
 import com.intellidream.daily.database.entity.SavedArticleEntity
 import com.intellidream.daily.database.entity.TagdoQuickNoteEntity
@@ -28,9 +29,10 @@ import com.intellidream.daily.database.entity.VitalMetricEntity
         TagdoStreamEntity::class,
         TagdoQuickNoteEntity::class,
         RssSubscriptionEntity::class,
-        SavedArticleEntity::class
+        SavedArticleEntity::class,
+        CachedFeedArticleEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class DailyDatabase : RoomDatabase() {

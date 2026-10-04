@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.RssFeed
 import androidx.compose.material.icons.rounded.Search
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -228,10 +229,9 @@ fun NewsFeedsManagementSheet(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            CircularProgressIndicator(
+                            DailyLiquidLoadingIndicator(
                                 color = ThemeColors.accentCyan,
-                                strokeWidth = 2.5.dp,
-                                modifier = Modifier.size(20.dp)
+                                size = 20.dp
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(

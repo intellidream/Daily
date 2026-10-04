@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.intellidream.daily.database.entity.CachedFeedArticleEntity
 import com.intellidream.daily.database.entity.RssSubscriptionEntity
 import com.intellidream.daily.database.entity.SavedArticleEntity
 import kotlinx.coroutines.flow.Flow
@@ -60,4 +61,18 @@ interface NewsDao {
 
     @Query("UPDATE rss_saved_articles SET synced_at = :timestamp WHERE id IN (:ids)")
     suspend fun markSavedArticlesSynced(ids: List<String>, timestamp: Long)
+
+    // MARK: - Cached Feed Articles (Local-First Offline Cache)
+
+    @Query("SELECT * FROM rss_cached_articles ORDER BY publish_date DESC LIMIT 100")
+    suspend fun getAllCachedArticles(): List<CachedFeedArticleEntity>
+
+    @Query("SELECT * FROM rss_cached_articles WHERE feed_url = :feedUrl ORDER BY publish_date DESC LIMIT 50")
+    suspend fun getCachedArticlesForFeed(feedUrl: String): List<CachedFeedArticleEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCachedArticles(articles: List<CachedFeedArticleEntity>)
+
+    @Query("DELETE FROM rss_cached_articles WHERE cached_at < :oldThreshold")
+    suspend fun pruneOldCachedArticles(oldThreshold: Long)
 }

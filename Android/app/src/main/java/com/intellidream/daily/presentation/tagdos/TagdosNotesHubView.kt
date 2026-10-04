@@ -73,7 +73,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellidream.daily.database.TagdosRepository
 import com.intellidream.daily.designsystem.ThemeColors
-import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
 import com.intellidream.daily.model.TagDoCluster
 import com.intellidream.daily.model.TagDoPill
 import com.intellidream.daily.model.TagDoPillAction
@@ -179,10 +178,10 @@ fun TagdosNotesHubView(
                     )
 
                     if (isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(12.dp),
+                        DailyLiquidLoadingIndicator(
+                            modifier = Modifier.size(14.dp),
                             color = ThemeColors.accentCyan,
-                            strokeWidth = 1.5.dp
+                            size = 14.dp
                         )
                     } else {
                         Icon(
@@ -378,19 +377,6 @@ fun TagdosNotesHubView(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .calmBoundedSwipeGesture(
-                        currentIndex = selectedStreamIndex,
-                        maxIndex = streams.size,
-                        edgeGuardDp = 75.dp,
-                        onIndexChange = { newIdx ->
-                            if (!isRawEditMode && newIdx in 0..streams.size) {
-                                selectedStreamIndex = newIdx
-                                if (newIdx < streams.size) {
-                                    rawTextBuffer = streams[newIdx].rawText
-                                }
-                            }
-                        }
-                    )
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -439,12 +425,14 @@ fun TagdosNotesHubView(
         }
 
         // Pull to refresh indicator inside BoxScope
-        PullToRefreshContainer(
-            state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter),
-            containerColor = Color(0xFF0D182E),
-            contentColor = ThemeColors.accentCyan
-        )
+        if (pullRefreshState.isRefreshing || pullRefreshState.verticalOffset > 0.5f) {
+            PullToRefreshContainer(
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = Color(0xFF0D182E),
+                contentColor = ThemeColors.accentCyan
+            )
+        }
     }
 
     // MARK: - Bottom Sheets & Modals

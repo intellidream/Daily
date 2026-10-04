@@ -1,6 +1,7 @@
 package com.intellidream.daily.database
 
 import com.intellidream.daily.database.dao.NewsDao
+import com.intellidream.daily.database.entity.CachedFeedArticleEntity
 import com.intellidream.daily.database.entity.RssSubscriptionEntity
 import com.intellidream.daily.database.entity.SavedArticleEntity
 import com.intellidream.daily.model.ArticleExtractor
@@ -99,6 +100,12 @@ class NewsRepository(
     init {
         observeDb(currentUserId)
         scope.launch {
+            val localCached = dao.getAllCachedArticles()
+            if (localCached.isNotEmpty()) {
+                val articles = localCached.map { it.toNewsArticle() }
+                _articles.value = articles
+                feedCache["all_news"] = articles to System.currentTimeMillis()
+            }
             loadAllNews()
         }
     }
@@ -172,23 +179,33 @@ class NewsRepository(
             return@withContext
         }
 
-        // Cache check
+        // 1. In-memory cache check
         if (!forceRefresh) {
             val cached = feedCache[feed.url]
             if (cached != null && cached.first.isNotEmpty() && System.currentTimeMillis() - cached.second < cacheDurationMillis) {
                 _articles.value = cached.first
                 return@withContext
             }
+            // 2. Room local cache fallback
+            val localRoom = dao.getCachedArticlesForFeed(feed.url)
+            if (localRoom.isNotEmpty()) {
+                val models = localRoom.map { it.toNewsArticle() }
+                feedCache[feed.url] = models to System.currentTimeMillis()
+                _articles.value = models
+            }
         }
 
-        _isLoading.value = true
+        _isLoading.value = _articles.value.isEmpty()
         _errorMessage.value = null
 
         try {
-            val items = fetchFeedItems(feed)
+            val items = kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                fetchFeedItems(feed)
+            } ?: emptyList()
             if (items.isNotEmpty()) {
                 feedCache[feed.url] = items to System.currentTimeMillis()
                 _articles.value = items
+                dao.upsertCachedArticles(items.map { CachedFeedArticleEntity.fromNewsArticle(it, feed.url) })
             } else if (_articles.value.isEmpty()) {
                 _errorMessage.value = "Failed to load ${feed.name}."
             }
@@ -202,15 +219,24 @@ class NewsRepository(
     }
 
     suspend fun loadAllNews(forceRefresh: Boolean = false) = withContext(Dispatchers.IO) {
-        val cached = feedCache["all_news"]
-        if (cached != null && cached.first.isNotEmpty()) {
-            _articles.value = cached.first
-            if (!forceRefresh && System.currentTimeMillis() - cached.second < cacheDurationMillis) {
-                return@withContext
+        if (!forceRefresh) {
+            val cached = feedCache["all_news"]
+            if (cached != null && cached.first.isNotEmpty()) {
+                _articles.value = cached.first
+                if (System.currentTimeMillis() - cached.second < cacheDurationMillis) {
+                    return@withContext
+                }
+            } else {
+                val localRoom = dao.getAllCachedArticles()
+                if (localRoom.isNotEmpty()) {
+                    val models = localRoom.map { it.toNewsArticle() }
+                    feedCache["all_news"] = models to System.currentTimeMillis()
+                    _articles.value = models
+                }
             }
         }
 
-        _isLoading.value = true
+        _isLoading.value = _articles.value.isEmpty()
         _errorMessage.value = null
 
         val activeFeeds = _feeds.value.ifEmpty { defaultFeeds }
@@ -220,7 +246,9 @@ class NewsRepository(
                 activeFeeds.map { feed ->
                     async {
                         try {
-                            fetchFeedItems(feed).take(4)
+                            kotlinx.coroutines.withTimeoutOrNull(2500L) {
+                                fetchFeedItems(feed).take(4)
+                            } ?: emptyList()
                         } catch (_: Throwable) {
                             emptyList()
                         }
@@ -231,6 +259,7 @@ class NewsRepository(
             if (aggregated.isNotEmpty()) {
                 feedCache["all_news"] = aggregated to System.currentTimeMillis()
                 _articles.value = aggregated
+                dao.upsertCachedArticles(aggregated.map { CachedFeedArticleEntity.fromNewsArticle(it, "all_news") })
             } else if (_articles.value.isEmpty()) {
                 _errorMessage.value = "Unable to load latest news briefings."
             }
@@ -468,7 +497,7 @@ class NewsRepository(
                 val toInsert = mutableListOf<RssSubscriptionEntity>()
                 for (remote in remoteSubs) {
                     val local = localMap[remote.url.lowercase()]
-                    if (local == null) {
+                    if (local == null || local.isDeleted != remote.isDeleted || local.name != remote.name) {
                         toInsert.add(
                             RssSubscriptionEntity(
                                 id = remote.id,
@@ -517,7 +546,7 @@ class NewsRepository(
                 val toUpsert = mutableListOf<SavedArticleEntity>()
                 for (remote in remoteSaved) {
                     val local = localMap[remote.id.lowercase()]
-                    if (local == null) {
+                    if (local == null || local.isDeleted != remote.isDeleted || local.articleType != remote.articleType) {
                         toUpsert.add(
                             SavedArticleEntity(
                                 id = remote.id,

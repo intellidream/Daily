@@ -106,7 +106,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.width >= 220.dp && size.height >= 180.dp -> LargeSmokesLayout(
+                        size.width >= 200.dp && size.height >= 215.dp -> LargeSmokesLayout(
                             todayTotal = todayTotal,
                             baseline = baseline,
                             cigsCount = cigsCount,
@@ -118,7 +118,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                             ringColorInt = ringColorInt,
                             lungColorInt = lungColorInt
                         )
-                        size.width >= 220.dp -> MediumSmokesLayout(
+                        size.width >= 200.dp -> MediumSmokesLayout(
                             todayTotal = todayTotal,
                             baseline = baseline,
                             formattedTime = formattedTime,
@@ -150,40 +150,37 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
         ringColorInt: Int
     ) {
         val progress = if (baseline > 0) min(todayTotal.toFloat() / baseline.toFloat(), 1f) else 0f
-        val availW = size.width.value - 34f
-        val availH = size.height.value - 48f
-        val ringSize = min(availW, availH).coerceIn(98f, 120f).dp
-        val bitmapPx = (ringSize.value * 2.5f).toInt().coerceAtLeast(240)
+        val ringSize = 72.dp
         val ringBitmap = WidgetVisualGraphics.createCircularProgressRingBitmap(
-            sizePx = bitmapPx,
+            sizePx = 180,
             progress = progress,
             ringColorInt = ringColorInt,
             startColorInt = android.graphics.Color.parseColor("#00E676"),
-            strokeWidthPx = 24f
+            strokeWidthPx = 16f
         )
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.FLAME,
-            sizePx = 140,
+            sizePx = 120,
             colorInt = ringColorInt,
-            opacity = 0.14f
+            opacity = 0.07f
         )
 
         Box(modifier = GlanceModifier.fillMaxSize()) {
-            // Trailing Watermark Flame
+            // Trailing Subtle Watermark Flame
             Box(
-                modifier = GlanceModifier.fillMaxSize().padding(end = 6.dp),
+                modifier = GlanceModifier.fillMaxSize().padding(end = 2.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Image(
                     provider = ImageProvider(watermarkBitmap),
                     contentDescription = null,
-                    modifier = GlanceModifier.size(59.dp)
+                    modifier = GlanceModifier.size(46.dp)
                 )
             }
 
             // Foreground Content
             Column(
-                modifier = GlanceModifier.fillMaxSize().padding(11.dp)
+                modifier = GlanceModifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp)
             ) {
                 // Top Section: Circle Hero on Left, Elapsed Time in Top-Right
                 Row(
@@ -206,7 +203,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                                 text = "$todayTotal",
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 24.sp,
+                                    fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -214,7 +211,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                                 text = "/ $baseline",
                                 style = TextStyle(
                                     color = ColorProvider(Color(0x99FFFFFF)),
-                                    fontSize = 11.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
@@ -227,14 +224,14 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .background(Color(0x1FFFFFFF))
-                            .cornerRadius(12.dp)
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                            .cornerRadius(10.dp)
+                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
                     ) {
                         Text(
                             text = formattedTime,
                             style = TextStyle(
                                 color = ColorProvider(Color(0xE6FFFFFF)),
-                                fontSize = 10.sp,
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -252,7 +249,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                         label = "Cig",
                         color = Color(0xFFEF4444),
                         smokeType = "Cigarette",
-                        height = 28.dp,
+                        height = 26.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                     Spacer(modifier = GlanceModifier.width(4.dp))
@@ -260,7 +257,7 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
                         label = "Heat",
                         color = Color(0xFF3B82F6),
                         smokeType = "Heated",
-                        height = 28.dp,
+                        height = 26.dp,
                         modifier = GlanceModifier.defaultWeight()
                     )
                 }

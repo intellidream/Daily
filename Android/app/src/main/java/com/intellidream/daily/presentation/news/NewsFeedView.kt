@@ -48,7 +48,6 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,9 +55,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import com.intellidream.daily.designsystem.calmBoundedSwipeGesture
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.ui.focus.onFocusChanged
@@ -133,6 +132,14 @@ fun NewsFeedView(
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(activeSubTab) {
+        listState.scrollToItem(0)
+        if (repository.currentUserId != "guest") {
+            repository.syncWithSupabase(repository.currentUserId)
+        }
+    }
 
     val currentArticles = when (activeSubTab) {
         NewsSubTab.Live -> liveArticles
@@ -248,22 +255,11 @@ fun NewsFeedView(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                color = ThemeColors.accentCyan,
-                                strokeWidth = 3.dp,
-                                modifier = Modifier.size(36.dp)
-                            )
-                            Text(
-                                text = "Fetching latest briefings from sources...",
-                                color = ThemeColors.textSecondary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        DailyLiquidLoadingIndicator(
+                            color = ThemeColors.accentCyan,
+                            size = 48.dp,
+                            label = "Fetching latest briefings from sources..."
+                        )
                     }
                 } else if (filteredArticles.isEmpty()) {
                     Box(
@@ -280,20 +276,9 @@ fun NewsFeedView(
                         )
                     }
                 } else {
-                    val tabs = NewsSubTab.entries
-                    val currentTabIndex = tabs.indexOf(activeSubTab).coerceAtLeast(0)
                     LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .calmBoundedSwipeGesture(
-                                currentIndex = currentTabIndex,
-                                maxIndex = tabs.lastIndex,
-                                onIndexChange = { newIdx ->
-                                    if (newIdx in tabs.indices) {
-                                        activeSubTab = tabs[newIdx]
-                                    }
-                                }
-                            ),
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(bottom = 90.dp)
                     ) {
@@ -327,12 +312,14 @@ fun NewsFeedView(
                     }
                 }
 
-                PullToRefreshContainer(
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    containerColor = Color(0xFF0D182E),
-                    contentColor = ThemeColors.accentCyan
-                )
+                if (pullRefreshState.isRefreshing || pullRefreshState.verticalOffset > 0.5f) {
+                    PullToRefreshContainer(
+                        state = pullRefreshState,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = Color(0xFF0D182E),
+                        contentColor = ThemeColors.accentCyan
+                    )
+                }
             }
         }
     }

@@ -44,7 +44,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.WbSunny
-import androidx.compose.material3.CircularProgressIndicator
+import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -341,22 +341,11 @@ fun SmartBriefingBottomSheet(
                             .weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                color = ThemeColors.accentCyan,
-                                modifier = Modifier.size(36.dp),
-                                strokeWidth = 3.dp
-                            )
-                            Text(
-                                text = "Synthesizing cross-hub briefing...",
-                                color = ThemeColors.textSecondary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        DailyLiquidLoadingIndicator(
+                            color = ThemeColors.accentCyan,
+                            size = 44.dp,
+                            label = "Synthesizing cross-hub briefing..."
+                        )
                     }
                 } else {
                     val currentRec = record!!

@@ -145,12 +145,12 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                         .clickable(actionStartActivity(launchIntent))
                 ) {
                     when {
-                        size.width >= 220.dp && size.height >= 180.dp -> LargeTagdosLayout(
+                        size.width >= 200.dp && size.height >= 215.dp -> LargeTagdosLayout(
                             streams = streams,
                             totalActivePills = totalActivePills,
                             nextReminderFormatted = nextReminderFormatted
                         )
-                        size.width >= 220.dp -> MediumTagdosLayout(
+                        size.width >= 200.dp -> MediumTagdosLayout(
                             stream1 = stream1,
                             stream2 = stream2
                         )
@@ -178,9 +178,9 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.CHECKLIST,
-            sizePx = 140,
+            sizePx = 120,
             colorInt = android.graphics.Color.parseColor("#A855F7"),
-            opacity = 0.08f
+            opacity = 0.06f
         )
         val checklistIcon = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.CHECKLIST,
@@ -199,21 +199,21 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
         )
 
         Box(modifier = GlanceModifier.fillMaxSize()) {
-            // Trailing Watermark Checklist
+            // Trailing Subtle Watermark Checklist
             Box(
-                modifier = GlanceModifier.fillMaxSize().padding(end = 6.dp),
+                modifier = GlanceModifier.fillMaxSize().padding(end = 2.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Image(
                     provider = ImageProvider(watermarkBitmap),
                     contentDescription = null,
-                    modifier = GlanceModifier.size(59.dp)
+                    modifier = GlanceModifier.size(46.dp)
                 )
             }
 
             // Foreground Content
             Column(
-                modifier = GlanceModifier.fillMaxSize().padding(11.dp)
+                modifier = GlanceModifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp)
             ) {
                 // Header Row: Icon + Title on Left, Reminder on Right
                 Row(
@@ -290,15 +290,15 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                     Box(
                         modifier = GlanceModifier
                             .background(pillColor.copy(alpha = 0.15f))
-                            .cornerRadius(12.dp)
-                            .padding(horizontal = 8.dp, vertical = 3.5.dp)
+                            .cornerRadius(10.dp)
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = driving,
                                 style = TextStyle(
                                     color = ColorProvider(pillColor),
-                                    fontSize = 22.sp,
+                                    fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
@@ -317,7 +317,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                             text = "Next: $nextTags",
                             style = TextStyle(
                                 color = ColorProvider(Color(0xA6FFFFFF)),
-                                fontSize = 9.5.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Medium
                             )
                         )
@@ -335,7 +335,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                         text = "$totalActivePills Active",
                         style = TextStyle(
                             color = ColorProvider(Color(0x99FFFFFF)),
-                            fontSize = 9.sp,
+                            fontSize = 8.5.sp,
                             fontWeight = FontWeight.Medium
                         )
                     )

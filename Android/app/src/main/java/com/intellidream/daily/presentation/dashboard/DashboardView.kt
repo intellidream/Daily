@@ -262,12 +262,14 @@ fun DashboardView(
         }
     }
 
-        PullToRefreshContainer(
-            state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter),
-            containerColor = Color(0xFF0D182E),
-            contentColor = ThemeColors.accentCyan
-        )
+        if (pullRefreshState.isRefreshing || pullRefreshState.verticalOffset > 0.5f) {
+            PullToRefreshContainer(
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = Color(0xFF0D182E),
+                contentColor = ThemeColors.accentCyan
+            )
+        }
     }
 
     val shouldAutoShowBriefing by smartBriefingRepository.shouldPresentMorningAutomatically.collectAsState()
