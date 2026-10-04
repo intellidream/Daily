@@ -240,75 +240,87 @@ fun NewsArticleCard(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Read Later Toggle
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleReadLater()
-                    },
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isReadLater) ThemeColors.accentCyan.copy(alpha = 0.18f)
-                            else Color.White.copy(alpha = 0.06f)
-                        )
+                // Action Buttons Row (Grouped with explicit 8.dp spacing to prevent overlap)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = if (isReadLater) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                    // Read Later Toggle
+                    CardActionButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onToggleReadLater()
+                        },
+                        icon = if (isReadLater) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
                         contentDescription = "Read Later",
-                        tint = if (isReadLater) ThemeColors.accentCyan else ThemeColors.textMuted,
-                        modifier = Modifier.size(16.dp)
+                        backgroundColor = if (isReadLater) ThemeColors.accentCyan.copy(alpha = 0.22f)
+                        else Color.White.copy(alpha = 0.08f),
+                        iconTint = if (isReadLater) ThemeColors.accentCyan else ThemeColors.textMuted,
+                        iconSize = 15.dp
                     )
-                }
 
-                // Favorite Toggle
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleFavorite()
-                    },
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isFavorite) Color(0xFFFFD700).copy(alpha = 0.18f)
-                            else Color.White.copy(alpha = 0.06f)
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                    // Favorite Toggle
+                    CardActionButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onToggleFavorite()
+                        },
+                        icon = if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
                         contentDescription = "Favorite",
-                        tint = if (isFavorite) Color(0xFFFFD700) else ThemeColors.textMuted,
-                        modifier = Modifier.size(16.dp)
+                        backgroundColor = if (isFavorite) Color(0xFFFFD700).copy(alpha = 0.22f)
+                        else Color.White.copy(alpha = 0.08f),
+                        iconTint = if (isFavorite) Color(0xFFFFD700) else ThemeColors.textMuted,
+                        iconSize = 15.dp
                     )
-                }
 
-                // Share Button
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
-                            type = "text/plain"
-                        }
-                        context.startActivity(Intent.createChooser(sendIntent, "Share Article"))
-                    },
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.06f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Share,
+                    // Share Button
+                    CardActionButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share Article"))
+                        },
+                        icon = Icons.Rounded.Share,
                         contentDescription = "Share",
-                        tint = ThemeColors.textMuted,
-                        modifier = Modifier.size(14.dp)
+                        backgroundColor = Color.White.copy(alpha = 0.08f),
+                        iconTint = ThemeColors.textMuted,
+                        iconSize = 14.dp
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CardActionButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String?,
+    backgroundColor: Color,
+    iconTint: Color,
+    iconSize: androidx.compose.ui.unit.Dp = 15.dp,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(backgroundColor)
+            .border(0.5.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = iconTint,
+            modifier = Modifier.size(iconSize)
+        )
     }
 }
 

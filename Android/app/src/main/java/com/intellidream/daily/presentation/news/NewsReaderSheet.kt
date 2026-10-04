@@ -60,9 +60,12 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
+import android.view.MotionEvent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,7 +80,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlin.math.roundToInt
 import com.intellidream.daily.database.NewsRepository
 import com.intellidream.daily.designsystem.DailyAsyncImage
 import com.intellidream.daily.designsystem.ThemeColors
@@ -87,7 +94,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun NewsReaderSheet(
@@ -111,7 +117,26 @@ fun NewsReaderSheet(
     val isReadLater = repository.isReadLater(currentArticle.link)
     val isFavorite = repository.isFavorite(currentArticle.link)
     val coroutineScope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Smooth drag-to-dismiss translation offset with spring physics
+    val animatableOffset = remember { Animatable(800f) }
+
+    LaunchedEffect(Unit) {
+        animatableOffset.animateTo(
+            targetValue = 0f,
+            animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f)
+        )
+    }
+
+    fun dismissWithAnimation() {
+        coroutineScope.launch {
+            animatableOffset.animateTo(
+                targetValue = 1600f,
+                animationSpec = tween(durationMillis = 180)
+            )
+            onDismiss()
+        }
+    }
 
     LaunchedEffect(currentArticle.link) {
         isLoadingFull = true
@@ -125,148 +150,235 @@ fun NewsReaderSheet(
         isLoadingFull = false
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color(if (isDark) 0xFF1A1423 else 0xFFEDE5D9),
-        contentColor = if (isDark) Color.White else Color(0xFF1C1B1F),
-        tonalElevation = 0.dp,
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(4.5.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.40f))
-                )
-            }
-        },
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        modifier = Modifier.fillMaxHeight(0.96f)
+    Dialog(
+        onDismissRequest = { dismissWithAnimation() },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
+        val currentOffset = animatableOffset.value
+        val scrimAlpha = (0.50f * (1f - (currentOffset / 800f).coerceIn(0f, 1f))).coerceAtLeast(0f)
+
+        Box(
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Top Glass Toolbar with vertical swipe-to-dismiss gesture
+            // Background Dimming Scrim
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = scrimAlpha))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { dismissWithAnimation() }
+                    )
+            )
+
+            // Sheet Card (iOS page sheet style: 95% height, rounded top corners)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures { _, dragAmount ->
-                            if (dragAmount > 12f) {
+                    .fillMaxHeight(0.95f)
+                    .align(Alignment.BottomCenter)
+                    .offset { IntOffset(0, currentOffset.roundToInt()) }
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(Color(if (isDark) 0xFF1A1423 else 0xFFEDE5D9))
+                    .navigationBarsPadding()
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Top Drag Handle & Toolbar with downward drag gesture
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures(
+                                    onDragEnd = {
+                                        if (animatableOffset.value > 150f) {
+                                            dismissWithAnimation()
+                                        } else {
+                                            coroutineScope.launch {
+                                                animatableOffset.animateTo(
+                                                    0f,
+                                                    spring(dampingRatio = 0.82f, stiffness = 450f)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        coroutineScope.launch {
+                                            animatableOffset.animateTo(
+                                                0f,
+                                                spring(dampingRatio = 0.82f, stiffness = 450f)
+                                            )
+                                        }
+                                    },
+                                    onVerticalDrag = { _, dragAmount ->
+                                        coroutineScope.launch {
+                                            val next = (animatableOffset.value + dragAmount).coerceAtLeast(0f)
+                                            animatableOffset.snapTo(next)
+                                        }
+                                    }
+                                )
+                            }
+                    ) {
+                        // Centered Drag Handle Pill
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp, bottom = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(40.dp)
+                                    .height(4.5.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.40f))
+                            )
+                        }
+
+                        // Top Glass Toolbar
+                        ReaderTopToolbar(
+                            article = currentArticle,
+                            isReadLater = isReadLater,
+                            isFavorite = isFavorite,
+                            fontSizeMultiplier = fontSizeMultiplier,
+                            onDismiss = { dismissWithAnimation() },
+                            onToggleReadLater = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 coroutineScope.launch {
-                                    sheetState.hide()
-                                    onDismiss()
+                                    repository.toggleReadLater(currentArticle)
+                                }
+                            },
+                            onToggleFavorite = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                coroutineScope.launch {
+                                    repository.toggleFavorite(currentArticle)
+                                }
+                            },
+                            onSelectFontSize = { fontSizeMultiplier = it },
+                            onShare = {
+                                val sendIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(Intent.EXTRA_TEXT, "${currentArticle.title}\n\n${currentArticle.link}")
+                                    type = "text/plain"
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Share Article"))
+                            },
+                            onOpenInBrowser = {
+                                try {
+                                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(currentArticle.link))
+                                    context.startActivity(browserIntent)
+                                } catch (_: Exception) {}
+                            },
+                            onFollowMedium = { user ->
+                                coroutineScope.launch {
+                                    repository.subscribeToMediumAuthor(user, currentArticle.author)
                                 }
                             }
-                        }
-                    }
-            ) {
-                ReaderTopToolbar(
-                    article = currentArticle,
-                    isReadLater = isReadLater,
-                    isFavorite = isFavorite,
-                    fontSizeMultiplier = fontSizeMultiplier,
-                    onDismiss = {
-                        coroutineScope.launch {
-                            sheetState.hide()
-                            onDismiss()
-                        }
-                    },
-                    onToggleReadLater = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        coroutineScope.launch {
-                            repository.toggleReadLater(currentArticle)
-                        }
-                    },
-                    onToggleFavorite = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        coroutineScope.launch {
-                            repository.toggleFavorite(currentArticle)
-                        }
-                    },
-                    onSelectFontSize = { fontSizeMultiplier = it },
-                    onShare = {
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, "${currentArticle.title}\n\n${currentArticle.link}")
-                            type = "text/plain"
-                        }
-                        context.startActivity(Intent.createChooser(sendIntent, "Share Article"))
-                    },
-                    onOpenInBrowser = {
-                        try {
-                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(currentArticle.link))
-                            context.startActivity(browserIntent)
-                        } catch (_: Exception) {}
-                    },
-                    onFollowMedium = { user ->
-                        coroutineScope.launch {
-                            repository.subscribeToMediumAuthor(user, currentArticle.author)
-                        }
-                    }
-                )
-            }
-
-            // Article Body Content
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                if (isLoadingFull) {
-                    DailyLiquidLoadingIndicator(
-                        color = ThemeColors.accentCyan,
-                        size = 44.dp,
-                        label = "Extracting Distraction-Free Article...",
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    val readerHtml = remember(currentArticle, isDark, fontSizeMultiplier) {
-                        generateReaderHtml(currentArticle, isDark, fontSizeMultiplier)
+                        )
                     }
 
-                    AndroidView(
-                        factory = { ctx ->
-                            WebView(ctx).apply {
-                                setBackgroundColor(0x00000000)
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                webViewClient = WebViewClient()
-                                tag = "${currentArticle.link}_${readerHtml.hashCode()}"
-                                loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
-                            }
-                        },
-                        update = { webView ->
-                            val key = "${currentArticle.link}_${readerHtml.hashCode()}"
-                            if (webView.tag != key) {
-                                webView.tag = key
-                                webView.loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                // Floating Bottom Recommendations Bar
-                if (recommendations.isNotEmpty()) {
-                    FloatingRecommendationsBar(
-                        recommendations = recommendations,
-                        isExpanded = showRecommendations,
-                        onToggleExpand = { showRecommendations = !showRecommendations },
-                        onSelectRecommendation = { currentArticle = it },
+                    // Article Body Content
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                    )
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        if (isLoadingFull) {
+                            DailyLiquidLoadingIndicator(
+                                color = ThemeColors.accentCyan,
+                                size = 44.dp,
+                                label = "Extracting Distraction-Free Article...",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            val readerHtml = remember(currentArticle, isDark, fontSizeMultiplier) {
+                                generateReaderHtml(currentArticle, isDark, fontSizeMultiplier)
+                            }
+
+                            AndroidView(
+                                factory = { ctx ->
+                                    var touchStartY = 0f
+                                    var isPullingDownAtTop = false
+                                    var initialScrollY = 0
+
+                                    WebView(ctx).apply {
+                                        setBackgroundColor(0x00000000)
+                                        settings.javaScriptEnabled = true
+                                        settings.domStorageEnabled = true
+                                        webViewClient = WebViewClient()
+                                        tag = "${currentArticle.link}_${readerHtml.hashCode()}"
+                                        loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
+
+                                        setOnTouchListener { v, event ->
+                                            when (event.actionMasked) {
+                                                MotionEvent.ACTION_DOWN -> {
+                                                    touchStartY = event.rawY
+                                                    initialScrollY = v.scrollY
+                                                    isPullingDownAtTop = false
+                                                }
+                                                MotionEvent.ACTION_MOVE -> {
+                                                    val deltaY = event.rawY - touchStartY
+                                                    if (v.scrollY == 0 && initialScrollY == 0 && deltaY > 30f) {
+                                                        isPullingDownAtTop = true
+                                                    }
+                                                    if (isPullingDownAtTop) {
+                                                        val dragDistance = (deltaY - 30f).coerceAtLeast(0f)
+                                                        coroutineScope.launch {
+                                                            animatableOffset.snapTo(dragDistance)
+                                                        }
+                                                        return@setOnTouchListener true
+                                                    }
+                                                }
+                                                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                                    if (isPullingDownAtTop) {
+                                                        isPullingDownAtTop = false
+                                                        if (animatableOffset.value > 150f) {
+                                                            dismissWithAnimation()
+                                                        } else {
+                                                            coroutineScope.launch {
+                                                                animatableOffset.animateTo(
+                                                                    0f,
+                                                                    spring(dampingRatio = 0.82f, stiffness = 450f)
+                                                                )
+                                                            }
+                                                        }
+                                                        return@setOnTouchListener true
+                                                    }
+                                                }
+                                            }
+                                            false
+                                        }
+                                    }
+                                },
+                                update = { webView ->
+                                    val key = "${currentArticle.link}_${readerHtml.hashCode()}"
+                                    if (webView.tag != key) {
+                                        webView.tag = key
+                                        webView.loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        // Floating Bottom Recommendations Bar
+                        if (recommendations.isNotEmpty()) {
+                            FloatingRecommendationsBar(
+                                recommendations = recommendations,
+                                isExpanded = showRecommendations,
+                                onToggleExpand = { showRecommendations = !showRecommendations },
+                                onSelectRecommendation = { currentArticle = it },
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

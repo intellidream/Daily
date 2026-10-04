@@ -147,3 +147,41 @@ A comprehensive stress test was executed against the top 5 articles of all 18 de
   - Installed and verified live over ADB wireless (`192.168.3.8:46477`).
   - Zero crashes in logcat.
 
+---
+
+## 6. Article Scrolling Restoration & List Item Action Buttons Fix (Update)
+
+### A. Root Cause: Article WebView Scrolling Failure
+1. **Compose Pointer Consumption by `ModalBottomSheet`**:
+   - `ModalBottomSheet` in Material 3 attaches `modalBottomSheetAnchors` with an internal `anchoredDraggable` (vertical orientation).
+   - Because `AndroidView` hosts the legacy `WebView` inside Compose's pointer tree, Compose's pointer pass (`Main` pass) intercepts vertical pointer motion before child views can process it.
+   - When the user attempted to scroll up or down on the article, `anchoredDraggable` consumed all pointer movement changes (`change.consume()`), causing the Android view hierarchy to dispatch `ACTION_CANCEL` to the embedded `WebView`.
+   - As a consequence, the article content was completely frozen and unscrollable in either direction.
+
+### B. Architecture & Resolution: Fluid Animated Page Sheet
+1. **Unrestricted Native Scrolling Container**:
+   - Replaced `ModalBottomSheet` with a high-performance, non-blocking `Dialog(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)`.
+   - The sheet card is styled identically to an iOS page sheet: 95% height, rounded top corners (`24.dp`), and Liquid Glass dark/light background.
+2. **Spring Physics & Bidirectional Drag Dismissal**:
+   - Managed translation using Compose `Animatable(800f)` with spring damping physics (`dampingRatio = 0.85f, stiffness = 380f`).
+   - Drag Handle and Toolbar: Attached `detectVerticalDragGestures` to allow continuous downward dragging with instant finger tracking (`snapTo`) and threshold-based spring dismiss (`animateTo(1600f)` if dragged >150px, otherwise springs back to 0).
+   - WebView Top Overscroll Integration: Added an `OnTouchListener` to the `WebView` that allows full, native 120Hz scrolling whenever `v.scrollY > 0` or scrolling downwards. If and only if the user is at the very top (`v.scrollY == 0 && initialScrollY == 0`) and pulls downwards (`deltaY > 30f`), the gesture seamlessly delegates to `animatableOffset` to drag down and dismiss the sheet.
+
+### C. News Feed Card Action Buttons Overlap Fix
+1. **Root Cause**:
+   - `NewsArticleCard` used raw Material 3 `IconButton` composables inside an outer footer row.
+   - M3's `minimumInteractiveComponentSize` expanded the interactive bounds to 48.dp, causing the 3 buttons (Bookmark, Favorite, Share) to visually overlap each other into a Venn-diagram intersection.
+2. **Resolution**:
+   - Introduced dedicated `CardActionButton` with exact 32.dp circular bounds, 0.5.dp translucent border, and centered vector icons.
+   - Enclosed all 3 actions in a dedicated `Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically)`.
+
+### D. Verification Summary
+- **Android Emulator (`Medium_Phone_API_36.1`)**:
+  - Feed Cards: All 3 buttons (Bookmark, Favorite, Share) verified discrete with clean 8.dp spacing and zero overlap (`screen_emulator_news_feed_now.png`).
+  - Article Scrolling: Verified smooth, continuous scrolling through the entire article body and images (`screen_emulator_article_scrolled_success.png`, `screen_emulator_article_scrolled_more.png`).
+  - Drag-to-Dismiss: Verified downward swipe dismissal from both the top drag handle/toolbar (`screen_emulator_dismissed_ok.png`) and directly from the top of the article body (`screen_emulator_zf_dismissed.png`).
+- **Physical Device: Google Pixel 9 Pro ("TRAPPER")**:
+  - Build successfully deployed and verified live via wireless ADB (`192.168.3.8:46477`).
+  - Zero crashes or exceptions in logcat.
+
+
