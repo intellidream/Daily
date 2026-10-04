@@ -71,5 +71,5 @@ Previously, Android Glance widgets exhibited layout clipping and an inverted res
 | **Debug APK Build** | `./gradlew assembleDebug` | **PASS** | `app-debug.apk` built cleanly |
 | **Android Emulator** | `emulator-5554` (`Medium_Phone_API_36.1`) | **VERIFIED** | Screen captures confirm all 7 widgets across Small & Medium sizes render with zero clipping |
 | **Google Pixel 9 Pro** | Wireless adb `192.168.3.8:46477` ("TRAPPER") | **DEPLOYED & VERIFIED** | Streamed install Success; PID 13162 verified running |
-| **Samsung Galaxy Z Fold 8** | Wireless adb ("RADAR") | **PENDING PORT CONFIRMATION** | Ready for immediate deployment once user provides wireless debugging port |
+| **Samsung Galaxy Z Fold 8** | Wireless adb `192.168.3.64:44941` ("RADAR") | **DEPLOYED & VERIFIED** | Streamed install Success; PID 18964 verified running, all 7 widgets active in dumpsys |
 | **iOS Core & App** | Gold Standard (`iOS/`, `DailyCore/`, `DailyWidgets/`) | **0 BYTES MODIFIED** | 100% preservation of iOS code |
