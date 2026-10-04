@@ -47,9 +47,9 @@ interface NewsSyncHandler {
 
 class NewsRepository(
     private val dao: NewsDao,
+    var syncHandler: NewsSyncHandler? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
-    var syncHandler: NewsSyncHandler? = null
 
     val allNewsFeedSource = FeedSource(
         id = "all_news",
@@ -91,6 +91,11 @@ class NewsRepository(
     private val feedCache = ConcurrentHashMap<String, Pair<List<NewsArticle>, Long>>()
     private val cacheDurationMillis = 15 * 60 * 1000L // 15 minutes
 
+    private var syncJob: kotlinx.coroutines.Job? = null
+    private var subsJob: kotlinx.coroutines.Job? = null
+    private var readLaterJob: kotlinx.coroutines.Job? = null
+    private var favoritesJob: kotlinx.coroutines.Job? = null
+
     var currentUserId: String = "guest"
         set(value) {
             field = value
@@ -111,12 +116,17 @@ class NewsRepository(
     }
 
     private fun observeDb(userId: String) {
+        syncJob?.cancel()
+        subsJob?.cancel()
+        readLaterJob?.cancel()
+        favoritesJob?.cancel()
+
         if (userId != "guest") {
-            scope.launch {
+            syncJob = scope.launch {
                 syncWithSupabase(userId)
             }
         }
-        scope.launch {
+        subsJob = scope.launch {
             dao.observeSubscriptions(userId).collect { entities ->
                 if (entities.isNotEmpty()) {
                     _feeds.value = entities.map { entity ->
@@ -136,13 +146,13 @@ class NewsRepository(
             }
         }
 
-        scope.launch {
+        readLaterJob = scope.launch {
             dao.observeSavedArticles(userId, SavedArticleType.ReadLater.value).collect { entities ->
                 _readLaterArticles.value = entities.map { it.toNewsArticle() }
             }
         }
 
-        scope.launch {
+        favoritesJob = scope.launch {
             dao.observeSavedArticles(userId, SavedArticleType.Favorite.value).collect { entities ->
                 _favoriteArticles.value = entities.map { it.toNewsArticle() }
             }
@@ -199,7 +209,7 @@ class NewsRepository(
         _errorMessage.value = null
 
         try {
-            val items = kotlinx.coroutines.withTimeoutOrNull(4000L) {
+            val items = kotlinx.coroutines.withTimeoutOrNull(8000L) {
                 fetchFeedItems(feed)
             } ?: emptyList()
             if (items.isNotEmpty()) {
@@ -246,7 +256,7 @@ class NewsRepository(
                 activeFeeds.map { feed ->
                     async {
                         try {
-                            kotlinx.coroutines.withTimeoutOrNull(2500L) {
+                            kotlinx.coroutines.withTimeoutOrNull(8000L) {
                                 fetchFeedItems(feed).take(4)
                             } ?: emptyList()
                         } catch (_: Throwable) {
@@ -309,14 +319,16 @@ class NewsRepository(
         var currentUrl = urlString
         var redirects = 0
         while (redirects < 5) {
+            var conn: HttpURLConnection? = null
             try {
                 val url = URL(currentUrl)
-                val conn = url.openConnection() as HttpURLConnection
+                conn = url.openConnection() as HttpURLConnection
                 conn.instanceFollowRedirects = true
-                conn.connectTimeout = 4000
-                conn.readTimeout = 5000
+                conn.connectTimeout = 8000
+                conn.readTimeout = 10000
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36")
-                conn.setRequestProperty("Accept", "application/rss+xml, application/atom+xml, application/json, text/xml, text/html, */*")
+                conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/rss+xml,application/atom+xml,application/json")
+                conn.setRequestProperty("Accept-Language", "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7")
                 val responseCode = conn.responseCode
                 if (responseCode in 300..399) {
                     val location = conn.getHeaderField("Location")
@@ -331,10 +343,35 @@ class NewsRepository(
                     }
                 }
                 if (responseCode in 200..299) {
-                    return BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-                } else return null
+                    val rawStream = conn.inputStream
+                    val isGzip = "gzip".equals(conn.contentEncoding, ignoreCase = true)
+                    val inStream = if (isGzip) java.util.zip.GZIPInputStream(rawStream) else rawStream
+
+                    val contentType = conn.contentType ?: ""
+                    val charset = extractCharset(contentType) ?: Charsets.UTF_8
+
+                    return BufferedReader(InputStreamReader(inStream, charset)).use { it.readText() }
+                } else {
+                    return null
+                }
             } catch (_: Exception) {
                 return null
+            } finally {
+                try { conn?.disconnect() } catch (_: Exception) {}
+            }
+        }
+        return null
+    }
+
+    private fun extractCharset(contentType: String): java.nio.charset.Charset? {
+        val parts = contentType.split(";")
+        for (part in parts) {
+            val trimmed = part.trim()
+            if (trimmed.startsWith("charset=", ignoreCase = true)) {
+                val name = trimmed.substring("charset=".length).trim('"', '\'')
+                try {
+                    return java.nio.charset.Charset.forName(name)
+                } catch (_: Exception) {}
             }
         }
         return null

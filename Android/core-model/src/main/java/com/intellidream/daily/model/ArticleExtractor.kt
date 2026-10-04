@@ -71,7 +71,7 @@ class ArticleExtractor {
             val commaCount = countOccurrences(",", cleanContainer)
             val score = charCount + (pCount * 60) + (commaCount * 5)
 
-            if (score > bestScore && (charCount > 100 || pCount >= 1)) {
+            if (score > bestScore && (charCount > 80 || pCount >= 1)) {
                 bestScore = score
                 bestCandidate = cleanContainer
             }
@@ -118,9 +118,11 @@ class ArticleExtractor {
                 }
                 val closeIdx = current.indexOf(closeTag, openCloseIdx + 1, ignoreCase = true)
                 if (closeIdx == -1) {
+                    // Tag is unclosed; discard just this opening tag and keep the rest of document
                     sb.append(current, lastCopied, openIdx)
-                    lastCopied = current.length
-                    break
+                    lastCopied = openCloseIdx + 1
+                    searchIndex = lastCopied
+                    continue
                 }
                 sb.append(current, lastCopied, openIdx)
                 lastCopied = closeIdx + closeTag.length
@@ -334,10 +336,13 @@ class ArticleExtractor {
             var searchIdx = 0
             val sb = StringBuilder(result.length)
             var lastCopied = 0
+            var modified = false
             while (searchIdx < result.length) {
                 val openIdx = result.indexOf("<$tag", searchIdx, ignoreCase = true)
                 if (openIdx == -1) {
-                    sb.append(result, lastCopied, result.length)
+                    if (modified) {
+                        sb.append(result, lastCopied, result.length)
+                    }
                     break
                 }
                 val charAfter = result.getOrNull(openIdx + 1 + tag.length)
@@ -347,7 +352,9 @@ class ArticleExtractor {
                 }
                 val openCloseIdx = result.indexOf('>', openIdx)
                 if (openCloseIdx == -1) {
-                    sb.append(result, lastCopied, result.length)
+                    if (modified) {
+                        sb.append(result, lastCopied, result.length)
+                    }
                     break
                 }
                 val tagHeader = result.substring(openIdx, openCloseIdx)
@@ -357,13 +364,13 @@ class ArticleExtractor {
                         sb.append(result, lastCopied, openIdx)
                         lastCopied = matchingEnd + "</$tag>".length
                         searchIdx = lastCopied
+                        modified = true
                         continue
                     }
                 }
                 searchIdx = openCloseIdx + 1
             }
-            if (lastCopied > 0) {
-                sb.append(result, lastCopied, result.length)
+            if (modified) {
                 result = sb.toString()
             }
         }

@@ -132,24 +132,33 @@ fun NewsFeedView(
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
-    val listState = rememberLazyListState()
+    val liveListState = rememberLazyListState()
+    val readLaterListState = rememberLazyListState()
+    val favoritesListState = rememberLazyListState()
+
+    val currentListState = when (activeSubTab) {
+        NewsSubTab.Live -> liveListState
+        NewsSubTab.ReadLater -> readLaterListState
+        NewsSubTab.Favorites -> favoritesListState
+    }
 
     LaunchedEffect(activeSubTab) {
-        listState.scrollToItem(0)
         if (repository.currentUserId != "guest") {
             repository.syncWithSupabase(repository.currentUserId)
         }
     }
 
-    val currentArticles = when (activeSubTab) {
-        NewsSubTab.Live -> liveArticles
-        NewsSubTab.ReadLater -> readLaterArticles
-        NewsSubTab.Favorites -> favoriteArticles
+    val currentArticles = remember(activeSubTab, liveArticles, readLaterArticles, favoriteArticles) {
+        when (activeSubTab) {
+            NewsSubTab.Live -> liveArticles
+            NewsSubTab.ReadLater -> readLaterArticles
+            NewsSubTab.Favorites -> favoriteArticles
+        }
     }
 
-    val filteredArticles = remember(currentArticles, searchQuery) {
+    val filteredArticles = remember(activeSubTab, currentArticles, searchQuery) {
         val query = searchQuery.trim().lowercase()
-        if (query.isBlank()) currentArticles
+        val list = if (query.isBlank()) currentArticles
         else {
             currentArticles.filter {
                 it.title.lowercase().contains(query) ||
@@ -157,6 +166,7 @@ fun NewsFeedView(
                         (it.author?.lowercase()?.contains(query) == true)
             }
         }
+        list.distinctBy { it.link.ifBlank { it.id } }
     }
 
     val pullRefreshState = rememberPullToRefreshState()
@@ -277,12 +287,15 @@ fun NewsFeedView(
                     }
                 } else {
                     LazyColumn(
-                        state = listState,
+                        state = currentListState,
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(bottom = 90.dp)
                     ) {
-                        items(filteredArticles, key = { it.link }) { article ->
+                        items(
+                            items = filteredArticles,
+                            key = { article -> "${article.link}_${article.id}" }
+                        ) { article ->
                             NewsArticleCard(
                                 article = article,
                                 isReadLater = repository.isReadLater(article.link),

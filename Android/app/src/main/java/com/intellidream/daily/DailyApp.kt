@@ -65,7 +65,15 @@ class DailyApp : Application() {
         financeRemoteService = com.intellidream.daily.network.FinanceRemoteService()
         tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao())
         newsRemoteService = com.intellidream.daily.network.NewsRemoteService()
-        newsRepository = com.intellidream.daily.database.NewsRepository(dailyDatabase.newsDao())
+        val newsHandler = object : com.intellidream.daily.database.NewsSyncHandler {
+            override suspend fun fetchUrl(url: String): String? = newsRemoteService.fetchUrl(url)
+            override suspend fun searchFeedly(query: String): List<com.intellidream.daily.model.FeedSearchResult> = newsRemoteService.searchFeedly(query)
+            override suspend fun pullSubscriptions(userId: String): List<com.intellidream.daily.model.RssSubscription> = newsRemoteService.pullSubscriptions(userId)
+            override suspend fun pushSubscription(subscription: com.intellidream.daily.model.RssSubscription): Boolean = newsRemoteService.pushSubscription(subscription)
+            override suspend fun pullSavedArticles(userId: String): List<com.intellidream.daily.model.SavedArticle> = newsRemoteService.pullSavedArticles(userId)
+            override suspend fun pushSavedArticle(article: com.intellidream.daily.model.SavedArticle): Boolean = newsRemoteService.pushSavedArticle(article)
+        }
+        newsRepository = com.intellidream.daily.database.NewsRepository(dailyDatabase.newsDao(), syncHandler = newsHandler)
         smartBriefingRepository = com.intellidream.daily.briefing.SmartBriefingRepository(this)
 
         habitsRepository.syncHandler = object : com.intellidream.daily.database.HabitSyncHandler {
@@ -84,15 +92,6 @@ class DailyApp : Application() {
             override suspend fun deleteLog(logId: String): Boolean {
                 return habitRemoteService.deleteLog(logId)
             }
-        }
-
-        newsRepository.syncHandler = object : com.intellidream.daily.database.NewsSyncHandler {
-            override suspend fun fetchUrl(url: String): String? = newsRemoteService.fetchUrl(url)
-            override suspend fun searchFeedly(query: String): List<com.intellidream.daily.model.FeedSearchResult> = newsRemoteService.searchFeedly(query)
-            override suspend fun pullSubscriptions(userId: String): List<com.intellidream.daily.model.RssSubscription> = newsRemoteService.pullSubscriptions(userId)
-            override suspend fun pushSubscription(subscription: com.intellidream.daily.model.RssSubscription): Boolean = newsRemoteService.pushSubscription(subscription)
-            override suspend fun pullSavedArticles(userId: String): List<com.intellidream.daily.model.SavedArticle> = newsRemoteService.pullSavedArticles(userId)
-            override suspend fun pushSavedArticle(article: com.intellidream.daily.model.SavedArticle): Boolean = newsRemoteService.pushSavedArticle(article)
         }
 
         // Bootstrap cached weather & refresh

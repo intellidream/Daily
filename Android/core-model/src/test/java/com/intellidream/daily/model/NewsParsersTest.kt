@@ -283,5 +283,65 @@ class NewsParsersTest {
         assertEquals(17, cal.get(java.util.Calendar.HOUR_OF_DAY))
         assertEquals(11, cal.get(java.util.Calendar.MINUTE))
     }
+
+    @Test
+    fun testArticleExtractorWithUnclosedTagsAndJunkClasses() {
+        // HTML containing an unclosed script tag and multiple junk classes
+        val html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Test Unclosed Tag Article</title>
+                <script src="bad.js">
+            </head>
+            <body>
+                <div class="marketing">Spam Banner</div>
+                <article>
+                    <div class="ad-banner">Ad 1</div>
+                    <p>First authentic paragraph with sufficient length to qualify as article content.</p>
+                    <div class="social-share">Share this story</div>
+                    <p>Second authentic paragraph providing in-depth analysis of the situation.</p>
+                    <div class="newsletter-signup">Subscribe now!</div>
+                </article>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val base = NewsArticle(
+            title = "Test Article",
+            link = "https://example.com/test-unclosed",
+            description = "Summary fallback"
+        )
+
+        val extracted = ArticleExtractor.shared.parseHtml(html, base.link, base)
+
+        assertNotNull(extracted.content)
+        assertTrue(extracted.content!!.contains("First authentic paragraph"))
+        assertTrue(extracted.content!!.contains("Second authentic paragraph"))
+        // Junk tags must not be present
+        assertTrue(!extracted.content!!.contains("Spam Banner"))
+        assertTrue(!extracted.content!!.contains("Ad 1"))
+        assertTrue(!extracted.content!!.contains("Subscribe now"))
+
+        // Verify string did NOT duplicate tail
+        val count = extracted.content!!.split("Second authentic paragraph").size - 1
+        assertEquals("Content should appear exactly once, no double-append tail duplication", 1, count)
+    }
+
+    @Test
+    fun testArticleExtractorBlankFallback() {
+        val blankHtml = "<html><head><title>Paywall Block</title></head><body><div>403 Forbidden</div></body></html>"
+        val base = NewsArticle(
+            title = "Paywalled Article",
+            link = "https://economist.com/story",
+            description = "Detailed briefing from RSS feed about global energy markets"
+        )
+
+        val extracted = ArticleExtractor.shared.parseHtml(blankHtml, base.link, base)
+
+        // Must fall back to base article description
+        assertNotNull(extracted.content)
+        assertTrue(extracted.content!!.contains("Detailed briefing from RSS feed"))
+    }
 }
 

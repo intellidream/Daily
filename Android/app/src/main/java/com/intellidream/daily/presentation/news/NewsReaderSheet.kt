@@ -200,11 +200,16 @@ fun NewsReaderSheet(
                                     settings.javaScriptEnabled = true
                                     settings.domStorageEnabled = true
                                     webViewClient = WebViewClient()
+                                    tag = "${currentArticle.link}_${readerHtml.hashCode()}"
                                     loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
                                 }
                             },
                             update = { webView ->
-                                webView.loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
+                                val key = "${currentArticle.link}_${readerHtml.hashCode()}"
+                                if (webView.tag != key) {
+                                    webView.tag = key
+                                    webView.loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
+                                }
                             },
                             modifier = Modifier.fillMaxSize()
                         )
@@ -589,7 +594,9 @@ private fun generateReaderHtml(article: NewsArticle, isDark: Boolean, fontSizeMu
     val authorHtml = if (!article.author.isNullOrBlank()) " &bull; <span>By ${article.author}</span>" else ""
     val metaHtml = "<div class='meta'><span>Published: $dateStr</span>$authorHtml</div>"
 
-    val contentBody = article.content ?: article.description ?: "<p>No content preview available.</p>"
+    val contentBody = article.content?.takeIf { it.isNotBlank() }
+        ?: article.description?.takeIf { it.isNotBlank() }
+        ?: "<p>No content preview available. Tap <strong>Open in Browser</strong> from the top menu to read the full story on the publisher's website.</p>"
 
     return """
     <!DOCTYPE html>

@@ -39,10 +39,14 @@ class NewsRemoteService(
         try {
             val response = httpClient.get(url) {
                 header("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36")
-                header("Accept", "application/rss+xml, application/atom+xml, application/json, text/xml, text/html, */*")
+                header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/rss+xml,application/atom+xml,application/json")
                 header("Accept-Language", "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7")
             }
-            response.bodyAsText()
+            if (response.status.value in 200..299) {
+                response.bodyAsText()
+            } else {
+                null
+            }
         } catch (_: Exception) {
             null
         }
