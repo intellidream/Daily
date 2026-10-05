@@ -447,6 +447,60 @@ public struct SleepStageRecord: Identifiable, Codable, Hashable, Sendable {
     public let durationSeconds: Double
     public let sourceDevice: String?
     
+    enum CodingKeys: String, CodingKey {
+        case id
+        case stageType = "stage_type"
+        case stageTypeCamel = "stageType"
+        case startTime = "start_time"
+        case startTimeCamel = "startTime"
+        case endTime = "end_time"
+        case endTimeCamel = "endTime"
+        case durationSeconds = "duration_seconds"
+        case durationSecondsCamel = "durationSeconds"
+        case sourceDevice = "source_device"
+        case sourceDeviceCamel = "sourceDevice"
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        if let st = try? container.decode(SleepStageType.self, forKey: .stageType) {
+            self.stageType = st
+        } else if let st = try? container.decode(SleepStageType.self, forKey: .stageTypeCamel) {
+            self.stageType = st
+        } else {
+            self.stageType = .unknown
+        }
+        if let s = try? container.decode(Date.self, forKey: .startTime) {
+            self.startTime = s
+        } else {
+            self.startTime = try container.decode(Date.self, forKey: .startTimeCamel)
+        }
+        if let e = try? container.decode(Date.self, forKey: .endTime) {
+            self.endTime = e
+        } else {
+            self.endTime = try container.decode(Date.self, forKey: .endTimeCamel)
+        }
+        if let d = try? container.decode(Double.self, forKey: .durationSeconds) {
+            self.durationSeconds = d
+        } else if let d = try? container.decode(Double.self, forKey: .durationSecondsCamel) {
+            self.durationSeconds = d
+        } else {
+            self.durationSeconds = max(0, self.endTime.timeIntervalSince(self.startTime))
+        }
+        self.sourceDevice = (try? container.decode(String.self, forKey: .sourceDevice)) ?? (try? container.decode(String.self, forKey: .sourceDeviceCamel))
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(stageType, forKey: .stageType)
+        try container.encode(startTime, forKey: .startTime)
+        try container.encode(endTime, forKey: .endTime)
+        try container.encode(durationSeconds, forKey: .durationSeconds)
+        try container.encodeIfPresent(sourceDevice, forKey: .sourceDevice)
+    }
+    
     public init(
         id: String = UUID().uuidString,
         stageType: SleepStageType,
@@ -477,6 +531,51 @@ public struct SleepSession: Identifiable, Codable, Hashable, Sendable {
     public let stages: [SleepStageRecord]
     public let sourceDevice: String
     public let hasGranularHypnogram: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case startTime = "start_time"
+        case startTimeCamel = "startTime"
+        case endTime = "end_time"
+        case endTimeCamel = "endTime"
+        case isNap = "is_nap"
+        case isNapCamel = "isNap"
+        case stages
+        case sourceDevice = "source_device"
+        case sourceDeviceCamel = "sourceDevice"
+        case hasGranularHypnogram = "has_granular_hypnogram"
+        case hasGranularHypnogramCamel = "hasGranularHypnogram"
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        if let s = try? container.decode(Date.self, forKey: .startTime) {
+            self.startTime = s
+        } else {
+            self.startTime = try container.decode(Date.self, forKey: .startTimeCamel)
+        }
+        if let e = try? container.decode(Date.self, forKey: .endTime) {
+            self.endTime = e
+        } else {
+            self.endTime = try container.decode(Date.self, forKey: .endTimeCamel)
+        }
+        self.isNap = (try? container.decode(Bool.self, forKey: .isNap)) ?? (try? container.decode(Bool.self, forKey: .isNapCamel)) ?? false
+        self.stages = (try? container.decode([SleepStageRecord].self, forKey: .stages)) ?? []
+        self.sourceDevice = (try? container.decode(String.self, forKey: .sourceDevice)) ?? (try? container.decode(String.self, forKey: .sourceDeviceCamel)) ?? "Unknown"
+        self.hasGranularHypnogram = (try? container.decode(Bool.self, forKey: .hasGranularHypnogram)) ?? (try? container.decode(Bool.self, forKey: .hasGranularHypnogramCamel)) ?? !self.stages.isEmpty
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(startTime, forKey: .startTime)
+        try container.encode(endTime, forKey: .endTime)
+        try container.encode(isNap, forKey: .isNap)
+        try container.encode(stages, forKey: .stages)
+        try container.encode(sourceDevice, forKey: .sourceDevice)
+        try container.encode(hasGranularHypnogram, forKey: .hasGranularHypnogram)
+    }
     
     public init(
         id: String = UUID().uuidString,
@@ -700,6 +799,50 @@ public struct NapSession: Identifiable, Codable, Hashable, Sendable {
     public let durationSeconds: Double
     public let sourceDevice: String
     
+    enum CodingKeys: String, CodingKey {
+        case id
+        case startTime = "start_time"
+        case startTimeCamel = "startTime"
+        case endTime = "end_time"
+        case endTimeCamel = "endTime"
+        case durationSeconds = "duration_seconds"
+        case durationSecondsCamel = "durationSeconds"
+        case sourceDevice = "source_device"
+        case sourceDeviceCamel = "sourceDevice"
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        if let s = try? container.decode(Date.self, forKey: .startTime) {
+            self.startTime = s
+        } else {
+            self.startTime = try container.decode(Date.self, forKey: .startTimeCamel)
+        }
+        if let e = try? container.decode(Date.self, forKey: .endTime) {
+            self.endTime = e
+        } else {
+            self.endTime = try container.decode(Date.self, forKey: .endTimeCamel)
+        }
+        if let d = try? container.decode(Double.self, forKey: .durationSeconds) {
+            self.durationSeconds = d
+        } else if let d = try? container.decode(Double.self, forKey: .durationSecondsCamel) {
+            self.durationSeconds = d
+        } else {
+            self.durationSeconds = max(0, self.endTime.timeIntervalSince(self.startTime))
+        }
+        self.sourceDevice = (try? container.decode(String.self, forKey: .sourceDevice)) ?? (try? container.decode(String.self, forKey: .sourceDeviceCamel)) ?? "Unknown"
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(startTime, forKey: .startTime)
+        try container.encode(endTime, forKey: .endTime)
+        try container.encode(durationSeconds, forKey: .durationSeconds)
+        try container.encode(sourceDevice, forKey: .sourceDevice)
+    }
+    
     public init(
         id: String = UUID().uuidString,
         startTime: Date,
@@ -766,6 +909,37 @@ public struct IntradayHeartRatePoint: Identifiable, Codable, Hashable, Sendable 
     public let zone: HeartRateZone
     public let sourceDevice: String?
     
+    enum CodingKeys: String, CodingKey {
+        case id
+        case timestamp
+        case bpm
+        case zone
+        case sourceDevice = "source_device"
+        case sourceDeviceCamel = "sourceDevice"
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        self.timestamp = try container.decode(Date.self, forKey: .timestamp)
+        self.bpm = try container.decode(Double.self, forKey: .bpm)
+        if let z = try? container.decode(HeartRateZone.self, forKey: .zone) {
+            self.zone = z
+        } else {
+            self.zone = HeartRateZone.zone(for: self.bpm)
+        }
+        self.sourceDevice = (try? container.decode(String.self, forKey: .sourceDevice)) ?? (try? container.decode(String.self, forKey: .sourceDeviceCamel))
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encode(bpm, forKey: .bpm)
+        try container.encode(zone, forKey: .zone)
+        try container.encodeIfPresent(sourceDevice, forKey: .sourceDevice)
+    }
+    
     public init(
         id: String = UUID().uuidString,
         timestamp: Date,
@@ -787,10 +961,29 @@ public struct HourlyStepBucket: Identifiable, Codable, Hashable, Sendable {
     public let hour: Int
     public let steps: Int
     
+    enum CodingKeys: String, CodingKey {
+        case id, hour, steps
+    }
+    
     public init(hour: Int, steps: Int) {
         self.id = hour
         self.hour = hour
         self.steps = steps
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let h = try container.decode(Int.self, forKey: .hour)
+        self.hour = h
+        self.steps = try container.decode(Int.self, forKey: .steps)
+        self.id = (try? container.decode(Int.self, forKey: .id)) ?? h
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(hour, forKey: .hour)
+        try container.encode(steps, forKey: .steps)
     }
     
     public var hourFormatted: String {

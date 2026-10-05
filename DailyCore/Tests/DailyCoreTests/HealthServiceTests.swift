@@ -590,5 +590,183 @@ struct HealthServiceTests {
         let computed = DeviceSource.from(name: "computed")
         #expect(computed.isVirtualEngine == true)
     }
+    
+    @Test func testCanonicalDailySummaryPayloadRoundTrip() throws {
+        let now = Date()
+        let cal = Calendar.current
+        let bedtime = cal.date(byAdding: .hour, value: -8, to: now)!
+        let wakeTime = now
+        
+        let primarySession = SleepSession(
+            id: "sleep-1",
+            startTime: bedtime,
+            endTime: wakeTime,
+            isNap: false,
+            stages: [
+                SleepStageRecord(
+                    id: "stage-1",
+                    stageType: .deep,
+                    startTime: bedtime,
+                    endTime: bedtime.addingTimeInterval(3600),
+                    durationSeconds: 3600,
+                    sourceDevice: "Apple Watch"
+                ),
+                SleepStageRecord(
+                    id: "stage-2",
+                    stageType: .rem,
+                    startTime: bedtime.addingTimeInterval(3600),
+                    endTime: bedtime.addingTimeInterval(7200),
+                    durationSeconds: 3600,
+                    sourceDevice: "Apple Watch"
+                ),
+                SleepStageRecord(
+                    id: "stage-3",
+                    stageType: .light,
+                    startTime: bedtime.addingTimeInterval(7200),
+                    endTime: wakeTime,
+                    durationSeconds: 21600,
+                    sourceDevice: "Apple Watch"
+                )
+            ],
+            sourceDevice: "Apple Watch",
+            hasGranularHypnogram: true
+        )
+        
+        let sleepSummary = CanonicalSleepSummary(
+            primarySession: primarySession,
+            allSessions: [primarySession],
+            naps: [
+                NapSession(
+                    id: "nap-1",
+                    startTime: now.addingTimeInterval(-14400),
+                    endTime: now.addingTimeInterval(-12600),
+                    durationSeconds: 1800,
+                    sourceDevice: "Apple Watch"
+                )
+            ],
+            guidance: CanonicalSleepGuidance(
+                verdict: SleepRecoveryVerdict(
+                    id: "verdict-1",
+                    status: .optimal,
+                    headline: "Superb Architecture",
+                    narrative: "Solid deep sleep and restorative REM balance.",
+                    readinessScore: 92,
+                    physicalRepairRating: "High",
+                    cognitiveRestoreRating: "High",
+                    sleepContinuityRating: "Continuous"
+                ),
+                tips: [
+                    SleepActionableTip(
+                        id: "tip-1",
+                        category: .circadian,
+                        title: "Early Sun",
+                        advice: "Get 10 minutes of direct sunlight.",
+                        scientificRationale: "Resets suprachiasmatic nucleus."
+                    )
+                ],
+                aiContext: SleepAIContext(
+                    narrativeSynthesis: "Your rest was exceptional.",
+                    suggestedPrompts: ["How do I sustain this recovery?"]
+                )
+            )
+        )
+        
+        let activitySummary = CanonicalActivitySummary(
+            totalSteps: 11420,
+            activeCalories: 620.5,
+            sourceDevice: "Apple Watch",
+            hourlySteps: [
+                HourlyStepBucket(hour: 8, steps: 1200),
+                HourlyStepBucket(hour: 9, steps: 2300),
+                HourlyStepBucket(hour: 10, steps: 3500)
+            ]
+        )
+        
+        let cardioSummary = CanonicalCardiovascularSummary(
+            averageBpm: 68.0,
+            restingBpm: 56.0,
+            minBpm: 52.0,
+            maxBpm: 142.0,
+            zones: CanonicalHeartRateZones(resting: 420, fatBurn: 60, cardio: 25, peak: 5),
+            intradayPoints: [
+                IntradayHeartRatePoint(
+                    id: "hr-1",
+                    timestamp: now.addingTimeInterval(-3600),
+                    bpm: 72.0,
+                    sourceDevice: "Apple Watch"
+                )
+            ]
+        )
+        
+        let stressSummary = CanonicalStressSummary(
+            currentScore: 24,
+            currentLevel: .restful,
+            dailyAverage: 28,
+            peakHour: 14,
+            peakScore: 48,
+            lowestHour: 4,
+            lowestScore: 12,
+            parasympatheticPercent: 78,
+            sympatheticPercent: 22,
+            baselineHrvMs: 65.0,
+            currentHrvMs: 72.0,
+            hrvDeltaPercent: 10.8,
+            restingHeartRateBpm: 56.0,
+            currentSedentaryBpm: 62.0,
+            heartRateElevationBpm: 6.0,
+            monkeyMood: .zen,
+            adviceQuote: "You're in peak recovery mode!",
+            recommendedBreathing: "Resonance Flow (5.5s)",
+            intradayPoints: [
+                IntradayStressPoint(
+                    id: "st-1",
+                    timestamp: now,
+                    hour: 10,
+                    score: 24,
+                    level: .restful,
+                    hrvMs: 72.0,
+                    heartRateBpm: 62.0,
+                    isSedentary: true
+                )
+            ]
+        )
+        
+        let payload = DailyHealthSummaryPayload(
+            date: "2026-10-05",
+            engineVersion: "1.0",
+            computedAt: now,
+            sleep: sleepSummary,
+            activity: activitySummary,
+            cardiovascular: cardioSummary,
+            stress: stressSummary,
+            vitals: [
+                "steps": CanonicalVitalSummaryItem(type: "steps", value: 11420, unit: "count", sourceDevice: "Apple Watch", timestamp: now),
+                "resting_heart_rate": CanonicalVitalSummaryItem(type: "resting_heart_rate", value: 56, unit: "bpm", sourceDevice: "Apple Watch", timestamp: now),
+                "hrv_sdnn": CanonicalVitalSummaryItem(type: "hrv_sdnn", value: 72, unit: "ms", sourceDevice: "Apple Watch", timestamp: now)
+            ]
+        )
+        
+        // Encode to JSON
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(payload)
+        
+        // Decode back
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(DailyHealthSummaryPayload.self, from: data)
+        
+        #expect(decoded.date == "2026-10-05")
+        #expect(decoded.activity.totalSteps == 11420)
+        #expect(decoded.activity.hourlySteps.count == 3)
+        #expect(decoded.activity.hourlySteps[0].steps == 1200)
+        #expect(decoded.sleep.primarySession?.sleepScore ?? 0 > 80)
+        #expect(decoded.sleep.naps.count == 1)
+        #expect(decoded.cardiovascular.restingBpm == 56.0)
+        #expect(decoded.stress?.currentLevel == .restful)
+        #expect(decoded.stress?.monkeyMood == .zen)
+        #expect(decoded.vitals["hrv_sdnn"]?.value == 72.0)
+    }
 }
+
 

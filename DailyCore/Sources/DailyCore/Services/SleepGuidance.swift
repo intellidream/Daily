@@ -38,7 +38,7 @@ public enum SleepRecoveryStatus: String, Codable, CaseIterable, Sendable {
 
 // MARK: - Sleep Recovery Verdict
 
-public struct SleepRecoveryVerdict: Identifiable, Sendable {
+public struct SleepRecoveryVerdict: Identifiable, Codable, Sendable {
     public let id: String
     public let status: SleepRecoveryStatus
     public let headline: String
@@ -47,6 +47,17 @@ public struct SleepRecoveryVerdict: Identifiable, Sendable {
     public let physicalRepairRating: String // "High", "Adequate", "Low"
     public let cognitiveRestoreRating: String // "High", "Adequate", "Low"
     public let sleepContinuityRating: String // "Continuous", "Fragmented"
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case status
+        case headline
+        case narrative
+        case readinessScore = "readiness_score"
+        case physicalRepairRating = "physical_repair_rating"
+        case cognitiveRestoreRating = "cognitive_restore_rating"
+        case sleepContinuityRating = "sleep_continuity_rating"
+    }
     
     public init(
         id: String = UUID().uuidString,
@@ -77,6 +88,22 @@ public enum SleepTipCategory: String, Codable, CaseIterable, Sendable {
     case nutrition = "Evening Nutrition"
     case windDown = "Vagal Wind-Down"
     
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self).lowercased()
+        if raw.contains("circadian") {
+            self = .circadian
+        } else if raw.contains("environment") || raw.contains("climate") {
+            self = .environment
+        } else if raw.contains("nutrition") {
+            self = .nutrition
+        } else if raw.contains("wind") || raw.contains("vagal") {
+            self = .windDown
+        } else {
+            self = .circadian
+        }
+    }
+    
     public var iconName: String {
         switch self {
         case .circadian: return "sun.horizon.fill"
@@ -96,12 +123,20 @@ public enum SleepTipCategory: String, Codable, CaseIterable, Sendable {
     }
 }
 
-public struct SleepActionableTip: Identifiable, Hashable, Sendable {
+public struct SleepActionableTip: Identifiable, Hashable, Codable, Sendable {
     public let id: String
     public let category: SleepTipCategory
     public let title: String
     public let advice: String
     public let scientificRationale: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case category
+        case title
+        case advice
+        case scientificRationale = "scientific_rationale"
+    }
     
     public init(
         id: String = UUID().uuidString,
@@ -120,9 +155,14 @@ public struct SleepActionableTip: Identifiable, Hashable, Sendable {
 
 // MARK: - Sleep AI Context & Follow-Up Prompts
 
-public struct SleepAIContext: Sendable {
+public struct SleepAIContext: Codable, Sendable {
     public let narrativeSynthesis: String
     public let suggestedPrompts: [String]
+    
+    enum CodingKeys: String, CodingKey {
+        case narrativeSynthesis = "narrative_synthesis"
+        case suggestedPrompts = "suggested_prompts"
+    }
     
     public init(narrativeSynthesis: String, suggestedPrompts: [String]) {
         self.narrativeSynthesis = narrativeSynthesis

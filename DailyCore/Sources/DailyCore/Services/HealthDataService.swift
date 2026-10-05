@@ -60,6 +60,9 @@ public final class HealthDataService: ObservableObject {
     @Published public var intradayStress: [IntradayStressPoint] = []
     @Published public var stressAnalysis: StressAnalysisResult? = nil
     
+    // Canonical Engine Daily Summary
+    @Published public var canonicalSummary: DailyHealthSummaryPayload? = nil
+    
     // MARK: - Private State & Dependencies
     
     private let groupSuiteName = "group.com.intellidream.daily"
@@ -67,8 +70,11 @@ public final class HealthDataService: ObservableObject {
     private let supabase = SupabaseService.shared.client
     private let cacheTTL: TimeInterval = 300 // 5 minutes in-memory cache
     private var telemetryCache: [String: (timestamp: Date, telemetry: [HealthTelemetryRecord], vitals: [VitalMetricRecord])] = [:]
+    private var summaryCache: [String: (timestamp: Date, summary: DailyHealthSummaryPayload)] = [:]
     private var cancellables = Set<AnyCancellable>()
     private var activeLoadTask: Task<Void, Never>?
+    private var realtimeChannel: RealtimeChannelV2?
+    private var realtimeTask: Task<Void, Never>?
     
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -84,21 +90,102 @@ public final class HealthDataService: ObservableObject {
         return f
     }()
     
+    private let summaryDecoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let str = try container.decode(String.self)
+            if let date = ISO8601DateFormatter().date(from: str) {
+                return date
+            }
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = TimeZone(secondsFromGMT: 0)
+            f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+            if let date = f.date(from: str) {
+                return date
+            }
+            f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+            if let date = f.date(from: str) {
+                return date
+            }
+            f.dateFormat = "yyyy-MM-dd"
+            if let date = f.date(from: str) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date format: \(str)")
+        }
+        return d
+    }()
+    
+    private let summaryEncoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        return e
+    }()
+    
     public init() {
         self.userDefaults = UserDefaults(suiteName: "group.com.intellidream.daily") ?? UserDefaults.standard
         
         // Observe auth session state changes so that once user authentication resolves,
-        // real telemetry is fetched immediately instead of falling back to or caching demo data.
+        // real telemetry and canonical summaries are fetched immediately.
         AuthService.shared.$sessionState
             .dropFirst()
             .sink { [weak self] state in
                 if case .authenticated = state {
                     Task { @MainActor [weak self] in
+                        self?.setupRealtimeSubscription()
                         await self?.loadDataForSelectedDate(forceRefresh: true)
                     }
                 }
             }
             .store(in: &cancellables)
+        
+        if AuthService.shared.isAuthenticated {
+            setupRealtimeSubscription()
+        }
+    }
+    
+    // MARK: - Realtime Health Summary Subscription
+    
+    public func setupRealtimeSubscription() {
+        Task { [weak self] in
+            guard let self = self else { return }
+            guard AuthService.shared.isAuthenticated,
+                  let session = try? await self.supabase.auth.session,
+                  let userId = session.user.id.uuidString.lowercased() as String? else { return }
+            
+            self.realtimeTask?.cancel()
+            if let old = self.realtimeChannel {
+                await old.unsubscribe()
+            }
+            
+            let channel = self.supabase.channel("health-summary-\(userId)")
+            self.realtimeChannel = channel
+            
+            self.realtimeTask = Task { [weak self] in
+                let changes = channel.postgresChange(
+                    AnyAction.self,
+                    schema: "public",
+                    table: "health_daily_summary",
+                    filter: .eq("user_id", value: userId)
+                )
+                
+                do {
+                    try await channel.subscribe()
+                } catch {
+                    print("[HealthDataService] Realtime subscription error: \(error)")
+                    return
+                }
+                
+                for await _ in changes {
+                    guard !Task.isCancelled else { break }
+                    Task { @MainActor [weak self] in
+                        await self?.loadDataForSelectedDate(forceRefresh: true)
+                    }
+                }
+            }
+        }
     }
     
     // MARK: - Navigation Actions & Formatting
@@ -213,42 +300,91 @@ public final class HealthDataService: ObservableObject {
         let isToday = Calendar.current.isDateInToday(targetDate)
         let effectiveTTL: TimeInterval = isToday ? 30 : cacheTTL
         
-        // 1. Check in-memory cache if not forcing refresh
-        if !forceRefresh, let cached = telemetryCache[dateKey], Date().timeIntervalSince(cached.timestamp) < effectiveTTL {
-            let hasSteps = cached.telemetry.contains(where: { $0.isSteps && ($0.value ?? 0) > 0 }) ||
-                           cached.vitals.contains(where: { $0.type == "steps" && $0.value > 0 })
-            if hasSteps || localDataProvider == nil {
-                await applyRecords(telemetry: cached.telemetry, vitals: cached.vitals)
+        // 1. Check in-memory canonical summary cache
+        if !forceRefresh, let cached = summaryCache[dateKey], Date().timeIntervalSince(cached.timestamp) < effectiveTTL {
+            self.canonicalSummary = cached.summary
+            applyCanonicalSummary(cached.summary, dateKey: dateKey)
+            await loadHistoricalTrends()
+            return
+        }
+        
+        // 2. Check persistent on-device App Group local storage for instantaneous (<300ms) startup
+        if !forceRefresh, let summaryData = userDefaults.data(forKey: "health_daily_summary_\(dateKey)"),
+           let summary = try? summaryDecoder.decode(DailyHealthSummaryPayload.self, from: summaryData) {
+            self.canonicalSummary = summary
+            summaryCache[dateKey] = (timestamp: Date(), summary: summary)
+            applyCanonicalSummary(summary, dateKey: dateKey)
+            if !isToday {
+                await loadHistoricalTrends()
                 return
             }
         }
         
-        // 2. Check persistent on-device local storage for prior dates
-        var persistentCachedVitals: [VitalMetricRecord] = []
-        if let data = userDefaults.data(forKey: "health_daily_vitals_\(dateKey)"),
-           let cached = try? JSONDecoder().decode([VitalMetricRecord].self, from: data),
-           !cached.isEmpty {
-            persistentCachedVitals = cached.filter { v in
-                guard let dev = v.sourceDevice, !dev.isEmpty else { return true }
-                return !DeviceSource.from(name: dev).isVirtualEngine
+        // 3. Query Supabase canonical health_daily_summary table
+        let session = try? await supabase.auth.session
+        let userId = session?.user.id.uuidString.lowercased()
+        
+        var foundCanonicalSummary = false
+        if let userId = userId {
+            do {
+                let summaryRows: [HealthDailySummaryRecord] = try await supabase
+                    .from("health_daily_summary")
+                    .select()
+                    .eq("user_id", value: userId)
+                    .eq("local_date", value: dateKey)
+                    .limit(1)
+                    .execute()
+                    .value
+                
+                if let row = summaryRows.first {
+                    let payload = row.summary
+                    self.canonicalSummary = payload
+                    if let encoded = try? summaryEncoder.encode(payload) {
+                        userDefaults.set(encoded, forKey: "health_daily_summary_\(dateKey)")
+                    }
+                    summaryCache[dateKey] = (timestamp: Date(), summary: payload)
+                    applyCanonicalSummary(payload, dateKey: dateKey)
+                    foundCanonicalSummary = true
+                }
+            } catch {
+                print("[HealthDataService] Warning: Could not fetch health_daily_summary: \(error.localizedDescription)")
             }
         }
         
-        // 3. Fetch from Supabase and Local Provider concurrently
-        var fetchedTelemetry: [HealthTelemetryRecord] = []
+        // 4. Concurrently fetch local on-device provider (e.g. Apple HealthKit)
+        var localTelemetry: [HealthTelemetryRecord] = []
+        if let provider = localDataProvider {
+            let localTelem = await provider.fetchLocalTelemetry(for: targetDate)
+            let localSleep = await provider.fetchLocalSleepStages(for: targetDate)
+            localTelemetry = localTelem + localSleep
+            
+            // Asynchronously sync real on-device telemetry to Supabase
+            if !localTelemetry.isEmpty {
+                Task { [weak self] in
+                    await self?.syncTelemetryToSupabase(telemetry: localTelemetry)
+                }
+            }
+        }
+        
+        // 5. If canonical summary was found and applied, we're done with date data
+        if foundCanonicalSummary {
+            await loadHistoricalTrends()
+            return
+        }
+        
+        // 6. Fallback to on-device provisional calculation if remote canonical summary is not yet computed or user is offline
+        var fetchedTelemetry = localTelemetry
         var fetchedVitals: [VitalMetricRecord] = []
         
-        let session = try? await supabase.auth.session
-        if let userId = session?.user.id.uuidString.lowercased() {
+        if let userId = userId {
             let cal = Calendar.current
             let startOfDay = cal.startOfDay(for: targetDate)
-            let windowStart = cal.date(byAdding: .hour, value: -6, to: startOfDay) ?? startOfDay // D-1 18:00
-            let windowEnd = cal.date(byAdding: .hour, value: 24, to: startOfDay) ?? startOfDay   // D 24:00
+            let windowStart = cal.date(byAdding: .hour, value: -6, to: startOfDay) ?? startOfDay
+            let windowEnd = cal.date(byAdding: .hour, value: 24, to: startOfDay) ?? startOfDay
             
             let startIso = isoTimestampFormatter.string(from: windowStart)
             let endIso = isoTimestampFormatter.string(from: windowEnd)
             
-            // Query Supabase telemetry
             do {
                 let records: [HealthTelemetryRecord] = try await supabase.from("health_telemetry")
                     .select()
@@ -262,44 +398,19 @@ public final class HealthDataService: ObservableObject {
             } catch {
                 print("[HealthDataService] Warning: Could not fetch health_telemetry: \(error.localizedDescription)")
             }
-            
-            // Query Supabase daily vitals
-            do {
-                let vitals: [VitalMetricRecord] = try await supabase.from("vitals")
-                    .select()
-                    .eq("user_id", value: userId)
-                    .eq("date", value: dateKey)
-                    .execute()
-                    .value
-                fetchedVitals = vitals
-            } catch {
-                print("[HealthDataService] Warning: Could not fetch vitals: \(error.localizedDescription)")
-            }
         }
         
-        // 4. Concurrently fetch local on-device provider (e.g. Apple HealthKit)
-        if let provider = localDataProvider {
-            let localTelem = await provider.fetchLocalTelemetry(for: targetDate)
-            let localSleep = await provider.fetchLocalSleepStages(for: targetDate)
-            fetchedTelemetry.append(contentsOf: localTelem)
-            fetchedTelemetry.append(contentsOf: localSleep)
-            
-            // Asynchronously sync real on-device telemetry to Supabase
-            if !localTelem.isEmpty || !localSleep.isEmpty {
-                let combined = localTelem + localSleep
-                Task { [weak self] in
-                    await self?.syncTelemetryToSupabase(telemetry: combined)
-                }
-            }
-        }
-        
-        // Deduplicate any repeated database or provider records
         fetchedTelemetry = Self.deduplicateTelemetry(fetchedTelemetry)
         
-        // 5. Fallback to local persistent cached vitals if available, or demo data only if explicitly flagged
-        if fetchedTelemetry.isEmpty && fetchedVitals.isEmpty {
-            if !persistentCachedVitals.isEmpty {
-                fetchedVitals = persistentCachedVitals
+        // Check persistent legacy cached vitals if no telemetry exists
+        if fetchedTelemetry.isEmpty {
+            if let data = userDefaults.data(forKey: "health_daily_vitals_\(dateKey)"),
+               let cached = try? JSONDecoder().decode([VitalMetricRecord].self, from: data),
+               !cached.isEmpty {
+                fetchedVitals = cached.filter { v in
+                    guard let dev = v.sourceDevice, !dev.isEmpty else { return true }
+                    return !DeviceSource.from(name: dev).isVirtualEngine
+                }
             } else if ProcessInfo.processInfo.arguments.contains("-demoHealth") {
                 let demo = generateDemoData(for: targetDate)
                 fetchedTelemetry = demo.telemetry
@@ -307,15 +418,189 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // Guard against race conditions if targetDate is no longer the active date or task cancelled
         guard !Task.isCancelled, Calendar.current.isDate(targetDate, inSameDayAs: self.selectedDate) else { return }
         
-        // 6. Update in-memory cache & apply
         telemetryCache[dateKey] = (timestamp: Date(), telemetry: fetchedTelemetry, vitals: fetchedVitals)
         await applyRecords(telemetry: fetchedTelemetry, vitals: fetchedVitals)
-        
-        // 7. Also load 7-day trend history
         await loadHistoricalTrends()
+        
+        // If we have an authenticated user and unsynced day, trigger Edge Function in background to compute canonical summary
+        if let userId = userId, !fetchedTelemetry.isEmpty {
+            Task { [weak self] in
+                guard let self = self else { return }
+                do {
+                    _ = try await self.supabase.functions.invoke(
+                        "health-engine",
+                        options: FunctionInvokeOptions(body: ["date": dateKey, "user_id": userId])
+                    )
+                } catch {
+                    // Non-fatal background invocation
+                }
+            }
+        }
+    }
+    
+    /// Unpacks canonical DailyHealthSummaryPayload into published properties.
+    private func applyCanonicalSummary(_ summary: DailyHealthSummaryPayload, dateKey: String) {
+        // Collect available devices and sources
+        var devicesSet = Set<String>()
+        var sourcesSet = Set<DeviceSource>()
+        
+        if let d = summary.sleep.primarySession?.sourceDevice, !d.isEmpty {
+            let src = DeviceSource.from(name: d)
+            if !src.isVirtualEngine {
+                devicesSet.insert(d)
+                sourcesSet.insert(src)
+            }
+        }
+        if let d = summary.activity.sourceDevice, !d.isEmpty {
+            let src = DeviceSource.from(name: d)
+            if !src.isVirtualEngine {
+                devicesSet.insert(d)
+                sourcesSet.insert(src)
+            }
+        }
+        for (_, v) in summary.vitals {
+            if let d = v.sourceDevice, !d.isEmpty {
+                let src = DeviceSource.from(name: d)
+                if !src.isVirtualEngine {
+                    devicesSet.insert(d)
+                    sourcesSet.insert(src)
+                }
+            }
+        }
+        self.availableDevices = Array(devicesSet).sorted()
+        self.availableSources = Array(sourcesSet).sorted()
+        
+        // 1. Sleep
+        self.primarySleepSession = summary.sleep.primarySession
+        self.allSleepSessions = summary.sleep.allSessions
+        self.daytimeNaps = summary.sleep.naps
+        
+        // 2. Activity
+        self.hourlySteps = summary.activity.hourlySteps
+        self.totalStepsToday = summary.activity.totalSteps
+        self.totalActiveCalories = summary.activity.activeCalories
+        
+        // 3. Cardiovascular & Zones
+        var hrPoints = summary.cardiovascular.intradayPoints
+        if let filter = selectedDeviceFilter, !filter.isEmpty {
+            hrPoints = hrPoints.filter { $0.sourceDevice?.localizedCaseInsensitiveContains(filter) == true }
+        }
+        self.intradayHeartRate = hrPoints
+        self.averageBpm = summary.cardiovascular.averageBpm ?? 0
+        self.restingBpm = summary.cardiovascular.restingBpm ?? 0
+        self.minBpm = summary.cardiovascular.minBpm ?? 0
+        self.maxBpm = summary.cardiovascular.maxBpm ?? 0
+        self.heartRateZones = [
+            .resting: summary.cardiovascular.zones.resting,
+            .fatBurn: summary.cardiovascular.zones.fatBurn,
+            .cardio: summary.cardiovascular.zones.cardio,
+            .peak: summary.cardiovascular.zones.peak
+        ]
+        
+        // 4. Stress
+        if let stress = summary.stress {
+            self.currentStressScore = stress.currentScore
+            self.currentStressLevel = stress.currentLevel
+            self.intradayStress = stress.intradayPoints
+            let breathing = BreathingProtocol(rawValue: stress.recommendedBreathing) ?? .boxBreathing
+            let result = StressAnalysisResult(
+                currentScore: stress.currentScore,
+                currentLevel: stress.currentLevel,
+                dailyAverageScore: stress.dailyAverage,
+                peakHour: stress.peakHour,
+                peakScore: stress.peakScore,
+                lowestHour: stress.lowestHour,
+                lowestScore: stress.lowestScore,
+                parasympatheticPercent: stress.parasympatheticPercent,
+                sympatheticPercent: stress.sympatheticPercent,
+                baselineHrvMs: stress.baselineHrvMs,
+                currentHrvMs: stress.currentHrvMs,
+                hrvDeltaPercent: stress.hrvDeltaPercent,
+                restingHeartRateBpm: stress.restingHeartRateBpm,
+                currentSedentaryBpm: stress.currentSedentaryBpm,
+                heartRateElevationBpm: stress.heartRateElevationBpm,
+                monkeyMood: stress.monkeyMood,
+                adviceQuote: stress.adviceQuote,
+                recommendedBreathing: breathing,
+                lastUpdated: summary.computedAt
+            )
+            self.stressAnalysis = result
+            
+            if Calendar.current.isDateInToday(selectedDate) {
+                WidgetDataCoordinator.shared.updateStressSnapshot(
+                    score: result.currentScore,
+                    level: result.currentLevel,
+                    monkeyMood: result.monkeyMood,
+                    advice: result.adviceQuote,
+                    hrvMs: result.currentHrvMs,
+                    restingHeartRate: result.restingHeartRateBpm,
+                    parasympathetic: result.parasympatheticPercent,
+                    sympathetic: result.sympatheticPercent
+                )
+            }
+        } else {
+            self.currentStressScore = 0
+            self.currentStressLevel = .calm
+            self.intradayStress = []
+            self.stressAnalysis = nil
+            if Calendar.current.isDateInToday(selectedDate) {
+                WidgetDataCoordinator.shared.clearStressSnapshot()
+            }
+        }
+        
+        // 5. Vitals Map
+        var vitalsMap: [HealthMetricType: VitalMetricRecord] = [:]
+        for (k, v) in summary.vitals {
+            if let type = HealthMetricType.from(rawString: k) ?? HealthMetricType.from(rawString: v.type) {
+                vitalsMap[type] = VitalMetricRecord(
+                    userId: "canonical",
+                    type: type.rawValue,
+                    value: v.value,
+                    unit: v.unit,
+                    date: dateKey,
+                    sourceDevice: v.sourceDevice,
+                    createdAt: v.timestamp
+                )
+            }
+        }
+        
+        if let stress = summary.stress {
+            vitalsMap[.stress] = VitalMetricRecord(
+                userId: "canonical",
+                type: HealthMetricType.stress.rawValue,
+                value: Double(stress.currentScore),
+                unit: "score",
+                date: dateKey,
+                sourceDevice: summary.activity.sourceDevice ?? "Canonical Engine"
+            )
+        }
+        
+        if vitalsMap[.hydration] == nil {
+            let waterMl = HabitsService.shared.totalWaterMlToday
+            if waterMl > 0 {
+                vitalsMap[.hydration] = VitalMetricRecord(
+                    userId: "habits",
+                    type: HealthMetricType.hydration.rawValue,
+                    value: Double(waterMl),
+                    unit: "ml",
+                    date: dateKey,
+                    sourceDevice: "Bubbles"
+                )
+            }
+        }
+        
+        self.currentVitals = vitalsMap
+        
+        // 6. Update Sleep Snapshot for Widget
+        if Calendar.current.isDateInToday(selectedDate) {
+            WidgetDataCoordinator.shared.updateSleepSnapshot(
+                from: summary.sleep.primarySession,
+                restingHeartRate: self.restingBpm > 0 ? self.restingBpm : nil,
+                hrvMs: summary.vitals["hrv_sdnn"]?.value ?? summary.stress?.currentHrvMs
+            )
+        }
     }
     
     private func applyRecords(telemetry: [HealthTelemetryRecord], vitals: [VitalMetricRecord]) async {
@@ -606,15 +891,28 @@ public final class HealthDataService: ObservableObject {
         }
     }
     
-    /// Syncs computed daily aggregate vitals to Supabase `vitals` table.
+    /// Syncs real device daily aggregate vitals to Supabase `vitals` table.
+    /// Excludes virtual engines (StressWatch, Biometric Engine, Bubbles, computed) to prevent duplicate pollution.
     public func syncVitalsToSupabase(vitals: [VitalMetricRecord]) async {
         guard AuthService.shared.isAuthenticated,
               let session = try? await supabase.auth.session,
               let userId = session.user.id.uuidString.lowercased() as String?,
               !vitals.isEmpty else { return }
         
+        let realVitals = vitals.filter { v in
+            if v.userId == "stress-engine" || v.userId == "computed" || v.userId == "canonical" || v.userId == "habits" {
+                return false
+            }
+            if let dev = v.sourceDevice, DeviceSource.from(name: dev).isVirtualEngine {
+                return false
+            }
+            return true
+        }
+        
+        guard !realVitals.isEmpty else { return }
+        
         do {
-            let prepared = vitals.map { v in
+            let prepared = realVitals.map { v in
                 VitalMetricRecord(
                     id: v.id,
                     userId: userId,
@@ -693,7 +991,27 @@ public final class HealthDataService: ObservableObject {
         for dayOffset in 0..<7 {
             if let date = cal.date(byAdding: .day, value: -dayOffset, to: selectedDate) {
                 let dKey = isoDateFormatter.string(from: date)
-                if let data = userDefaults.data(forKey: "health_daily_vitals_\(dKey)"),
+                if let summaryData = userDefaults.data(forKey: "health_daily_summary_\(dKey)"),
+                   let summary = try? summaryDecoder.decode(DailyHealthSummaryPayload.self, from: summaryData) {
+                    if summary.activity.totalSteps > 0 {
+                        historicalVitalsByDate[dKey, default: [:]][.steps] = Double(summary.activity.totalSteps)
+                    }
+                    if let asleep = summary.sleep.primarySession?.asleepSeconds, asleep > 0 {
+                        historicalVitalsByDate[dKey, default: [:]][.sleepDuration] = asleep / 60.0
+                    }
+                    if let rhr = summary.cardiovascular.restingBpm, rhr > 0 {
+                        historicalVitalsByDate[dKey, default: [:]][.heartRate] = rhr
+                    }
+                    if let st = summary.stress?.currentScore, st > 0 {
+                        historicalVitalsByDate[dKey, default: [:]][.stress] = Double(st)
+                    }
+                    if let hrv = summary.stress?.currentHrvMs, hrv > 0 {
+                        historicalVitalsByDate[dKey, default: [:]][.hrvSdnn] = hrv
+                    }
+                    if summary.activity.activeCalories > 0 {
+                        historicalVitalsByDate[dKey, default: [:]][.activeEnergy] = summary.activity.activeCalories
+                    }
+                } else if let data = userDefaults.data(forKey: "health_daily_vitals_\(dKey)"),
                    let records = try? JSONDecoder().decode([VitalMetricRecord].self, from: data) {
                     for r in records {
                         if let t = r.metricType, r.value > 0 {
@@ -704,13 +1022,36 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 2. For authenticated users, query real 7-day historical vitals from Supabase
+        // 2. For authenticated users, query 7-day historical summaries from health_daily_summary
         let session = try? await supabase.auth.session
         if let userId = session?.user.id.uuidString.lowercased(),
            let minDate = cal.date(byAdding: .day, value: -6, to: selectedDate) {
             let minDateStr = isoDateFormatter.string(from: minDate)
             let maxDateStr = isoDateFormatter.string(from: selectedDate)
             
+            if let summaryRows: [HealthDailySummaryRecord] = try? await supabase
+                .from("health_daily_summary")
+                .select()
+                .eq("user_id", value: userId)
+                .gte("local_date", value: minDateStr)
+                .lte("local_date", value: maxDateStr)
+                .order("local_date", ascending: true)
+                .execute()
+                .value {
+                for row in summaryRows {
+                    let dStr = row.localDate
+                    if let s = row.steps, s > 0 { historicalVitalsByDate[dStr, default: [:]][.steps] = Double(s) }
+                    if let sl = row.sleepAsleepS, sl > 0 { historicalVitalsByDate[dStr, default: [:]][.sleepDuration] = Double(sl) / 60.0 }
+                    if let r = row.rhr, r > 0 { historicalVitalsByDate[dStr, default: [:]][.heartRate] = r }
+                    if let st = row.stressAvg, st > 0 { historicalVitalsByDate[dStr, default: [:]][.stress] = Double(st) }
+                    if let h = row.hrvSdnn, h > 0 { historicalVitalsByDate[dStr, default: [:]][.hrvSdnn] = h }
+                    if let cal = row.activeKcal, cal > 0 { historicalVitalsByDate[dStr, default: [:]][.activeEnergy] = cal }
+                    if let w = row.weight, w > 0 { historicalVitalsByDate[dStr, default: [:]][.weight] = w }
+                    if let sp = row.spo2, sp > 0 { historicalVitalsByDate[dStr, default: [:]][.oxygenSaturation] = sp }
+                }
+            }
+            
+            // Also check legacy vitals table for any historical entries
             if let vitalsRows: [VitalMetricRecord] = try? await supabase.from("vitals")
                 .select()
                 .eq("user_id", value: userId)
@@ -720,59 +1061,15 @@ public final class HealthDataService: ObservableObject {
                 .value {
                 for row in vitalsRows {
                     if let t = row.metricType, row.value > 0 {
-                        historicalVitalsByDate[row.date, default: [:]][t] = row.value
-                    }
-                }
-            }
-            
-            // Also fetch 7-day telemetry to populate steps and sleep for days without aggregated vitals row
-            let minDateTimeStr = isoTimestampFormatter.string(from: cal.startOfDay(for: minDate))
-            let maxDateTimeStr = isoTimestampFormatter.string(from: cal.date(bySettingHour: 23, minute: 59, second: 59, of: selectedDate) ?? selectedDate)
-            
-            if let telemRows: [HealthTelemetryRecord] = try? await supabase.from("health_telemetry")
-                .select()
-                .eq("user_id", value: userId)
-                .gte("start_time", value: minDateTimeStr)
-                .lte("start_time", value: maxDateTimeStr)
-                .execute()
-                .value {
-                let deduped = Self.deduplicateTelemetry(telemRows)
-                let groupedByDay = Dictionary(grouping: deduped) { r in
-                    isoDateFormatter.string(from: r.startTime)
-                }
-                for (dayStr, dayRecords) in groupedByDay {
-                    guard let dayDate = isoDateFormatter.date(from: dayStr) else { continue }
-                    
-                    if (historicalVitalsByDate[dayStr]?[.steps] ?? 0) <= 0 {
-                        let stepRes = Self.calculateDailySteps(
-                            targetDate: dayDate,
-                            telemetry: dayRecords,
-                            vitalsSummary: historicalVitalsByDate[dayStr] ?? [:],
-                            preferredDevice: selectedDeviceFilter,
-                            preferredSource: selectedDeviceSource,
-                            calendar: cal
-                        )
-                        if stepRes.totalSteps > 0 {
-                            historicalVitalsByDate[dayStr, default: [:]][.steps] = Double(stepRes.totalSteps)
-                        }
-                    }
-                    
-                    if (historicalVitalsByDate[dayStr]?[.sleepDuration] ?? 0) <= 0 {
-                        let sleepRes = SleepClusteringEngine.clusterSleep(
-                            targetDate: dayDate,
-                            telemetry: dayRecords,
-                            vitalsSummary: historicalVitalsByDate[dayStr] ?? [:],
-                            preferredDevice: selectedDeviceFilter
-                        )
-                        if let prim = sleepRes.primarySession, prim.asleepSeconds > 0 {
-                            historicalVitalsByDate[dayStr, default: [:]][.sleepDuration] = prim.asleepSeconds / 60.0
+                        if historicalVitalsByDate[row.date]?[t] == nil {
+                            historicalVitalsByDate[row.date, default: [:]][t] = row.value
                         }
                     }
                 }
             }
         }
         
-        // 3. Assemble final trend points with deterministic fallback for missing history
+        // 3. Assemble final trend points with honest data (zero fallback for missing history)
         for m in metrics {
             var points: [DailyMetricTrendPoint] = []
             for dayOffset in (0..<7).reversed() {
@@ -791,7 +1088,7 @@ public final class HealthDataService: ObservableObject {
                         case .sleepDuration: val = Double(primarySleepSession?.asleepSeconds ?? 0) / 60.0
                         case .heartRate: val = averageBpm > 0 ? averageBpm : restingBpm
                         case .activeEnergy: val = totalActiveCalories
-                        case .stress: val = Double(stressAnalysis?.stressScore ?? 0)
+                        case .stress: val = Double(stressAnalysis?.currentScore ?? currentStressScore)
                         default: val = currentVitals[m]?.value ?? 0
                         }
                     } else if ProcessInfo.processInfo.arguments.contains("-demoHealth") {
