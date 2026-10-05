@@ -1,5 +1,6 @@
 package com.intellidream.daily.network
 
+import com.intellidream.daily.model.DeviceSource
 import com.intellidream.daily.model.HealthTelemetryRecord
 import com.intellidream.daily.model.VitalMetricRecord
 import io.github.jan.supabase.postgrest.postgrest
@@ -11,8 +12,15 @@ class HealthRemoteService(
 ) {
     suspend fun pushTelemetry(records: List<HealthTelemetryRecord>): Boolean = withContext(Dispatchers.IO) {
         try {
-            if (records.isEmpty()) return@withContext true
-            clientManager.client.postgrest["health_telemetry"].insert(records)
+            val realRecords = records.filter {
+                val dev = it.sourceDevice
+                dev == null || !DeviceSource.from(dev).isVirtualEngine
+            }
+            if (realRecords.isEmpty()) return@withContext true
+            
+            for (chunk in realRecords.chunked(200)) {
+                clientManager.client.postgrest["health_telemetry"].insert(chunk)
+            }
             true
         } catch (_: Exception) {
             false
@@ -25,12 +33,14 @@ class HealthRemoteService(
         endTimeEpochMs: Long
     ): List<HealthTelemetryRecord> = withContext(Dispatchers.IO) {
         try {
+            val startIso = java.time.Instant.ofEpochMilli(startTimeEpochMs).toString()
+            val endIso = java.time.Instant.ofEpochMilli(endTimeEpochMs).toString()
             clientManager.client.postgrest["health_telemetry"]
                 .select {
                     filter {
                         eq("user_id", userId)
-                        gte("start_time", startTimeEpochMs)
-                        lte("start_time", endTimeEpochMs)
+                        gte("start_time", startIso)
+                        lte("start_time", endIso)
                     }
                 }
                 .decodeList<HealthTelemetryRecord>()
@@ -42,7 +52,9 @@ class HealthRemoteService(
     suspend fun pushVitals(vitals: List<VitalMetricRecord>): Boolean = withContext(Dispatchers.IO) {
         try {
             if (vitals.isEmpty()) return@withContext true
-            clientManager.client.postgrest["vitals"].upsert(vitals)
+            clientManager.client.postgrest["vitals"].upsert(vitals) {
+                onConflict = "user_id,date,type"
+            }
             true
         } catch (_: Exception) {
             false

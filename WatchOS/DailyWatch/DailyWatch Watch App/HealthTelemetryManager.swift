@@ -11,6 +11,10 @@ struct TelemetryPayload: Codable {
     let start_time: String
     let end_time: String
     let source_device: String
+    let external_id: String?
+    let semantics: String?
+    let tz_offset_min: Int?
+    let local_date: String?
 }
 
 class HealthTelemetryManager {
@@ -38,6 +42,14 @@ class HealthTelemetryManager {
     private let dateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    
+    private let localDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = Calendar.current.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
     
@@ -85,7 +97,14 @@ class HealthTelemetryManager {
         if let anchor = hrAnchor { pendingAnchors[HKQuantityTypeIdentifier.heartRate.rawValue] = anchor }
         for sample in hrSamples {
             let val = sample.quantity.doubleValue(for: HKUnit(from: "count/min"))
-            allPayloads.append(createPayload(userId: userId, type: "heart_rate", value: val, unit: "bpm", sample: sample))
+            allPayloads.append(createPayload(
+                userId: userId,
+                type: "heart_rate",
+                value: val,
+                unit: "bpm",
+                sample: sample,
+                semantics: "spot"
+            ))
         }
         
         // Steps
@@ -93,7 +112,14 @@ class HealthTelemetryManager {
         if let anchor = stepAnchor { pendingAnchors[HKQuantityTypeIdentifier.stepCount.rawValue] = anchor }
         for sample in stepSamples {
             let val = sample.quantity.doubleValue(for: HKUnit.count())
-            allPayloads.append(createPayload(userId: userId, type: "steps", value: val, unit: "count", sample: sample))
+            allPayloads.append(createPayload(
+                userId: userId,
+                type: "steps",
+                value: val,
+                unit: "count",
+                sample: sample,
+                semantics: "interval_delta"
+            ))
         }
         
         // Active Energy
@@ -101,7 +127,14 @@ class HealthTelemetryManager {
         if let anchor = energyAnchor { pendingAnchors[HKQuantityTypeIdentifier.activeEnergyBurned.rawValue] = anchor }
         for sample in energySamples {
             let val = sample.quantity.doubleValue(for: HKUnit.kilocalorie())
-            allPayloads.append(createPayload(userId: userId, type: "active_energy", value: val, unit: "kcal", sample: sample))
+            allPayloads.append(createPayload(
+                userId: userId,
+                type: "active_energy",
+                value: val,
+                unit: "kcal",
+                sample: sample,
+                semantics: "interval_delta"
+            ))
         }
         
         // --- TIER 2: Deep Analytics (Sleep, HRV, Resting HR, SpO2) ---
@@ -110,13 +143,34 @@ class HealthTelemetryManager {
             let (sleepSamples, sleepAnchor) = await fetchCategorySamplesWithAnchor(typeIdentifier: .sleepAnalysis)
             if let anchor = sleepAnchor { pendingAnchors[HKCategoryTypeIdentifier.sleepAnalysis.rawValue] = anchor }
             for sample in sleepSamples {
-                if sample.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue ||
-                   sample.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue ||
-                   sample.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue ||
-                   sample.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue {
-                    
-                    let durationHours = sample.endDate.timeIntervalSince(sample.startDate) / 3600.0
-                    allPayloads.append(createPayload(userId: userId, type: "sleep", value: durationHours, unit: "hours", sample: sample))
+                let durationSec = sample.endDate.timeIntervalSince(sample.startDate)
+                guard durationSec > 0 else { continue }
+                
+                let stageType: String?
+                switch sample.value {
+                case HKCategoryValueSleepAnalysis.asleepCore.rawValue:
+                    stageType = "sleep_stage_light"
+                case HKCategoryValueSleepAnalysis.asleepDeep.rawValue:
+                    stageType = "sleep_stage_deep"
+                case HKCategoryValueSleepAnalysis.asleepREM.rawValue:
+                    stageType = "sleep_stage_rem"
+                case HKCategoryValueSleepAnalysis.awake.rawValue:
+                    stageType = "sleep_stage_awake"
+                case HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
+                    stageType = "sleep_duration"
+                default:
+                    stageType = nil
+                }
+                
+                if let stageType = stageType {
+                    allPayloads.append(createPayload(
+                        userId: userId,
+                        type: stageType,
+                        value: durationSec,
+                        unit: "seconds",
+                        sample: sample,
+                        semantics: "session_stage"
+                    ))
                 }
             }
             
@@ -125,7 +179,14 @@ class HealthTelemetryManager {
             if let anchor = hrvAnchor { pendingAnchors[HKQuantityTypeIdentifier.heartRateVariabilitySDNN.rawValue] = anchor }
             for sample in hrvSamples {
                 let val = sample.quantity.doubleValue(for: HKUnit.secondUnit(with: .milli))
-                allPayloads.append(createPayload(userId: userId, type: "hrv", value: val, unit: "ms", sample: sample))
+                allPayloads.append(createPayload(
+                    userId: userId,
+                    type: "hrv_sdnn",
+                    value: val,
+                    unit: "ms",
+                    sample: sample,
+                    semantics: "spot"
+                ))
             }
             
             // Resting Heart Rate (bpm)
@@ -133,7 +194,14 @@ class HealthTelemetryManager {
             if let anchor = restingAnchor { pendingAnchors[HKQuantityTypeIdentifier.restingHeartRate.rawValue] = anchor }
             for sample in restingSamples {
                 let val = sample.quantity.doubleValue(for: HKUnit(from: "count/min"))
-                allPayloads.append(createPayload(userId: userId, type: "resting_heart_rate", value: val, unit: "bpm", sample: sample))
+                allPayloads.append(createPayload(
+                    userId: userId,
+                    type: "resting_heart_rate",
+                    value: val,
+                    unit: "bpm",
+                    sample: sample,
+                    semantics: "spot"
+                ))
             }
             
             // Blood Oxygen / SpO2 (%)
@@ -142,7 +210,14 @@ class HealthTelemetryManager {
             for sample in spo2Samples {
                 let rawFraction = sample.quantity.doubleValue(for: HKUnit.percent())
                 let percentage = rawFraction <= 1.0 ? (rawFraction * 100.0) : rawFraction
-                allPayloads.append(createPayload(userId: userId, type: "spo2", value: percentage, unit: "%", sample: sample))
+                allPayloads.append(createPayload(
+                    userId: userId,
+                    type: "oxygen_saturation",
+                    value: percentage,
+                    unit: "%",
+                    sample: sample,
+                    semantics: "spot"
+                ))
             }
         }
         
@@ -178,9 +253,19 @@ class HealthTelemetryManager {
         }
     }
     
-    private func createPayload(userId: UUID, type: String, value: Double, unit: String, sample: HKSample) -> TelemetryPayload {
+    private func createPayload(
+        userId: UUID,
+        type: String,
+        value: Double,
+        unit: String,
+        sample: HKSample,
+        semantics: String? = nil,
+        externalId: String? = nil
+    ) -> TelemetryPayload {
         let deviceName = sample.device?.name ?? "Apple Watch"
         let model = sample.device?.model ?? "watchOS"
+        let tzOffsetMin = TimeZone.current.secondsFromGMT() / 60
+        let localDate = localDateFormatter.string(from: sample.startDate)
         
         return TelemetryPayload(
             user_id: userId.uuidString,
@@ -189,7 +274,11 @@ class HealthTelemetryManager {
             unit: unit,
             start_time: dateFormatter.string(from: sample.startDate),
             end_time: dateFormatter.string(from: sample.endDate),
-            source_device: "\(deviceName) (\(model))"
+            source_device: "\(deviceName) (\(model))",
+            external_id: externalId ?? sample.uuid.uuidString,
+            semantics: semantics,
+            tz_offset_min: tzOffsetMin,
+            local_date: localDate
         )
     }
     

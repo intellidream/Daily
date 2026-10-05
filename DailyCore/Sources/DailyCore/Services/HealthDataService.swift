@@ -72,6 +72,8 @@ public final class HealthDataService: ObservableObject {
     
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = Calendar.current.timeZone
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
@@ -281,6 +283,14 @@ public final class HealthDataService: ObservableObject {
             let localSleep = await provider.fetchLocalSleepStages(for: targetDate)
             fetchedTelemetry.append(contentsOf: localTelem)
             fetchedTelemetry.append(contentsOf: localSleep)
+            
+            // Asynchronously sync real on-device telemetry to Supabase
+            if !localTelem.isEmpty || !localSleep.isEmpty {
+                let combined = localTelem + localSleep
+                Task { [weak self] in
+                    await self?.syncTelemetryToSupabase(telemetry: combined)
+                }
+            }
         }
         
         // Deduplicate any repeated database or provider records
@@ -417,11 +427,13 @@ public final class HealthDataService: ObservableObject {
             self.daytimeNaps = demoSleepResult.naps
         }
         
-        WidgetDataCoordinator.shared.updateSleepSnapshot(
-            from: sleepResult.primarySession,
-            restingHeartRate: vitalsValues[.restingHeartRate] ?? (self.restingBpm > 0 ? self.restingBpm : nil),
-            hrvMs: vitalsValues[.hrvSdnn]
-        )
+        if Calendar.current.isDateInToday(selectedDate) {
+            WidgetDataCoordinator.shared.updateSleepSnapshot(
+                from: sleepResult.primarySession,
+                restingHeartRate: vitalsValues[.restingHeartRate] ?? (self.restingBpm > 0 ? self.restingBpm : nil),
+                hrvMs: vitalsValues[.hrvSdnn]
+            )
+        }
         
         // 2. Process Heart Rate
         let cal = Calendar.current
@@ -556,17 +568,19 @@ public final class HealthDataService: ObservableObject {
             vitalsMap[.stress] = stressRecord
             vitalsValues[.stress] = Double(self.currentStressScore)
             
-            // Update Widget Coordinator with fresh stress snapshot
-            WidgetDataCoordinator.shared.updateStressSnapshot(
-                score: stressCalculation.result.currentScore,
-                level: stressCalculation.result.currentLevel,
-                monkeyMood: stressCalculation.result.monkeyMood,
-                advice: stressCalculation.result.adviceQuote,
-                hrvMs: stressCalculation.result.currentHrvMs,
-                restingHeartRate: stressCalculation.result.restingHeartRateBpm,
-                parasympathetic: stressCalculation.result.parasympatheticPercent,
-                sympathetic: stressCalculation.result.sympatheticPercent
-            )
+            // Update Widget Coordinator with fresh stress snapshot if today
+            if Calendar.current.isDateInToday(selectedDate) {
+                WidgetDataCoordinator.shared.updateStressSnapshot(
+                    score: stressCalculation.result.currentScore,
+                    level: stressCalculation.result.currentLevel,
+                    monkeyMood: stressCalculation.result.monkeyMood,
+                    advice: stressCalculation.result.adviceQuote,
+                    hrvMs: stressCalculation.result.currentHrvMs,
+                    restingHeartRate: stressCalculation.result.restingHeartRateBpm,
+                    parasympathetic: stressCalculation.result.parasympatheticPercent,
+                    sympathetic: stressCalculation.result.sympatheticPercent
+                )
+            }
         } else {
             self.stressAnalysis = nil
             self.intradayStress = []
@@ -614,9 +628,54 @@ public final class HealthDataService: ObservableObject {
                     syncedAt: Date()
                 )
             }
-            try await supabase.from("vitals").upsert(prepared).execute()
+            try await supabase.from("vitals").upsert(prepared, onConflict: "user_id,date,type").execute()
         } catch {
             print("[HealthDataService] Warning: Failed to sync vitals to Supabase: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Syncs local high-frequency telemetry samples to Supabase `health_telemetry` table idempotently.
+    public func syncTelemetryToSupabase(telemetry: [HealthTelemetryRecord]) async {
+        guard AuthService.shared.isAuthenticated,
+              let session = try? await supabase.auth.session,
+              let userId = session.user.id.uuidString.lowercased() as String?,
+              !telemetry.isEmpty else { return }
+        
+        let tzOffsetMin = Calendar.current.timeZone.secondsFromGMT() / 60
+        
+        let prepared = telemetry.compactMap { r -> HealthTelemetryRecord? in
+            if let dev = r.sourceDevice, DeviceSource.from(name: dev).isVirtualEngine {
+                return nil
+            }
+            let dKey = isoDateFormatter.string(from: r.startTime)
+            return HealthTelemetryRecord(
+                id: r.id,
+                userId: userId,
+                type: r.type,
+                value: r.value,
+                unit: r.unit,
+                startTime: r.startTime,
+                endTime: r.endTime,
+                sourceDevice: r.sourceDevice,
+                createdAt: r.createdAt ?? Date(),
+                externalId: r.externalId ?? r.id,
+                sourceId: r.sourceId,
+                semantics: r.semantics,
+                tzOffsetMin: tzOffsetMin,
+                localDate: dKey
+            )
+        }
+        
+        guard !prepared.isEmpty else { return }
+        
+        let batchSize = 200
+        for i in stride(from: 0, to: prepared.count, by: batchSize) {
+            let chunk = Array(prepared[i..<min(i + batchSize, prepared.count)])
+            do {
+                try await supabase.from("health_telemetry").insert(chunk).execute()
+            } catch {
+                print("[HealthDataService] Warning: Failed to sync telemetry batch: \(error.localizedDescription)")
+            }
         }
     }
     
@@ -735,8 +794,10 @@ public final class HealthDataService: ObservableObject {
                         case .stress: val = Double(stressAnalysis?.stressScore ?? 0)
                         default: val = currentVitals[m]?.value ?? 0
                         }
-                    } else {
+                    } else if ProcessInfo.processInfo.arguments.contains("-demoHealth") {
                         val = generateHistoricalValue(for: m, dayOffset: dayOffset, target: target)
+                    } else {
+                        val = 0
                     }
                     
                     points.append(DailyMetricTrendPoint(

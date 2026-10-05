@@ -119,6 +119,9 @@ class DailyApp : Application() {
                 habitsRepository.syncLogs(uid)
                 newsRepository.currentUserId = uid
                 newsRepository.syncWithSupabase(uid)
+                healthRepository.currentUserId = uid
+                healthRepository.syncUnsyncedTelemetry()
+                healthRepository.syncUnsyncedVitals()
             }
             weatherRepository.refreshWeather(
                 force = false,
@@ -130,6 +133,7 @@ class DailyApp : Application() {
                 }
             )
 
+            com.intellidream.daily.health.HealthSyncWorker.enqueuePeriodicSync(this@DailyApp)
             com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@DailyApp)
         }
     }

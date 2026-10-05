@@ -230,6 +230,11 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
     public let endTime: Date?
     public let sourceDevice: String?
     public let createdAt: Date?
+    public let externalId: String?
+    public let sourceId: String?
+    public let semantics: String?
+    public let tzOffsetMin: Int?
+    public let localDate: String?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -241,6 +246,11 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
         case endTime = "end_time"
         case sourceDevice = "source_device"
         case createdAt = "created_at"
+        case externalId = "external_id"
+        case sourceId = "source_id"
+        case semantics
+        case tzOffsetMin = "tz_offset_min"
+        case localDate = "local_date"
     }
     
     public init(
@@ -252,7 +262,12 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
         startTime: Date,
         endTime: Date? = nil,
         sourceDevice: String? = nil,
-        createdAt: Date? = nil
+        createdAt: Date? = nil,
+        externalId: String? = nil,
+        sourceId: String? = nil,
+        semantics: String? = nil,
+        tzOffsetMin: Int? = nil,
+        localDate: String? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -263,6 +278,11 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
         self.endTime = endTime
         self.sourceDevice = sourceDevice
         self.createdAt = createdAt
+        self.externalId = externalId
+        self.sourceId = sourceId
+        self.semantics = semantics
+        self.tzOffsetMin = tzOffsetMin
+        self.localDate = localDate
     }
     
     public var normalizedType: String {

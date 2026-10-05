@@ -32,7 +32,7 @@ import com.intellidream.daily.database.entity.VitalMetricEntity
         SavedArticleEntity::class,
         CachedFeedArticleEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class DailyDatabase : RoomDatabase() {

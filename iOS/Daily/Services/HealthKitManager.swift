@@ -122,9 +122,13 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
             }
         }
         
-        // 2. Active Calories
-        if let calType = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned) {
+        // 2. Active Calories (Queried per hour via HKStatisticsCollectionQuery for accurate hourly accumulation)
+        let hourlyEnergy = await fetchHourlyActiveEnergy(for: date)
+        if !hourlyEnergy.isEmpty {
+            records.append(contentsOf: hourlyEnergy)
+        } else if let calType = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned) {
             if let kcal = await fetchCumulativeSum(for: calType, unit: .kilocalorie(), predicate: predicate) {
+                let epoch = Int(startOfDay.timeIntervalSince1970)
                 records.append(HealthTelemetryRecord(
                     userId: "healthkit",
                     type: "active_energy",
@@ -132,7 +136,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "kcal",
                     startTime: startOfDay,
                     endTime: endOfDay,
-                    sourceDevice: "Apple Health"
+                    sourceDevice: "Apple Health",
+                    externalId: "active_energy_daily_\(epoch)",
+                    semantics: "interval_delta"
                 ))
             }
         }
@@ -158,7 +164,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "bpm",
                     startTime: rhr.timestamp,
                     endTime: rhr.timestamp,
-                    sourceDevice: rhr.device
+                    sourceDevice: rhr.device,
+                    externalId: rhr.uuid,
+                    semantics: "spot"
                 ))
             }
         }
@@ -174,7 +182,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "ms",
                     startTime: hrv.timestamp,
                     endTime: hrv.timestamp,
-                    sourceDevice: hrv.device
+                    sourceDevice: hrv.device,
+                    externalId: hrv.uuid,
+                    semantics: "spot"
                 ))
             }
         }
@@ -191,7 +201,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "%",
                     startTime: o2.timestamp,
                     endTime: o2.timestamp,
-                    sourceDevice: o2.device
+                    sourceDevice: o2.device,
+                    externalId: o2.uuid,
+                    semantics: "spot"
                 ))
             }
         }
@@ -207,7 +219,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "br/min",
                     startTime: resp.timestamp,
                     endTime: resp.timestamp,
-                    sourceDevice: resp.device
+                    sourceDevice: resp.device,
+                    externalId: resp.uuid,
+                    semantics: "spot"
                 ))
             }
         }
@@ -223,7 +237,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "kg",
                     startTime: weight.timestamp,
                     endTime: weight.timestamp,
-                    sourceDevice: weight.device
+                    sourceDevice: weight.device,
+                    externalId: weight.uuid,
+                    semantics: "spot"
                 ))
             }
         }
@@ -239,7 +255,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "%",
                     startTime: fat.timestamp,
                     endTime: fat.timestamp,
-                    sourceDevice: fat.device
+                    sourceDevice: fat.device,
+                    externalId: fat.uuid,
+                    semantics: "spot"
                 ))
             }
         }
@@ -318,7 +336,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                         unit: "minutes",
                         startTime: sample.startDate,
                         endTime: sample.endDate,
-                        sourceDevice: devName
+                        sourceDevice: devName,
+                        externalId: sample.uuid.uuidString,
+                        semantics: "session_stage"
                     ))
                 }
                 
@@ -381,6 +401,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                 var hourlyRecords: [HealthTelemetryRecord] = []
                 results.enumerateStatistics(from: startOfDay, to: endOfDay) { stats, _ in
                     if let sum = stats.sumQuantity()?.doubleValue(for: .count()), sum > 0 {
+                        let epoch = Int(stats.startDate.timeIntervalSince1970)
                         hourlyRecords.append(HealthTelemetryRecord(
                             id: UUID().uuidString,
                             userId: "healthkit",
@@ -389,7 +410,54 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                             unit: "count",
                             startTime: stats.startDate,
                             endTime: stats.endDate,
-                            sourceDevice: "Apple Health"
+                            sourceDevice: "Apple Health",
+                            externalId: "steps_hourly_\(epoch)",
+                            semantics: "interval_delta"
+                        ))
+                    }
+                }
+                continuation.resume(returning: hourlyRecords)
+            }
+            healthStore.execute(query)
+        }
+    }
+    
+    private func fetchHourlyActiveEnergy(for date: Date) async -> [HealthTelemetryRecord] {
+        guard let calType = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned) else { return [] }
+        let cal = Calendar.current
+        let startOfDay = cal.startOfDay(for: date)
+        guard let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay) else { return [] }
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        
+        return await withCheckedContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: calType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum,
+                anchorDate: startOfDay,
+                intervalComponents: DateComponents(hour: 1)
+            )
+            
+            query.initialResultsHandler = { _, results, error in
+                guard let results = results, error == nil else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                var hourlyRecords: [HealthTelemetryRecord] = []
+                results.enumerateStatistics(from: startOfDay, to: endOfDay) { stats, _ in
+                    if let sum = stats.sumQuantity()?.doubleValue(for: .kilocalorie()), sum > 0 {
+                        let epoch = Int(stats.startDate.timeIntervalSince1970)
+                        hourlyRecords.append(HealthTelemetryRecord(
+                            id: UUID().uuidString,
+                            userId: "healthkit",
+                            type: "active_energy",
+                            value: sum,
+                            unit: "kcal",
+                            startTime: stats.startDate,
+                            endTime: stats.endDate,
+                            sourceDevice: "Apple Health",
+                            externalId: "active_energy_hourly_\(epoch)",
+                            semantics: "interval_delta"
                         ))
                     }
                 }
@@ -443,7 +511,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                         unit: unit.unitString,
                         startTime: sample.startDate,
                         endTime: sample.endDate,
-                        sourceDevice: dev
+                        sourceDevice: dev,
+                        externalId: sample.uuid.uuidString,
+                        semantics: "spot"
                     )
                 }
                 continuation.resume(returning: records)
@@ -457,7 +527,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         predicate: NSPredicate,
         unit: HKUnit,
         sampleLimit: Int = 50
-    ) async -> [(value: Double, device: String, timestamp: Date)] {
+    ) async -> [(value: Double, device: String, timestamp: Date, uuid: String)] {
         await withCheckedContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
             let query = HKSampleQuery(sampleType: quantityType, predicate: predicate, limit: sampleLimit, sortDescriptors: [sort]) { _, samples, _ in
@@ -467,7 +537,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                 }
                 
                 var seenDevices = Set<String>()
-                var results: [(value: Double, device: String, timestamp: Date)] = []
+                var results: [(value: Double, device: String, timestamp: Date, uuid: String)] = []
                 
                 for sample in qSamples {
                     let dev = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
@@ -476,7 +546,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     }
                     if !seenDevices.contains(dev) {
                         seenDevices.insert(dev)
-                        results.append((sample.quantity.doubleValue(for: unit), dev, sample.endDate))
+                        results.append((sample.quantity.doubleValue(for: unit), dev, sample.endDate, sample.uuid.uuidString))
                     }
                 }
                 continuation.resume(returning: results)
@@ -485,13 +555,13 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         }
     }
     
-    private func fetchMostRecentSample(for quantityType: HKQuantityType, predicate: NSPredicate, unit: HKUnit) async -> (value: Double, device: String, timestamp: Date)? {
+    private func fetchMostRecentSample(for quantityType: HKQuantityType, predicate: NSPredicate, unit: HKUnit) async -> (value: Double, device: String, timestamp: Date, uuid: String)? {
         await withCheckedContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
             let query = HKSampleQuery(sampleType: quantityType, predicate: predicate, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
                 if let sample = samples?.first as? HKQuantitySample {
                     let dev = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
-                    continuation.resume(returning: (sample.quantity.doubleValue(for: unit), dev, sample.endDate))
+                    continuation.resume(returning: (sample.quantity.doubleValue(for: unit), dev, sample.endDate, sample.uuid.uuidString))
                 } else {
                     continuation.resume(returning: nil)
                 }

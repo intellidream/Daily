@@ -274,11 +274,16 @@ class HealthDataRepository(
 
                 // 2. Fetch on-device Health Connect (if available and permissions granted)
                 if (healthConnectManager.isAvailable && healthConnectManager.hasAnyPermissions()) {
-                    val hcTelemetry = healthConnectManager.fetchTelemetryForDate(targetDate)
+                    val hcTelemetry = healthConnectManager.fetchTelemetryForDate(targetDate, currentUserId)
                     if (hcTelemetry.isNotEmpty()) {
                         telemetry.addAll(hcTelemetry)
                         withContext(Dispatchers.IO) {
                             telemetryDao.insertRecords(hcTelemetry.map { HealthTelemetryEntity.fromRecord(it) })
+                        }
+                        if (currentUserId != "local_user") {
+                            scope.launch(Dispatchers.IO) {
+                                syncTelemetryToSupabase(hcTelemetry)
+                            }
                         }
                         cachedTelemetry = deduplicateTelemetry(telemetry)
                         updateDevicesAndSources()
@@ -557,6 +562,19 @@ class HealthDataRepository(
         }
 
         _currentVitals.value = vitalsMap
+
+        // Persist computed daily vitals to Room and sync to Supabase
+        val vitalsToSave = vitalsMap.values.toList()
+        if (vitalsToSave.isNotEmpty()) {
+            withContext(Dispatchers.IO) {
+                vitalsDao.insertVitals(vitalsToSave.map { VitalMetricEntity.fromRecord(it) })
+            }
+            if (currentUserId != "local_user") {
+                scope.launch(Dispatchers.IO) {
+                    syncVitalsToSupabase(vitalsToSave)
+                }
+            }
+        }
     }
 
     // MARK: - 7-Day Trend Generator
@@ -599,9 +617,13 @@ class HealthDataRepository(
                     val historyVitals = withContext(Dispatchers.IO) {
                         vitalsDao.getVitalsForDateSync(currentUserId, historyDateKey)
                     }
-                    val found = historyVitals.firstOrNull { it.type.equals(m.name, ignoreCase = true) }
+                    val found = historyVitals.firstOrNull {
+                        it.type.equals(m.name, ignoreCase = true) ||
+                        it.type.equals(m.rawKey, ignoreCase = true) ||
+                        HealthMetricType.from(it.type) == m
+                    }
                     val dbVal = found?.value ?: 0.0
-                    if (dbVal > 0.0) dbVal else generateHistoricalValue(m, dayOffset, target)
+                    if (dbVal > 0.0) dbVal else 0.0
                 }
 
                 points.add(
@@ -807,6 +829,66 @@ class HealthDataRepository(
             }
         }
         return unique
+    }
+
+    // MARK: - Supabase Cloud Synchronization
+
+    suspend fun syncTelemetryToSupabase(telemetry: List<HealthTelemetryRecord>): Boolean {
+        if (currentUserId == "local_user" || telemetry.isEmpty()) return false
+        val success = remoteService.pushTelemetry(telemetry)
+        if (success) {
+            val ids = telemetry.map { it.id }
+            withContext(Dispatchers.IO) {
+                telemetryDao.markRecordsSynced(ids, System.currentTimeMillis())
+            }
+        }
+        return success
+    }
+
+    suspend fun syncVitalsToSupabase(vitals: List<VitalMetricRecord>): Boolean {
+        if (currentUserId == "local_user" || vitals.isEmpty()) return false
+        val success = remoteService.pushVitals(vitals)
+        if (success) {
+            val ids = vitals.map { it.id }
+            withContext(Dispatchers.IO) {
+                vitalsDao.markVitalsSynced(ids, System.currentTimeMillis())
+            }
+        }
+        return success
+    }
+
+    suspend fun syncUnsyncedTelemetry(): Boolean {
+        if (currentUserId == "local_user") return false
+        val unsynced = withContext(Dispatchers.IO) {
+            telemetryDao.getUnsyncedRecords()
+        }
+        if (unsynced.isEmpty()) return true
+        val records = unsynced.map { it.toRecord() }
+        val success = remoteService.pushTelemetry(records)
+        if (success) {
+            val ids = records.map { it.id }
+            withContext(Dispatchers.IO) {
+                telemetryDao.markRecordsSynced(ids, System.currentTimeMillis())
+            }
+        }
+        return success
+    }
+
+    suspend fun syncUnsyncedVitals(): Boolean {
+        if (currentUserId == "local_user") return false
+        val unsynced = withContext(Dispatchers.IO) {
+            vitalsDao.getUnsyncedVitals()
+        }
+        if (unsynced.isEmpty()) return true
+        val records = unsynced.map { it.toRecord() }
+        val success = remoteService.pushVitals(records)
+        if (success) {
+            val ids = records.map { it.id }
+            withContext(Dispatchers.IO) {
+                vitalsDao.markVitalsSynced(ids, System.currentTimeMillis())
+            }
+        }
+        return success
     }
 
     private fun getStartOfDay(timeMillis: Long): Long {

@@ -45,7 +45,22 @@ data class HealthTelemetryEntity(
     val createdAt: Long? = System.currentTimeMillis(),
 
     @ColumnInfo(name = "synced_at")
-    val syncedAt: Long? = null
+    val syncedAt: Long? = null,
+
+    @ColumnInfo(name = "external_id")
+    val externalId: String? = null,
+
+    @ColumnInfo(name = "source_id")
+    val sourceId: String? = null,
+
+    @ColumnInfo(name = "semantics")
+    val semantics: String? = null,
+
+    @ColumnInfo(name = "tz_offset_min")
+    val tzOffsetMin: Int? = null,
+
+    @ColumnInfo(name = "local_date")
+    val localDate: String? = null
 ) {
     fun toRecord(): HealthTelemetryRecord = HealthTelemetryRecord(
         id = id,
@@ -56,7 +71,12 @@ data class HealthTelemetryEntity(
         startTime = startTime,
         endTime = endTime,
         sourceDevice = sourceDevice,
-        createdAt = createdAt
+        createdAt = createdAt,
+        externalId = externalId,
+        sourceId = sourceId,
+        semantics = semantics,
+        tzOffsetMin = tzOffsetMin,
+        localDate = localDate
     )
 
     companion object {
@@ -71,7 +91,12 @@ data class HealthTelemetryEntity(
                 endTime = record.endTime,
                 sourceDevice = record.sourceDevice,
                 createdAt = record.createdAt ?: System.currentTimeMillis(),
-                syncedAt = syncedAt
+                syncedAt = syncedAt,
+                externalId = record.externalId,
+                sourceId = record.sourceId,
+                semantics = record.semantics,
+                tzOffsetMin = record.tzOffsetMin,
+                localDate = record.localDate
             )
     }
 }

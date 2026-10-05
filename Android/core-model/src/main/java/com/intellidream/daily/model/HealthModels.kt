@@ -1,7 +1,16 @@
 package com.intellidream.daily.model
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -129,6 +138,60 @@ enum class HealthMetricType(val rawKey: String, val displayName: String, val def
     }
 }
 
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+object NullableTimestampSerializer : KSerializer<Long?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("NullableTimestampSerializer", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: Long?) {
+        if (value != null) {
+            encoder.encodeString(java.time.Instant.ofEpochMilli(value).toString())
+        } else {
+            encoder.encodeNull()
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): Long? {
+        val jsonInput = decoder as? JsonDecoder
+        if (jsonInput != null) {
+            val element = jsonInput.decodeJsonElement()
+            if (element is JsonNull) return null
+            if (element is JsonPrimitive) {
+                return element.content.toLongOrNull() ?: parseIsoToEpoch(element.content)
+            }
+            return null
+        }
+        return try {
+            decoder.decodeLong()
+        } catch (_: Exception) {
+            try {
+                val str = decoder.decodeString()
+                parseIsoToEpoch(str)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    private fun parseIsoToEpoch(raw: String): Long? {
+        return try {
+            java.time.Instant.parse(raw).toEpochMilli()
+        } catch (_: Exception) {
+            try {
+                java.time.OffsetDateTime.parse(raw).toInstant().toEpochMilli()
+            } catch (_: Exception) {
+                try {
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    }
+                    sdf.parse(raw)?.time
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Supabase Raw Telemetry Record
 
 @Serializable
@@ -138,10 +201,18 @@ data class HealthTelemetryRecord(
     val type: String,
     val value: Double? = null,
     val unit: String? = null,
+    @Serializable(with = TimestampSerializer::class)
     @SerialName("start_time") val startTime: Long, // Epoch ms
+    @Serializable(with = NullableTimestampSerializer::class)
     @SerialName("end_time") val endTime: Long? = null, // Epoch ms
     @SerialName("source_device") val sourceDevice: String? = null,
-    @SerialName("created_at") val createdAt: Long? = null
+    @Serializable(with = NullableTimestampSerializer::class)
+    @SerialName("created_at") val createdAt: Long? = null,
+    @SerialName("external_id") val externalId: String? = null,
+    @SerialName("source_id") val sourceId: String? = null,
+    val semantics: String? = null,
+    @SerialName("tz_offset_min") val tzOffsetMin: Int? = null,
+    @SerialName("local_date") val localDate: String? = null
 ) {
     val normalizedType: String
         get() = type.trim().lowercase().replace("_", "").replace(" ", "")
@@ -215,8 +286,11 @@ data class VitalMetricRecord(
     val unit: String? = null,
     val date: String, // ISO date "yyyy-MM-dd"
     @SerialName("source_device") val sourceDevice: String? = null,
+    @Serializable(with = NullableTimestampSerializer::class)
     @SerialName("created_at") val createdAt: Long? = null,
+    @Serializable(with = NullableTimestampSerializer::class)
     @SerialName("updated_at") val updatedAt: Long? = null,
+    @Serializable(with = NullableTimestampSerializer::class)
     @SerialName("synced_at") val syncedAt: Long? = null
 ) {
     val metricType: HealthMetricType?
