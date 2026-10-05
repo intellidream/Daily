@@ -15,13 +15,20 @@ namespace Daily.Models.Health
         public double RemSeconds => Stages.Where(x => x.SleepCategory == "REM").Sum(x => x.DurationSeconds);
         public double LightSeconds => Stages.Where(x => x.SleepCategory == "Core").Sum(x => x.DurationSeconds);
         public double AwakeSeconds => Stages.Where(x => x.SleepCategory == "Awake").Sum(x => x.DurationSeconds);
-        public double AsleepSeconds => DeepSeconds + RemSeconds + LightSeconds;
+        private double? _asleepSeconds;
+        public double AsleepSeconds
+        {
+            get => _asleepSeconds ?? (DeepSeconds + RemSeconds + LightSeconds);
+            set => _asleepSeconds = value;
+        }
         public double TotalStagesSeconds => DeepSeconds + RemSeconds + LightSeconds + AwakeSeconds;
 
+        private double? _durationSeconds;
         public double DurationSeconds
         {
             get
             {
+                if (_durationSeconds.HasValue) return _durationSeconds.Value;
                 if (Stages.Any())
                 {
                     var sumStages = TotalStagesSeconds;
@@ -34,6 +41,7 @@ namespace Daily.Models.Health
                 }
                 return Math.Max(0, (EndTime - StartTime).TotalSeconds);
             }
+            set => _durationSeconds = value;
         }
 
         public DateTime EffectiveEndTime
@@ -58,16 +66,19 @@ namespace Daily.Models.Health
 
         public int EfficiencyPercent => DurationSeconds > 0 ? Math.Clamp((int)((AsleepSeconds / DurationSeconds) * 100), 10, 100) : 90;
 
+        private int? _sleepScore;
         public int SleepScore
         {
             get
             {
+                if (_sleepScore.HasValue) return _sleepScore.Value;
                 if (AsleepSeconds <= 0) return 0;
                 double durationScore = Math.Min((AsleepSeconds / (8.0 * 3600.0)) * 50.0, 50.0);
                 double efficiencyScore = (EfficiencyPercent / 100.0) * 30.0;
                 double qualityScore = Math.Min((RestorativePercent / 40.0) * 20.0, 20.0);
                 return Math.Clamp((int)(durationScore + efficiencyScore + qualityScore), 0, 100);
             }
+            set => _sleepScore = value;
         }
 
         public string SleepScoreQuality => SleepScore switch

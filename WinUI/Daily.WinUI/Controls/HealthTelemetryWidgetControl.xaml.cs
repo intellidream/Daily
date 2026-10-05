@@ -327,12 +327,12 @@ namespace Daily_WinUI.Controls
         private void Header_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
             if (_healthService != null) _healthService.CurrentViewType = "Sensors";
-            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthTelemetryDetailPage));
+            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Overview");
         }
 
         private void Sleep_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
-            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthTelemetryDetailPage));
+            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Sleep");
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

@@ -33,16 +33,10 @@ public sealed class GlassWidgetContainer : ContentControl
     private static readonly double MaxDirtOpacity = 0.75;
     private static readonly double MaxNoiseOpacity = 0.55;
 
+    [System.Diagnostics.Conditional("DEBUG_GLASS_VERBOSE")]
     private static void LogToFile(string message)
     {
-        try
-        {
-            var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Daily.WinUI");
-            System.IO.Directory.CreateDirectory(dir);
-            var path = System.IO.Path.Combine(dir, "debug_glass.log");
-            System.IO.File.AppendAllText(path, $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}");
-        }
-        catch { }
+        // Verbose file logging removed to eliminate per-second disk I/O on UI thread
     }
 
     public GlassWidgetContainer()

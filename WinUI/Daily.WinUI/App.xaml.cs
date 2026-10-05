@@ -313,8 +313,11 @@ public partial class App : Application
         
         // Dummy services to satisfy SyncService dependencies
         services.AddSingleton<Daily.Services.Health.INativeHealthStore, Daily.Services.Health.MockNativeHealthStore>();
-        services.AddSingleton<Microsoft.Extensions.Logging.ILogger<Daily.Services.Health.SupabaseHealthService>>(Microsoft.Extensions.Logging.Abstractions.NullLogger<Daily.Services.Health.SupabaseHealthService>.Instance);
-        services.AddSingleton<Daily.Services.Health.IHealthService, Daily.Services.Health.SupabaseHealthService>();
+        // Health Hub Service (Canonical Health & Vitals Data Layer)
+        services.AddSingleton<Microsoft.Extensions.Logging.ILogger<Daily_WinUI.Services.HealthHubService>>(Microsoft.Extensions.Logging.Abstractions.NullLogger<Daily_WinUI.Services.HealthHubService>.Instance);
+        services.AddSingleton<Daily_WinUI.Services.IHealthHubService, Daily_WinUI.Services.HealthHubService>();
+        services.AddSingleton<Daily.Services.Health.IHealthService>(sp => (Daily.Services.Health.IHealthService)sp.GetRequiredService<Daily_WinUI.Services.IHealthHubService>());
+        services.AddSingleton<Daily_WinUI.Services.HealthHubService>(sp => (Daily_WinUI.Services.HealthHubService)sp.GetRequiredService<Daily_WinUI.Services.IHealthHubService>());
 
         // Local AI Services
         services.AddSingleton<Daily_WinUI.Services.AIManager>();

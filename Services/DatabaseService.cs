@@ -70,6 +70,7 @@ namespace Daily.Services
                 
                 // Health (Vitals)
                 await _connection.CreateTableAsync<LocalVitalMetric>().ConfigureAwait(false);
+                await _connection.CreateTableAsync<Daily.Models.Health.HealthDailySummaryEntity>().ConfigureAwait(false);
 
                 // Calendar Integration
                 await _connection.CreateTableAsync<LocalCalendarAccount>().ConfigureAwait(false);
