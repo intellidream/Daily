@@ -105,5 +105,12 @@ Built and deployed `Daily.app` on `SimulaPhone` (iOS 26.2, UUID `E618B1DA-82AC-4
   - **Stress Studio with Canonical Data**: `/tmp/simulaphone_stress_studio.png` — Score 62, "Busy Monkey" animated mascot, autonomic balance bar (Sympathetic 68% / Parasympathetic 32%), driver breakdown cards, and breathwork deep-link all render cleanly.
 
 ### 4.3 Physical Device Deployment (`Schmitz`)
-- Physical device targeted: `Schmitz` (iPhone 16 Pro, iOS 26.6.2, CoreDevice UUID `00008140-000E2C863EFB001C`).
-- Compiled with Debug configuration for iOS device architecture with automatic team code signing (`7LZ9ZT2Z5B`).
+- Physical device targeted: `Schmitz` (iPhone 16 Pro, iOS 26.6.2, CoreDevice UUID `00008140-000E2C863EFB001C`, ECID `3989604767825948`).
+- Compiled with Debug configuration for iOS device architecture (`arm64-apple-ios18.0`) with automatic team code signing (`7LZ9ZT2Z5B`) and widget extensions validated.
+- Established secure CoreDevice tunnel connection over local network (`Schmitz.coredevice.local` at `192.168.3.58`).
+- Installed application bundle directly on device (`file:///private/var/containers/Bundle/Application/DE57DD28-5C3C-4976-BC77-A56853288BC4/Daily.app/`).
+- Launched application in foreground on Schmitz:
+  - Process `Daily`: PID `40360` running live.
+  - Process `DailyWidgetsExtension`: PID `40361` running live.
+- Verification confirmed: App launches cleanly and runs natively on physical hardware.
+
