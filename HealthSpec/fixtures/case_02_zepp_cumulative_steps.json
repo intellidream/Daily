@@ -1,0 +1,108 @@
+{
+  "name": "case_02_zepp_cumulative_steps",
+  "description": "Zepp OS / Amazfit cumulative daily step ingestion with hourly deltas",
+  "input": {
+    "user_id": "00000000-0000-0000-0000-000000000001",
+    "target_date": "2026-10-05",
+    "tz_offset_min": 120,
+    "telemetry": [
+      {
+        "id": "z_step1",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "steps",
+        "value": 1500,
+        "unit": "count",
+        "start_time": "2026-10-05T06:00:00Z",
+        "end_time": "2026-10-05T06:00:00Z",
+        "source_device": "Amazfit Balance",
+        "semantics": "cumulative_daily"
+      },
+      {
+        "id": "z_step2",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "steps",
+        "value": 4800,
+        "unit": "count",
+        "start_time": "2026-10-05T10:00:00Z",
+        "end_time": "2026-10-05T10:00:00Z",
+        "source_device": "Amazfit Balance",
+        "semantics": "cumulative_daily"
+      },
+      {
+        "id": "z_step3",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "steps",
+        "value": 8200,
+        "unit": "count",
+        "start_time": "2026-10-05T14:00:00Z",
+        "end_time": "2026-10-05T14:00:00Z",
+        "source_device": "Amazfit Balance",
+        "semantics": "cumulative_daily"
+      },
+      {
+        "id": "z_step4",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "steps",
+        "value": 12350,
+        "unit": "count",
+        "start_time": "2026-10-05T19:00:00Z",
+        "end_time": "2026-10-05T19:00:00Z",
+        "source_device": "Amazfit Balance",
+        "semantics": "cumulative_daily"
+      },
+      {
+        "id": "z_cal",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "active_energy",
+        "value": 580,
+        "unit": "kcal",
+        "start_time": "2026-10-05T19:00:00Z",
+        "end_time": "2026-10-05T19:00:00Z",
+        "source_device": "Amazfit Balance",
+        "semantics": "cumulative_daily"
+      },
+      {
+        "id": "z_hr1",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "heart_rate",
+        "value": 65,
+        "unit": "bpm",
+        "start_time": "2026-10-05T08:00:00Z",
+        "end_time": "2026-10-05T08:00:00Z",
+        "source_device": "Amazfit Balance"
+      },
+      {
+        "id": "z_hr2",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "heart_rate",
+        "value": 85,
+        "unit": "bpm",
+        "start_time": "2026-10-05T12:00:00Z",
+        "end_time": "2026-10-05T12:00:00Z",
+        "source_device": "Amazfit Balance"
+      },
+      {
+        "id": "z_rhr",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "resting_heart_rate",
+        "value": 59,
+        "unit": "bpm",
+        "start_time": "2026-10-05T04:00:00Z",
+        "end_time": "2026-10-05T04:00:00Z",
+        "source_device": "Amazfit Balance"
+      }
+    ]
+  },
+  "expected": {
+    "steps": 12350,
+    "active_kcal": 580,
+    "sleep_asleep_s": null,
+    "sleep_score": null,
+    "stress_avg": 48,
+    "rhr": 59,
+    "hrv_sdnn": null,
+    "primary_sleep_device": null,
+    "sleep_quality_rating": null,
+    "nap_count": 0
+  }
+}

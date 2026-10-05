@@ -1038,8 +1038,12 @@ public final class HealthDataService: ObservableObject {
         for (device, records) in grouped {
             let lower = device.lowercased()
             let source = DeviceSource.from(name: device)
-            let isWearable = (source == .appleWatch || source == .amazfit || source == .oneplus || source == .huawei || source == .oura || source == .healthKit) ||
-                             lower.contains("watch") || lower.contains("balance") || lower.contains("gt5") || lower.contains("oura") || lower.contains("health")
+            let isPhone = lower.contains("phone") || lower.contains("pixel") || lower.contains("galaxy") || lower.contains("handset")
+            let isWearable = !isPhone && (
+                source == .appleWatch || source == .amazfit || source == .oneplus || source == .huawei || source == .oura ||
+                lower.contains("watch") || lower.contains("balance") || lower.contains("gt5") || lower.contains("oura") ||
+                (lower.contains("health") && !lower.contains("phone"))
+            )
             
             let isCumulative = isCumulativeStepDevice(device: device, records: records)
             
@@ -1163,6 +1167,9 @@ public final class HealthDataService: ObservableObject {
     }
     
     private nonisolated static func isCumulativeStepDevice(device: String, records: [HealthTelemetryRecord]) -> Bool {
+        if records.contains(where: { $0.semantics == "cumulative_daily" }) { return true }
+        if records.contains(where: { $0.semantics == "interval_delta" }) { return false }
+        
         let lower = device.lowercased()
         if lower.contains("zepp") || lower.contains("amazfit") || lower.contains("balance") ||
            lower.contains("huawei") || lower.contains("harmony") || lower.contains("gt5") {
@@ -1172,7 +1179,12 @@ public final class HealthDataService: ObservableObject {
         if nonZero.count >= 2 {
             let isIncreasing = zip(nonZero, nonZero.dropFirst()).allSatisfy { $0 <= $1 }
             let hasLargeValues = nonZero.contains { $0 >= 500 }
-            if isIncreasing && hasLargeValues {
+            let hasShortIntervals = records.contains(where: { r in
+                guard let end = r.endTime else { return false }
+                let dur = end.timeIntervalSince(r.startTime)
+                return dur > 0 && dur <= 3600
+            })
+            if isIncreasing && hasLargeValues && !hasShortIntervals {
                 return true
             }
         }

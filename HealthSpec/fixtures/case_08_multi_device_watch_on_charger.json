@@ -1,0 +1,43 @@
+{
+  "name": "case_08_multi_device_watch_on_charger",
+  "description": "Multi-device step aggregation avoiding duplicate summing between phone and watch",
+  "input": {
+    "user_id": "00000000-0000-0000-0000-000000000001",
+    "target_date": "2026-10-05",
+    "tz_offset_min": 180,
+    "telemetry": [
+      {
+        "id": "md_w1",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "steps",
+        "value": 3800,
+        "unit": "count",
+        "start_time": "2026-10-05T06:00:00Z",
+        "end_time": "2026-10-05T07:00:00Z",
+        "source_device": "Apple Watch Series 10"
+      },
+      {
+        "id": "md_p1",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "type": "steps",
+        "value": 4600,
+        "unit": "count",
+        "start_time": "2026-10-05T12:00:00Z",
+        "end_time": "2026-10-05T13:00:00Z",
+        "source_device": "iPhone HealthKit"
+      }
+    ]
+  },
+  "expected": {
+    "steps": 3800,
+    "active_kcal": 159.6,
+    "sleep_asleep_s": null,
+    "sleep_score": null,
+    "stress_avg": null,
+    "rhr": null,
+    "hrv_sdnn": null,
+    "primary_sleep_device": null,
+    "sleep_quality_rating": null,
+    "nap_count": 0
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "case_06_empty_day_zero_data",
+  "description": "Empty day with no telemetry records; verifies honest missing data representation with no synthetic fallbacks",
+  "input": {
+    "user_id": "00000000-0000-0000-0000-000000000001",
+    "target_date": "2026-10-05",
+    "tz_offset_min": 180,
+    "telemetry": []
+  },
+  "expected": {
+    "steps": null,
+    "active_kcal": null,
+    "sleep_asleep_s": null,
+    "sleep_score": null,
+    "stress_avg": null,
+    "rhr": null,
+    "hrv_sdnn": null,
+    "primary_sleep_device": null,
+    "sleep_quality_rating": null,
+    "nap_count": 0
+  }
+}
