@@ -43,8 +43,16 @@ import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Watch
+import androidx.compose.ui.text.style.TextOverflow
+import com.intellidream.daily.designsystem.MonkeyMascotView
+import com.intellidream.daily.designsystem.MonkeySize
+import com.intellidream.daily.model.MonkeyMood
+import com.intellidream.daily.model.StressAnalysisResult
+import com.intellidream.daily.model.StressLevel
 import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -288,8 +296,12 @@ fun HealthMainView(
                                 latestBpm = latestBpm,
                                 hourlySteps = hourlySteps,
                                 primarySleep = primarySleep,
+                                stressAnalysis = stressAnalysis,
+                                currentStressScore = currentStressScore,
+                                currentStressLevel = currentStressLevel,
                                 currentVitals = currentVitals,
-                                onOpenSleepStudio = { repository.setActiveSubTab(HealthSubTab.SLEEP) }
+                                onOpenSleepStudio = { repository.setActiveSubTab(HealthSubTab.SLEEP) },
+                                onOpenStressStudio = { repository.setActiveSubTab(HealthSubTab.STRESS) }
                             )
 
                             HealthSubTab.SLEEP -> SleepStudioView(
@@ -575,6 +587,14 @@ private fun DeviceSelectorMenu(
         ) {
             DropdownMenuItem(
                 text = { Text("All Devices", color = Color.White) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Devices,
+                        contentDescription = null,
+                        tint = ThemeColors.accentCyan,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
                 trailingIcon = {
                     if (selectedSource == null) {
                         Icon(Icons.Rounded.Check, contentDescription = null, tint = ThemeColors.accentCyan)
@@ -591,6 +611,19 @@ private fun DeviceSelectorMenu(
             availableSources.forEach { source ->
                 DropdownMenuItem(
                     text = { Text(source.displayName, color = Color.White) },
+                    leadingIcon = {
+                        val icon = when (source) {
+                            is DeviceSource.HealthConnect -> Icons.Rounded.Favorite
+                            is DeviceSource.Manual -> Icons.Rounded.Edit
+                            else -> Icons.Rounded.Watch
+                        }
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = ThemeColors.accentCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
                     trailingIcon = {
                         if (selectedSource == source) {
                             Icon(Icons.Rounded.Check, contentDescription = null, tint = ThemeColors.accentCyan)
@@ -654,8 +687,12 @@ private fun OverviewSection(
     latestBpm: Double? = null,
     hourlySteps: List<com.intellidream.daily.model.HourlyStepBucket>,
     primarySleep: SleepSession?,
+    stressAnalysis: StressAnalysisResult?,
+    currentStressScore: Int,
+    currentStressLevel: StressLevel,
     currentVitals: Map<HealthMetricType, com.intellidream.daily.model.VitalMetricRecord>,
-    onOpenSleepStudio: () -> Unit
+    onOpenSleepStudio: () -> Unit,
+    onOpenStressStudio: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Activity Hero Dual Rings Card
@@ -679,6 +716,15 @@ private fun OverviewSection(
                 onClick = onOpenSleepStudio
             )
         }
+
+        // Stress & Autonomic Tone Preview Card (Tap opens Stress Studio)
+        StressOverviewPreviewCard(
+            analysis = stressAnalysis,
+            stressScore = currentStressScore,
+            stressLevel = currentStressLevel,
+            sourceName = currentVitals[HealthMetricType.STRESS]?.sourceDevice,
+            onClick = onOpenStressStudio
+        )
 
         // Primary Vitals Grid
         VitalsGrid(currentVitals = currentVitals)
@@ -863,6 +909,148 @@ private fun SleepOverviewPreviewCard(
                         fontWeight = FontWeight.Medium,
                         color = ThemeColors.fgMutedDark
                     )
+                }
+            }
+
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = ThemeColors.fgMutedDark,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StressOverviewPreviewCard(
+    analysis: StressAnalysisResult?,
+    stressScore: Int,
+    stressLevel: StressLevel,
+    sourceName: String?,
+    onClick: () -> Unit
+) {
+    val hasData = analysis != null || stressScore > 0
+    val levelColor = if (hasData) {
+        try {
+            Color(android.graphics.Color.parseColor(stressLevel.hexColor))
+        } catch (_: Exception) {
+            ThemeColors.accentCyan
+        }
+    } else {
+        ThemeColors.fgMutedDark
+    }
+    val mood = analysis?.monkeyMood ?: if (hasData) MonkeyMood.fromLevel(stressLevel) else MonkeyMood.ZEN
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 18.dp,
+        padding = 16.dp,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                MonkeyMascotView(
+                    mood = mood,
+                    size = MonkeySize.MINI,
+                    animated = false,
+                    modifier = Modifier.size(44.dp)
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "STRESS & AUTONOMIC BALANCE",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (hasData) levelColor else ThemeColors.fgMutedDark
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(if (hasData) levelColor else ThemeColors.fgMutedDark)
+                        )
+                        if (!sourceName.isNullOrEmpty()) {
+                            Text(
+                                text = "• $sourceName",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = ThemeColors.fgMutedDark
+                            )
+                        }
+                    }
+
+                    if (hasData) {
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "$stressScore",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "• ${stressLevel.displayName}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = levelColor
+                            )
+                            Text(
+                                text = "(${mood.displayName})",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = ThemeColors.fgMutedDark
+                            )
+                        }
+                        Text(
+                            text = mood.adviceQuote,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.75f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "--",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = "No Telemetry",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ThemeColors.fgMutedDark
+                            )
+                        }
+                        Text(
+                            text = "Wear your smartwatch to track autonomic stress and HRV",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = ThemeColors.fgMutedDark,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 

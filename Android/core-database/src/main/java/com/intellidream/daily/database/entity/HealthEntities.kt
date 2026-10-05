@@ -170,3 +170,38 @@ data class VitalMetricEntity(
             )
     }
 }
+
+@Entity(
+    tableName = "health_daily_summary_cache",
+    indices = [
+        Index(value = ["user_id", "date_key"], unique = true),
+        Index(value = ["date_key"])
+    ]
+)
+data class HealthDailySummaryEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "id")
+    val id: String,
+
+    @ColumnInfo(name = "user_id")
+    val userId: String,
+
+    @ColumnInfo(name = "date_key")
+    val dateKey: String, // "yyyy-MM-dd"
+
+    @ColumnInfo(name = "summary_version")
+    val summaryVersion: Int = 1,
+
+    @ColumnInfo(name = "payload_json")
+    val payloadJson: String,
+
+    @ColumnInfo(name = "computed_at")
+    val computedAt: Long? = null,
+
+    @ColumnInfo(name = "cached_at")
+    val cachedAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "source_device_primary")
+    val sourceDevicePrimary: String? = null
+)
+

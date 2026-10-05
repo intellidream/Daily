@@ -1,6 +1,8 @@
 package com.intellidream.daily.model
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNames
 import java.util.Locale
 import java.util.UUID
 
@@ -171,6 +173,7 @@ enum class BreathingProtocol(
 /**
  * Hourly point tracking stress fluctuation throughout the 24-hour cycle.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class IntradayStressPoint(
     val id: String = UUID.randomUUID().toString(),
@@ -178,8 +181,11 @@ data class IntradayStressPoint(
     val hour: Int,
     val score: Int,
     val level: StressLevel,
+    @JsonNames("hrv_ms", "hrvMs")
     val hrvMs: Double? = null,
+    @JsonNames("heart_rate_bpm", "heartRateBpm")
     val heartRateBpm: Double? = null,
+    @JsonNames("is_sedentary", "isSedentary")
     val isSedentary: Boolean = true
 ) {
     val hourFormatted: String

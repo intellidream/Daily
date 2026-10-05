@@ -5,11 +5,13 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.intellidream.daily.database.dao.HabitLogDao
+import com.intellidream.daily.database.dao.HealthDailySummaryDao
 import com.intellidream.daily.database.dao.HealthTelemetryDao
 import com.intellidream.daily.database.dao.SmartLedgerDao
 import com.intellidream.daily.database.dao.TagdosDao
 import com.intellidream.daily.database.dao.VitalMetricDao
 import com.intellidream.daily.database.entity.HabitLogEntity
+import com.intellidream.daily.database.entity.HealthDailySummaryEntity
 import com.intellidream.daily.database.entity.HealthTelemetryEntity
 import com.intellidream.daily.database.entity.SmartLedgerEntity
 import com.intellidream.daily.database.dao.NewsDao
@@ -25,6 +27,7 @@ import com.intellidream.daily.database.entity.VitalMetricEntity
         HabitLogEntity::class,
         HealthTelemetryEntity::class,
         VitalMetricEntity::class,
+        HealthDailySummaryEntity::class,
         SmartLedgerEntity::class,
         TagdoStreamEntity::class,
         TagdoQuickNoteEntity::class,
@@ -32,7 +35,7 @@ import com.intellidream.daily.database.entity.VitalMetricEntity
         SavedArticleEntity::class,
         CachedFeedArticleEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class DailyDatabase : RoomDatabase() {
@@ -40,6 +43,7 @@ abstract class DailyDatabase : RoomDatabase() {
     abstract fun habitLogDao(): HabitLogDao
     abstract fun healthTelemetryDao(): HealthTelemetryDao
     abstract fun vitalMetricDao(): VitalMetricDao
+    abstract fun healthDailySummaryDao(): HealthDailySummaryDao
     abstract fun smartLedgerDao(): SmartLedgerDao
     abstract fun tagdosDao(): TagdosDao
     abstract fun newsDao(): NewsDao

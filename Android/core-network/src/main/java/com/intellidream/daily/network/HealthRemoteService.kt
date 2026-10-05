@@ -1,9 +1,12 @@
 package com.intellidream.daily.network
 
+import com.intellidream.daily.model.DailyHealthSummaryPayload
 import com.intellidream.daily.model.DeviceSource
+import com.intellidream.daily.model.HealthDailySummaryRecord
 import com.intellidream.daily.model.HealthTelemetryRecord
 import com.intellidream.daily.model.VitalMetricRecord
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -98,4 +101,70 @@ class HealthRemoteService(
             emptyList()
         }
     }
+
+    suspend fun fetchDailySummary(
+        userId: String,
+        date: String
+    ): DailyHealthSummaryPayload? = withContext(Dispatchers.IO) {
+        try {
+            val response = clientManager.client.postgrest["health_daily_summary"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                        eq("local_date", date)
+                    }
+                    limit(1)
+                }
+                .decodeSingleOrNull<HealthDailySummaryRecord>()
+            response?.summary
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun fetchDailySummariesBetween(
+        userId: String,
+        startDate: String,
+        endDate: String
+    ): List<HealthDailySummaryRecord> = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_daily_summary"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                        gte("local_date", startDate)
+                        lte("local_date", endDate)
+                    }
+                    order("local_date", Order.ASCENDING)
+                }
+                .decodeList<HealthDailySummaryRecord>()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun triggerCanonicalEngine(date: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val url = "${SupabaseClientManager.SUPABASE_URL}/functions/v1/health-engine"
+            val conn = (java.net.URI.create(url).toURL().openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 5000
+                readTimeout = 5000
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("apikey", SupabaseClientManager.SUPABASE_ANON_KEY)
+                setRequestProperty("Authorization", "Bearer ${SupabaseClientManager.SUPABASE_ANON_KEY}")
+                doOutput = true
+            }
+            val body = """{"date":"$date","autoProcessDirty":true}"""
+            conn.outputStream.use { os ->
+                os.write(body.toByteArray(Charsets.UTF_8))
+            }
+            val code = conn.responseCode
+            conn.disconnect()
+            code in 200..299
+        } catch (_: Exception) {
+            false
+        }
+    }
 }
+

@@ -2,10 +2,13 @@ package com.intellidream.daily.health
 
 import android.content.Context
 import com.intellidream.daily.database.DailyDatabase
+import com.intellidream.daily.database.dao.HealthDailySummaryDao
 import com.intellidream.daily.database.dao.HealthTelemetryDao
 import com.intellidream.daily.database.dao.VitalMetricDao
+import com.intellidream.daily.database.entity.HealthDailySummaryEntity
 import com.intellidream.daily.database.entity.HealthTelemetryEntity
 import com.intellidream.daily.database.entity.VitalMetricEntity
+import com.intellidream.daily.model.DailyHealthSummaryPayload
 import com.intellidream.daily.model.DailyMetricTrendPoint
 import com.intellidream.daily.model.DeviceSource
 import com.intellidream.daily.model.HealthMetricType
@@ -24,6 +27,10 @@ import com.intellidream.daily.model.StressAnalysisResult
 import com.intellidream.daily.model.StressLevel
 import com.intellidream.daily.model.VitalMetricRecord
 import com.intellidream.daily.network.HealthRemoteService
+import com.intellidream.daily.network.SupabaseClientManager
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,10 +39,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -61,6 +72,7 @@ class HealthDataRepository(
     private val context: Context,
     private val telemetryDao: HealthTelemetryDao,
     private val vitalsDao: VitalMetricDao,
+    private val summaryDao: HealthDailySummaryDao = DailyDatabase.getDatabase(context).healthDailySummaryDao(),
     private val remoteService: HealthRemoteService = HealthRemoteService(),
     val healthConnectManager: HealthConnectManager = HealthConnectManager(context),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -168,6 +180,14 @@ class HealthDataRepository(
     private val _historicalTrends = MutableStateFlow<Map<HealthMetricType, List<DailyMetricTrendPoint>>>(emptyMap())
     val historicalTrends: StateFlow<Map<HealthMetricType, List<DailyMetricTrendPoint>>> = _historicalTrends.asStateFlow()
 
+    private val _canonicalSummary = MutableStateFlow<DailyHealthSummaryPayload?>(null)
+    val canonicalSummary: StateFlow<DailyHealthSummaryPayload?> = _canonicalSummary.asStateFlow()
+
+    private val jsonSerializer = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
     // In-memory cache
     private var cachedTelemetry: List<HealthTelemetryRecord> = emptyList()
     private var cachedVitals: List<VitalMetricRecord> = emptyList()
@@ -176,6 +196,24 @@ class HealthDataRepository(
 
     init {
         loadDataForSelectedDate(forceRefresh = true)
+        setupRealtimeSubscription()
+    }
+
+    private fun setupRealtimeSubscription() {
+        if (currentUserId == "local_user") return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val channel = SupabaseClientManager.client.channel("health_daily_summary_sub")
+                channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    table = "health_daily_summary"
+                }.collect {
+                    android.util.Log.d("HealthDataRepository", "Realtime update received for health_daily_summary")
+                    loadDataForSelectedDate(forceRefresh = true)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("HealthDataRepository", "Realtime subscription exception", e)
+            }
+        }
     }
 
     // MARK: - Navigation Actions
@@ -242,6 +280,61 @@ class HealthDataRepository(
                 val targetDate = Date(targetEpochMs)
                 val dateKey = isoDateFormatter.format(targetDate)
 
+                // 0. Check in-memory summary
+                if (!forceRefresh && _canonicalSummary.value?.date == dateKey) {
+                    _isLoading.value = false
+                    return@launch
+                }
+
+                // 1. Check Room local database cache for canonical summary (<10ms)
+                val cachedSummaryEntity = withContext(Dispatchers.IO) {
+                    summaryDao.getSummary(currentUserId, dateKey)
+                }
+                if (cachedSummaryEntity != null && cachedSummaryEntity.summaryVersion == 1) {
+                    try {
+                        val payload = jsonSerializer.decodeFromString<DailyHealthSummaryPayload>(cachedSummaryEntity.payloadJson)
+                        applyCanonicalSummary(payload, dateKey)
+                        _isLoading.value = false
+                        if (!forceRefresh) {
+                            loadHistoricalTrends(targetDate)
+                            return@launch
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("HealthDataRepository", "Failed to deserialize cached summary", e)
+                    }
+                }
+
+                // 2. Fetch from Supabase Remote health_daily_summary
+                val remoteSummary = withTimeoutOrNull(2500L) {
+                    remoteService.fetchDailySummary(currentUserId, dateKey)
+                }
+                if (remoteSummary != null) {
+                    withContext(Dispatchers.IO) {
+                        val entity = HealthDailySummaryEntity(
+                            id = UUID.randomUUID().toString(),
+                            userId = currentUserId,
+                            dateKey = dateKey,
+                            summaryVersion = 1,
+                            payloadJson = jsonSerializer.encodeToString(remoteSummary),
+                            computedAt = System.currentTimeMillis(),
+                            sourceDevicePrimary = remoteSummary.sources.firstOrNull()
+                        )
+                        summaryDao.upsertSummary(entity)
+                    }
+                    applyCanonicalSummary(remoteSummary, dateKey)
+                    loadHistoricalTrends(targetDate)
+                    _isLoading.value = false
+                    return@launch
+                } else {
+                    // Summary uncomputed remotely: trigger Edge Function in background
+                    if (currentUserId != "local_user") {
+                        scope.launch(Dispatchers.IO) {
+                            remoteService.triggerCanonicalEngine(dateKey)
+                        }
+                    }
+                }
+
+                // 3. Fallback to on-device provisional calculation (offline resilience)
                 // Window: D-1 18:00 to D 24:00
                 val cal = Calendar.getInstance().apply {
                     timeInMillis = targetEpochMs
@@ -253,7 +346,7 @@ class HealthDataRepository(
                 val telemetry = mutableListOf<HealthTelemetryRecord>()
                 val vitals = mutableListOf<VitalMetricRecord>()
 
-                // 1. Check Room local database cache first
+                // Check Room local database cache for raw samples
                 val localEntities = withContext(Dispatchers.IO) {
                     telemetryDao.getTelemetryBetweenSync(currentUserId, windowStart, windowEnd)
                 }
@@ -264,7 +357,6 @@ class HealthDataRepository(
                 telemetry.addAll(localEntities.map { it.toRecord() })
                 vitals.addAll(localVitalsEntities.map { it.toRecord() })
 
-                // Pure real-data telemetry and vitals (honest empty state when unpopulated)
                 cachedTelemetry = deduplicateTelemetry(telemetry)
                 cachedVitals = vitals
 
@@ -272,7 +364,7 @@ class HealthDataRepository(
                 processDataForCurrentDate()
                 loadHistoricalTrends(targetDate)
 
-                // 2. Fetch on-device Health Connect (if available and permissions granted)
+                // Fetch on-device Health Connect
                 if (healthConnectManager.isAvailable && healthConnectManager.hasAnyPermissions()) {
                     val hcTelemetry = healthConnectManager.fetchTelemetryForDate(targetDate, currentUserId)
                     if (hcTelemetry.isNotEmpty()) {
@@ -292,11 +384,11 @@ class HealthDataRepository(
                     }
                 }
 
-                // 3. Fetch from Supabase Remote (guarded with timeout)
-                val remoteTelemetry = kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                // Fetch from Supabase Remote raw telemetry & vitals
+                val remoteTelemetry = withTimeoutOrNull(1500L) {
                     remoteService.fetchTelemetryBetween(currentUserId, windowStart, windowEnd)
                 } ?: emptyList()
-                val remoteVitals = kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                val remoteVitals = withTimeoutOrNull(1500L) {
                     remoteService.fetchVitalsForDate(currentUserId, dateKey)
                 } ?: emptyList()
 
@@ -326,6 +418,66 @@ class HealthDataRepository(
                 _isLoading.value = false
             }
         }
+    }
+
+    private fun applyCanonicalSummary(payload: DailyHealthSummaryPayload, dateKey: String) {
+        _canonicalSummary.value = payload
+
+        // Sleep
+        _primarySleepSession.value = payload.sleep?.primarySession
+        _daytimeNaps.value = payload.sleep?.naps ?: emptyList()
+        _sleepRecoveryVerdict.value = payload.sleep?.guidance?.verdict?.toDomain()
+        _sleepActionableTips.value = payload.sleep?.guidance?.tips?.map { it.toDomain() } ?: emptyList()
+        _sleepAIContext.value = payload.sleep?.guidance?.aiContext?.toDomain()
+
+        // Activity
+        _totalStepsToday.value = payload.activity?.totalSteps ?: 0
+        _totalActiveCalories.value = payload.activity?.activeCaloriesKcal ?: 0.0
+        _hourlySteps.value = payload.activity?.hourlySteps ?: emptyList()
+
+        // Cardiovascular
+        _intradayHeartRate.value = payload.cardiovascular?.intradayHeartRate ?: emptyList()
+        _restingBpm.value = payload.cardiovascular?.restingHeartRateBpm ?: 0.0
+        _averageBpm.value = payload.cardiovascular?.averageHeartRateBpm ?: 0.0
+        _maxBpm.value = payload.cardiovascular?.maxHeartRateBpm ?: 0.0
+        _minBpm.value = payload.cardiovascular?.minHeartRateBpm ?: 0.0
+        _heartRateZones.value = payload.cardiovascular?.heartRateZones?.toMap() ?: emptyMap()
+        _latestBpm.value = payload.cardiovascular?.intradayHeartRate?.lastOrNull()?.bpm
+
+        // Stress
+        val stress = payload.stress
+        if (stress != null) {
+            _currentStressScore.value = stress.currentScore
+            _currentStressLevel.value = stress.toDomainLevel()
+            _stressAnalysis.value = stress.toDomainAnalysis()
+            _intradayStress.value = stress.intradayStress
+        } else {
+            _currentStressScore.value = 0
+            _currentStressLevel.value = StressLevel.CALM
+            _stressAnalysis.value = null
+            _intradayStress.value = emptyList()
+        }
+
+        // Vitals Map
+        val vitalsMap = mutableMapOf<HealthMetricType, VitalMetricRecord>()
+        for ((metricKey, item) in payload.vitals) {
+            val type = HealthMetricType.from(metricKey) ?: continue
+            vitalsMap[type] = VitalMetricRecord(
+                id = UUID.randomUUID().toString(),
+                userId = currentUserId,
+                type = metricKey,
+                value = item.value,
+                unit = item.unit,
+                date = dateKey,
+                sourceDevice = item.sourceDevice
+            )
+        }
+        _currentVitals.value = vitalsMap
+
+        // Update available devices & sources
+        val sourcesList = payload.sources.map { DeviceSource.from(it) }.distinctBy { it.displayName }
+        _availableSources.value = sourcesList.sortedBy { it.displayName }
+        _availableDevices.value = payload.sources.sorted()
     }
 
     private fun updateDevicesAndSources() {
@@ -593,18 +745,111 @@ class HealthDataRepository(
         )
 
         val selectedMidnight = getStartOfDay(selectedDate.time)
+        val selectedDateKey = isoDateFormatter.format(selectedDate)
+        cal.timeInMillis = selectedMidnight
+        cal.add(Calendar.DAY_OF_YEAR, -6)
+        val minDateKey = isoDateFormatter.format(cal.time)
 
+        val historicalVitalsByDate = mutableMapOf<String, MutableMap<HealthMetricType, Double>>()
+
+        // 1. Read cached canonical summaries from Room
+        val cachedSummaries = withContext(Dispatchers.IO) {
+            summaryDao.getSummariesInRange(currentUserId, minDateKey, selectedDateKey)
+        }
+        for (summaryEntity in cachedSummaries) {
+            val dKey = summaryEntity.dateKey
+            try {
+                val payload = jsonSerializer.decodeFromString<DailyHealthSummaryPayload>(summaryEntity.payloadJson)
+                payload.activity?.totalSteps?.takeIf { it > 0 }?.let {
+                    historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }[HealthMetricType.STEPS] = it.toDouble()
+                }
+                payload.sleep?.primarySession?.asleepSeconds?.takeIf { it > 0 }?.let {
+                    historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }[HealthMetricType.SLEEP_DURATION] = it / 60.0
+                }
+                payload.cardiovascular?.restingHeartRateBpm?.takeIf { it > 0 }?.let {
+                    historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }[HealthMetricType.HEART_RATE] = it
+                }
+                payload.stress?.currentScore?.takeIf { it > 0 }?.let {
+                    historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }[HealthMetricType.STRESS] = it.toDouble()
+                }
+                payload.stress?.biometricDrivers?.currentHrvMs?.takeIf { it > 0 }?.let {
+                    historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }[HealthMetricType.HRV_SDNN] = it
+                }
+                payload.activity?.activeCaloriesKcal?.takeIf { it > 0 }?.let {
+                    historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }[HealthMetricType.ACTIVE_ENERGY] = it
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 2. Query Room vitals for any missing historical metrics
+        for (dayOffset in 0..6) {
+            cal.timeInMillis = selectedMidnight
+            cal.add(Calendar.DAY_OF_YEAR, -dayOffset)
+            val dKey = isoDateFormatter.format(cal.time)
+            val historyVitals = withContext(Dispatchers.IO) {
+                vitalsDao.getVitalsForDateSync(currentUserId, dKey)
+            }
+            for (v in historyVitals) {
+                val t = HealthMetricType.from(v.type)
+                if (t != null && v.value > 0.0) {
+                    val map = historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }
+                    if (!map.containsKey(t)) {
+                        map[t] = v.value
+                    }
+                }
+            }
+        }
+
+        // 3. For authenticated users, fetch remote canonical summaries from Supabase
+        if (currentUserId != "local_user") {
+            try {
+                val remoteSummaries = remoteService.fetchDailySummariesBetween(currentUserId, minDateKey, selectedDateKey)
+                for (record in remoteSummaries) {
+                    val dKey = record.localDate
+                    val map = historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }
+                    record.steps?.takeIf { it > 0 }?.let { map[HealthMetricType.STEPS] = it.toDouble() }
+                    record.sleepAsleepS?.takeIf { it > 0 }?.let { map[HealthMetricType.SLEEP_DURATION] = it.toDouble() / 60.0 }
+                    record.rhr?.takeIf { it > 0 }?.let { map[HealthMetricType.HEART_RATE] = it }
+                    record.stressAvg?.takeIf { it > 0 }?.let { map[HealthMetricType.STRESS] = it.toDouble() }
+                    record.hrvSdnn?.takeIf { it > 0 }?.let { map[HealthMetricType.HRV_SDNN] = it }
+                    record.activeKcal?.takeIf { it > 0 }?.let { map[HealthMetricType.ACTIVE_ENERGY] = it }
+                    record.weight?.takeIf { it > 0 }?.let { map[HealthMetricType.WEIGHT] = it }
+                    record.spo2?.takeIf { it > 0 }?.let { map[HealthMetricType.OXYGEN_SATURATION] = it }
+
+                    // Also cache into Room if payload exists
+                    val payload = record.summary
+                    if (payload != null) {
+                        val payloadJson = jsonSerializer.encodeToString(payload)
+                        withContext(Dispatchers.IO) {
+                            summaryDao.upsertSummary(
+                                HealthDailySummaryEntity(
+                                    id = record.id.ifEmpty { "${currentUserId}_$dKey" },
+                                    userId = currentUserId,
+                                    dateKey = dKey,
+                                    summaryVersion = 1,
+                                    payloadJson = payloadJson,
+                                    computedAt = System.currentTimeMillis()
+                                )
+                            )
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 4. Assemble final trend points with honest data (zero synthetic fallback)
         for (m in metrics) {
             val points = mutableListOf<DailyMetricTrendPoint>()
             for (dayOffset in (0..6).reversed()) {
                 cal.timeInMillis = selectedMidnight
                 cal.add(Calendar.DAY_OF_YEAR, -dayOffset)
                 val dayTime = cal.timeInMillis
+                val dateStr = isoDateFormatter.format(Date(dayTime))
                 val isComplete = dayOffset > 0
                 val target = defaultTarget(m)
 
                 val valNum = if (dayOffset == 0) {
-                    when (m) {
+                    historicalVitalsByDate[dateStr]?.get(m) ?: when (m) {
                         HealthMetricType.STEPS -> _totalStepsToday.value.toDouble()
                         HealthMetricType.SLEEP_DURATION -> (_primarySleepSession.value?.asleepSeconds ?: 0.0) / 60.0
                         HealthMetricType.HEART_RATE -> if (_averageBpm.value > 0) _averageBpm.value else _restingBpm.value
@@ -613,17 +858,7 @@ class HealthDataRepository(
                         else -> _currentVitals.value[m]?.value ?: 0.0
                     }
                 } else {
-                    val historyDateKey = isoDateFormatter.format(Date(dayTime))
-                    val historyVitals = withContext(Dispatchers.IO) {
-                        vitalsDao.getVitalsForDateSync(currentUserId, historyDateKey)
-                    }
-                    val found = historyVitals.firstOrNull {
-                        it.type.equals(m.name, ignoreCase = true) ||
-                        it.type.equals(m.rawKey, ignoreCase = true) ||
-                        HealthMetricType.from(it.type) == m
-                    }
-                    val dbVal = found?.value ?: 0.0
-                    if (dbVal > 0.0) dbVal else 0.0
+                    historicalVitalsByDate[dateStr]?.get(m) ?: 0.0
                 }
 
                 points.add(
@@ -631,7 +866,7 @@ class HealthDataRepository(
                         date = dayTime,
                         value = valNum,
                         target = target,
-                        isCompleteDay = isComplete && valNum > 0
+                        isCompleteDay = isComplete && valNum > 0.0
                     )
                 )
             }
@@ -639,20 +874,6 @@ class HealthDataRepository(
         }
 
         _historicalTrends.value = trends
-    }
-
-    private fun generateHistoricalValue(metric: HealthMetricType, dayOffset: Int, target: Double): Double {
-        val baseSeed = ((dayOffset * 17) % 10) / 10.0
-        return when (metric) {
-            HealthMetricType.STEPS -> 8_500.0 + (baseSeed * 3_500).toInt()
-            HealthMetricType.SLEEP_DURATION -> 410.0 + (baseSeed * 85).toInt()
-            HealthMetricType.HEART_RATE -> 68.0 + (baseSeed * 8).toInt()
-            HealthMetricType.HRV_SDNN -> 45.0 + (baseSeed * 22).toInt()
-            HealthMetricType.ACTIVE_ENERGY -> 480.0 + (baseSeed * 220).toInt()
-            HealthMetricType.WEIGHT -> 78.2 + (baseSeed * 0.8)
-            HealthMetricType.STRESS -> 32.0 + (baseSeed * 24).toInt()
-            else -> 0.0
-        }
     }
 
     private fun defaultTarget(metric: HealthMetricType): Double = when (metric) {
@@ -847,7 +1068,18 @@ class HealthDataRepository(
 
     suspend fun syncVitalsToSupabase(vitals: List<VitalMetricRecord>): Boolean {
         if (currentUserId == "local_user" || vitals.isEmpty()) return false
-        val success = remoteService.pushVitals(vitals)
+        val realVitals = vitals.filter { v ->
+            if (v.userId == "stress-engine" || v.userId == "computed" || v.userId == "canonical" || v.userId == "habits") {
+                return@filter false
+            }
+            val dev = v.sourceDevice
+            if (dev != null && DeviceSource.from(dev).isVirtualEngine) {
+                return@filter false
+            }
+            true
+        }
+        if (realVitals.isEmpty()) return true
+        val success = remoteService.pushVitals(realVitals)
         if (success) {
             val ids = vitals.map { it.id }
             withContext(Dispatchers.IO) {
@@ -881,7 +1113,24 @@ class HealthDataRepository(
         }
         if (unsynced.isEmpty()) return true
         val records = unsynced.map { it.toRecord() }
-        val success = remoteService.pushVitals(records)
+        val realVitals = records.filter { v ->
+            if (v.userId == "stress-engine" || v.userId == "computed" || v.userId == "canonical" || v.userId == "habits") {
+                return@filter false
+            }
+            val dev = v.sourceDevice
+            if (dev != null && DeviceSource.from(dev).isVirtualEngine) {
+                return@filter false
+            }
+            true
+        }
+        if (realVitals.isEmpty()) {
+            val ids = records.map { it.id }
+            withContext(Dispatchers.IO) {
+                vitalsDao.markVitalsSynced(ids, System.currentTimeMillis())
+            }
+            return true
+        }
+        val success = remoteService.pushVitals(realVitals)
         if (success) {
             val ids = records.map { it.id }
             withContext(Dispatchers.IO) {

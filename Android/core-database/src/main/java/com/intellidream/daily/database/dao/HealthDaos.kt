@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import com.intellidream.daily.database.entity.HealthDailySummaryEntity
 import com.intellidream.daily.database.entity.HealthTelemetryEntity
 import com.intellidream.daily.database.entity.VitalMetricEntity
 import kotlinx.coroutines.flow.Flow
@@ -60,3 +61,29 @@ interface VitalMetricDao {
     @Query("UPDATE vitals SET synced_at = :syncedAt WHERE id IN (:ids)")
     suspend fun markVitalsSynced(ids: List<String>, syncedAt: Long)
 }
+
+@Dao
+interface HealthDailySummaryDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSummary(summary: HealthDailySummaryEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSummaries(summaries: List<HealthDailySummaryEntity>)
+
+    @Query("SELECT * FROM health_daily_summary_cache WHERE user_id = :userId AND date_key = :dateKey LIMIT 1")
+    fun getSummaryFlow(userId: String, dateKey: String): Flow<HealthDailySummaryEntity?>
+
+    @Query("SELECT * FROM health_daily_summary_cache WHERE user_id = :userId AND date_key = :dateKey LIMIT 1")
+    suspend fun getSummary(userId: String, dateKey: String): HealthDailySummaryEntity?
+
+    @Query("SELECT * FROM health_daily_summary_cache WHERE user_id = :userId AND date_key >= :startDate AND date_key <= :endDate ORDER BY date_key ASC")
+    suspend fun getSummariesInRange(userId: String, startDate: String, endDate: String): List<HealthDailySummaryEntity>
+
+    @Query("SELECT * FROM health_daily_summary_cache WHERE user_id = :userId AND date_key >= :startDate AND date_key <= :endDate ORDER BY date_key ASC")
+    fun getSummariesInRangeFlow(userId: String, startDate: String, endDate: String): Flow<List<HealthDailySummaryEntity>>
+
+    @Query("DELETE FROM health_daily_summary_cache WHERE cached_at < :cutoffTime")
+    suspend fun deleteOldCache(cutoffTime: Long)
+}
+

@@ -25,10 +25,10 @@ kotlin {
 
 dependencies {
     implementation(project(":core-model"))
-    implementation(libs.supabase.postgrest)
-    implementation(libs.supabase.auth)
-    implementation(libs.supabase.realtime)
-    implementation(libs.supabase.functions)
+    api(libs.supabase.postgrest)
+    api(libs.supabase.auth)
+    api(libs.supabase.realtime)
+    api(libs.supabase.functions)
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)

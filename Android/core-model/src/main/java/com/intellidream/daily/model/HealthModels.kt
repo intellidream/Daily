@@ -1,8 +1,10 @@
 package com.intellidream.daily.model
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNames
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -308,27 +310,39 @@ enum class SleepStageType(val rawValue: String, val hexColor: String, val sortOr
     @SerialName("Unknown") UNKNOWN("Unknown", "#78909C", 4) // Muted Slate
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SleepStageRecord(
     val id: String = UUID.randomUUID().toString(),
+    @JsonNames("stage_type", "stageType")
     val stageType: SleepStageType,
+    @JsonNames("start_time", "startTime")
     val startTime: Long, // Epoch ms
+    @JsonNames("end_time", "endTime")
     val endTime: Long,   // Epoch ms
+    @JsonNames("duration_seconds", "durationSeconds")
     val durationSeconds: Double = max(0.0, (endTime - startTime) / 1000.0),
+    @JsonNames("source_device", "sourceDevice")
     val sourceDevice: String? = null
 ) {
     val durationMinutes: Double
         get() = durationSeconds / 60.0
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SleepSession(
     val id: String = UUID.randomUUID().toString(),
+    @JsonNames("start_time", "startTime")
     val startTime: Long,
+    @JsonNames("end_time", "endTime")
     val endTime: Long,
+    @JsonNames("is_nap", "isNap")
     val isNap: Boolean = false,
     val stages: List<SleepStageRecord> = emptyList(),
+    @JsonNames("source_device", "sourceDevice")
     val sourceDevice: String = "Unknown",
+    @JsonNames("has_granular_hypnogram", "hasGranularHypnogram")
     val hasGranularHypnogram: Boolean = false
 ) {
     val deepSeconds: Double
@@ -494,12 +508,17 @@ data class SleepSession(
     }
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class NapSession(
     val id: String = UUID.randomUUID().toString(),
+    @JsonNames("start_time", "startTime")
     val startTime: Long,
+    @JsonNames("end_time", "endTime")
     val endTime: Long,
+    @JsonNames("duration_seconds", "durationSeconds")
     val durationSeconds: Double = max(0.0, (endTime - startTime) / 1000.0),
+    @JsonNames("source_device", "sourceDevice")
     val sourceDevice: String = "Unknown"
 ) {
     val formattedDuration: String
@@ -531,12 +550,14 @@ enum class HeartRateZone(val displayName: String, val bpmRangeText: String, val 
     }
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class IntradayHeartRatePoint(
     val id: String = UUID.randomUUID().toString(),
     val timestamp: Long,
     val bpm: Double,
     val zone: HeartRateZone = HeartRateZone.zoneFor(bpm),
+    @JsonNames("source_device", "sourceDevice")
     val sourceDevice: String? = null
 )
 
