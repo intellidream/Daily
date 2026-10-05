@@ -69,14 +69,15 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         val smokesRingColorInt = WidgetVisualGraphics.getSmokeRingColor(smokesCount, smokesBase)
 
         val sleepSession = app?.healthRepository?.primarySleepSession?.value
-        val sleepScore = sleepSession?.sleepScore ?: 88
-        val totalMinutes = if (sleepSession != null && sleepSession.asleepSeconds > 0) (sleepSession.asleepSeconds / 60.0).roundToInt() else (7 * 60 + 42)
-        val totalAsleep = "${totalMinutes / 60}h ${totalMinutes % 60}m"
-        val sleepEff = sleepSession?.efficiencyPercent ?: 93
-        val deepSec = sleepSession?.deepSeconds?.takeIf { it > 0 } ?: 5400.0
-        val remSec = sleepSession?.remSeconds?.takeIf { it > 0 } ?: 6120.0
-        val deepFormatted = "${(deepSec / 3600).toInt()}h ${((deepSec % 3600) / 60).toInt()}m"
-        val remFormatted = "${(remSec / 3600).toInt()}h ${((remSec % 3600) / 60).toInt()}m"
+        val hasSleepData = sleepSession != null && sleepSession.asleepSeconds > 0
+        val sleepScore = if (hasSleepData) (sleepSession?.sleepScore ?: 0) else 0
+        val totalMinutes = if (hasSleepData) (sleepSession!!.asleepSeconds / 60.0).roundToInt() else 0
+        val totalAsleep = if (hasSleepData) "${totalMinutes / 60}h ${totalMinutes % 60}m" else "--"
+        val sleepEff = if (hasSleepData) sleepSession!!.efficiencyPercent else 0
+        val deepSec = if (hasSleepData) (sleepSession?.deepSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
+        val remSec = if (hasSleepData) (sleepSession?.remSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
+        val deepFormatted = if (hasSleepData && deepSec > 0) "${(deepSec / 3600).toInt()}h ${((deepSec % 3600) / 60).toInt()}m" else "--"
+        val remFormatted = if (hasSleepData && remSec > 0) "${(remSec / 3600).toInt()}h ${((remSec % 3600) / 60).toInt()}m" else "--"
 
         val parsedMoney = app?.smartLedgerRepository?.parsedLedger?.value
         val netWorthLei = parsedMoney?.netWorth ?: 127156.47
@@ -84,15 +85,23 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         val formattedNetWorth = WidgetVisualGraphics.formatCompactNumber(netWorthLei) + " Lei"
         val formattedNetWorthEUR = "~" + WidgetVisualGraphics.formatCompactIntegerEUR(netWorthEUR)
 
-        val stressScore = app?.healthRepository?.currentStressScore?.value ?: 28
-        val stressLevelObj = app?.healthRepository?.currentStressLevel?.value
-        val stressLevel = stressLevelObj?.displayName ?: "Calm"
+        val hasStressData = app?.healthRepository?.stressAnalysis?.value != null || (app?.healthRepository?.currentStressScore?.value != null && app?.healthRepository?.currentStressScore?.value!! > 0)
+        val stressScore = if (hasStressData) (app?.healthRepository?.currentStressScore?.value ?: 0) else 0
+        val stressLevelObj = if (hasStressData) app?.healthRepository?.currentStressLevel?.value else null
+        val stressLevel = when {
+            !hasStressData -> "--"
+            stressLevelObj != null -> stressLevelObj.displayName
+            stressScore > 65 -> "High"
+            stressScore > 35 -> "Moderate"
+            else -> "Calm"
+        }
         val stressEmoji = when (stressLevel) {
             "High" -> "⚡️"
             "Moderate" -> "🐵"
+            "Calm" -> "🧘"
             else -> "🧘"
         }
-        val stressColor = Color(android.graphics.Color.parseColor(stressLevelObj?.hexColor ?: "#10B981"))
+        val stressColor = Color(android.graphics.Color.parseColor(stressLevelObj?.hexColor ?: if (hasStressData) "#10B981" else "#6B7280"))
 
         val firstActivePill = app?.tagdosRepository?.streams?.value
             ?.flatMap { it.activePills }

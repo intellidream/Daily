@@ -41,6 +41,7 @@ import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
 import com.intellidream.daily.R
+import com.intellidream.daily.model.HealthMetricType
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -58,17 +59,19 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
         val session = app?.healthRepository?.primarySleepSession?.value
-        val hasData = session != null
+        val hasData = session != null && session.asleepSeconds > 0
 
-        val sleepScore = session?.sleepScore ?: 88
-        val totalMinutes = if (session != null && session.asleepSeconds > 0) (session.asleepSeconds / 60.0).roundToInt() else (7 * 60 + 42)
+        val sleepScore = if (hasData) (session?.sleepScore ?: 0) else 0
+        val totalMinutes = if (hasData) (session!!.asleepSeconds / 60.0).roundToInt() else 0
         val asleepHours = totalMinutes / 60
         val asleepMins = totalMinutes % 60
-        val totalAsleepFormatted = "${asleepHours}h ${asleepMins}m"
-        val timeInBedFormatted = "${asleepHours}h ${asleepMins + 34}m"
-        val efficiencyPercent = session?.efficiencyPercent ?: 93
-        val restorativePercent = session?.restorativePercent ?: 42
+        val totalAsleepFormatted = if (hasData) "${asleepHours}h ${asleepMins}m" else "--"
+        val inBedDiffMins = if (hasData) Math.max(0, ((session!!.durationSeconds - session.asleepSeconds) / 60.0).roundToInt()) else 0
+        val timeInBedFormatted = if (hasData) "${asleepHours}h ${asleepMins + inBedDiffMins}m" else "--"
+        val efficiencyPercent = if (hasData) session!!.efficiencyPercent else 0
+        val restorativePercent = if (hasData) session!!.restorativePercent else 0
         val sleepQualityRating = when {
+            !hasData -> "No Data"
             sleepScore >= 85 -> "Optimal"
             sleepScore >= 75 -> "Great"
             sleepScore >= 60 -> "Fair"
@@ -76,22 +79,22 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
         }
 
         val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val bedtimeFormatted = if (session != null && session.startTime > 0) timeFormatter.format(Date(session.startTime)) else "23:18"
-        val wakeTimeFormatted = if (session != null && session.endTime > 0) timeFormatter.format(Date(session.endTime)) else "07:34"
+        val bedtimeFormatted = if (hasData && session!!.startTime > 0) timeFormatter.format(Date(session.startTime)) else "--:--"
+        val wakeTimeFormatted = if (hasData && session!!.endTime > 0) timeFormatter.format(Date(session.endTime)) else "--:--"
 
-        val deepSec = session?.deepSeconds?.takeIf { it > 0 } ?: 5400.0
-        val remSec = session?.remSeconds?.takeIf { it > 0 } ?: 6120.0
-        val lightSec = session?.lightSeconds?.takeIf { it > 0 } ?: 16200.0
-        val awakeSec = session?.awakeSeconds?.takeIf { it > 0 } ?: 2080.0
+        val deepSec = if (hasData) (session?.deepSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
+        val remSec = if (hasData) (session?.remSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
+        val lightSec = if (hasData) (session?.lightSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
+        val awakeSec = if (hasData) (session?.awakeSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
 
-        val deepFormatted = "${(deepSec / 3600).toInt()}h ${((deepSec % 3600) / 60).toInt()}m"
-        val remFormatted = "${(remSec / 3600).toInt()}h ${((remSec % 3600) / 60).toInt()}m"
-        val lightFormatted = "${(lightSec / 3600).toInt()}h ${((lightSec % 3600) / 60).toInt()}m"
-        val awakeFormatted = "${(awakeSec / 60).toInt()}m"
+        val deepFormatted = if (hasData && deepSec > 0) "${(deepSec / 3600).toInt()}h ${((deepSec % 3600) / 60).toInt()}m" else "--"
+        val remFormatted = if (hasData && remSec > 0) "${(remSec / 3600).toInt()}h ${((remSec % 3600) / 60).toInt()}m" else "--"
+        val lightFormatted = if (hasData && lightSec > 0) "${(lightSec / 3600).toInt()}h ${((lightSec % 3600) / 60).toInt()}m" else "--"
+        val awakeFormatted = if (hasData && awakeSec > 0) "${(awakeSec / 60).toInt()}m" else "--"
 
-        val restingHr = app?.healthRepository?.restingBpm?.value?.takeIf { it > 0.0 } ?: 58.0
-        val hrvMs = 45.0
-        val sourceDevice = session?.sourceDevice?.takeIf { it.isNotBlank() } ?: "Pixel Watch"
+        val restingHr = app?.healthRepository?.restingBpm?.value?.takeIf { it > 0.0 } ?: 0.0
+        val hrvMs = app?.healthRepository?.currentVitals?.value?.get(HealthMetricType.HRV_SDNN)?.value?.takeIf { it > 0.0 } ?: 0.0
+        val sourceDevice = if (hasData) (session?.sourceDevice?.takeIf { it.isNotBlank() } ?: "Wearable") else "Daily"
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
             action = "com.intellidream.daily.ACTION_OPEN_HEALTH_SLEEP"

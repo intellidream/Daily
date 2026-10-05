@@ -401,9 +401,9 @@ namespace Daily_WinUI.Services
 
 
             // 3. Health Aggregation
-            int steps = 2450;
-            double sleep = 7.5;
-            int heartRate = 68;
+            int steps = 0;
+            double sleep = 0;
+            int heartRate = 0;
             double weightVal = 0;
             double caloriesVal = 0;
             double hrvVal = 0;
@@ -470,13 +470,20 @@ namespace Daily_WinUI.Services
             data.HealthBpDiastolic = bpDiastolic;
             data.HealthSpO2 = oxygenVal;
 
-            if (steps < 4000)
+            if (steps > 0)
             {
-                healthSentence = $"So far you've taken {steps:N0} steps today. Let's aim to get moving and hit your steps goal later.";
+                if (steps < 4000)
+                {
+                    healthSentence = $"So far you've taken {steps:N0} steps today. Let's aim to get moving and hit your steps goal later.";
+                }
+                else
+                {
+                    healthSentence = $"Great job! You've already reached {steps:N0} steps today, keeping up a healthy active baseline.";
+                }
             }
             else
             {
-                healthSentence = $"Great job! You've already reached {steps:N0} steps today, keeping up a healthy active baseline.";
+                healthSentence = "No steps recorded yet today. Let's aim to get moving and hit your daily goals.";
             }
 
             if (sleep > 0)

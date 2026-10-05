@@ -872,8 +872,6 @@ private fun IntradayTimelineCard(
     intraday: List<IntradayStressPoint>,
     dailyAverage: Int
 ) {
-    val displayPoints = if (intraday.isNotEmpty()) intraday else generateMockIntraday()
-
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 20.dp,
@@ -911,49 +909,70 @@ private fun IntradayTimelineCard(
                 )
             }
 
-            // Hourly Bar Chart
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                displayPoints.forEach { pt ->
-                    val barH = max(8.0f, (pt.score * 0.70f)).dp
-                    val barColor = Color(android.graphics.Color.parseColor(pt.level.hexColor))
+            if (intraday.isNotEmpty()) {
+                // Hourly Bar Chart
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    intraday.forEach { pt ->
+                        val barH = max(8.0f, (pt.score * 0.70f)).dp
+                        val barColor = Color(android.graphics.Color.parseColor(pt.level.hexColor))
 
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp, 70.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.08f)),
-                            contentAlignment = Alignment.BottomCenter
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(14.dp, barH)
+                                    .size(14.dp, 70.dp)
                                     .clip(CircleShape)
-                                    .background(
-                                        brush = Brush.verticalGradient(
-                                            listOf(barColor, barColor.copy(alpha = 0.6f))
+                                    .background(Color.White.copy(alpha = 0.08f)),
+                                contentAlignment = Alignment.BottomCenter
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp, barH)
+                                        .clip(CircleShape)
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                listOf(barColor, barColor.copy(alpha = 0.6f))
+                                            )
                                         )
-                                    )
+                                )
+                            }
+
+                            Text(
+                                text = "${pt.hour}",
+                                color = ThemeColors.fgMutedDark,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
-
-                        Text(
-                            text = "${pt.hour}",
-                            color = ThemeColors.fgMutedDark,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Nightlight,
+                        contentDescription = null,
+                        tint = ThemeColors.fgMutedDark,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Intraday hourly points populate as heart rate is sampled throughout the day.",
+                        color = ThemeColors.fgMutedDark,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }
@@ -1220,27 +1239,6 @@ private fun ScienceGuidanceCard(
             )
         }
     }
-}
-
-private fun generateMockIntraday(): List<IntradayStressPoint> {
-    val list = mutableListOf<IntradayStressPoint>()
-    val baseTime = System.currentTimeMillis()
-    val pattern = listOf(22, 20, 18, 19, 24, 30, 36, 42, 48, 52, 46, 38, 32, 28)
-    for (i in pattern.indices) {
-        val score = pattern[i]
-        list.add(
-            IntradayStressPoint(
-                timestamp = baseTime + (i * 3600_000L),
-                hour = i + 7,
-                score = score,
-                level = StressLevel.from(score),
-                hrvMs = 45.0 + (50 - score) * 0.4,
-                heartRateBpm = 60.0 + (score * 0.2),
-                isSedentary = true
-            )
-        )
-    }
-    return list
 }
 
 private typealias BoolOrBoolean = Boolean

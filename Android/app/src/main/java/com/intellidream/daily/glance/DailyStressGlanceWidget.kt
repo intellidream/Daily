@@ -42,6 +42,7 @@ import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
 import com.intellidream.daily.R
+import com.intellidream.daily.model.HealthMetricType
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -55,18 +56,17 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
+        val hasData = app?.healthRepository?.stressAnalysis?.value != null || (app?.healthRepository?.currentStressScore?.value != null && app?.healthRepository?.currentStressScore?.value!! > 0)
         val rhr = app?.healthRepository?.restingBpm?.value?.takeIf { it > 0.0 }
-            ?: (app?.healthRepository?.latestBpm?.value ?: 62.0)
-        val hrvMs = 48.0
+            ?: (app?.healthRepository?.latestBpm?.value ?: 0.0)
+        val hrvMs = app?.healthRepository?.currentVitals?.value?.get(HealthMetricType.HRV_SDNN)?.value?.takeIf { it > 0.0 } ?: 0.0
 
-        val stressScore = app?.healthRepository?.currentStressScore?.value ?: when {
-            rhr > 85 -> 72
-            rhr > 75 -> 54
-            else -> 28
-        }
+        val stressScore = if (hasData) (app?.healthRepository?.currentStressScore?.value ?: 0) else 0
 
-        val currentLevel = app?.healthRepository?.currentStressLevel?.value
-        val levelName = currentLevel?.displayName ?: when {
+        val currentLevel = if (hasData) app?.healthRepository?.currentStressLevel?.value else null
+        val levelName = when {
+            !hasData -> "No Data"
+            currentLevel != null -> currentLevel.displayName
             stressScore > 65 -> "High"
             stressScore > 35 -> "Moderate"
             else -> "Calm"
@@ -75,29 +75,33 @@ class DailyStressGlanceWidget : GlanceAppWidget() {
         val levelColorHex = currentLevel?.hexColor ?: when (levelName) {
             "High" -> "#EF4444"
             "Moderate" -> "#FFB800"
-            else -> "#10B981"
+            "Calm" -> "#10B981"
+            else -> "#6B7280"
         }
         val levelColor = Color(android.graphics.Color.parseColor(levelColorHex))
 
         val monkeyEmoji = when (levelName) {
             "High" -> "⚡️"
             "Moderate" -> "🐵"
-            else -> "🧘"
+            "Calm" -> "🧘"
+            else -> "—"
         }
 
         val monkeyMoodTitle = when (levelName) {
             "High" -> "Storm Tamer"
             "Moderate" -> "Focus Chief"
-            else -> "Zen Sage"
+            "Calm" -> "Zen Sage"
+            else -> "Resting"
         }
 
         val adviceSnippet = when (levelName) {
             "High" -> "Deep autonomic breathing helps restore equilibrium."
             "Moderate" -> "Steady rhythm. Stay hydrated and take small breaks."
-            else -> "Parasympathetic tone is optimal. Great restoration."
+            "Calm" -> "Parasympathetic tone is optimal. Great restoration."
+            else -> "No stress telemetry recorded today."
         }
 
-        val parasympatheticPercent = (100 - stressScore).coerceIn(10, 90)
+        val parasympatheticPercent = if (hasData) (100 - stressScore).coerceIn(10, 90) else 50
         val sympatheticPercent = (100 - parasympatheticPercent)
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
