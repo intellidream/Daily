@@ -295,3 +295,7 @@ DerivedData*/
 .build_cache/
 *.xcuserstate
 
+# Supabase Local CLI & Cache
+supabase/.temp/
+.supabase/
+
