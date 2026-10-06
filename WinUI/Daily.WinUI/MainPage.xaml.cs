@@ -99,102 +99,116 @@ public sealed partial class MainPage : Page
 
     private async System.Threading.Tasks.Task RunLoadingSequenceAsync()
     {
-        // Initialize transition targets to starting state
-        ContentGrid.Opacity = 0.0;
-        ContentScale.ScaleX = 0.94;
-        ContentScale.ScaleY = 0.94;
-
         var mainWindow = App.Current.MainWindow as MainWindow;
         bool isInitialBoot = mainWindow != null && mainWindow.IsLoadingOverlayVisible;
 
-        // 1. Track loads
-        lock (_lock)
+        try
         {
-            _isTrackingLoads = true;
-            _loadingTasks.Clear();
-        }
+            // Initialize transition targets to starting state
+            ContentGrid.Opacity = 0.0;
+            ContentScale.ScaleX = 0.94;
+            ContentScale.ScaleY = 0.94;
 
-        // 2. Load widgets configuration and bind
-        await LoadWidgetsAsync();
-
-        // 3. Yield/delay to let widgets instantiate, trigger Loaded, and register their loading tasks
-        await System.Threading.Tasks.Task.Delay(200);
-        
-        List<System.Threading.Tasks.Task> tasksToAwait;
-        lock (_lock)
-        {
-            _isTrackingLoads = false;
-            tasksToAwait = _loadingTasks.ToList();
-        }
-
-        // 4. Wait for all registered widget data loads to finish (bounded to 2.5s to prevent indefinite blank screen)
-        if (tasksToAwait.Count > 0)
-        {
-            try
+            // 1. Track loads
+            lock (_lock)
             {
-                var whenAllTask = System.Threading.Tasks.Task.WhenAll(tasksToAwait);
-                await System.Threading.Tasks.Task.WhenAny(whenAllTask, System.Threading.Tasks.Task.Delay(2500));
+                _isTrackingLoads = true;
+                _loadingTasks.Clear();
             }
-            catch (System.Exception ex)
+
+            // 2. Load widgets configuration and bind
+            await LoadWidgetsAsync();
+
+            // 3. Yield/delay to let widgets instantiate, trigger Loaded, and register their loading tasks
+            await System.Threading.Tasks.Task.Delay(200);
+            
+            List<System.Threading.Tasks.Task> tasksToAwait;
+            lock (_lock)
             {
-                System.Diagnostics.Debug.WriteLine($"[MainPage] Error loading widgets: {ex}");
+                _isTrackingLoads = false;
+                tasksToAwait = _loadingTasks.ToList();
+            }
+
+            // 4. Wait for all registered widget data loads to finish (bounded to 2.5s to prevent indefinite blank screen)
+            if (tasksToAwait.Count > 0)
+            {
+                try
+                {
+                    var whenAllTask = System.Threading.Tasks.Task.WhenAll(tasksToAwait);
+                    await System.Threading.Tasks.Task.WhenAny(whenAllTask, System.Threading.Tasks.Task.Delay(2500));
+                }
+                catch (System.Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MainPage] Error loading widgets: {ex}");
+                }
+            }
+
+            // 4.1 Sync behavior events, briefing cache, and habits logs from remote in background (non-blocking)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var behaviorSvc = App.Current.Services.GetRequiredService<IBehaviorService>();
+                    var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
+                    var syncService = App.Current.Services.GetRequiredService<Daily.Services.ISyncService>();
+                    
+                    // Run pulls concurrently (including Habits sync pull!)
+                    await Task.WhenAll(
+                        behaviorSvc.PullEventsAsync(),
+                        cacheManager.PullRemoteCacheAsync(),
+                        syncService.PullAsync(Daily.Services.SyncScope.Habits)
+                    );
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MainPage] Remote pulls failed: {ex.Message}");
+                }
+            });
+
+            // Pre-generate Smart Briefing data in background as soon as data loading is complete
+            var settingsForPreGen = SettingsService.Load();
+            _pregeneratedAccelerator = settingsForPreGen.SelectedAiAccelerator ?? "Auto";
+            _pregeneratedModelId = settingsForPreGen.SelectedLocalAiModel ?? "llama32_1b";
+            string currentUserName = _authService.CurrentUserDisplayName ?? "Explorer";
+            var cacheMgr = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
+            _pregeneratedBriefingTask = cacheMgr.GetOrGenerateBriefingAsync(currentUserName);
+
+            // Show Smart Briefing if enabled on startup (trigger check before window loading overlay fades out)
+            if (settingsForPreGen.EnableSmartBriefing && isInitialBoot)
+            {
+                ShowSmartBriefing(isAutomatic: true);
+            }
+
+            if (isInitialBoot && mainWindow != null)
+            {
+                // 5. Ensure minimum boot time has elapsed
+                await mainWindow.WaitForMinBootTimeAsync();
+
+                // 6. Start the fade out of the window-level loading overlay concurrently with widgets entrance
+                var fadeOutTask = mainWindow.FadeOutLoadingOverlayAsync();
+
+                // 7. Trigger local widgets entrance animation concurrently
+                FadeInContentStoryboard.Begin();
+
+                // 8. Wait for the fade out to finish before collapsing the loading overlay entirely
+                await fadeOutTask;
+            }
+            else
+            {
+                // 7. Trigger local widgets entrance animation
+                FadeInContentStoryboard.Begin();
             }
         }
-
-        // 4.1 Sync behavior events, briefing cache, and habits logs from remote in background (non-blocking)
-        _ = Task.Run(async () =>
+        catch (System.Exception ex)
         {
-            try
-            {
-                var behaviorSvc = App.Current.Services.GetRequiredService<IBehaviorService>();
-                var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
-                var syncService = App.Current.Services.GetRequiredService<Daily.Services.ISyncService>();
-                
-                // Run pulls concurrently (including Habits sync pull!)
-                await Task.WhenAll(
-                    behaviorSvc.PullEventsAsync(),
-                    cacheManager.PullRemoteCacheAsync(),
-                    syncService.PullAsync(Daily.Services.SyncScope.Habits)
-                );
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[MainPage] Remote pulls failed: {ex.Message}");
-            }
-        });
-
-        // Pre-generate Smart Briefing data in background as soon as data loading is complete
-        var settingsForPreGen = SettingsService.Load();
-        _pregeneratedAccelerator = settingsForPreGen.SelectedAiAccelerator ?? "Auto";
-        _pregeneratedModelId = settingsForPreGen.SelectedLocalAiModel ?? "llama32_1b";
-        string currentUserName = _authService.CurrentUserDisplayName ?? "Explorer";
-        var cacheMgr = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
-        _pregeneratedBriefingTask = cacheMgr.GetOrGenerateBriefingAsync(currentUserName);
-
-        // Show Smart Briefing if enabled on startup (trigger check before window loading overlay fades out)
-        if (settingsForPreGen.EnableSmartBriefing && isInitialBoot)
-        {
-            ShowSmartBriefing(isAutomatic: true);
+            System.Diagnostics.Debug.WriteLine($"[MainPage] RunLoadingSequenceAsync failed: {ex}");
         }
-
-        if (isInitialBoot && mainWindow != null)
+        finally
         {
-            // 5. Ensure minimum boot time has elapsed
-            await mainWindow.WaitForMinBootTimeAsync();
-
-            // 6. Start the fade out of the window-level loading overlay concurrently with widgets entrance
-            var fadeOutTask = mainWindow.FadeOutLoadingOverlayAsync();
-
-            // 7. Trigger local widgets entrance animation concurrently
-            FadeInContentStoryboard.Begin();
-
-            // 8. Wait for the fade out to finish before collapsing the loading overlay entirely
-            await fadeOutTask;
-        }
-        else
-        {
-            // 7. Trigger local widgets entrance animation
-            FadeInContentStoryboard.Begin();
+            // Unconditional guarantee: ContentGrid is never trapped at Opacity 0.0
+            ContentGrid.Opacity = 1.0;
+            ContentScale.ScaleX = 1.0;
+            ContentScale.ScaleY = 1.0;
         }
     }
 

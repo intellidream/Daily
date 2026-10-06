@@ -235,8 +235,8 @@ public partial class App : Application
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
 
-        // Start initialization FIRST so the task is available to be awaited
-        InitializationTask = InitializeAsync();
+        // Start initialization in background task so UI thread is completely unblocked
+        InitializationTask = Task.Run(async () => await InitializeAsync());
 
         // Listen for Windows network connectivity changes
         Windows.Networking.Connectivity.NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;

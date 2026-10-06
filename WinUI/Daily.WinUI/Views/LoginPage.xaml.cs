@@ -25,15 +25,13 @@ public sealed partial class LoginPage : Page
 
         try
         {
-            // Bounded wait on InitializationTask so background service hydration never hangs user interaction
-            await Task.WhenAny(App.Current.InitializationTask, Task.Delay(1500));
             StatusText.Text = "Waiting for Google sign-in...";
             var success = await _authService.SignInWithGoogleAsync();
 
             if (success)
             {
                 StatusText.Text = "Success! Loading dashboard...";
-                await Task.Delay(500); // Brief pause so user sees success
+                await Task.Delay(300); // Brief pause so user sees success
 
                 // Navigate to the main dashboard
                 if (Frame != null)
@@ -64,17 +62,11 @@ public sealed partial class LoginPage : Page
         }
     }
 
-    private async void SkipButton_Click(object sender, RoutedEventArgs e)
+    private void SkipButton_Click(object sender, RoutedEventArgs e)
     {
-        GoogleSignInButton.IsEnabled = false;
-        SkipButton.IsEnabled = false;
-
         try
         {
-            // Bounded wait on InitializationTask so guest skip is instantaneous
-            await Task.WhenAny(App.Current.InitializationTask, Task.Delay(1000));
-
-            // Navigate directly to the dashboard without signing in
+            // Navigate directly and instantaneously to the dashboard without waiting
             if (Frame != null)
             {
                 Frame.Navigate(typeof(MainPage));
@@ -88,8 +80,6 @@ public sealed partial class LoginPage : Page
         {
             ErrorText.Text = $"Initialization failed: {ex.Message}";
             ErrorText.Visibility = Visibility.Visible;
-            GoogleSignInButton.IsEnabled = true;
-            SkipButton.IsEnabled = true;
         }
     }
 }
