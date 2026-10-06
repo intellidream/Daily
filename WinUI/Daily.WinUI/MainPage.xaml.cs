@@ -205,10 +205,11 @@ public sealed partial class MainPage : Page
         }
         finally
         {
-            // Unconditional guarantee: ContentGrid is never trapped at Opacity 0.0
+            // Unconditional guarantee: ContentGrid and LoadingOverlay are never trapped
             ContentGrid.Opacity = 1.0;
             ContentScale.ScaleX = 1.0;
             ContentScale.ScaleY = 1.0;
+            mainWindow?.DismissLoadingOverlay();
         }
     }
 

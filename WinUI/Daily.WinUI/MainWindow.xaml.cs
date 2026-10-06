@@ -292,52 +292,69 @@ public sealed partial class MainWindow : Window
         await _minBootTimeTask;
     }
 
-    public System.Threading.Tasks.Task FadeOutLoadingOverlayAsync()
+    public void DismissLoadingOverlay()
     {
-        var tcs = new System.Threading.Tasks.TaskCompletionSource();
-        bool shouldShowTitleBar = RootFrame.Content is MainPage;
-
-        FadeOutStoryboard.Completed += (s, e) =>
+        try
         {
-            LoadingOverlay.Visibility = Visibility.Collapsed;
             LoadingStoryboard.Stop();
-            if (shouldShowTitleBar)
-            {
-                AppTitleBar.Opacity = 1.0;
-                AppTitleBar.IsHitTestVisible = true;
-            }
-            else
-            {
-                AppTitleBar.Opacity = 0.0;
-                AppTitleBar.IsHitTestVisible = false;
-            }
-            tcs.SetResult();
-        };
+            FadeOutStoryboard.Stop();
+        }
+        catch { }
 
-        if (shouldShowTitleBar)
+        LoadingOverlay.Visibility = Visibility.Collapsed;
+        LoadingOverlay.Opacity = 0.0;
+
+        if (RootFrame.Content is MainPage)
         {
-            var titleBarAnimation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
-            {
-                From = 0.0,
-                To = 1.0,
-                Duration = new Duration(TimeSpan.FromSeconds(0.7)),
-                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut }
-            };
-            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(titleBarAnimation, AppTitleBar);
-            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(titleBarAnimation, "Opacity");
-
-            var tempStoryboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
-            tempStoryboard.Children.Add(titleBarAnimation);
-            tempStoryboard.Begin();
+            AppTitleBar.Opacity = 1.0;
+            AppTitleBar.IsHitTestVisible = true;
         }
         else
         {
             AppTitleBar.Opacity = 0.0;
             AppTitleBar.IsHitTestVisible = false;
         }
+    }
 
-        FadeOutStoryboard.Begin();
-        return tcs.Task;
+    public async System.Threading.Tasks.Task FadeOutLoadingOverlayAsync()
+    {
+        bool shouldShowTitleBar = RootFrame.Content is MainPage;
+
+        try
+        {
+            // Stop the bouncing loading storyboard first so it doesn't contend composition
+            LoadingStoryboard.Stop();
+
+            if (shouldShowTitleBar)
+            {
+                var titleBarAnimation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+                {
+                    From = 0.0,
+                    To = 1.0,
+                    Duration = new Duration(TimeSpan.FromSeconds(0.7)),
+                    EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut }
+                };
+                Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(titleBarAnimation, AppTitleBar);
+                Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(titleBarAnimation, "Opacity");
+
+                var tempStoryboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+                tempStoryboard.Children.Add(titleBarAnimation);
+                tempStoryboard.Begin();
+            }
+
+            FadeOutStoryboard.Begin();
+
+            // Bounded wait matching the 0.7s storyboard duration
+            await System.Threading.Tasks.Task.Delay(750);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] FadeOutLoadingOverlayAsync error: {ex.Message}");
+        }
+        finally
+        {
+            DismissLoadingOverlay();
+        }
     }
 
     private async Task NavigateAfterHydrationAsync()

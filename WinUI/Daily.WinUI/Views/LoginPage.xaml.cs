@@ -34,6 +34,7 @@ public sealed partial class LoginPage : Page
                 await Task.Delay(300); // Brief pause so user sees success
 
                 // Navigate to the main dashboard
+                (App.Current.MainWindow as MainWindow)?.DismissLoadingOverlay();
                 if (Frame != null)
                 {
                     Frame.Navigate(typeof(MainPage));
@@ -67,6 +68,7 @@ public sealed partial class LoginPage : Page
         try
         {
             // Navigate directly and instantaneously to the dashboard without waiting
+            (App.Current.MainWindow as MainWindow)?.DismissLoadingOverlay();
             if (Frame != null)
             {
                 Frame.Navigate(typeof(MainPage));
