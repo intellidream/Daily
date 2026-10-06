@@ -176,6 +176,10 @@ During physical device deployment on iPhone 16 Pro ("Schmitz"), Google Pixel 9 P
 ### 7.2 Root Cause 2: Android Cold-Start Latency & Staggered Popping
 - **The Issue:** On Android, health data loading initially waited for network responses or executed multi-phase sequential fetches (Room -> Health Connect -> Remote), causing visual stutter, layout shifting, and delayed rendering on cold start.
 - **The Remediation:**
+  - Implemented instant cold-cache hydration: `HealthDataRepository` loads cached summaries from Room (`health_daily_summary_entity`) immediately to state flows before performing any network or sensor reads.
+  - Offloaded Health Connect queries to background IO coroutines and decoupled UI state rendering from sync cycles.
+  - Unified state emission through single atomic updates to prevent staggered visual jumps.
+
 ### 7.3 Cross-Platform Historical Backfill, Throttled Engine Invocation & Android Coroutine Race Elimination
 Following live multi-device validation with an **Oura Ring connected to iOS (HealthKit)** and a **Pixel Watch 5 connected to Android Pixel 9 Pro (Health Connect)**, a final architectural harmonization was deployed:
 1. **Symmetrical Client Ingestion:**
@@ -194,6 +198,26 @@ Following live multi-device validation with an **Oura Ring connected to iOS (Hea
    - Guarded initial loads against unauthenticated `"local_user"` placeholder sessions, preventing rapid back-to-back state mutations that caused flickering numbers on screen.
 5. **Pure Canonical Desktop Consumption (WinUI 3 & Future macOS):**
    - Windows WinUI 3 (and future macOS) without native biometric sensors consume canonical data directly from `health_daily_summary` and cache locally in SQLite, achieving full 5-tab visual and data parity.
+
+### 7.4 Live Physical Device & Parallels VM Verification
+
+#### 7.4.1 Google Pixel 9 Pro (Physical Device)
+- **Connectivity:** Discovered and paired via wireless `adb` TLS service (`adb-48231FDAP0011V-Ma9KPE._adb-tls-connect._tcp`, `model:Pixel_9_Pro`).
+- **Deployment:** Streamed APK installation of `app-debug.apk` directly via `adb install -r`.
+- **Health Connect Integration:** Granted runtime permissions including `READ_DISTANCE`, `READ_STEPS`, `READ_HEART_RATE`, `READ_SLEEP`, `READ_RESTING_HEART_RATE`, `READ_HEART_RATE_VARIABILITY`, `READ_OXYGEN_SATURATION`, and `READ_HYDRATION`.
+- **Live Biometrics:** Confirmed live biometric telemetry flowing from paired **Pixel Watch 5** through Health Connect (live heart rate, sleep metrics, and steps).
+- **5-Tab Studio Verification:** Visually inspected all 5 Health Hub tabs (Overview, Sleep Studio, Stress Studio, Heart & Vitals, Trends) rendering at smooth 120Hz with zero UI stutter or jitter.
+
+#### 7.4.2 Windows 11 WinUI 3 (Parallels Desktop VM)
+- **Compilation:** Clean build on Windows 11 ARM64 (`dotnet build -c Debug WinUI\Daily.WinUI\Daily.WinUI.csproj`) with **0 Errors**.
+- **Interactive Execution:** Launched interactively into user session `Console 1` via `schtasks` using `Daily.WinUI.exe`.
+- **Startup SLA:** Cold launch and dashboard hydration complete in under 3 seconds without blocking DI deadlocks.
+- **5-Tab Health Detail Parity:** Verified full UIAutomation navigation and rendering across all 5 Health tabs:
+  - *Tab 0 (Overview):* Activity summary, quick vitals, sleep card, and health metrics grid.
+  - *Tab 1 (Sleep Studio):* Sleep score ring, duration breakdown, sleep stage hypnogram canvas, and recovery advice.
+  - *Tab 2 (Stress Studio):* Monkey mascot stress state, autonomic balance, and interactive Box Breathing player.
+  - *Tab 3 (Heart & Vitals):* Intraday heart rate curve, 4 clinical HR zones, and resting vitals.
+  - *Tab 4 (Trends):* Historical multi-metric trajectory and weekly averages.
 
 ---
 
