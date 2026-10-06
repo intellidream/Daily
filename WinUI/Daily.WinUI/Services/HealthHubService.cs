@@ -23,7 +23,6 @@ namespace Daily_WinUI.Services
     {
         private readonly Supabase.Client _supabaseClient;
         private readonly IDatabaseService _dbService;
-        private readonly ISettingsService _settingsService;
         private readonly ILogger<HealthHubService>? _logger;
         private readonly ConcurrentDictionary<string, HealthDailySummaryRecord> _memoryCache = new();
         private readonly ConcurrentDictionary<string, Task<HealthDailySummaryRecord?>> _inFlightFetches = new();
@@ -38,12 +37,10 @@ namespace Daily_WinUI.Services
         public HealthHubService(
             Supabase.Client supabaseClient,
             IDatabaseService dbService,
-            ISettingsService settingsService,
             ILogger<HealthHubService>? logger = null)
         {
             _supabaseClient = supabaseClient;
             _dbService = dbService;
-            _settingsService = settingsService;
             _logger = logger;
 
             try
@@ -87,6 +84,15 @@ namespace Daily_WinUI.Services
             {
                 _logger?.LogWarning(ex, "[HealthHubService] Failed to attach listeners in constructor: {Message}", ex.Message);
             }
+        }
+
+        public HealthHubService(
+            Supabase.Client supabaseClient,
+            IDatabaseService dbService,
+            ISettingsService? settingsService,
+            ILogger<HealthHubService>? logger = null)
+            : this(supabaseClient, dbService, logger)
+        {
         }
 
         public DateTime SelectedDate
