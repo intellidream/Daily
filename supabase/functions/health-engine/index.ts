@@ -62,9 +62,11 @@ Deno.serve(async (req: Request) => {
 
     // Mode A: Process next batch of dirty days from health_day_dirty
     if (processDirty && (!userId || !targetDate)) {
-      const { data: dirtyRows, error: dirtyErr } = await supabase
-        .from('health_day_dirty')
-        .select('user_id, local_date')
+      let query = supabase.from('health_day_dirty').select('user_id, local_date');
+      if (userId) {
+        query = query.eq('user_id', userId);
+      }
+      const { data: dirtyRows, error: dirtyErr } = await query
         .order('dirty_since', { ascending: true })
         .limit(10);
 

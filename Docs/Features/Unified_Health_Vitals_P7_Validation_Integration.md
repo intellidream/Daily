@@ -176,13 +176,29 @@ During physical device deployment on iPhone 16 Pro ("Schmitz"), Google Pixel 9 P
 ### 7.2 Root Cause 2: Android Cold-Start Latency & Staggered Popping
 - **The Issue:** On Android, health data loading initially waited for network responses or executed multi-phase sequential fetches (Room -> Health Connect -> Remote), causing visual stutter, layout shifting, and delayed rendering on cold start.
 - **The Remediation:**
-  - Reversed the loading sequence: the Room local cache (`health_daily_summary_entity`) is now loaded and bound to the UI immediately (<10ms cold start) before any network or Health Connect query begins.
-  - Eliminated multi-phase popping by aggregating Room data, local Health Connect telemetry, and remote delta records into a single atomic calculation and state update pass.
-  - StateFlow observables update atomically, ensuring a jitter-free 120Hz Liquid Glass rendering experience.
+### 7.3 Cross-Platform Historical Backfill, Throttled Engine Invocation & Android Coroutine Race Elimination
+Following live multi-device validation with an **Oura Ring connected to iOS (HealthKit)** and a **Pixel Watch 5 connected to Android Pixel 9 Pro (Health Connect)**, a final architectural harmonization was deployed:
+1. **Symmetrical Client Ingestion:**
+   - Both iOS (`HealthDataService.swift`) and Android (`HealthDataRepository.kt`) act symmetrically as canonical ingestion agents.
+   - iOS reads Apple HealthKit (capturing Apple Watch and Oura Ring samples).
+   - Android reads Android Health Connect (capturing Pixel Watch 5 and connected wearable samples).
+2. **Smart & Frugal Historical Sync (`syncMissingHistoricalDataIfNeeded`):**
+   - Before uploading historical days, clients query Supabase for `health_daily_summary` rows across `[today - 14, today - 1]`.
+   - Only dates with missing data are queried locally from HealthKit or Health Connect and pushed to Supabase.
+   - Guarded by a strict **12-hour local epoch throttle** (`UserDefaults` / `SharedPreferences`) to avoid running heavy historical sweeps on every app launch.
+3. **Edge Function Quota Discipline & Serverless Throttling:**
+   - Invocations of the `health-engine` Edge Function are throttled per date with a strict **3-minute minimum cooldown** (`lastEngineInvocation`).
+   - Historical backfills execute a single user-scoped batch dirty computation (`process_dirty: true, user_id: currentUserId`), preventing hundreds of individual HTTP triggers.
+4. **Android Coroutine Race & Screen Flickering Elimination:**
+   - Addressed coroutine overlap in `HealthDataRepository.kt` by introducing `activeLoadJob?.cancel()` before launching new date computations.
+   - Guarded initial loads against unauthenticated `"local_user"` placeholder sessions, preventing rapid back-to-back state mutations that caused flickering numbers on screen.
+5. **Pure Canonical Desktop Consumption (WinUI 3 & Future macOS):**
+   - Windows WinUI 3 (and future macOS) without native biometric sensors consume canonical data directly from `health_daily_summary` and cache locally in SQLite, achieving full 5-tab visual and data parity.
 
 ---
 
 ## 8. Conclusion
 
-Phase P7 achieves **100% cross-platform parity, zero synthetic data generation, and complete architectural consistency** for the Health & Vitals system across iOS, Android, WinUI, Supabase, and connected wearables.
+Phase P7 achieves **100% cross-platform parity, zero synthetic data generation, frugal and throttled network synchronization, and complete architectural consistency** for the Health & Vitals system across iOS, Android, WinUI, Supabase, and connected wearables.
+
 

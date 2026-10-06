@@ -77,12 +77,20 @@ class HealthDataRepository(
     val healthConnectManager: HealthConnectManager = HealthConnectManager(context),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) {
+    private var activeLoadJob: kotlinx.coroutines.Job? = null
+    private var isSyncingHistory: Boolean = false
+    private val lastEngineInvocation = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     var currentUserId: String = "local_user"
         set(value) {
             val changed = field != value
             field = value
-            if (changed) {
-                loadDataForSelectedDate(forceRefresh = false)
+            if (changed && value != "local_user") {
+                setupRealtimeSubscription()
+                loadDataForSelectedDate(forceRefresh = true)
+                scope.launch {
+                    syncMissingHistoricalDataIfNeeded()
+                }
             }
         }
 
@@ -195,8 +203,10 @@ class HealthDataRepository(
     private val isoDateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     init {
-        loadDataForSelectedDate(forceRefresh = true)
-        setupRealtimeSubscription()
+        if (currentUserId != "local_user") {
+            loadDataForSelectedDate(forceRefresh = true)
+            setupRealtimeSubscription()
+        }
     }
 
     private fun setupRealtimeSubscription() {
@@ -273,7 +283,8 @@ class HealthDataRepository(
     // MARK: - Data Fetching & Processing
 
     fun loadDataForSelectedDate(forceRefresh: Boolean = false) {
-        scope.launch {
+        activeLoadJob?.cancel()
+        activeLoadJob = scope.launch {
             _isLoading.value = true
             try {
                 val targetEpochMs = _selectedDate.value
@@ -358,7 +369,9 @@ class HealthDataRepository(
 
                 // 4. Fetch Supabase Remote canonical summary
                 val remoteSummary = withTimeoutOrNull(2000L) {
-                    remoteService.fetchDailySummary(currentUserId, dateKey)
+                    if (currentUserId != "local_user") {
+                        remoteService.fetchDailySummary(currentUserId, dateKey)
+                    } else null
                 }
                 if (remoteSummary != null && !remoteSummary.isEmpty()) {
                     withContext(Dispatchers.IO) {
@@ -383,9 +396,7 @@ class HealthDataRepository(
                     return@launch
                 } else if (remoteSummary != null && remoteSummary.isEmpty()) {
                     if (currentUserId != "local_user") {
-                        scope.launch(Dispatchers.IO) {
-                            remoteService.triggerCanonicalEngine(dateKey)
-                        }
+                        triggerCanonicalEngineIfNeeded(dateKey)
                     }
                 }
 
@@ -1211,6 +1222,24 @@ class HealthDataRepository(
 
     // MARK: - Supabase Cloud Synchronization
 
+    fun triggerCanonicalEngineIfNeeded(dateKey: String) {
+        if (currentUserId == "local_user") return
+        val now = System.currentTimeMillis()
+        val last = lastEngineInvocation[dateKey] ?: 0L
+        if (now - last < 180_000L) {
+            // Throttled: invoked within last 3 minutes for this date
+            return
+        }
+        lastEngineInvocation[dateKey] = now
+        scope.launch(Dispatchers.IO) {
+            try {
+                remoteService.triggerCanonicalEngine(currentUserId, date = dateKey)
+            } catch (e: Exception) {
+                android.util.Log.w("HealthDataRepository", "Failed to trigger canonical engine for $dateKey: ${e.message}")
+            }
+        }
+    }
+
     suspend fun syncTelemetryToSupabase(telemetry: List<HealthTelemetryRecord>): Boolean {
         if (currentUserId == "local_user" || telemetry.isEmpty()) return false
         val success = remoteService.pushTelemetry(telemetry)
@@ -1218,6 +1247,10 @@ class HealthDataRepository(
             val ids = telemetry.map { it.id }
             withContext(Dispatchers.IO) {
                 telemetryDao.markRecordsSynced(ids, System.currentTimeMillis())
+            }
+            val affectedDates = telemetry.map { isoDateFormatter.format(Date(it.startTime)) }.toSet()
+            for (dKey in affectedDates) {
+                triggerCanonicalEngineIfNeeded(dKey)
             }
         }
         return success
@@ -1259,8 +1292,128 @@ class HealthDataRepository(
             withContext(Dispatchers.IO) {
                 telemetryDao.markRecordsSynced(ids, System.currentTimeMillis())
             }
+            val affectedDates = records.map { isoDateFormatter.format(Date(it.startTime)) }.toSet()
+            for (dKey in affectedDates) {
+                triggerCanonicalEngineIfNeeded(dKey)
+            }
         }
         return success
+    }
+
+    suspend fun syncMissingHistoricalDataIfNeeded() {
+        if (isSyncingHistory) return
+        if (currentUserId == "local_user") return
+        isSyncingHistory = true
+        try {
+            val sharedPrefs = context.getSharedPreferences("daily_health_prefs", Context.MODE_PRIVATE)
+            val lastSyncEpoch = sharedPrefs.getLong("last_historical_health_sync_epoch", 0L)
+            val nowEpoch = System.currentTimeMillis()
+            // Throttle check to at most once every 12 hours
+            if (lastSyncEpoch > 0 && (nowEpoch - lastSyncEpoch) < 12 * 3600 * 1000L) {
+                return
+            }
+
+            if (!healthConnectManager.isAvailable || !healthConnectManager.hasAnyPermissions()) {
+                return
+            }
+
+            val cal = Calendar.getInstance()
+            cal.time = Date()
+            cal.add(Calendar.DAY_OF_YEAR, -14)
+            val minDateStr = isoDateFormatter.format(cal.time)
+
+            cal.time = Date()
+            cal.add(Calendar.DAY_OF_YEAR, -1)
+            val maxDateStr = isoDateFormatter.format(cal.time)
+
+            // 1. Query existing summaries from Supabase
+            val existingSummaries = try {
+                remoteService.fetchDailySummariesBetween(currentUserId, minDateStr, maxDateStr)
+            } catch (e: Exception) {
+                android.util.Log.w("HealthDataRepository", "Could not query existing historical summaries: ${e.message}")
+                emptyList()
+            }
+
+            val existingDatesWithData = existingSummaries.filter {
+                (it.steps ?: 0) > 0 || (it.sleepAsleepS ?: 0) > 0 || (it.rhr ?: 0.0) > 0.0
+            }.map { it.localDate }.toSet()
+
+            // 2. Identify missing dates
+            val missingDates = mutableListOf<Date>()
+            for (dayOffset in 1..14) {
+                val c = Calendar.getInstance()
+                c.add(Calendar.DAY_OF_YEAR, -dayOffset)
+                val dKey = isoDateFormatter.format(c.time)
+                if (!existingDatesWithData.contains(dKey)) {
+                    missingDates.add(c.time)
+                }
+            }
+
+            if (missingDates.isEmpty()) {
+                sharedPrefs.edit().putLong("last_historical_health_sync_epoch", nowEpoch).apply()
+                return
+            }
+
+            // 3. For missing dates only, fetch local Health Connect data and upload
+            var hasUploadedAnyHistory = false
+            for (missingDate in missingDates) {
+                val pastTelemetry = healthConnectManager.fetchTelemetryForDate(missingDate, currentUserId)
+                if (pastTelemetry.isNotEmpty()) {
+                    val pushed = remoteService.pushTelemetry(pastTelemetry)
+                    if (pushed) {
+                        withContext(Dispatchers.IO) {
+                            telemetryDao.insertRecords(pastTelemetry.map { HealthTelemetryEntity.fromRecord(it) })
+                            telemetryDao.markRecordsSynced(pastTelemetry.map { it.id }, nowEpoch)
+                        }
+
+                        // Calculate and sync daily vitals for this day
+                        val pastDateKey = isoDateFormatter.format(missingDate)
+                        val vitalsList = mutableListOf<VitalMetricRecord>()
+                        for (t in pastTelemetry) {
+                            val valNum = t.value ?: continue
+                            if (valNum <= 0) continue
+                            val metricType = HealthMetricType.from(t.type) ?: continue
+                            if (metricType == HealthMetricType.STEPS || t.isSleep || t.isSleepStage) continue
+
+                            vitalsList.add(
+                                VitalMetricRecord(
+                                    userId = currentUserId,
+                                    type = metricType.name.lowercase(),
+                                    value = valNum,
+                                    unit = t.unit ?: metricType.defaultUnit,
+                                    date = pastDateKey,
+                                    sourceDevice = t.sourceDevice,
+                                    createdAt = t.startTime
+                                )
+                            )
+                        }
+                        if (vitalsList.isNotEmpty()) {
+                            val vitalsPushed = remoteService.pushVitals(vitalsList)
+                            if (vitalsPushed) {
+                                withContext(Dispatchers.IO) {
+                                    vitalsDao.insertVitals(vitalsList.map { VitalMetricEntity.fromRecord(it) })
+                                    vitalsDao.markVitalsSynced(vitalsList.map { it.id }, nowEpoch)
+                                }
+                            }
+                        }
+                        hasUploadedAnyHistory = true
+                    }
+                }
+            }
+
+            // 4. If new historical telemetry was uploaded, trigger a single batch dirty computation in health-engine
+            if (hasUploadedAnyHistory) {
+                try {
+                    remoteService.triggerCanonicalEngine(currentUserId, processDirty = true)
+                } catch (e: Exception) {
+                    android.util.Log.w("HealthDataRepository", "Failed to trigger batch dirty engine: ${e.message}")
+                }
+            }
+
+            sharedPrefs.edit().putLong("last_historical_health_sync_epoch", nowEpoch).apply()
+        } finally {
+            isSyncingHistory = false
+        }
     }
 
     suspend fun syncUnsyncedVitals(): Boolean {

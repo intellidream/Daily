@@ -75,6 +75,8 @@ public final class HealthDataService: ObservableObject {
     private var activeLoadTask: Task<Void, Never>?
     private var realtimeChannel: RealtimeChannelV2?
     private var realtimeTask: Task<Void, Never>?
+    private var lastEngineInvocation: [String: Date] = [:]
+    private var isSyncingHistory: Bool = false
     
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -136,6 +138,7 @@ public final class HealthDataService: ObservableObject {
                     Task { @MainActor [weak self] in
                         self?.setupRealtimeSubscription()
                         await self?.loadDataForSelectedDate(forceRefresh: true)
+                        await self?.syncMissingHistoricalDataIfNeeded()
                     }
                 }
             }
@@ -143,6 +146,9 @@ public final class HealthDataService: ObservableObject {
         
         if AuthService.shared.isAuthenticated {
             setupRealtimeSubscription()
+            Task { @MainActor [weak self] in
+                await self?.syncMissingHistoricalDataIfNeeded()
+            }
         }
     }
     
@@ -1120,15 +1126,174 @@ public final class HealthDataService: ObservableObject {
         
         guard !prepared.isEmpty else { return }
         
+        var anyChunkSucceeded = false
+        var affectedDates = Set<String>()
+        for r in prepared {
+            affectedDates.insert(r.localDate ?? isoDateFormatter.string(from: r.startTime))
+        }
+        
         let batchSize = 200
         for i in stride(from: 0, to: prepared.count, by: batchSize) {
             let chunk = Array(prepared[i..<min(i + batchSize, prepared.count)])
             do {
                 try await supabase.from("health_telemetry").insert(chunk).execute()
+                anyChunkSucceeded = true
             } catch {
                 print("[HealthDataService] Warning: Failed to sync telemetry batch: \(error.localizedDescription)")
             }
         }
+        
+        // If telemetry was successfully uploaded, trigger canonical engine computation (throttled)
+        if anyChunkSucceeded {
+            for dKey in affectedDates {
+                triggerCanonicalEngineIfNeeded(for: dKey, userId: userId)
+            }
+        }
+    }
+    
+    private struct HealthEngineDatePayload: Encodable {
+        let date: String
+        let user_id: String
+    }
+    
+    private struct HealthEngineDirtyPayload: Encodable {
+        let user_id: String
+        let process_dirty: Bool
+    }
+    
+    /// Triggers the canonical Edge Function `health-engine` with strict throttling to prevent burning function quotas.
+    public func triggerCanonicalEngineIfNeeded(for dateKey: String, userId: String) {
+        if let last = lastEngineInvocation[dateKey], Date().timeIntervalSince(last) < 180 {
+            // Throttled: invoked within last 3 minutes for this date
+            return
+        }
+        lastEngineInvocation[dateKey] = Date()
+        
+        Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                _ = try await self.supabase.functions.invoke(
+                    "health-engine",
+                    options: FunctionInvokeOptions(body: HealthEngineDatePayload(date: dateKey, user_id: userId))
+                )
+            } catch {
+                // Non-fatal background invocation
+            }
+        }
+    }
+    
+    /// Checks Supabase for any missing historical daily summaries across the last 14 days.
+    /// Only queries and syncs local HealthKit data for dates that do NOT exist in Supabase,
+    /// preventing redundant network bandwidth and Edge Function quota burn.
+    public func syncMissingHistoricalDataIfNeeded() async {
+        guard !isSyncingHistory else { return }
+        isSyncingHistory = true
+        defer { isSyncingHistory = false }
+        
+        guard AuthService.shared.isAuthenticated,
+              let session = try? await supabase.auth.session,
+              let userId = session.user.id.uuidString.lowercased() as String?,
+              let provider = localDataProvider else { return }
+        
+        let lastSyncEpoch = userDefaults.double(forKey: "last_historical_health_sync_epoch")
+        let nowEpoch = Date().timeIntervalSince1970
+        // Throttle check to at most once every 12 hours
+        if lastSyncEpoch > 0 && (nowEpoch - lastSyncEpoch) < 12 * 3600 {
+            return
+        }
+        
+        let cal = Calendar.current
+        guard let minDate = cal.date(byAdding: .day, value: -14, to: Date()),
+              let maxDate = cal.date(byAdding: .day, value: -1, to: Date()) else { return }
+        
+        let minDateStr = isoDateFormatter.string(from: minDate)
+        let maxDateStr = isoDateFormatter.string(from: maxDate)
+        
+        // 1. Query existing summaries from Supabase
+        var existingDatesWithData = Set<String>()
+        do {
+            let existingRows: [HealthDailySummaryRecord] = try await supabase
+                .from("health_daily_summary")
+                .select()
+                .eq("user_id", value: userId)
+                .gte("local_date", value: minDateStr)
+                .lte("local_date", value: maxDateStr)
+                .execute()
+                .value
+            
+            for row in existingRows {
+                if (row.steps ?? 0) > 0 || (row.sleepAsleepS ?? 0) > 0 || (row.rhr ?? 0) > 0 {
+                    existingDatesWithData.insert(row.localDate)
+                }
+            }
+        } catch {
+            print("[HealthDataService] Note: Could not query existing historical summaries: \(error)")
+        }
+        
+        // 2. Identify missing dates
+        var missingDates: [Date] = []
+        for dayOffset in 1...14 {
+            if let d = cal.date(byAdding: .day, value: -dayOffset, to: Date()) {
+                let dKey = isoDateFormatter.string(from: d)
+                if !existingDatesWithData.contains(dKey) {
+                    missingDates.append(d)
+                }
+            }
+        }
+        
+        // If no dates are missing, mark complete and return
+        if missingDates.isEmpty {
+            userDefaults.set(nowEpoch, forKey: "last_historical_health_sync_epoch")
+            return
+        }
+        
+        // 3. For missing dates only, fetch local HealthKit data and upload
+        var hasUploadedAnyHistory = false
+        for missingDate in missingDates {
+            let pastTelem = await provider.fetchLocalTelemetry(for: missingDate)
+            let pastSleep = await provider.fetchLocalSleepStages(for: missingDate)
+            let combined = pastTelem + pastSleep
+            
+            if !combined.isEmpty {
+                await syncTelemetryToSupabase(telemetry: combined)
+                
+                // Calculate and sync daily vitals for this day
+                let pastDateKey = isoDateFormatter.string(from: missingDate)
+                var vitalsList: [VitalMetricRecord] = []
+                for t in combined {
+                    guard let val = t.value, val > 0,
+                          let mType = HealthMetricType.from(rawString: t.type) else { continue }
+                    if mType == .steps || t.isSleep || t.isSleepStage { continue }
+                    vitalsList.append(VitalMetricRecord(
+                        userId: userId,
+                        type: mType.rawValue,
+                        value: val,
+                        unit: t.unit ?? mType.defaultUnit,
+                        date: pastDateKey,
+                        sourceDevice: t.sourceDevice,
+                        createdAt: t.startTime
+                    ))
+                }
+                if !vitalsList.isEmpty {
+                    await syncVitalsToSupabase(vitals: vitalsList)
+                }
+                hasUploadedAnyHistory = true
+            }
+        }
+        
+        // 4. If new historical telemetry was uploaded, trigger a single batch dirty computation in health-engine
+        if hasUploadedAnyHistory {
+            do {
+                _ = try await self.supabase.functions.invoke(
+                    "health-engine",
+                    options: FunctionInvokeOptions(body: HealthEngineDirtyPayload(user_id: userId, process_dirty: true))
+                )
+            } catch {
+                // Non-fatal background invocation
+            }
+        }
+        
+        userDefaults.set(nowEpoch, forKey: "last_historical_health_sync_epoch")
     }
     
     // MARK: - 7-Day & 30-Day Trend Generator

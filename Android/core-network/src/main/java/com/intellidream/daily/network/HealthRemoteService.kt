@@ -143,7 +143,12 @@ class HealthRemoteService(
         }
     }
 
-    suspend fun triggerCanonicalEngine(date: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun triggerCanonicalEngine(
+        userId: String,
+        date: String = "",
+        processDirty: Boolean = false
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (userId.isEmpty() || userId == "local_user") return@withContext false
         try {
             val url = "${SupabaseClientManager.SUPABASE_URL}/functions/v1/health-engine"
             val conn = (java.net.URI.create(url).toURL().openConnection() as java.net.HttpURLConnection).apply {
@@ -155,7 +160,13 @@ class HealthRemoteService(
                 setRequestProperty("Authorization", "Bearer ${SupabaseClientManager.SUPABASE_ANON_KEY}")
                 doOutput = true
             }
-            val body = """{"date":"$date","autoProcessDirty":true}"""
+            val body = if (processDirty && date.isEmpty()) {
+                """{"user_id":"$userId","process_dirty":true}"""
+            } else if (processDirty) {
+                """{"user_id":"$userId","date":"$date","process_dirty":true}"""
+            } else {
+                """{"user_id":"$userId","date":"$date"}"""
+            }
             conn.outputStream.use { os ->
                 os.write(body.toByteArray(Charsets.UTF_8))
             }
