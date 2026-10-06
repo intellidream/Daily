@@ -66,11 +66,12 @@
             </Border>
 
             <!-- Skip option -->
-            <HyperlinkButton x:Name="SkipButton" Click="SkipButton_Click" 
-                             Content="Continue without signing in" 
-                             Padding="12,8"
-                             HorizontalAlignment="Center" Margin="0,24,0,0"
-                             Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="13"/>
+            <Button x:Name="SkipButton" Click="SkipButton_Click" 
+                    Content="Continue without signing in" 
+                    Background="Transparent" BorderThickness="0"
+                    Padding="12,8"
+                    HorizontalAlignment="Center" Margin="0,24,0,0"
+                    Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="13"/>
 
         </StackPanel>
     </Grid>
