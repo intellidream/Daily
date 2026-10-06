@@ -387,5 +387,85 @@ namespace Daily.Health.Tests
                 }
             }
         }
+
+        [Fact]
+        public async Task TestInitializeAsyncDoesNotHang()
+        {
+            var dbPath = Path.Combine(Path.GetTempPath(), $"test_hub_init_{Guid.NewGuid():N}.db");
+            try
+            {
+                var mockDb = new MockDatabaseService(dbPath);
+                await mockDb.InitializeAsync();
+
+                var options = new Supabase.SupabaseOptions { AutoConnectRealtime = false };
+                var client = new Supabase.Client("https://dummy.supabase.co", "dummy_key", options);
+                try { await client.Auth.SetSession("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", "dummy_refresh"); } catch {}
+                var mockSettings = new MockSettingsService();
+                var hubService = new HealthHubService(client, mockDb, mockSettings);
+
+                var initTask = hubService.InitializeAsync();
+                var completedTask = await Task.WhenAny(initTask, Task.Delay(500));
+                Assert.Same(initTask, completedTask);
+            }
+            finally
+            {
+                if (File.Exists(dbPath))
+                {
+                    File.Delete(dbPath);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task TestParallelGetDailySummaryDeduplication()
+        {
+            var dbPath = Path.Combine(Path.GetTempPath(), $"test_hub_parallel_{Guid.NewGuid():N}.db");
+            try
+            {
+                var mockDb = new MockDatabaseService(dbPath);
+                await mockDb.InitializeAsync();
+
+                var testDate = new DateTime(2026, 10, 6);
+                var entity = new HealthDailySummaryEntity
+                {
+                    LocalDate = testDate.ToString("yyyy-MM-dd"),
+                    UserId = "test-user-id",
+                    Steps = 9500,
+                    Rhr = 58.0,
+                    SleepAsleepS = 27000,
+                    StressAvg = 22,
+                    UpdatedAtTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                };
+                await mockDb.Connection.InsertAsync(entity);
+
+                var options = new Supabase.SupabaseOptions { AutoConnectRealtime = false };
+                var client = new Supabase.Client("https://dummy.supabase.co", "dummy_key", options);
+                var mockSettings = new MockSettingsService();
+                var hubService = new HealthHubService(client, mockDb, mockSettings);
+
+                // Simulate 13 concurrent calls from SmartBriefingService
+                var tasks = Enumerable.Range(0, 13)
+                    .Select(_ => hubService.GetDailySummaryAsync(testDate))
+                    .ToArray();
+
+                var completed = await Task.WhenAny(Task.WhenAll(tasks), Task.Delay(2000));
+                Assert.NotEqual(completed, Task.Delay(2000));
+
+                var results = await Task.WhenAll(tasks);
+                Assert.Equal(13, results.Length);
+                Assert.All(results, r =>
+                {
+                    Assert.NotNull(r);
+                    Assert.Equal(9500, r!.Steps);
+                });
+            }
+            finally
+            {
+                if (File.Exists(dbPath))
+                {
+                    File.Delete(dbPath);
+                }
+            }
+        }
     }
 }

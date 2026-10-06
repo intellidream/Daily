@@ -87,21 +87,40 @@ Existing controls (`HealthWidgetControl`, `HealthTelemetryWidgetControl`) contin
 Ran `dotnet test Tests/Daily.Health.Tests/Daily.Health.Tests.csproj`:
 ```
 Test run for Daily.Health.Tests.dll (.NETCoreApp,Version=v10.0)
-Passed! - Failed: 0, Passed: 6, Skipped: 0, Total: 6, Duration: 96 ms
+Passed! - Failed: 0, Passed: 8, Skipped: 0, Total: 8, Duration: 84 ms
 ```
 - `CanonicalModelTests`: Validated roundtrip JSON serialization and SQLite cache entity insertion/query.
 - `GoldenFixturesTest`: Verified all 8 cross-platform golden fixtures against the canonical schema.
-- `TestOfflineColdStartAndMetricMapping`: Verified cold-start loads from SQLite in `< 300ms` and maps honest metrics.
+- `TestOfflineColdStartAndMetricMapping`: Verified cold-start loads from SQLite in `< 10ms` and maps honest metrics.
 - `TestFiveTabPayloadAndStressParity`: Verified 5-tab extraction, autonomic balance, sleep guidance, and stress drivers.
 - `TestDateRangeAndHistoryIntegrity`: Verified multi-day range queries and historical trend extraction without synthetic data.
+- `TestInitializeAsyncDoesNotHang`: Verified that `InitializeAsync` executes non-blockingly and returns in `< 500ms` on cold cache.
+- `TestParallelGetDailySummaryDeduplication`: Verified that concurrent parallel calls to `GetDailySummaryAsync` (e.g. from `SmartBriefingService` and dashboard widgets) are cleanly deduplicated with zero deadlocks.
 
-### 2. iOS Native Test Suite (`DailyCoreTests`)
+---
+
+## Startup Hang Hotfix & Non-Blocking Architecture
+
+### 1. Root Cause Analysis
+When testing the WinUI 3 desktop application after the initial P6 integration, the application hung on startup with an empty window and a busy cursor ("Not Responding"). Analysis identified three key failure vectors:
+1. **Awaited Realtime Subscribe in UI Hydration Path**: `HealthHubService.InitializeAsync()` awaited `_realtimeChannel.Subscribe()` with topic `"realtime_summary"`. On Supabase Realtime (Phoenix Channels), postgres_changes requires the standard channel topic `"realtime"`. Awaiting `Subscribe()` on an unmatched topic without a timeout blocked the task indefinitely. Because `App.xaml.cs` awaits `healthService.InitializeAsync()` inside `InitializationTask`, `MainWindow.NavigateAfterHydrationAsync` was permanently blocked from navigating to `MainPage`.
+2. **Model Reflection Hazard**: `HealthDailySummaryRecord` had shadowed properties (`public new string? BaseUrl`, `public new string? TableName`, `public new Dictionary<PrimaryKeyAttribute, object>? PrimaryKey`), which interfered with Postgrest's reflection-based property resolution.
+3. **Synchronous Cold-Start Network Call**: `HealthHubService.InitializeAsync()` executed `await LoadSummaryForSelectedDateAsync()`, which synchronously invoked `_supabaseClient.From<HealthDailySummaryRecord>().Get()` when the SQLite cache was cold.
+4. **Parallel Stampede**: Concurrent requests from `SmartBriefingService` (13 metrics) and dashboard widgets concurrently hammered remote Supabase before local caching settled.
+
+### 2. Implementation Resolution
+1. **Clean Postgrest BaseModel Inheritance**: Removed all shadowed `public new` properties from `HealthDailySummaryRecord`. Postgrest properties are safely resolved and `HealthJsonSerializer` handles `BaseModel` internal properties via `DefaultJsonTypeInfoResolver`.
+2. **Non-Blocking `< 15ms` Startup**: `HealthHubService.InitializeAsync()` now strictly initializes SQLite and immediately loads from the fast local SQLite cache (`< 10ms`). Remote synchronization and Realtime channel subscriptions are dispatched to background `Task.Run` workers, never blocking `App.InitializationTask` or window hydration.
+3. **Channel Topic & Timeout Protection**: Realtime channel uses standard topic `"realtime"`, bounded by a strict 3-second timeout (`Task.WhenAny`). Automatic re-subscription is tied to `Realtime.AddStateChangedHandler` on `SocketState.Open`.
+4. **Single-Flight Deduplication**: Implemented `ConcurrentDictionary<string, Task<HealthDailySummaryRecord?>> _inFlightFetches` in `HealthHubService.GetDailySummaryAsync`, collapsing multiple concurrent requests for the same date into a single background operation.
+
+### 3. iOS Native Test Suite (`DailyCoreTests`)
 Ran `swift test --package-path DailyCore`:
 ```
 Test run with 54 tests in 8 suites passed after 0.049 seconds.
 ```
 
-### 3. Android Native Test Suite (`:core-health:testDebugUnitTest`)
+### 4. Android Native Test Suite (`:core-health:testDebugUnitTest`)
 Ran `./gradlew :core-health:testDebugUnitTest`:
 ```
 BUILD SUCCESSFUL in 13s

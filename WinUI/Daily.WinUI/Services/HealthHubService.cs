@@ -26,6 +26,8 @@ namespace Daily_WinUI.Services
         private readonly ISettingsService _settingsService;
         private readonly ILogger<HealthHubService>? _logger;
         private readonly ConcurrentDictionary<string, HealthDailySummaryRecord> _memoryCache = new();
+        private readonly ConcurrentDictionary<string, Task<HealthDailySummaryRecord?>> _inFlightFetches = new();
+        private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
 
         private DateTime _selectedDate = DateTime.Today;
         private string _currentViewType = "Overview";
@@ -43,6 +45,48 @@ namespace Daily_WinUI.Services
             _dbService = dbService;
             _settingsService = settingsService;
             _logger = logger;
+
+            try
+            {
+                _supabaseClient.Realtime.AddStateChangedHandler((sender, state) =>
+                {
+                    if (state == Supabase.Realtime.Constants.SocketState.Open)
+                    {
+                        _logger?.LogInformation("[HealthHubService] Realtime socket opened. Ensuring subscription...");
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await SetupRealtimeSubscriptionAsync(forceRecreate: true).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger?.LogWarning(ex, "[HealthHubService] Socket state reconnect error: {Message}", ex.Message);
+                            }
+                        });
+                    }
+                });
+
+                _supabaseClient.Auth.AddStateChangedListener((sender, state) =>
+                {
+                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn ||
+                        state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await SetupRealtimeSubscriptionAsync(forceRecreate: true).ConfigureAwait(false);
+                            }
+                            catch { }
+                        });
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[HealthHubService] Failed to attach listeners in constructor: {Message}", ex.Message);
+            }
         }
 
         public DateTime SelectedDate
@@ -84,14 +128,37 @@ namespace Daily_WinUI.Services
 
             try
             {
-                // Guarantee local database table is initialized
-                await _dbService.InitializeAsync();
+                // 1. Guarantee local database table is initialized (<5ms)
+                await _dbService.InitializeAsync().ConfigureAwait(false);
 
-                // Load initial date summary from cache / remote
-                await LoadSummaryForSelectedDateAsync();
+                // 2. Load initial date summary from FAST local SQLite/memory cache (<10ms)
+                await LoadSummaryFromLocalCacheAsync(_selectedDate).ConfigureAwait(false);
 
-                // Setup Supabase Realtime
-                await SetupRealtimeSubscriptionAsync(forceRecreateRealtime);
+                // 3. Fire-and-forget remote synchronization in background - NEVER block startup
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await RefreshSummaryFromRemoteAsync(_selectedDate).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "[HealthHubService] Background initial summary fetch error: {Message}", ex.Message);
+                    }
+                });
+
+                // 4. Fire-and-forget Realtime setup with timeout protection - NEVER block startup
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await SetupRealtimeSubscriptionAsync(forceRecreateRealtime).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "[HealthHubService] Background realtime setup error: {Message}", ex.Message);
+                    }
+                });
 
                 _isInitialized = true;
             }
@@ -101,31 +168,16 @@ namespace Daily_WinUI.Services
             }
         }
 
-        private async Task LoadSummaryForSelectedDateAsync()
-        {
-            try
-            {
-                var summary = await GetDailySummaryAsync(_selectedDate);
-                _currentSummary = summary;
-                OnDailySummaryChanged?.Invoke(summary);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "[HealthHubService] Failed to load summary for {Date}: {Message}", _selectedDate, ex.Message);
-            }
-        }
-
-        public async Task<HealthDailySummaryRecord?> GetDailySummaryAsync(DateTime date, bool forceRefresh = false)
+        private async Task<HealthDailySummaryRecord?> LoadSummaryFromLocalCacheAsync(DateTime date)
         {
             var dateStr = date.ToString("yyyy-MM-dd");
-
-            // 1. Fast memory cache
-            if (!forceRefresh && _memoryCache.TryGetValue(dateStr, out var cached))
+            if (_memoryCache.TryGetValue(dateStr, out var cached))
             {
+                _currentSummary = cached;
+                DispatchToUI(() => OnDailySummaryChanged?.Invoke(cached));
                 return cached;
             }
 
-            // 2. Offline SQLite cache (<300ms)
             try
             {
                 var entity = await _dbService.Connection.FindAsync<HealthDailySummaryEntity>(dateStr).ConfigureAwait(false);
@@ -133,10 +185,9 @@ namespace Daily_WinUI.Services
                 {
                     var record = MapEntityToRecord(entity);
                     _memoryCache[dateStr] = record;
-                    if (!forceRefresh)
-                    {
-                        return record;
-                    }
+                    _currentSummary = record;
+                    DispatchToUI(() => OnDailySummaryChanged?.Invoke(record));
+                    return record;
                 }
             }
             catch (Exception ex)
@@ -144,7 +195,38 @@ namespace Daily_WinUI.Services
                 _logger?.LogWarning(ex, "[HealthHubService] SQLite cache read error: {Message}", ex.Message);
             }
 
-            // 3. Remote Supabase fetch
+            return null;
+        }
+
+        private async Task LoadSummaryForSelectedDateAsync()
+        {
+            try
+            {
+                // First load instantly from local SQLite/memory cache
+                var cached = await LoadSummaryFromLocalCacheAsync(_selectedDate).ConfigureAwait(false);
+
+                // Asynchronously pull latest from remote in background
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await RefreshSummaryFromRemoteAsync(_selectedDate).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "[HealthHubService] Remote refresh failed for {Date}: {Message}", _selectedDate, ex.Message);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[HealthHubService] Failed to load summary for {Date}: {Message}", _selectedDate, ex.Message);
+            }
+        }
+
+        private async Task<HealthDailySummaryRecord?> RefreshSummaryFromRemoteAsync(DateTime date)
+        {
+            var dateStr = date.ToString("yyyy-MM-dd");
             var currentUserId = _supabaseClient.Auth.CurrentSession?.User?.Id;
             if (string.IsNullOrEmpty(currentUserId))
             {
@@ -153,16 +235,32 @@ namespace Daily_WinUI.Services
 
             try
             {
-                var resp = await _supabaseClient.From<HealthDailySummaryRecord>()
+                var fetchTask = _supabaseClient.From<HealthDailySummaryRecord>()
                     .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
-                    .Get()
-                    .ConfigureAwait(false);
+                    .Get();
 
+                var completed = await Task.WhenAny(fetchTask, Task.Delay(4000)).ConfigureAwait(false);
+                if (completed != fetchTask)
+                {
+                    _logger?.LogWarning("[HealthHubService] Remote fetch timed out for {Date}", dateStr);
+                    return _memoryCache.TryGetValue(dateStr, out var timeoutFallback) ? timeoutFallback : null;
+                }
+
+                var resp = await fetchTask.ConfigureAwait(false);
                 var record = resp.Models.FirstOrDefault();
                 if (record != null)
                 {
                     _memoryCache[dateStr] = record;
                     await SaveRecordToSqliteAsync(record).ConfigureAwait(false);
+
+                    if (date.Date == _selectedDate.Date)
+                    {
+                        _currentSummary = record;
+                        DispatchToUI(() =>
+                        {
+                            OnDailySummaryChanged?.Invoke(record);
+                        });
+                    }
                     return record;
                 }
             }
@@ -174,13 +272,57 @@ namespace Daily_WinUI.Services
             return _memoryCache.TryGetValue(dateStr, out var mem) ? mem : null;
         }
 
+        public async Task<HealthDailySummaryRecord?> GetDailySummaryAsync(DateTime date, bool forceRefresh = false)
+        {
+            var dateStr = date.ToString("yyyy-MM-dd");
+
+            // 1. Fast memory cache (<0.1ms)
+            if (!forceRefresh && _memoryCache.TryGetValue(dateStr, out var cached))
+            {
+                return cached;
+            }
+
+            // 2. Offline SQLite cache (<10ms)
+            if (!forceRefresh)
+            {
+                try
+                {
+                    var entity = await _dbService.Connection.FindAsync<HealthDailySummaryEntity>(dateStr).ConfigureAwait(false);
+                    if (entity != null)
+                    {
+                        var record = MapEntityToRecord(entity);
+                        _memoryCache[dateStr] = record;
+                        return record;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "[HealthHubService] SQLite cache read error: {Message}", ex.Message);
+                }
+            }
+
+            // 3. Remote Supabase fetch with single-flight deduplication (prevents parallel storm)
+            var key = dateStr + (forceRefresh ? "_force" : "");
+            return await _inFlightFetches.GetOrAdd(key, _ => Task.Run(async () =>
+            {
+                try
+                {
+                    return await RefreshSummaryFromRemoteAsync(date).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _inFlightFetches.TryRemove(key, out Task<HealthDailySummaryRecord?>? _);
+                }
+            })).ConfigureAwait(false);
+        }
+
         public async Task<List<HealthDailySummaryRecord>> GetDailySummariesRangeAsync(DateTime startDate, DateTime endDate)
         {
             var startStr = startDate.ToString("yyyy-MM-dd");
             var endStr = endDate.ToString("yyyy-MM-dd");
             var results = new Dictionary<string, HealthDailySummaryRecord>(StringComparer.OrdinalIgnoreCase);
 
-            // Read from SQLite first
+            // Read from SQLite first (<20ms)
             try
             {
                 var cached = await _dbService.Connection.QueryAsync<HealthDailySummaryEntity>(
@@ -199,24 +341,32 @@ namespace Daily_WinUI.Services
                 _logger?.LogWarning(ex, "[HealthHubService] Range cache read error: {Message}", ex.Message);
             }
 
-            // Sync missing from remote
+            // Sync missing from remote with timeout
             var currentUserId = _supabaseClient.Auth.CurrentSession?.User?.Id;
             if (!string.IsNullOrEmpty(currentUserId))
             {
                 try
                 {
-                    var resp = await _supabaseClient.From<HealthDailySummaryRecord>()
+                    var fetchTask = _supabaseClient.From<HealthDailySummaryRecord>()
                         .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
                         .Filter("local_date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
                         .Where(x => x.UserId == currentUserId)
-                        .Get()
-                        .ConfigureAwait(false);
+                        .Get();
 
-                    foreach (var record in resp.Models)
+                    var completed = await Task.WhenAny(fetchTask, Task.Delay(4000)).ConfigureAwait(false);
+                    if (completed == fetchTask)
                     {
-                        results[record.LocalDate] = record;
-                        _memoryCache[record.LocalDate] = record;
-                        await SaveRecordToSqliteAsync(record).ConfigureAwait(false);
+                        var resp = await fetchTask.ConfigureAwait(false);
+                        foreach (var record in resp.Models)
+                        {
+                            results[record.LocalDate] = record;
+                            _memoryCache[record.LocalDate] = record;
+                            await SaveRecordToSqliteAsync(record).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        _logger?.LogWarning("[HealthHubService] Range remote read timed out for {Start} to {End}", startStr, endStr);
                     }
                 }
                 catch (Exception ex)
@@ -239,24 +389,39 @@ namespace Daily_WinUI.Services
             var userId = _supabaseClient.Auth.CurrentSession?.User?.Id;
             if (string.IsNullOrEmpty(userId)) return;
 
+            await _realtimeSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
-                if (_realtimeChannel != null && !forceRecreate) return;
+                if (_realtimeChannel != null && !forceRecreate && _realtimeChannel.IsJoined) return;
 
                 if (_realtimeChannel != null)
                 {
                     try { _realtimeChannel.Unsubscribe(); } catch { }
+                    try { _supabaseClient.Realtime.Remove(_realtimeChannel); } catch { }
                     _realtimeChannel = null;
                 }
 
-                _realtimeChannel = _supabaseClient.Realtime.Channel("realtime_summary", "public", "health_daily_summary", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
+                _realtimeChannel = _supabaseClient.Realtime.Channel("realtime", "public", "health_daily_summary", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
                 _realtimeChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnRealtimeSummaryReceived);
 
-                await _realtimeChannel.Subscribe();
+                var subscribeTask = _realtimeChannel.Subscribe();
+                var completed = await Task.WhenAny(subscribeTask, Task.Delay(3000)).ConfigureAwait(false);
+                if (completed != subscribeTask)
+                {
+                    _logger?.LogWarning("[HealthHubService] Realtime channel subscribe timed out after 3000ms. Will retry on socket open.");
+                }
+                else
+                {
+                    _logger?.LogInformation("[HealthHubService] Realtime channel subscribed to health_daily_summary");
+                }
             }
             catch (Exception ex)
             {
                 _logger?.LogWarning(ex, "[HealthHubService] Realtime subscription error: {Message}", ex.Message);
+            }
+            finally
+            {
+                _realtimeSemaphore.Release();
             }
         }
 

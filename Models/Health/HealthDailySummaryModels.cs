@@ -15,21 +15,6 @@ namespace Daily.Models.Health
     [Table("health_daily_summary")]
     public class HealthDailySummaryRecord : BaseModel
     {
-        [System.Text.Json.Serialization.JsonIgnore]
-        [Newtonsoft.Json.JsonIgnore]
-        public new string? BaseUrl { get => base.BaseUrl; set => base.BaseUrl = value; }
-
-        [System.Text.Json.Serialization.JsonIgnore]
-        [Newtonsoft.Json.JsonIgnore]
-        public new Supabase.Postgrest.ClientOptions? RequestClientOptions { get => base.RequestClientOptions; set => base.RequestClientOptions = value; }
-
-        [System.Text.Json.Serialization.JsonIgnore]
-        [Newtonsoft.Json.JsonIgnore]
-        public new string? TableName => base.TableName;
-
-        [System.Text.Json.Serialization.JsonIgnore]
-        [Newtonsoft.Json.JsonIgnore]
-        public new Dictionary<PrimaryKeyAttribute, object>? PrimaryKey => base.PrimaryKey;
 
         [PrimaryKey("id")]
         [JsonPropertyName("id")]
