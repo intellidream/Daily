@@ -441,7 +441,7 @@ namespace Daily_WinUI.Views
                 var m = GetMetric(VitalType.SleepDuration);
                 if (m != null && m.Value > 0)
                 {
-                    double mins = SettingsService.ConvertSleepToMinutes(m.Value, m.Unit);
+                    double mins = Daily_WinUI.Services.SettingsService.ConvertSleepToMinutes(m.Value, m.Unit);
                     var ts = TimeSpan.FromMinutes(mins);
                     return $"{(int)ts.TotalHours}h {ts.Minutes}m";
                 }
@@ -450,7 +450,7 @@ namespace Daily_WinUI.Views
         }
 
         public string DistanceText => GetMetricValueWithUnit(VitalType.Distance, "km", 2);
-        public string FloorsText => GetMetricValueWithUnit(VitalType.FlightsClimbed, "fl", 0);
+        public string FloorsText => GetMetricValueWithUnit(VitalType.FloorsClimbed, "fl", 0);
         public string SpeedText => GetMetricValueWithUnit(VitalType.WalkingSpeed, "km/h", 1);
 
         public string HourlyStepsMaxText
