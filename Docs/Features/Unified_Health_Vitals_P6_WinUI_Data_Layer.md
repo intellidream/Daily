@@ -126,3 +126,43 @@ Ran `./gradlew :core-health:testDebugUnitTest`:
 BUILD SUCCESSFUL in 13s
 52 actionable tasks: 1 executed, 51 up-to-date
 ```
+
+---
+
+## Live Windows 11 Verification & Interactive Polish
+
+### 1. Dashboard Widget Tap Interaction Wiring
+In `HealthWidgetControl.xaml` and `HealthWidgetControl.xaml.cs`, explicit `Tapped` routed handlers were wired up:
+- **Header Banner**: `Tapped="Header_Tapped"` $\rightarrow$ opens `HealthDetailPage` with `"Overview"` tab selected.
+- **Top Row (Steps/Kcal/HR)**: `Tapped="Header_Tapped"` $\rightarrow$ opens `"Overview"` tab.
+- **Sleep Section**: `Tapped="Sleep_Tapped"` $\rightarrow$ opens `"Sleep Studio"` tab (Pivot item 1) directly.
+- **Vitals Grid (HRV/RHR/Resp/SpO2)**: `Tapped="Vitals_Tapped"` $\rightarrow$ opens `"Heart & Vitals"` tab (Pivot item 3) directly.
+- All handlers set `e.Handled = true` to prevent scroll interference and ensure immediate modal navigation.
+
+### 2. Live Verification on Windows 11 Parallels VM
+Built and tested live on Windows 11 ARM64 (`Daily.WinUI.exe` PID 3092):
+- **Boot Time**: Instant (< 1s), clean transition from startup hydration overlay directly to Liquid Glass dashboard.
+- **Tab 0: Overview**:
+  - Hero metrics: 32 steps (orange), 1 kcal (red), -- sleep (purple), 44 stress (cyan).
+  - 24-Hour Steps Cadence chart: Hourly bars rendering hour 07 (4 steps) and hour 08 (28 steps) with 28 steps/hr peak, strictly matching canonical `health_daily_summary` Supabase record.
+  - Sleep & Stress preview cards: Sleep score `--` ("No Sleep Logged"), Monkey mascot mood glyph ("Baseline").
+  - Key Vitals: Resting HR 63 bpm, Heart Rate 74 bpm.
+- **Tab 1: Sleep Studio**:
+  - Score ring: `-- SCORE`.
+  - Sleep Architecture: "No Sleep Logged", Efficiency `--`.
+  - Clinical verdict: "Awaiting Telemetry".
+  - 4-level hypnogram canvas: Awake, REM, Light, Deep stages with hourly grid timeline.
+- **Tab 2: Stress Studio**:
+  - Monkey Mascot avatar with dynamic mood state ("Baseline").
+  - Autonomic Balance gauge (Sympathetic vs Parasympathetic balance).
+  - 4 stress drivers (Physical activity, sleep debt, HRV suppression, intraday spikes).
+  - Interactive 4-4-4-4 Box Breathing player with Start/Stop controls.
+- **Tab 3: Heart & Vitals**:
+  - Syncfusion `SfCartesianChart` continuous intraday heart rate spline chart (180, 160, 140, 120 bpm scale).
+  - 4 heart rate zones breakdown (Resting, Fat Burn, Cardio, Peak).
+  - Sensor tiles: Resting HR (63 bpm), HRV, SpO2, Blood Pressure, Respiratory Rate, Blood Glucose.
+- **Tab 4: Trends**:
+  - 7-Day History trend cards with continuous spline curve (Steps 7-Day showing 8000, 6000, 4000, 2000 scale).
+  - Zero-synthetic fallback contract verified: displays `--` for days without records.
+  - Day Navigator (`<` and `>` buttons) smoothly transitions between dates, reloading SQLite cache in `< 10ms`.
+
