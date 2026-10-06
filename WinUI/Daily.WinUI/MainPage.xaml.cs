@@ -41,11 +41,15 @@ public sealed partial class MainPage : Page
 
     public MainPage()
     {
-        App.LogDiagnostic("MainPage constructor entered");
+        App.LogDiagnostic("MainPage constructor: step 1 (entering)");
         InitializeComponent();
+        App.LogDiagnostic("MainPage constructor: step 2 (InitializeComponent done)");
         Current = this;
+        App.LogDiagnostic("MainPage constructor: step 3 (Current=this)");
         _authService = App.Current.Services.GetRequiredService<WinUIAuthService>();
+        App.LogDiagnostic("MainPage constructor: step 4 (_authService resolved)");
         _widgetService = App.Current.Services.GetRequiredService<WinUIWidgetService>();
+        App.LogDiagnostic("MainPage constructor: step 5 (_widgetService resolved)");
         Loaded += MainPage_Loaded;
         FadeOutBriefingStoryboard.Completed += FadeOutBriefingStoryboard_Completed;
         SizeChanged += MainPage_SizeChanged;
@@ -59,12 +63,12 @@ public sealed partial class MainPage : Page
             }
             if (Current == this) Current = null;
         };
+        App.LogDiagnostic("MainPage constructor: step 6");
         WeatherBannerService.WeatherConditionChanged += OnWeatherConditionChanged;
-        // Replay last known condition if weather already loaded before this page
+        App.LogDiagnostic("MainPage constructor: step 7");
         if (WeatherBannerService.LastIconCode is { } code)
             OnWeatherConditionChanged(code);
-
-        // Listen for Auth changes so we update profile picture when session hydration completes
+        App.LogDiagnostic("MainPage constructor: step 8");
         _authStateChangedHandler = (sender, state) =>
         {
             DispatcherQueue.TryEnqueue(() =>
@@ -73,7 +77,7 @@ public sealed partial class MainPage : Page
             });
         };
         _authService.AddStateChangedListener(_authStateChangedHandler);
-        App.LogDiagnostic("MainPage constructor completed");
+        App.LogDiagnostic("MainPage constructor: step 9 (COMPLETE)");
     }
 
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
