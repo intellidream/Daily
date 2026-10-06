@@ -280,6 +280,11 @@ public sealed partial class MainWindow : Window
 
     // ── Navigation after auth hydration ──────────────────────────────────────
 
+    public void Navigate(Type pageType)
+    {
+        RootFrame.Navigate(pageType);
+    }
+
     public bool IsLoadingOverlayVisible => LoadingOverlay.Visibility == Visibility.Visible;
 
     public async System.Threading.Tasks.Task WaitForMinBootTimeAsync()

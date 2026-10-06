@@ -42,7 +42,7 @@ public sealed partial class LoginPage : Page
                 }
                 else if (App.Current.MainWindow is MainWindow mw)
                 {
-                    mw.RootFrame.Navigate(typeof(MainPage));
+                    mw.Navigate(typeof(MainPage));
                 }
             }
             else
@@ -81,7 +81,7 @@ public sealed partial class LoginPage : Page
             }
             else if (App.Current.MainWindow is MainWindow mw)
             {
-                mw.RootFrame.Navigate(typeof(MainPage));
+                mw.Navigate(typeof(MainPage));
             }
         }
         catch (System.Exception ex)
