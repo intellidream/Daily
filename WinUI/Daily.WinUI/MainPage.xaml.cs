@@ -127,12 +127,13 @@ public sealed partial class MainPage : Page
             tasksToAwait = _loadingTasks.ToList();
         }
 
-        // 4. Wait for all registered widget data loads to finish
+        // 4. Wait for all registered widget data loads to finish (bounded to 2.5s to prevent indefinite blank screen)
         if (tasksToAwait.Count > 0)
         {
             try
             {
-                await System.Threading.Tasks.Task.WhenAll(tasksToAwait);
+                var whenAllTask = System.Threading.Tasks.Task.WhenAll(tasksToAwait);
+                await System.Threading.Tasks.Task.WhenAny(whenAllTask, System.Threading.Tasks.Task.Delay(2500));
             }
             catch (System.Exception ex)
             {
@@ -140,24 +141,27 @@ public sealed partial class MainPage : Page
             }
         }
 
-        // 4.1 Sync behavior events, briefing cache, and habits logs from remote (Supabase)
-        try
+        // 4.1 Sync behavior events, briefing cache, and habits logs from remote in background (non-blocking)
+        _ = Task.Run(async () =>
         {
-            var behaviorSvc = App.Current.Services.GetRequiredService<IBehaviorService>();
-            var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
-            var syncService = App.Current.Services.GetRequiredService<Daily.Services.ISyncService>();
-            
-            // Run pulls concurrently (including Habits sync pull!)
-            await Task.WhenAll(
-                behaviorSvc.PullEventsAsync(),
-                cacheManager.PullRemoteCacheAsync(),
-                syncService.PullAsync(Daily.Services.SyncScope.Habits)
-            );
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[MainPage] Remote pulls failed: {ex.Message}");
-        }
+            try
+            {
+                var behaviorSvc = App.Current.Services.GetRequiredService<IBehaviorService>();
+                var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
+                var syncService = App.Current.Services.GetRequiredService<Daily.Services.ISyncService>();
+                
+                // Run pulls concurrently (including Habits sync pull!)
+                await Task.WhenAll(
+                    behaviorSvc.PullEventsAsync(),
+                    cacheManager.PullRemoteCacheAsync(),
+                    syncService.PullAsync(Daily.Services.SyncScope.Habits)
+                );
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainPage] Remote pulls failed: {ex.Message}");
+            }
+        });
 
         // Pre-generate Smart Briefing data in background as soon as data loading is complete
         var settingsForPreGen = SettingsService.Load();

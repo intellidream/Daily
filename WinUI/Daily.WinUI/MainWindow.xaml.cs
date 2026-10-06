@@ -337,7 +337,12 @@ public sealed partial class MainWindow : Window
 
     private async Task NavigateAfterHydrationAsync()
     {
-        await App.Current.InitializationTask;
+        try
+        {
+            // Bound waiting on InitializationTask to 2.5 seconds max so UI never freezes
+            await Task.WhenAny(App.Current.InitializationTask, Task.Delay(2500));
+        }
+        catch { }
 
         var authService = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
             .GetRequiredService<WinUIAuthService>(App.Current.Services);
@@ -352,6 +357,7 @@ public sealed partial class MainWindow : Window
             }
             else
             {
+                RootFrame.Opacity = 1.0;
                 RootFrame.Navigate(typeof(Views.LoginPage));
                 await FadeOutLoadingOverlayAsync();
             }
@@ -360,6 +366,7 @@ public sealed partial class MainWindow : Window
 
     private void RootFrame_Navigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
+        RootFrame.Opacity = 1.0;
         if (e.SourcePageType == typeof(MainPage))
         {
             if (LoadingOverlay.Visibility != Visibility.Visible)

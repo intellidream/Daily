@@ -25,7 +25,8 @@ public sealed partial class LoginPage : Page
 
         try
         {
-            await App.Current.InitializationTask;
+            // Bounded wait on InitializationTask so background service hydration never hangs user interaction
+            await Task.WhenAny(App.Current.InitializationTask, Task.Delay(1500));
             StatusText.Text = "Waiting for Google sign-in...";
             var success = await _authService.SignInWithGoogleAsync();
 
@@ -38,6 +39,10 @@ public sealed partial class LoginPage : Page
                 if (Frame != null)
                 {
                     Frame.Navigate(typeof(MainPage));
+                }
+                else if (App.Current.MainWindow is MainWindow mw)
+                {
+                    mw.RootFrame.Navigate(typeof(MainPage));
                 }
             }
             else
@@ -66,12 +71,17 @@ public sealed partial class LoginPage : Page
 
         try
         {
-            await App.Current.InitializationTask;
+            // Bounded wait on InitializationTask so guest skip is instantaneous
+            await Task.WhenAny(App.Current.InitializationTask, Task.Delay(1000));
 
             // Navigate directly to the dashboard without signing in
             if (Frame != null)
             {
                 Frame.Navigate(typeof(MainPage));
+            }
+            else if (App.Current.MainWindow is MainWindow mw)
+            {
+                mw.RootFrame.Navigate(typeof(MainPage));
             }
         }
         catch (System.Exception ex)

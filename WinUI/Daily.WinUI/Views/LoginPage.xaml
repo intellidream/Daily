@@ -9,7 +9,7 @@
 
     <Grid Background="{ThemeResource LoginBackgroundBrush}">
         <!-- Subtle radial glow behind the card -->
-        <Ellipse Width="500" Height="500" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-80,0,0" Opacity="0.08">
+        <Ellipse Width="500" Height="500" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-80,0,0" Opacity="0.08" IsHitTestVisible="False">
             <Ellipse.Fill>
                 <RadialGradientBrush>
                     <GradientStop Color="{ThemeResource LoginGlowColor}" Offset="0" />

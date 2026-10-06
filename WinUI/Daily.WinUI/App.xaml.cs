@@ -334,7 +334,15 @@ public partial class App : Application
 
     private async Task InitializeAsync()
     {
-        await SupabaseClient.InitializeAsync();
+        try
+        {
+            var initSupabaseTask = SupabaseClient.InitializeAsync();
+            await Task.WhenAny(initSupabaseTask, Task.Delay(3500));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Supabase initialization warning: {ex.Message}");
+        }
 
         // Manual Hydration
         if (SupabaseClient.Auth.CurrentSession == null)
