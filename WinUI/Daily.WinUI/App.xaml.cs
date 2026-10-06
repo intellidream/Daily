@@ -192,21 +192,34 @@ public partial class App : Application
         });
     }
 
+    public static void LogDiagnostic(string message)
+    {
+        try
+        {
+            var logPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "daily_debug.log");
+            System.IO.File.AppendAllText(logPath, $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] {message}\r\n");
+        }
+        catch { }
+    }
+
     public App()
     {
         this.UnhandledException += (s, e) =>
         {
+            LogDiagnostic($"UNHANDLED XAML EXCEPTION: {e.Exception}");
             Console.WriteLine("UNHANDLED XAML EXCEPTION: " + e.Exception);
             e.Handled = true;
         };
 
         AppDomain.CurrentDomain.UnhandledException += (s, e) =>
         {
+            LogDiagnostic($"UNHANDLED APPDOMAIN EXCEPTION: {e.ExceptionObject}");
             Console.WriteLine("UNHANDLED APPDOMAIN EXCEPTION: " + e.ExceptionObject);
         };
 
         TaskScheduler.UnobservedTaskException += (s, e) =>
         {
+            LogDiagnostic($"UNOBSERVED TASK EXCEPTION: {e.Exception}");
             Console.WriteLine("UNOBSERVED TASK EXCEPTION: " + e.Exception);
             e.SetObserved();
         };
@@ -231,6 +244,7 @@ public partial class App : Application
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
+        LogDiagnostic("OnLaunched entered");
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
@@ -243,6 +257,7 @@ public partial class App : Application
 
         _window = new MainWindow();
         _window.Activate();
+        LogDiagnostic("MainWindow created and activated");
 
         // Handle initial launch activation (covers cold-start via protocol click)
         var appActivatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
@@ -334,55 +349,82 @@ public partial class App : Application
 
     private async Task InitializeAsync()
     {
+        LogDiagnostic("InitializeAsync started");
         try
         {
             var initSupabaseTask = SupabaseClient.InitializeAsync();
             await Task.WhenAny(initSupabaseTask, Task.Delay(3500));
+            LogDiagnostic("InitializeAsync: Supabase init finished or timed out");
         }
         catch (Exception ex)
         {
+            LogDiagnostic($"InitializeAsync: Supabase initialization warning: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"[App] Supabase initialization warning: {ex.Message}");
         }
 
         // Manual Hydration
         if (SupabaseClient.Auth.CurrentSession == null)
         {
+            LogDiagnostic("InitializeAsync: Supabase session is null, checking persistence");
             var persistence = new Daily_WinUI.Services.WinUISessionPersistence();
             var session = persistence.LoadSession();
             if (session != null && !string.IsNullOrEmpty(session.AccessToken))
             {
-                try { await SupabaseClient.Auth.SetSession(session.AccessToken, session.RefreshToken); }
-                catch { }
+                try
+                {
+                    LogDiagnostic("InitializeAsync: Restoring session via SetSession");
+                    await SupabaseClient.Auth.SetSession(session.AccessToken, session.RefreshToken);
+                    LogDiagnostic($"InitializeAsync: Session restored. CurrentUser={SupabaseClient.Auth.CurrentSession?.User?.Email}");
+                }
+                catch (Exception ex)
+                {
+                    LogDiagnostic($"InitializeAsync: SetSession failed: {ex.Message}");
+                }
             }
         }
+        else
+        {
+            LogDiagnostic($"InitializeAsync: CurrentSession already active: {SupabaseClient.Auth.CurrentSession?.User?.Email}");
+        }
 
-        // Initialize Database & Start Background Sync
-        var db = Services.GetRequiredService<Daily.Services.IDatabaseService>();
-        await db.InitializeAsync();
+        try
+        {
+            // Initialize Database & Start Background Sync
+            var db = Services.GetRequiredService<Daily.Services.IDatabaseService>();
+            await db.InitializeAsync();
+            LogDiagnostic("InitializeAsync: Database initialized");
 
-        // CRITICAL: Guarantee SettingsService is fully hydrated BEFORE the UI loads and asks for widgets!
-        // This solves the race condition where the dashboard falls back to default sizes/positions on startup.
-        var settingsService = Services.GetRequiredService<Daily.Services.ISettingsService>();
-        await settingsService.InitializeAsync();
+            var settingsService = Services.GetRequiredService<Daily.Services.ISettingsService>();
+            await settingsService.InitializeAsync();
+            LogDiagnostic("InitializeAsync: SettingsService initialized");
 
-        var userId = SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
-        var seeder = Services.GetRequiredService<Daily.Services.ISeederService>();
-        await seeder.SeedRssFeedsAsync(userId);
+            var userId = SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
+            var seeder = Services.GetRequiredService<Daily.Services.ISeederService>();
+            await seeder.SeedRssFeedsAsync(userId);
+            LogDiagnostic("InitializeAsync: Feeds seeded");
 
-        // Re-initialize feeds in memory to reflect the newly seeded database entries
-        var rssService = Services.GetRequiredService<Daily.Services.IRssFeedService>();
-        await rssService.InitializeCustomFeedsAsync();
+            var rssService = Services.GetRequiredService<Daily.Services.IRssFeedService>();
+            await rssService.InitializeCustomFeedsAsync();
+            LogDiagnostic("InitializeAsync: Custom feeds initialized");
 
-        // Initialize RSS articles service (for bookmarks and favorites)
-        var articleService = Services.GetRequiredService<Daily.Services.IRssArticleService>();
-        await articleService.InitializeAsync();
+            var articleService = Services.GetRequiredService<Daily.Services.IRssArticleService>();
+            await articleService.InitializeAsync();
+            LogDiagnostic("InitializeAsync: Articles service initialized");
 
-        // Initialize Habits and Health services (sets up Realtime subscriptions)
-        var habitsService = Services.GetRequiredService<Daily.Services.IHabitsService>();
-        await habitsService.InitializeAsync();
+            var habitsService = Services.GetRequiredService<Daily.Services.IHabitsService>();
+            await habitsService.InitializeAsync();
+            LogDiagnostic("InitializeAsync: Habits service initialized");
 
-        var healthService = Services.GetRequiredService<Daily.Services.Health.IHealthService>();
-        await healthService.InitializeAsync();
+            var healthService = Services.GetRequiredService<Daily.Services.Health.IHealthService>();
+            await healthService.InitializeAsync();
+            LogDiagnostic("InitializeAsync: Health service initialized");
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic($"InitializeAsync: Core services init error: {ex}");
+        }
+
+        LogDiagnostic("InitializeAsync: COMPLETED");
 
         if (SupabaseClient.Auth.CurrentSession != null)
         {

@@ -41,6 +41,7 @@ public sealed partial class MainPage : Page
 
     public MainPage()
     {
+        App.LogDiagnostic("MainPage constructor entered");
         InitializeComponent();
         Current = this;
         _authService = App.Current.Services.GetRequiredService<WinUIAuthService>();
@@ -72,6 +73,13 @@ public sealed partial class MainPage : Page
             });
         };
         _authService.AddStateChangedListener(_authStateChangedHandler);
+        App.LogDiagnostic("MainPage constructor completed");
+    }
+
+    protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        App.LogDiagnostic("MainPage.OnNavigatedTo fired");
     }
 
     public void RegisterLoadingTask(System.Threading.Tasks.Task task)
@@ -93,14 +101,26 @@ public sealed partial class MainPage : Page
 
     private async void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
-        UpdateUserUI();
-        await RunLoadingSequenceAsync();
+        App.LogDiagnostic("MainPage_Loaded fired");
+        try
+        {
+            UpdateUserUI();
+            App.LogDiagnostic("MainPage_Loaded: UpdateUserUI finished, calling RunLoadingSequenceAsync");
+            await RunLoadingSequenceAsync();
+            App.LogDiagnostic("MainPage_Loaded: RunLoadingSequenceAsync completed");
+        }
+        catch (Exception ex)
+        {
+            App.LogDiagnostic($"MainPage_Loaded error: {ex}");
+            (App.Current.MainWindow as MainWindow)?.DismissLoadingOverlay();
+        }
     }
 
     private async System.Threading.Tasks.Task RunLoadingSequenceAsync()
     {
         var mainWindow = App.Current.MainWindow as MainWindow;
         bool isInitialBoot = mainWindow != null && mainWindow.IsLoadingOverlayVisible;
+        App.LogDiagnostic($"RunLoadingSequenceAsync started. isInitialBoot={isInitialBoot}, mainWindow={mainWindow != null}");
 
         try
         {
@@ -117,7 +137,9 @@ public sealed partial class MainPage : Page
             }
 
             // 2. Load widgets configuration and bind
+            App.LogDiagnostic("RunLoadingSequenceAsync: calling LoadWidgetsAsync");
             await LoadWidgetsAsync();
+            App.LogDiagnostic("RunLoadingSequenceAsync: LoadWidgetsAsync completed");
 
             // 3. Yield/delay to let widgets instantiate, trigger Loaded, and register their loading tasks
             await System.Threading.Tasks.Task.Delay(200);
@@ -130,6 +152,7 @@ public sealed partial class MainPage : Page
             }
 
             // 4. Wait for all registered widget data loads to finish (bounded to 2.5s to prevent indefinite blank screen)
+            App.LogDiagnostic($"RunLoadingSequenceAsync: awaiting {tasksToAwait.Count} loading tasks");
             if (tasksToAwait.Count > 0)
             {
                 try
@@ -139,9 +162,11 @@ public sealed partial class MainPage : Page
                 }
                 catch (System.Exception ex)
                 {
+                    App.LogDiagnostic($"RunLoadingSequenceAsync: Error loading widgets: {ex.Message}");
                     System.Diagnostics.Debug.WriteLine($"[MainPage] Error loading widgets: {ex}");
                 }
             }
+            App.LogDiagnostic("RunLoadingSequenceAsync: loading tasks finished or timed out");
 
             // 4.1 Sync behavior events, briefing cache, and habits logs from remote in background (non-blocking)
             _ = Task.Run(async () =>
@@ -182,9 +207,11 @@ public sealed partial class MainPage : Page
             if (isInitialBoot && mainWindow != null)
             {
                 // 5. Ensure minimum boot time has elapsed
+                App.LogDiagnostic("RunLoadingSequenceAsync: waiting for min boot time");
                 await mainWindow.WaitForMinBootTimeAsync();
 
                 // 6. Start the fade out of the window-level loading overlay concurrently with widgets entrance
+                App.LogDiagnostic("RunLoadingSequenceAsync: calling FadeOutLoadingOverlayAsync");
                 var fadeOutTask = mainWindow.FadeOutLoadingOverlayAsync();
 
                 // 7. Trigger local widgets entrance animation concurrently
@@ -192,19 +219,23 @@ public sealed partial class MainPage : Page
 
                 // 8. Wait for the fade out to finish before collapsing the loading overlay entirely
                 await fadeOutTask;
+                App.LogDiagnostic("RunLoadingSequenceAsync: fadeOutTask completed");
             }
             else
             {
                 // 7. Trigger local widgets entrance animation
+                App.LogDiagnostic("RunLoadingSequenceAsync: Not initial boot, beginning FadeInContentStoryboard");
                 FadeInContentStoryboard.Begin();
             }
         }
         catch (System.Exception ex)
         {
+            App.LogDiagnostic($"RunLoadingSequenceAsync failed: {ex}");
             System.Diagnostics.Debug.WriteLine($"[MainPage] RunLoadingSequenceAsync failed: {ex}");
         }
         finally
         {
+            App.LogDiagnostic("RunLoadingSequenceAsync finally block executing");
             // Unconditional guarantee: ContentGrid and LoadingOverlay are never trapped
             ContentGrid.Opacity = 1.0;
             ContentScale.ScaleX = 1.0;

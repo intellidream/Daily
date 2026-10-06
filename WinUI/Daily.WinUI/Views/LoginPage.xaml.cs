@@ -11,8 +11,16 @@ public sealed partial class LoginPage : Page
 
     public LoginPage()
     {
+        App.LogDiagnostic("LoginPage constructor entered");
         InitializeComponent();
         _authService = App.Current.Services.GetRequiredService<WinUIAuthService>();
+        App.LogDiagnostic("LoginPage constructor completed");
+    }
+
+    protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        App.LogDiagnostic("LoginPage.OnNavigatedTo fired");
     }
 
     private async void GoogleSignInButton_Click(object sender, RoutedEventArgs e)

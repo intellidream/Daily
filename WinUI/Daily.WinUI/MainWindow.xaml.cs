@@ -42,12 +42,14 @@ public sealed partial class MainWindow : Window
 
         var persistence = new Daily_WinUI.Services.WinUISessionPersistence();
         bool hasSession = persistence.LoadSession() != null;
+        App.LogDiagnostic($"MainWindow ctor: hasSession={hasSession}");
 
         if (hasSession)
         {
             LoadingOverlay.Visibility = Visibility.Visible;
             _minBootTimeTask = System.Threading.Tasks.Task.Delay(1200);
             LoadingStoryboard.Begin();
+            App.LogDiagnostic("MainWindow ctor: calling NavigateAfterHydrationAsync");
             _ = NavigateAfterHydrationAsync();
         }
         else
@@ -55,6 +57,7 @@ public sealed partial class MainWindow : Window
             LoadingOverlay.Visibility = Visibility.Collapsed;
             RootFrame.Opacity = 1.0;
             _minBootTimeTask = System.Threading.Tasks.Task.CompletedTask;
+            App.LogDiagnostic("MainWindow ctor: no session, navigating to LoginPage");
             RootFrame.Navigate(typeof(Views.LoginPage));
         }
 
@@ -294,6 +297,7 @@ public sealed partial class MainWindow : Window
 
     public void DismissLoadingOverlay()
     {
+        App.LogDiagnostic($"DismissLoadingOverlay called. Currently visible={LoadingOverlay.Visibility}");
         try
         {
             LoadingStoryboard.Stop();
@@ -314,10 +318,12 @@ public sealed partial class MainWindow : Window
             AppTitleBar.Opacity = 0.0;
             AppTitleBar.IsHitTestVisible = false;
         }
+        App.LogDiagnostic($"DismissLoadingOverlay completed. Visibility now={LoadingOverlay.Visibility}");
     }
 
     public async System.Threading.Tasks.Task FadeOutLoadingOverlayAsync()
     {
+        App.LogDiagnostic("FadeOutLoadingOverlayAsync entered");
         bool shouldShowTitleBar = RootFrame.Content is MainPage;
 
         try
@@ -349,6 +355,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            App.LogDiagnostic($"FadeOutLoadingOverlayAsync error: {ex}");
             System.Diagnostics.Debug.WriteLine($"[MainWindow] FadeOutLoadingOverlayAsync error: {ex.Message}");
         }
         finally
@@ -359,31 +366,58 @@ public sealed partial class MainWindow : Window
 
     private async Task NavigateAfterHydrationAsync()
     {
+        App.LogDiagnostic("NavigateAfterHydrationAsync started");
         try
         {
             // Bound waiting on InitializationTask to 2.5 seconds max so UI never freezes
             await Task.WhenAny(App.Current.InitializationTask, Task.Delay(2500));
+            App.LogDiagnostic("NavigateAfterHydrationAsync: task wait complete");
         }
-        catch { }
-
-        var authService = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
-            .GetRequiredService<WinUIAuthService>(App.Current.Services);
-
-        DispatcherQueue.TryEnqueue(async () =>
+        catch (Exception ex)
         {
-            UpdateAppThemeFromSystem();
+            App.LogDiagnostic($"NavigateAfterHydrationAsync wait error: {ex}");
+        }
 
-            if (authService.IsAuthenticated)
+        try
+        {
+            var authService = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
+                .GetRequiredService<WinUIAuthService>(App.Current.Services);
+            bool isAuth = authService.IsAuthenticated;
+            App.LogDiagnostic($"NavigateAfterHydrationAsync: authService.IsAuthenticated={isAuth}");
+
+            bool enqueued = DispatcherQueue.TryEnqueue(async () =>
             {
-                RootFrame.Navigate(typeof(MainPage));
-            }
-            else
-            {
-                RootFrame.Opacity = 1.0;
-                RootFrame.Navigate(typeof(Views.LoginPage));
-                await FadeOutLoadingOverlayAsync();
-            }
-        });
+                App.LogDiagnostic($"NavigateAfterHydrationAsync dispatcher callback running. isAuth={isAuth}");
+                try
+                {
+                    UpdateAppThemeFromSystem();
+
+                    if (isAuth)
+                    {
+                        App.LogDiagnostic("NavigateAfterHydrationAsync: Navigating to MainPage");
+                        RootFrame.Navigate(typeof(MainPage));
+                    }
+                    else
+                    {
+                        App.LogDiagnostic("NavigateAfterHydrationAsync: Not authenticated, navigating to LoginPage");
+                        RootFrame.Opacity = 1.0;
+                        RootFrame.Navigate(typeof(Views.LoginPage));
+                        await FadeOutLoadingOverlayAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.LogDiagnostic($"NavigateAfterHydrationAsync dispatcher callback error: {ex}");
+                    DismissLoadingOverlay();
+                }
+            });
+            App.LogDiagnostic($"NavigateAfterHydrationAsync: DispatcherQueue.TryEnqueue returned {enqueued}");
+        }
+        catch (Exception ex)
+        {
+            App.LogDiagnostic($"NavigateAfterHydrationAsync outer error: {ex}");
+            DismissLoadingOverlay();
+        }
     }
 
     private void RootFrame_Navigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
