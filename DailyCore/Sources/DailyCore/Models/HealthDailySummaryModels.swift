@@ -123,6 +123,15 @@ public struct DailyHealthSummaryPayload: Codable, Sendable {
         self.stress = stress
         self.vitals = vitals
     }
+    
+    public var isEmpty: Bool {
+        activity.totalSteps == 0 &&
+        sleep.primarySession == nil &&
+        vitals.isEmpty &&
+        stress == nil &&
+        (cardiovascular.restingBpm == nil || cardiovascular.restingBpm == 0) &&
+        cardiovascular.intradayPoints.isEmpty
+    }
 }
 
 // MARK: - Canonical Sub-Payloads

@@ -301,22 +301,30 @@ public final class HealthDataService: ObservableObject {
         let effectiveTTL: TimeInterval = isToday ? 30 : cacheTTL
         
         // 1. Check in-memory canonical summary cache
-        if !forceRefresh, let cached = summaryCache[dateKey], Date().timeIntervalSince(cached.timestamp) < effectiveTTL {
+        if !forceRefresh, let cached = summaryCache[dateKey], !cached.summary.isEmpty, Date().timeIntervalSince(cached.timestamp) < effectiveTTL {
             self.canonicalSummary = cached.summary
             applyCanonicalSummary(cached.summary, dateKey: dateKey)
-            await loadHistoricalTrends()
-            return
+            if !isToday {
+                ensureLocalDeviceSourcesPopulated()
+                await loadHistoricalTrends()
+                return
+            }
         }
         
         // 2. Check persistent on-device App Group local storage for instantaneous (<300ms) startup
         if !forceRefresh, let summaryData = userDefaults.data(forKey: "health_daily_summary_\(dateKey)"),
            let summary = try? summaryDecoder.decode(DailyHealthSummaryPayload.self, from: summaryData) {
-            self.canonicalSummary = summary
-            summaryCache[dateKey] = (timestamp: Date(), summary: summary)
-            applyCanonicalSummary(summary, dateKey: dateKey)
-            if !isToday {
-                await loadHistoricalTrends()
-                return
+            if !summary.isEmpty {
+                self.canonicalSummary = summary
+                summaryCache[dateKey] = (timestamp: Date(), summary: summary)
+                applyCanonicalSummary(summary, dateKey: dateKey)
+                if !isToday {
+                    ensureLocalDeviceSourcesPopulated()
+                    await loadHistoricalTrends()
+                    return
+                }
+            } else {
+                userDefaults.removeObject(forKey: "health_daily_summary_\(dateKey)")
             }
         }
         
@@ -336,7 +344,7 @@ public final class HealthDataService: ObservableObject {
                     .execute()
                     .value
                 
-                if let row = summaryRows.first {
+                if let row = summaryRows.first, !row.summary.isEmpty {
                     let payload = row.summary
                     self.canonicalSummary = payload
                     if let encoded = try? summaryEncoder.encode(payload) {
@@ -366,13 +374,17 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 5. If canonical summary was found and applied, we're done with date data
+        // 5. If canonical summary was found and applied, merge local live sensor data (today) and finish
         if foundCanonicalSummary {
+            if !localTelemetry.isEmpty {
+                mergeLocalTelemetryWithSummary(telemetry: localTelemetry, isToday: isToday)
+            }
+            ensureLocalDeviceSourcesPopulated()
             await loadHistoricalTrends()
             return
         }
         
-        // 6. Fallback to on-device provisional calculation if remote canonical summary is not yet computed or user is offline
+        // 6. Fallback to on-device provisional calculation if remote canonical summary is not yet computed, empty, or user is offline
         var fetchedTelemetry = localTelemetry
         var fetchedVitals: [VitalMetricRecord] = []
         
@@ -471,6 +483,7 @@ public final class HealthDataService: ObservableObject {
         }
         self.availableDevices = Array(devicesSet).sorted()
         self.availableSources = Array(sourcesSet).sorted()
+        ensureLocalDeviceSourcesPopulated()
         
         // 1. Sleep
         self.primarySleepSession = summary.sleep.primarySession
@@ -603,6 +616,146 @@ public final class HealthDataService: ObservableObject {
         }
     }
     
+    private func ensureLocalDeviceSourcesPopulated() {
+        var devicesSet = Set(availableDevices)
+        var sourcesSet = Set(availableSources)
+        
+        if localDataProvider != nil {
+            if !devicesSet.contains(where: { $0.localizedCaseInsensitiveContains("watch") }) {
+                devicesSet.insert("Apple Watch")
+                sourcesSet.insert(.appleWatch)
+            }
+            if !sourcesSet.contains(.healthKit) {
+                devicesSet.insert("Apple Health")
+                sourcesSet.insert(.healthKit)
+            }
+        }
+        
+        self.availableDevices = Array(devicesSet).sorted()
+        self.availableSources = Array(sourcesSet).sorted()
+    }
+    
+    private func mergeLocalTelemetryWithSummary(telemetry: [HealthTelemetryRecord], isToday: Bool) {
+        guard !telemetry.isEmpty else { return }
+        let dateKey = isoDateFormatter.string(from: selectedDate)
+        
+        // 1. Devices & Sources
+        var devicesSet = Set(self.availableDevices)
+        var sourcesSet = Set(self.availableSources)
+        for t in telemetry {
+            if let d = t.sourceDevice, !d.isEmpty {
+                let src = DeviceSource.from(name: d)
+                if !src.isVirtualEngine {
+                    devicesSet.insert(d)
+                    sourcesSet.insert(src)
+                }
+            }
+        }
+        self.availableDevices = Array(devicesSet).sorted()
+        self.availableSources = Array(sourcesSet).sorted()
+        ensureLocalDeviceSourcesPopulated()
+        
+        // 2. Activity (Steps & Active Calories)
+        let stepCalc = Self.calculateDailySteps(
+            targetDate: selectedDate,
+            telemetry: telemetry,
+            vitalsSummary: [:],
+            preferredDevice: selectedDeviceFilter,
+            preferredSource: selectedDeviceSource,
+            calendar: Calendar.current
+        )
+        if isToday || stepCalc.totalSteps > self.totalStepsToday {
+            if stepCalc.totalSteps > 0 {
+                self.totalStepsToday = stepCalc.totalSteps
+                self.hourlySteps = stepCalc.hourlyBuckets
+            }
+        }
+        
+        let activeCals = telemetry.filter { $0.type == "active_energy" }.compactMap { $0.value }.reduce(0, +)
+        if (isToday || activeCals > self.totalActiveCalories) && activeCals > 0 {
+            self.totalActiveCalories = activeCals
+        } else if self.totalActiveCalories == 0 && stepCalc.activeCalories > 0 {
+            self.totalActiveCalories = stepCalc.activeCalories
+        }
+        
+        // 3. Intraday Heart Rate
+        let hrSamples = telemetry.filter { $0.isHeartRate && ($0.value ?? 0) > 0 }
+        if !hrSamples.isEmpty {
+            let points = hrSamples.compactMap { t -> IntradayHeartRatePoint? in
+                guard let val = t.value else { return nil }
+                return IntradayHeartRatePoint(timestamp: t.startTime, bpm: val, sourceDevice: t.sourceDevice)
+            }.sorted { $0.timestamp < $1.timestamp }
+            
+            if self.intradayHeartRate.isEmpty || (isToday && points.count >= self.intradayHeartRate.count) {
+                self.intradayHeartRate = points
+                let bpms = points.map { $0.bpm }
+                self.averageBpm = bpms.reduce(0, +) / Double(bpms.count)
+                self.minBpm = bpms.min() ?? 0
+                self.maxBpm = bpms.max() ?? 0
+                var zones: [HeartRateZone: Int] = [.resting: 0, .fatBurn: 0, .cardio: 0, .peak: 0]
+                for pt in points {
+                    zones[pt.zone, default: 0] += 1
+                }
+                self.heartRateZones = zones
+            }
+        }
+        
+        // 4. Vitals Map Enrichment
+        var updatedVitals = self.currentVitals
+        for t in telemetry.sorted(by: { $0.startTime < $1.startTime }) {
+            guard let val = t.value, val > 0,
+                  let metricType = HealthMetricType.from(rawString: t.type) else { continue }
+            if metricType == .steps || t.isSleep || t.isSleepStage { continue }
+            
+            let existing = updatedVitals[metricType]
+            if existing == nil || t.startTime >= (existing?.createdAt ?? Date.distantPast) {
+                updatedVitals[metricType] = VitalMetricRecord(
+                    userId: t.userId,
+                    type: metricType.rawValue,
+                    value: val,
+                    unit: t.unit ?? metricType.defaultUnit,
+                    date: dateKey,
+                    sourceDevice: t.sourceDevice,
+                    createdAt: t.startTime
+                )
+            }
+        }
+        self.currentVitals = updatedVitals
+        
+        // 5. Resting Heart Rate from vitals if missing
+        if self.restingBpm == 0, let rhr = updatedVitals[.restingHeartRate]?.value {
+            self.restingBpm = rhr
+        }
+        
+        // 6. Sleep fallback if summary sleep was nil
+        if self.primarySleepSession == nil {
+            var vitalsSummary: [HealthMetricType: Double] = [:]
+            for (k, v) in updatedVitals {
+                vitalsSummary[k] = v.value
+            }
+            let sleepResult = SleepClusteringEngine.clusterSleep(
+                targetDate: selectedDate,
+                telemetry: telemetry,
+                vitalsSummary: vitalsSummary,
+                preferredDevice: selectedDeviceFilter
+            )
+            if sleepResult.primarySession != nil {
+                self.primarySleepSession = sleepResult.primarySession
+                self.allSleepSessions = sleepResult.allSessions
+                self.daytimeNaps = sleepResult.naps
+            }
+        }
+        
+        // 7. Update Widget Snapshot if today
+        if Calendar.current.isDateInToday(selectedDate) {
+            WidgetDataCoordinator.shared.updateSleepSnapshot(
+                from: self.primarySleepSession,
+                restingHeartRate: self.restingBpm > 0 ? self.restingBpm : nil,
+                hrvMs: updatedVitals[.hrvSdnn]?.value ?? updatedVitals[.hrvRmssd]?.value
+            )
+        }
+    }
+    
     private func applyRecords(telemetry: [HealthTelemetryRecord], vitals: [VitalMetricRecord]) async {
         // Collect available devices and canonical sources (filtering out virtual computational engines like StressWatch/Daily Biometric Engine)
         var devicesSet = Set<String>()
@@ -627,6 +780,7 @@ public final class HealthDataService: ObservableObject {
         }
         availableDevices = Array(devicesSet).sorted()
         availableSources = Array(sourcesSet).sorted()
+        ensureLocalDeviceSourcesPopulated()
         
         await processDataForCurrentDate()
     }

@@ -42,7 +42,16 @@ data class DailyHealthSummaryPayload(
     val cardiovascular: CanonicalCardiovascularSummary? = null,
     val stress: CanonicalStressSummary? = null,
     val vitals: Map<String, CanonicalVitalSummaryItem> = emptyMap()
-)
+) {
+    fun isEmpty(): Boolean {
+        val noSteps = activity == null || activity.totalSteps == 0
+        val noSleep = sleep == null || sleep.primarySession == null
+        val noVitals = vitals.isEmpty()
+        val noStress = stress == null
+        val noCardio = cardiovascular == null || ((cardiovascular.restingHeartRateBpm == null || cardiovascular.restingHeartRateBpm == 0.0) && cardiovascular.intradayHeartRate.isEmpty())
+        return noSteps && noSleep && noVitals && noStress && noCardio
+    }
+}
 
 @Serializable
 data class CanonicalSleepSummary(
