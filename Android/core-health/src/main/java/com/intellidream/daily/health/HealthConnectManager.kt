@@ -145,32 +145,50 @@ class HealthConnectManager(private val context: Context) {
                 )
             }
 
-            // 2. Heart Rate
+            // 2. Heart Rate (downsampled to 5-minute buckets to prevent high-frequency row bloat)
             val hrResponse = client.readRecords(
                 ReadRecordsRequest(
                     recordType = HeartRateRecord::class,
                     timeRangeFilter = timeFilter
                 )
             )
+            val fiveMinMs = 5 * 60 * 1000L
+            val rawHrSamples = mutableListOf<Triple<Long, Double, String>>()
+
             for (record in hrResponse.records) {
+                val dev = record.metadata.dataOrigin.packageName
                 for (sample in record.samples) {
-                    val sampleEpoch = sample.time.toEpochMilli()
-                    telemetry.add(
-                        HealthTelemetryRecord(
-                            userId = userId,
-                            type = "heart_rate",
-                            value = sample.beatsPerMinute.toDouble(),
-                            unit = "bpm",
-                            startTime = sampleEpoch,
-                            endTime = sampleEpoch,
-                            sourceDevice = record.metadata.dataOrigin.packageName,
-                            externalId = "${record.metadata.id}_$sampleEpoch",
-                            semantics = "spot",
-                            tzOffsetMin = tzOffsetMin,
-                            localDate = localDateStr
-                        )
-                    )
+                    val bpm = sample.beatsPerMinute.toDouble()
+                    if (bpm in 30.0..240.0) {
+                        rawHrSamples.add(Triple(sample.time.toEpochMilli(), bpm, dev))
+                    }
                 }
+            }
+
+            // Group by 5-minute bucket and device
+            val hrBuckets = rawHrSamples.groupBy {
+                val bucketEpoch = (it.first / fiveMinMs) * fiveMinMs
+                Pair(bucketEpoch, it.third)
+            }
+
+            for ((key, samplesInBucket) in hrBuckets) {
+                val (bucketEpoch, device) = key
+                val avgBpm = Math.round((samplesInBucket.map { it.second }.average()) * 10.0) / 10.0
+                telemetry.add(
+                    HealthTelemetryRecord(
+                        userId = userId,
+                        type = "heart_rate",
+                        value = avgBpm,
+                        unit = "bpm",
+                        startTime = bucketEpoch,
+                        endTime = bucketEpoch + fiveMinMs,
+                        sourceDevice = device,
+                        externalId = "hr_${device}_$bucketEpoch",
+                        semantics = "interval_avg",
+                        tzOffsetMin = tzOffsetMin,
+                        localDate = localDateStr
+                    )
+                )
             }
 
             // 3. Resting Heart Rate
@@ -422,22 +440,39 @@ class HealthConnectManager(private val context: Context) {
                     )
                 )
             }
-            // Heart Rate
+            // Heart Rate (5-minute downsampled)
             val hr = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, timeFilter))
+            val rawLocalHr = mutableListOf<Triple<Long, Double, String>>()
             for (record in hr.records) {
+                val dev = record.metadata.dataOrigin.packageName
                 for (sample in record.samples) {
-                    telemetry.add(
-                        HealthTelemetryRecord(
-                            userId = "local_health_connect",
-                            type = "heart_rate",
-                            value = sample.beatsPerMinute.toDouble(),
-                            unit = "bpm",
-                            startTime = sample.time.toEpochMilli(),
-                            endTime = sample.time.toEpochMilli(),
-                            sourceDevice = record.metadata.dataOrigin.packageName
-                        )
-                    )
+                    val bpm = sample.beatsPerMinute.toDouble()
+                    if (bpm in 30.0..240.0) {
+                        rawLocalHr.add(Triple(sample.time.toEpochMilli(), bpm, dev))
+                    }
                 }
+            }
+            val fiveMinMs = 5 * 60 * 1000L
+            val localHrBuckets = rawLocalHr.groupBy {
+                val bucketEpoch = (it.first / fiveMinMs) * fiveMinMs
+                Pair(bucketEpoch, it.third)
+            }
+            for ((key, samplesInBucket) in localHrBuckets) {
+                val (bucketEpoch, device) = key
+                val avgBpm = Math.round((samplesInBucket.map { it.second }.average()) * 10.0) / 10.0
+                telemetry.add(
+                    HealthTelemetryRecord(
+                        userId = "local_health_connect",
+                        type = "heart_rate",
+                        value = avgBpm,
+                        unit = "bpm",
+                        startTime = bucketEpoch,
+                        endTime = bucketEpoch + fiveMinMs,
+                        sourceDevice = device,
+                        externalId = "hr_local_${device}_$bucketEpoch",
+                        semantics = "interval_avg"
+                    )
+                )
             }
             // Hydration
             val hyd = client.readRecords(ReadRecordsRequest(HydrationRecord::class, timeFilter))

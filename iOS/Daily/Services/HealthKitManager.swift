@@ -143,10 +143,11 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
             }
         }
         
-        // 3. Intraday Heart Rate Samples (query all samples for the day without arbitrary limit)
+        // 3. Intraday Heart Rate Samples (downsampled to 5-minute buckets to prevent high-frequency row bloat)
         if let hrType = HKObjectType.quantityType(forIdentifier: .heartRate) {
             let hrSamples = await fetchQuantitySamples(for: hrType, predicate: predicate, unit: HKUnit.count().unitDivided(by: .minute()), typeName: "heart_rate", limit: HKObjectQueryNoLimit)
-            records.append(contentsOf: hrSamples)
+            let downsampled = downsampleHeartRateRecords(hrSamples, bucketIntervalSeconds: 300)
+            records.append(contentsOf: downsampled)
         }
         
         // Predicate for nocturnal & daily vital samples (from 18:00 D-1 to 24:00 D)
@@ -612,6 +613,45 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         } else {
             return "Apple Health"
         }
+    }
+    
+    private func downsampleHeartRateRecords(_ samples: [HealthTelemetryRecord], bucketIntervalSeconds: TimeInterval = 300) -> [HealthTelemetryRecord] {
+        guard !samples.isEmpty else { return [] }
+        
+        var buckets: [String: (sum: Double, count: Int, timestamp: Date, device: String)] = [:]
+        
+        for sample in samples {
+            guard let bpm = sample.value, bpm >= 30, bpm <= 240 else { continue }
+            let epoch = sample.startTime.timeIntervalSince1970
+            let bucketTime = floor(epoch / bucketIntervalSeconds) * bucketIntervalSeconds
+            let device = sample.sourceDevice ?? "Apple Health"
+            let key = "\(Int64(bucketTime))_\(device)"
+            
+            if var existing = buckets[key] {
+                existing.sum += bpm
+                existing.count += 1
+                buckets[key] = existing
+            } else {
+                buckets[key] = (sum: bpm, count: 1, timestamp: Date(timeIntervalSince1970: bucketTime), device: device)
+            }
+        }
+        
+        return buckets.values.map { b in
+            let avgBpm = (round((b.sum / Double(b.count)) * 10.0)) / 10.0
+            let bucketEpoch = Int64(b.timestamp.timeIntervalSince1970)
+            return HealthTelemetryRecord(
+                id: UUID().uuidString,
+                userId: "healthkit",
+                type: "heart_rate",
+                value: avgBpm,
+                unit: "bpm",
+                startTime: b.timestamp,
+                endTime: b.timestamp.addingTimeInterval(bucketIntervalSeconds),
+                sourceDevice: b.device,
+                externalId: "hr_\(b.device)_\(bucketEpoch)",
+                semantics: "interval_avg"
+            )
+        }.sorted { $0.startTime < $1.startTime }
     }
 }
 

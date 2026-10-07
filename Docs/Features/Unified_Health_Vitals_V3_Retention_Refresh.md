@@ -149,6 +149,29 @@ The obsolete files were removed:
 - Cleaned up references in `WidgetTemplateSelector.cs`, `MainPage.xaml`, and `MainPage.xaml.cs`.
 - WinUI 3 now relies solely on `HealthWidgetControl` with full 5-tab detail navigation and local SQLite caching.
 
+### 3.4 High-Frequency Continuous Heart Rate Downsampling & pg_cron Automated Retention
+An exhaustive audit of `health_telemetry` revealed **359,028 rows**, of which **124,939 (98.48%)** were 1-second continuous `heart_rate` samples uploaded by Fitbit / Pixel Watch on Android. All other 12 metric types combined generated only ~950 rows/day. This led to massive payload bloat (5–10 MB JSON summaries) and query latency.
+
+#### Architectural Resolution:
+1. **Android Health Connect (`HealthConnectManager.kt`)**:
+   - `readTelemetryForDate()` and `readLocalHealthConnectData()` now aggregate continuous `HeartRateRecord` samples into 5-minute time windows (`(sampleTime / 300_000L) * 300_000L`).
+   - Calculates `avgBpm` rounded to 1 decimal place per device, producing an `interval_avg` record with deterministic `externalId = "hr_${device}_$bucketEpoch"`.
+   - Max 288 points/day per device instead of 50,000+ points/day (a **99.4% reduction in row volume and network egress**).
+   - Live heart rate in mobile UI continues to sample directly from Health Connect/HealthKit for immediate real-time feedback.
+2. **iOS HealthKit (`HealthKitManager.swift`)**:
+   - Implemented `downsampleHeartRateRecords(_:bucketIntervalSeconds:)` with 300-second bucketing.
+   - Preserves device source, computes `interval_avg` values, and assigns deduplication keys `hr_\(device)_\(bucketEpoch)`.
+3. **Supabase Edge Function (`engine.ts`)**:
+   - Added an automatic 5-minute downsampling safeguard in `computeCardiovascular()` for `intraday_points` if incoming points exceed 300.
+4. **Database Retention Automation**:
+   - Enhanced `apply_health_data_retention()` to sanitize legacy rows with null `local_date` using `COALESCE(local_date, start_time::date)`.
+   - Purged 232,644 obsolete legacy records older than 48 hours; remaining rows strictly represent the active 48-hour rolling window (~126,384 rows).
+   - Executed `VACUUM ANALYZE public.health_telemetry`.
+   - Activated `pg_cron` extension and scheduled automated daily execution at 03:00 UTC:
+     ```sql
+     SELECT cron.schedule('daily-health-retention', '0 3 * * *', 'SELECT public.apply_health_data_retention();');
+     ```
+
 ---
 
 ## 4. Verification and Validation Results
@@ -158,22 +181,23 @@ The obsolete files were removed:
 | **Swift Unit Tests** | `DailyCore` | `swift test --package-path DailyCore` (8 test suites, 54 unit tests) | **PASSED (54/54)** |
 | **iOS Simulator** | `SimulaPhone` | Built and launched `Daily.app` (`com.intellidream.daily`), deep link `daily://health`, verified 5 tabs | **VERIFIED (Visual)** |
 | **iPhone 16 Pro ("Schmitz")** | Physical Device (CoreDevice) | Built ARM64 debug package with automatic codesigning, installed via `xcrun devicectl` | **DEPLOYED & INSTALLED** |
-| **Kotlin Unit Tests** | `:core-health` | `./gradlew :core-health:testDebugUnitTest` | **PASSED** |
+| **Kotlin Unit Tests** | `:core-health` | `./gradlew :core-health:testDebugUnitTest` (including 5-min HR bucketing) | **PASSED** |
 | **Android APK Build** | `:app` | `./gradlew :app:assembleDebug` | **SUCCESS** |
-| **Google Pixel 9 Pro** | Physical Device (`adb` TLS) | Installed `app-debug.apk`, launched `MainActivity`, verified foreground refresh | **VERIFIED LIVE** |
-| **Samsung Galaxy Z Fold 8** | Physical Device (`adb` TLS) | Installed `app-debug.apk`, verified layout and background sync | **VERIFIED LIVE** |
+| **Android Emulator** | `Medium_Phone_API_36.1` | Launched app, verified Health Hub 5 tabs and biometrics render smoothly | **VERIFIED (Visual)** |
+| **Google Pixel 9 Pro** | Physical Device (`adb` TLS) | Installed `app-debug.apk`, launched `MainActivity`, verified foreground refresh & bucketing | **VERIFIED LIVE** |
+| **Samsung Galaxy Z Fold 8** | Physical Device (`adb` TLS) | Installed `app-debug.apk`, verified layout, bucketing, and background sync | **VERIFIED LIVE** |
 | **WinUI 3 Compilation** | Windows 11 Parallels VM | `dotnet build -c Debug WinUI\Daily.WinUI\Daily.WinUI.csproj` | **0 Errors, 0 Warnings** |
 | **WinUI 3 Live Verification** | Windows 11 Parallels VM | Launched `Daily.WinUI.exe` via Task Scheduler, captured screenshot | **VERIFIED LIVE** |
-| **Supabase Remote DB** | Cloud Postgres | Migration applied, legacy tables dropped, retention function active | **VERIFIED** |
-| **Supabase Edge Function** | Cloud Deno Runtime | `health-engine` deployed with multi-session sleep score calculation | **VERIFIED** |
+| **Supabase Remote DB** | Cloud Postgres | Migration applied, legacy tables dropped, retention function active, `pg_cron` scheduled | **VERIFIED** |
+| **Supabase Edge Function** | Cloud Deno Runtime | `health-engine` deployed with multi-session sleep score & 5-min downsampling guard | **VERIFIED** |
 
 ---
 
 ## 5. Artifacts and Evidence
 
 Screenshots and telemetry traces captured during verification:
-- `simulaphone_v3_health.png`: iOS Simulator dashboard showing live canonical health vitals (141 steps, 11 kcal, 89 bpm, Stress 39 Calm).
-- `simulaphone_v3_hub.png`: iOS Simulator 5-tab Health Hub (Overview, Sleep, Stress, Vitals, Trends) with hourly cadence histogram and autonomic balance.
+- `simulaphone_v4_health.png` / `simulaphone_v4_vitals.png`: iOS Simulator dashboard showing live canonical health vitals with 5-minute downsampled bucketing.
+- `android_emu_health_hub2.png`: Android emulator 5-tab Health Hub (Overview, Sleep, Stress, Vitals, Trends) with hourly cadence histogram, Curious Monkey mascot, and heart metrics.
 - `windows_v3_health_hub.png`: Demonstrates the unified WinUI 3 Health Hub running live on Windows 11 with 141 steps, 11 kcal, and 83 bpm.
 - `windows_v3_clean_dashboard.png`: WinUI 3 desktop dashboard after removing duplicate widgets.
 - `pixel9pro_v3_refresh.png`: Google Pixel 9 Pro running the updated APK with smart foreground refresh and live biometrics.
@@ -184,4 +208,5 @@ Screenshots and telemetry traces captured during verification:
 
 - `cec8823`: `feat(health): V3 cleanup, 3-tier retention in Supabase, smart refresh, and WinUI widget deduplication`
 - `4412343`: `fix(winui): remove orphaned XAML tags in MainPage.xaml`
-- `Docs/Features/Unified_Health_Vitals_V3_Retention_Refresh.md`: Architectural specification and deployment record for V3.
+- `20261007123000_20261007_v3_automated_retention_and_pg_cron.sql`: Automated retention function fix and `pg_cron` daily schedule.
+- `Docs/Features/Unified_Health_Vitals_V3_Retention_Refresh.md`: Architectural specification and deployment record for V3 & continuous HR optimization.

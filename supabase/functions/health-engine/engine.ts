@@ -1040,13 +1040,46 @@ export function computeCardiovascular(
     else if (p.zone === 'Peak') zones.peak++;
   }
 
+  // Downsample to 5-minute buckets for intraday_points output if dense (> 300 points)
+  let outputPoints = validPoints;
+  if (validPoints.length > 300) {
+    const FIVE_MIN_MS = 5 * 60 * 1000;
+    const buckets = new Map<string, { sum: number; count: number; timestamp: string; device?: string }>();
+    for (const pt of validPoints) {
+      const epoch = toEpochMs(pt.timestamp);
+      const bucketEpoch = Math.floor(epoch / FIVE_MIN_MS) * FIVE_MIN_MS;
+      const key = `${bucketEpoch}_${pt.source_device || ''}`;
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.sum += pt.bpm;
+        existing.count += 1;
+      } else {
+        buckets.set(key, {
+          sum: pt.bpm,
+          count: 1,
+          timestamp: new Date(bucketEpoch).toISOString(),
+          device: pt.source_device
+        });
+      }
+    }
+    outputPoints = Array.from(buckets.values()).map(b => {
+      const bAvg = Math.round((b.sum / b.count) * 10) / 10;
+      return {
+        timestamp: b.timestamp,
+        bpm: bAvg,
+        zone: mapHeartRateZone(bAvg),
+        source_device: b.device
+      };
+    }).sort((a, b) => toEpochMs(a.timestamp) - toEpochMs(b.timestamp));
+  }
+
   return {
     average_bpm: avg,
     resting_bpm: resting ? Math.round(resting) : null,
     min_bpm: Math.round(min),
     max_bpm: Math.round(max),
     zones,
-    intraday_points: validPoints
+    intraday_points: outputPoints
   };
 }
 
