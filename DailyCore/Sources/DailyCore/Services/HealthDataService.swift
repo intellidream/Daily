@@ -1159,7 +1159,7 @@ public final class HealthDataService: ObservableObject {
         for i in stride(from: 0, to: prepared.count, by: batchSize) {
             let chunk = Array(prepared[i..<min(i + batchSize, prepared.count)])
             do {
-                try await supabase.from("health_telemetry").insert(chunk).execute()
+                try await supabase.from("health_telemetry").upsert(chunk).execute()
                 anyChunkSucceeded = true
             } catch {
                 print("[HealthDataService] Warning: Failed to sync telemetry batch: \(error.localizedDescription)")

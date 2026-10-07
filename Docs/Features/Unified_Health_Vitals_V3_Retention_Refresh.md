@@ -244,3 +244,12 @@ Screenshots and telemetry traces captured during verification:
 - **Android Emulator (`emulator-5554`)**: Verified live Health Hub displaying canonical stress mascot and metrics.
 - **Pixel 9 Pro & Samsung Galaxy Z Fold 8**: Installed `app-debug.apk` via `adb` and verified app launch and live rendering.
 
+### 7.6 Strict 48-Hour Telemetry Retention & Single-Bucket Heart Rate Consolidation
+- **Strict 48-Hour Pruning:** Completely purged legacy records older than 48 hours (including 2026-10-05 and older historical rows), ensuring `health_telemetry` strictly contains only the active 48-hour rolling window (yesterday and today).
+- **Consolidated 5-Minute Heart Rate:** Eliminated duplicate inserts and multi-device collisions (Fitbit, Google Health, Oura Ring) by consolidating heart rate readings into exactly 1 canonical 5-minute bucketed record with average BPM and deterministic UUIDs (`UUID.nameUUIDFromBytes("hr_${userId}_$bucketEpoch")`).
+- **Upsert Deduplication:** Switched client-side sync pipelines in both Android (`HealthRemoteService`) and iOS (`HealthDataService`) from `insert` to `upsert`, guaranteeing that re-syncing never creates duplicate records in Supabase.
+- **Automated Retention Enforcement:** Updated `apply_health_data_retention()` to permanently enforce:
+  `DELETE FROM public.health_telemetry WHERE COALESCE(local_date, start_time::date) < (CURRENT_DATE - INTERVAL '1 day')::date;`
+  ensuring raw telemetry beyond 48 hours is automatically pruned every day at 03:00 UTC.
+
+

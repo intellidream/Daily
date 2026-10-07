@@ -22,7 +22,7 @@ class HealthRemoteService(
             if (realRecords.isEmpty()) return@withContext true
             
             for (chunk in realRecords.chunked(200)) {
-                clientManager.client.postgrest["health_telemetry"].insert(chunk)
+                clientManager.client.postgrest["health_telemetry"].upsert(chunk)
             }
             true
         } catch (_: Exception) {

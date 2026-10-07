@@ -165,25 +165,26 @@ class HealthConnectManager(private val context: Context) {
                 }
             }
 
-            // Group by 5-minute bucket and device
+            // Consolidate into single 5-minute bucket across all devices
             val hrBuckets = rawHrSamples.groupBy {
-                val bucketEpoch = (it.first / fiveMinMs) * fiveMinMs
-                Pair(bucketEpoch, it.third)
+                (it.first / fiveMinMs) * fiveMinMs
             }
 
-            for ((key, samplesInBucket) in hrBuckets) {
-                val (bucketEpoch, device) = key
+            for ((bucketEpoch, samplesInBucket) in hrBuckets) {
+                val primaryDevice = samplesInBucket.first().third
                 val avgBpm = Math.round((samplesInBucket.map { it.second }.average()) * 10.0) / 10.0
+                val extId = "hr_${userId}_$bucketEpoch"
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = java.util.UUID.nameUUIDFromBytes(extId.toByteArray()).toString(),
                         userId = userId,
                         type = "heart_rate",
                         value = avgBpm,
                         unit = "bpm",
                         startTime = bucketEpoch,
                         endTime = bucketEpoch + fiveMinMs,
-                        sourceDevice = device,
-                        externalId = "hr_${device}_$bucketEpoch",
+                        sourceDevice = primaryDevice,
+                        externalId = extId,
                         semantics = "interval_avg",
                         tzOffsetMin = tzOffsetMin,
                         localDate = localDateStr
@@ -454,22 +455,23 @@ class HealthConnectManager(private val context: Context) {
             }
             val fiveMinMs = 5 * 60 * 1000L
             val localHrBuckets = rawLocalHr.groupBy {
-                val bucketEpoch = (it.first / fiveMinMs) * fiveMinMs
-                Pair(bucketEpoch, it.third)
+                (it.first / fiveMinMs) * fiveMinMs
             }
-            for ((key, samplesInBucket) in localHrBuckets) {
-                val (bucketEpoch, device) = key
+            for ((bucketEpoch, samplesInBucket) in localHrBuckets) {
+                val primaryDevice = samplesInBucket.first().third
                 val avgBpm = Math.round((samplesInBucket.map { it.second }.average()) * 10.0) / 10.0
+                val extId = "hr_local_${primaryDevice}_$bucketEpoch"
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = java.util.UUID.nameUUIDFromBytes(extId.toByteArray()).toString(),
                         userId = "local_health_connect",
                         type = "heart_rate",
                         value = avgBpm,
                         unit = "bpm",
                         startTime = bucketEpoch,
                         endTime = bucketEpoch + fiveMinMs,
-                        sourceDevice = device,
-                        externalId = "hr_local_${device}_$bucketEpoch",
+                        sourceDevice = primaryDevice,
+                        externalId = extId,
                         semantics = "interval_avg"
                     )
                 )
