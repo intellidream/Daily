@@ -146,6 +146,8 @@ The obsolete files were removed:
 | Test / Target | Scope | Verification Details | Result |
 | :--- | :--- | :--- | :--- |
 | **Swift Unit Tests** | `DailyCore` | `swift test --package-path DailyCore` (8 test suites, 54 unit tests) | **PASSED (54/54)** |
+| **iOS Simulator** | `SimulaPhone` | Built and launched `Daily.app` (`com.intellidream.daily`), deep link `daily://health`, verified 5 tabs | **VERIFIED (Visual)** |
+| **iPhone 16 Pro ("Schmitz")** | Physical Device (CoreDevice) | Built ARM64 debug package with automatic codesigning, installed via `xcrun devicectl` | **DEPLOYED & INSTALLED** |
 | **Kotlin Unit Tests** | `:core-health` | `./gradlew :core-health:testDebugUnitTest` | **PASSED** |
 | **Android APK Build** | `:app` | `./gradlew :app:assembleDebug` | **SUCCESS** |
 | **Google Pixel 9 Pro** | Physical Device (`adb` TLS) | Installed `app-debug.apk`, launched `MainActivity`, verified foreground refresh | **VERIFIED LIVE** |
@@ -160,6 +162,8 @@ The obsolete files were removed:
 ## 5. Artifacts and Evidence
 
 Screenshots and telemetry traces captured during verification:
+- `simulaphone_v3_health.png`: iOS Simulator dashboard showing live canonical health vitals (141 steps, 11 kcal, 89 bpm, Stress 39 Calm).
+- `simulaphone_v3_hub.png`: iOS Simulator 5-tab Health Hub (Overview, Sleep, Stress, Vitals, Trends) with hourly cadence histogram and autonomic balance.
 - `windows_v3_health_hub.png`: Demonstrates the unified WinUI 3 Health Hub running live on Windows 11 with 141 steps, 11 kcal, and 83 bpm.
 - `windows_v3_clean_dashboard.png`: WinUI 3 desktop dashboard after removing duplicate widgets.
 - `pixel9pro_v3_refresh.png`: Google Pixel 9 Pro running the updated APK with smart foreground refresh and live biometrics.
