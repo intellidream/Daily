@@ -177,10 +177,11 @@ enum class BreathingProtocol(
 @Serializable
 data class IntradayStressPoint(
     val id: String = UUID.randomUUID().toString(),
+    @Serializable(with = FlexibleTimestampSerializer::class)
     val timestamp: Long,
     val hour: Int,
     val score: Int,
-    val level: StressLevel,
+    val level: StressLevel = StressLevel.from(score),
     @JsonNames("hrv_ms", "hrvMs")
     val hrvMs: Double? = null,
     @JsonNames("heart_rate_bpm", "heartRateBpm")

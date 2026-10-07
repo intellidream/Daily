@@ -203,9 +203,23 @@ class HealthDataRepository(
     private val isoDateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     init {
+        performDatabaseMaintenance()
         if (currentUserId != "local_user") {
             loadDataForSelectedDate(forceRefresh = true)
             setupRealtimeSubscription()
+        }
+    }
+
+    private fun performDatabaseMaintenance() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val cutoff = System.currentTimeMillis() - 2 * 24 * 3600 * 1000L // 48h retention
+                telemetryDao.deleteTelemetryBefore(cutoff)
+                DailyDatabase.getDatabase(context).openHelper.writableDatabase.execSQL("VACUUM")
+                android.util.Log.d("HealthDataRepository", "Database maintenance completed (48h retention + VACUUM)")
+            } catch (e: Exception) {
+                android.util.Log.w("HealthDataRepository", "Database maintenance warning", e)
+            }
         }
     }
 
@@ -464,8 +478,14 @@ class HealthDataRepository(
         _sleepAIContext.value = payload.sleep?.guidance?.aiContext?.toDomain()
 
         // Activity
-        _totalStepsToday.value = payload.activity?.totalSteps ?: 0
-        _totalActiveCalories.value = payload.activity?.activeCaloriesKcal ?: 0.0
+        val isToday = isSameDay(_selectedDate.value, System.currentTimeMillis())
+        if (isToday) {
+            _totalStepsToday.value = maxOf(_totalStepsToday.value, payload.activity?.totalSteps ?: 0)
+            _totalActiveCalories.value = maxOf(_totalActiveCalories.value, payload.activity?.activeCaloriesKcal ?: 0.0)
+        } else {
+            _totalStepsToday.value = payload.activity?.totalSteps ?: 0
+            _totalActiveCalories.value = payload.activity?.activeCaloriesKcal ?: 0.0
+        }
         _hourlySteps.value = payload.activity?.hourlySteps ?: emptyList()
 
         // Cardiovascular

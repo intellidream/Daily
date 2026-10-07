@@ -13,6 +13,7 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -20,6 +21,45 @@ import java.util.UUID
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+
+object FlexibleTimestampSerializer : KSerializer<Long> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("FlexibleTimestamp", PrimitiveKind.LONG)
+
+    override fun serialize(encoder: Encoder, value: Long) {
+        encoder.encodeLong(value)
+    }
+
+    override fun deserialize(decoder: Decoder): Long {
+        return if (decoder is JsonDecoder) {
+            val element = decoder.decodeJsonElement()
+            if (element is JsonPrimitive) {
+                element.longOrNull ?: run {
+                    val str = element.content
+                    try {
+                        java.time.OffsetDateTime.parse(str).toInstant().toEpochMilli()
+                    } catch (_: Exception) {
+                        try {
+                            java.time.Instant.parse(str).toEpochMilli()
+                        } catch (_: Exception) {
+                            try {
+                                SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).parse(str)?.time ?: 0L
+                            } catch (_: Exception) {
+                                try {
+                                    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).parse(str)?.time ?: 0L
+                                } catch (_: Exception) {
+                                    0L
+                                }
+                            }
+                        }
+                    }
+                }
+            } else 0L
+        } else {
+            decoder.decodeLong()
+        }
+    }
+}
 
 // MARK: - Health Sub Tabs
 
@@ -316,8 +356,10 @@ data class SleepStageRecord(
     val id: String = UUID.randomUUID().toString(),
     @JsonNames("stage_type", "stageType")
     val stageType: SleepStageType,
+    @Serializable(with = FlexibleTimestampSerializer::class)
     @JsonNames("start_time", "startTime")
     val startTime: Long, // Epoch ms
+    @Serializable(with = FlexibleTimestampSerializer::class)
     @JsonNames("end_time", "endTime")
     val endTime: Long,   // Epoch ms
     @JsonNames("duration_seconds", "durationSeconds")
@@ -333,8 +375,10 @@ data class SleepStageRecord(
 @Serializable
 data class SleepSession(
     val id: String = UUID.randomUUID().toString(),
+    @Serializable(with = FlexibleTimestampSerializer::class)
     @JsonNames("start_time", "startTime")
     val startTime: Long,
+    @Serializable(with = FlexibleTimestampSerializer::class)
     @JsonNames("end_time", "endTime")
     val endTime: Long,
     @JsonNames("is_nap", "isNap")
@@ -512,8 +556,10 @@ data class SleepSession(
 @Serializable
 data class NapSession(
     val id: String = UUID.randomUUID().toString(),
+    @Serializable(with = FlexibleTimestampSerializer::class)
     @JsonNames("start_time", "startTime")
     val startTime: Long,
+    @Serializable(with = FlexibleTimestampSerializer::class)
     @JsonNames("end_time", "endTime")
     val endTime: Long,
     @JsonNames("duration_seconds", "durationSeconds")
@@ -554,6 +600,7 @@ enum class HeartRateZone(val displayName: String, val bpmRangeText: String, val 
 @Serializable
 data class IntradayHeartRatePoint(
     val id: String = UUID.randomUUID().toString(),
+    @Serializable(with = FlexibleTimestampSerializer::class)
     val timestamp: Long,
     val bpm: Double,
     val zone: HeartRateZone = HeartRateZone.zoneFor(bpm),
@@ -565,7 +612,7 @@ data class IntradayHeartRatePoint(
 
 @Serializable
 data class HourlyStepBucket(
-    val id: Int, // 0 - 23 hour of day
+    val id: Int = 0, // 0 - 23 hour of day
     val hour: Int,
     val steps: Int
 ) {

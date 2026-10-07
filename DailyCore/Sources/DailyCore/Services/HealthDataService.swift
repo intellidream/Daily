@@ -350,12 +350,12 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 3. Query Supabase canonical health_daily_summary table
+        // 3. Concurrently fetch Supabase canonical summary while reading local on-device provider (HealthKit)
         let session = try? await supabase.auth.session
         let userId = session?.user.id.uuidString.lowercased()
         
-        var foundCanonicalSummary = false
-        if let userId = userId {
+        async let remoteSummaryFetch: DailyHealthSummaryPayload? = {
+            guard let userId = userId else { return nil }
             do {
                 let summaryRows: [HealthDailySummaryRecord] = try await supabase
                     .from("health_daily_summary")
@@ -365,23 +365,15 @@ public final class HealthDataService: ObservableObject {
                     .limit(1)
                     .execute()
                     .value
-                
                 if let row = summaryRows.first, !row.summary.isEmpty {
-                    let payload = row.summary
-                    self.canonicalSummary = payload
-                    if let encoded = try? summaryEncoder.encode(payload) {
-                        userDefaults.set(encoded, forKey: "health_daily_summary_\(dateKey)")
-                    }
-                    summaryCache[dateKey] = (timestamp: Date(), summary: payload)
-                    applyCanonicalSummary(payload, dateKey: dateKey)
-                    foundCanonicalSummary = true
+                    return row.summary
                 }
             } catch {
                 print("[HealthDataService] Warning: Could not fetch health_daily_summary: \(error.localizedDescription)")
             }
-        }
+            return nil
+        }()
         
-        // 4. Concurrently fetch local on-device provider (e.g. Apple HealthKit)
         var localTelemetry: [HealthTelemetryRecord] = []
         if let provider = localDataProvider {
             let localTelem = await provider.fetchLocalTelemetry(for: targetDate)
@@ -396,8 +388,17 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 5. If canonical summary was found and applied, merge local live sensor data (today) and finish
-        if foundCanonicalSummary {
+        let remotePayload = await remoteSummaryFetch
+        
+        // 4. If canonical summary was found, apply and merge local sensor data atomically to eliminate UI flickering
+        if let payload = remotePayload {
+            self.canonicalSummary = payload
+            if let encoded = try? summaryEncoder.encode(payload) {
+                userDefaults.set(encoded, forKey: "health_daily_summary_\(dateKey)")
+            }
+            summaryCache[dateKey] = (timestamp: Date(), summary: payload)
+            applyCanonicalSummary(payload, dateKey: dateKey)
+            
             if !localTelemetry.isEmpty {
                 mergeLocalTelemetryWithSummary(telemetry: localTelemetry, isToday: isToday)
             }
@@ -514,8 +515,14 @@ public final class HealthDataService: ObservableObject {
         
         // 2. Activity
         self.hourlySteps = summary.activity.hourlySteps
-        self.totalStepsToday = summary.activity.totalSteps
-        self.totalActiveCalories = summary.activity.activeCalories
+        let isToday = Calendar.current.isDateInToday(selectedDate)
+        if isToday {
+            self.totalStepsToday = max(self.totalStepsToday, summary.activity.totalSteps)
+            self.totalActiveCalories = max(self.totalActiveCalories, summary.activity.activeCalories)
+        } else {
+            self.totalStepsToday = summary.activity.totalSteps
+            self.totalActiveCalories = summary.activity.activeCalories
+        }
         
         // 3. Cardiovascular & Zones
         var hrPoints = summary.cardiovascular.intradayPoints

@@ -90,9 +90,11 @@ Deno.serve(async (req: Request) => {
       }
 
       // Apply retention policy during dirty batch processing
-      await supabase.rpc('apply_health_data_retention').catch((e: any) => {
+      try {
+        await supabase.rpc('apply_health_data_retention');
+      } catch (e: any) {
         console.warn('Retention RPC execution notice:', e);
-      });
+      }
 
       return new Response(JSON.stringify({ processed_count: results.length, results }), {
         status: 200,
@@ -140,16 +142,42 @@ async function processDayForUser(
   // Day window ends D 23:59:59.999 (+24h)
   const windowEndIso = new Date(targetMidnight.getTime() + 24 * 3600 * 1000 - 1).toISOString();
 
-  // 1. Fetch raw telemetry within the full window for this user
+  // 1. Fetch raw telemetry within the full window for this user (with explicit limit to prevent PostgREST 1000 default truncate)
   const { data: telemetryRows, error: telemErr } = await supabase
     .from('health_telemetry')
     .select('*')
     .eq('user_id', userId)
     .gte('start_time', windowStartIso)
-    .lte('start_time', windowEndIso);
+    .lte('start_time', windowEndIso)
+    .order('start_time', { ascending: true })
+    .limit(25000);
 
-  if (telemErr) {
-    throw new Error(`Failed to fetch telemetry: ${telemErr.message}`);
+  if (!telemetryRows || telemetryRows.length === 0) {
+    // If telemetry has already been pruned for this historical date, do NOT overwrite an existing summary with nulls!
+    const { data: existingSummary } = await supabase
+      .from('health_daily_summary')
+      .select('steps, sleep_asleep_s')
+      .eq('user_id', userId)
+      .eq('local_date', targetDate)
+      .maybeSingle();
+
+    if (existingSummary && (existingSummary.steps !== null || existingSummary.sleep_asleep_s !== null)) {
+      await supabase
+        .from('health_day_dirty')
+        .delete()
+        .eq('user_id', userId)
+        .eq('local_date', targetDate);
+      return { success: true, date: targetDate, preserved: true };
+    }
+  }
+
+  // Infer effective timezone if caller did not supply one (0) but telemetry records contain it
+  let effectiveTz = tzOffsetMin;
+  if (effectiveTz === 0 && telemetryRows && telemetryRows.length > 0) {
+    const rowWithTz = telemetryRows.find((r: any) => r.tz_offset_min !== null && r.tz_offset_min !== undefined && r.tz_offset_min !== 0);
+    if (rowWithTz) {
+      effectiveTz = rowWithTz.tz_offset_min;
+    }
   }
 
   // 2. Run the deterministic Canonical Health Engine
@@ -157,7 +185,7 @@ async function processDayForUser(
     userId,
     targetDate,
     telemetry: (telemetryRows || []) as HealthTelemetryRow[],
-    tzOffsetMin,
+    tzOffsetMin: effectiveTz,
     preferredDevice
   });
 

@@ -53,33 +53,16 @@ class HealthRemoteService(
     }
 
     suspend fun pushVitals(vitals: List<VitalMetricRecord>): Boolean = withContext(Dispatchers.IO) {
-        try {
-            if (vitals.isEmpty()) return@withContext true
-            clientManager.client.postgrest["vitals"].upsert(vitals) {
-                onConflict = "user_id,date,type"
-            }
-            true
-        } catch (_: Exception) {
-            false
-        }
+        // Deprecated: V3 architecture stores all data in health_telemetry and health_daily_summary
+        true
     }
 
     suspend fun fetchVitalsForDate(
         userId: String,
         date: String
     ): List<VitalMetricRecord> = withContext(Dispatchers.IO) {
-        try {
-            clientManager.client.postgrest["vitals"]
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                        eq("date", date)
-                    }
-                }
-                .decodeList<VitalMetricRecord>()
-        } catch (_: Exception) {
-            emptyList()
-        }
+        // Deprecated: V3 architecture uses health_daily_summary
+        emptyList()
     }
 
     suspend fun fetchVitalsBetween(
@@ -87,19 +70,8 @@ class HealthRemoteService(
         startDate: String,
         endDate: String
     ): List<VitalMetricRecord> = withContext(Dispatchers.IO) {
-        try {
-            clientManager.client.postgrest["vitals"]
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                        gte("date", startDate)
-                        lte("date", endDate)
-                    }
-                }
-                .decodeList<VitalMetricRecord>()
-        } catch (_: Exception) {
-            emptyList()
-        }
+        // Deprecated: V3 architecture uses health_daily_summary
+        emptyList()
     }
 
     suspend fun fetchDailySummary(
@@ -117,7 +89,8 @@ class HealthRemoteService(
                 }
                 .decodeSingleOrNull<HealthDailySummaryRecord>()
             response?.summary
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("HealthRemoteService", "Failed to fetch/decode daily summary for $date: ${e.message}", e)
             null
         }
     }
@@ -138,7 +111,8 @@ class HealthRemoteService(
                     order("local_date", Order.ASCENDING)
                 }
                 .decodeList<HealthDailySummaryRecord>()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("HealthRemoteService", "Failed to fetch daily summaries between $startDate and $endDate: ${e.message}", e)
             emptyList()
         }
     }

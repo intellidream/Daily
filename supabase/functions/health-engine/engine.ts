@@ -856,6 +856,11 @@ export function computeDailySteps(
       lower.includes('amazfit') ||
       lower.includes('gt5') ||
       lower.includes('oura') ||
+      lower.includes('fitbit') ||
+      lower.includes('garmin') ||
+      lower.includes('whoop') ||
+      lower.includes('polar') ||
+      lower.includes('huawei') ||
       (lower.includes('health') && !lower.includes('phone'))
     );
 

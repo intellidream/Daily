@@ -1,9 +1,11 @@
 package com.intellidream.daily.model
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNames
 
 /**
  * Android Kotlin models mapping to Supabase canonical Health & Vitals daily summary schema (version 1).
@@ -56,6 +58,7 @@ data class DailyHealthSummaryPayload(
 @Serializable
 data class CanonicalSleepSummary(
     @SerialName("primary_session") val primarySession: SleepSession? = null,
+    @SerialName("all_sessions") val allSessions: List<SleepSession> = emptyList(),
     val naps: List<NapSession> = emptyList(),
     val guidance: CanonicalSleepGuidance? = null,
     @SerialName("tracker_priority_order") val trackerPriorityOrder: List<String> = emptyList()
@@ -131,30 +134,45 @@ data class CanonicalSleepAIContext(
     )
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class CanonicalActivitySummary(
-    @SerialName("total_steps") val totalSteps: Int,
-    @SerialName("active_calories_kcal") val activeCaloriesKcal: Double,
+    @SerialName("total_steps") val totalSteps: Int = 0,
+    @JsonNames("active_calories", "active_calories_kcal")
+    @SerialName("active_calories") val activeCaloriesKcal: Double = 0.0,
+    @SerialName("source_device") val sourceDevice: String? = null,
     @SerialName("hourly_steps") val hourlySteps: List<HourlyStepBucket> = emptyList(),
     @SerialName("tracker_priority_order") val trackerPriorityOrder: List<String> = emptyList()
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class CanonicalCardiovascularSummary(
-    @SerialName("intraday_heart_rate") val intradayHeartRate: List<IntradayHeartRatePoint> = emptyList(),
-    @SerialName("resting_heart_rate_bpm") val restingHeartRateBpm: Double? = null,
-    @SerialName("average_heart_rate_bpm") val averageHeartRateBpm: Double? = null,
-    @SerialName("max_heart_rate_bpm") val maxHeartRateBpm: Double? = null,
-    @SerialName("min_heart_rate_bpm") val minHeartRateBpm: Double? = null,
-    @SerialName("heart_rate_zones") val heartRateZones: CanonicalHeartRateZones? = null
+    @JsonNames("intraday_points", "intraday_heart_rate")
+    @SerialName("intraday_points") val intradayHeartRate: List<IntradayHeartRatePoint> = emptyList(),
+    @JsonNames("resting_bpm", "resting_heart_rate_bpm")
+    @SerialName("resting_bpm") val restingHeartRateBpm: Double? = null,
+    @JsonNames("average_bpm", "average_heart_rate_bpm")
+    @SerialName("average_bpm") val averageHeartRateBpm: Double? = null,
+    @JsonNames("max_bpm", "max_heart_rate_bpm")
+    @SerialName("max_bpm") val maxHeartRateBpm: Double? = null,
+    @JsonNames("min_bpm", "min_heart_rate_bpm")
+    @SerialName("min_bpm") val minHeartRateBpm: Double? = null,
+    @JsonNames("zones", "heart_rate_zones")
+    @SerialName("zones") val heartRateZones: CanonicalHeartRateZones? = null
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class CanonicalHeartRateZones(
-    @SerialName("resting_minutes") val restingMinutes: Int = 0,
-    @SerialName("fat_burn_minutes") val fatBurnMinutes: Int = 0,
-    @SerialName("cardio_minutes") val cardioMinutes: Int = 0,
-    @SerialName("peak_minutes") val peakMinutes: Int = 0
+    @JsonNames("resting", "resting_minutes")
+    @SerialName("resting") val restingMinutes: Int = 0,
+    @JsonNames("fat_burn", "fat_burn_minutes")
+    @SerialName("fat_burn") val fatBurnMinutes: Int = 0,
+    @JsonNames("cardio", "cardio_minutes")
+    @SerialName("cardio") val cardioMinutes: Int = 0,
+    @JsonNames("peak", "peak_minutes")
+    @SerialName("peak") val peakMinutes: Int = 0
 ) {
     fun toMap(): Map<HeartRateZone, Int> = mapOf(
         HeartRateZone.RESTING to restingMinutes,
@@ -164,16 +182,42 @@ data class CanonicalHeartRateZones(
     )
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class CanonicalStressSummary(
-    @SerialName("daily_average_score") val dailyAverageScore: Int,
-    @SerialName("current_score") val currentScore: Int,
-    @SerialName("current_level") val currentLevel: String,
-    @SerialName("autonomic_balance") val autonomicBalance: CanonicalAutonomicBalance? = null,
-    @SerialName("biometric_drivers") val biometricDrivers: CanonicalStressDrivers? = null,
+    @JsonNames("daily_average", "daily_average_score")
+    @SerialName("daily_average") val dailyAverageScore: Int = 50,
+    @SerialName("current_score") val currentScore: Int = 50,
+    @SerialName("current_level") val currentLevel: String = "Calm",
+    @SerialName("peak_hour") val peakHour: Int? = null,
+    @SerialName("peak_score") val peakScore: Int? = null,
+    @SerialName("lowest_hour") val lowestHour: Int? = null,
+    @SerialName("lowest_score") val lowestScore: Int? = null,
+    @SerialName("parasympathetic_percent") val parasympatheticPercent: Int = 50,
+    @SerialName("sympathetic_percent") val sympatheticPercent: Int = 50,
+    @SerialName("baseline_hrv_ms") val baselineHrvMs: Double = 45.0,
+    @SerialName("current_hrv_ms") val currentHrvMs: Double? = null,
+    @SerialName("hrv_delta_percent") val hrvDeltaPercent: Double? = null,
+    @SerialName("resting_heart_rate_bpm") val restingHeartRateBpm: Double? = null,
+    @SerialName("current_sedentary_bpm") val currentSedentaryBpm: Double? = null,
+    @SerialName("heart_rate_elevation_bpm") val heartRateElevationBpm: Double? = null,
     @SerialName("monkey_mood") val monkeyMood: String? = null,
-    @SerialName("intraday_stress") val intradayStress: List<IntradayStressPoint> = emptyList()
+    @SerialName("advice_quote") val adviceQuote: String? = null,
+    @SerialName("recommended_breathing") val recommendedBreathing: String? = null,
+    @JsonNames("intraday_points", "intraday_stress")
+    @SerialName("intraday_points") val intradayStress: List<IntradayStressPoint> = emptyList()
 ) {
+    val autonomicBalance: CanonicalAutonomicBalance
+        get() = CanonicalAutonomicBalance(sympatheticPercent, parasympatheticPercent)
+
+    val biometricDrivers: CanonicalStressDrivers
+        get() = CanonicalStressDrivers(
+            baselineHrvMs = baselineHrvMs,
+            currentHrvMs = currentHrvMs,
+            restingHeartRateBpm = restingHeartRateBpm,
+            currentSedentaryBpm = currentSedentaryBpm
+        )
+
     fun toDomainLevel(): StressLevel = when (currentLevel.lowercase()) {
         "restful" -> StressLevel.RESTFUL
         "calm" -> StressLevel.CALM
@@ -192,12 +236,12 @@ data class CanonicalStressSummary(
     fun toDomainAnalysis(): StressAnalysisResult {
         val level = toDomainLevel()
         val mood = toDomainMood()
-        val sym = autonomicBalance?.sympatheticPercent ?: 50
-        val para = autonomicBalance?.parasympatheticPercent ?: 50
-        val baseHrv = biometricDrivers?.baselineHrvMs ?: 45.0
-        val curHrv = biometricDrivers?.currentHrvMs
-        val rhr = biometricDrivers?.restingHeartRateBpm
-        val sedBpm = biometricDrivers?.currentSedentaryBpm
+        val sym = sympatheticPercent
+        val para = parasympatheticPercent
+        val baseHrv = baselineHrvMs
+        val curHrv = currentHrvMs
+        val rhr = restingHeartRateBpm
+        val sedBpm = currentSedentaryBpm
 
         return StressAnalysisResult(
             currentScore = currentScore,
@@ -207,13 +251,15 @@ data class CanonicalStressSummary(
             sympatheticPercent = sym,
             baselineHrvMs = baseHrv,
             currentHrvMs = curHrv,
-            hrvDeltaPercent = if (curHrv != null && baseHrv > 0) ((curHrv - baseHrv) / baseHrv) * 100.0 else null,
+            hrvDeltaPercent = hrvDeltaPercent ?: if (curHrv != null && baseHrv > 0) ((curHrv - baseHrv) / baseHrv) * 100.0 else null,
             restingHeartRateBpm = rhr,
             currentSedentaryBpm = sedBpm,
-            heartRateElevationBpm = if (sedBpm != null && rhr != null) (sedBpm - rhr) else null,
+            heartRateElevationBpm = heartRateElevationBpm ?: if (sedBpm != null && rhr != null) (sedBpm - rhr) else null,
             monkeyMood = mood,
-            adviceQuote = mood.adviceQuote,
-            recommendedBreathing = BreathingProtocol.defaultForLevel(level)
+            adviceQuote = adviceQuote ?: mood.adviceQuote,
+            recommendedBreathing = recommendedBreathing?.let {
+                BreathingProtocol.entries.find { b -> b.id.equals(it, ignoreCase = true) || b.title.equals(it, ignoreCase = true) }
+            } ?: BreathingProtocol.defaultForLevel(level)
         )
     }
 }

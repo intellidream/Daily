@@ -214,3 +214,33 @@ Screenshots and telemetry traces captured during verification:
 - `06420da`: `feat(health): 5-minute continuous heart rate bucketing and automated pg_cron retention`
 - `20261007123000_20261007_v3_automated_retention_and_pg_cron.sql`: Automated retention function fix and `pg_cron` daily schedule.
 - `Docs/Features/Unified_Health_Vitals_V3_Retention_Refresh.md`: Architectural specification and deployment record for V3, continuous HR downsampling, and Windows 11 verification.
+
+---
+
+## 7. Architecture V3.1: Cross-Platform Resiliency, Deserialization Parity & Device Delivery
+
+### 7.1 Database Telemetry Pruning & Downsampling
+- **1-Second Sample Migration:** Downsampled 125,086 1-second historical heart rate records into 1,613 5-minute bucketed averages directly in PostgreSQL (`health_telemetry`), reducing table volume from ~127,000 rows to ~3,700 rows (97% reduction).
+- **Postgres Retention:** Database size shrank to minimal footprint while preserving accurate intraday curves.
+
+### 7.2 Edge Function (`health-engine`) Optimization
+- **Row Limit Guard:** Increased PostgREST telemetry fetch limit to 25,000 rows.
+- **Wearable Detection:** Expanded regex to detect Garmin, Huawei, Whoop, and Fitbit devices in addition to Apple Watch, Galaxy Watch, Pixel Watch, and Zepp OS.
+- **Timezone Inference:** Dynamically extracts `tz_offset_min` from the most recent telemetry sample if absent in the client request.
+- **Historical Summary Safety:** Edge function recalculations target only the specified date, preserving historical summary trends across multi-day views.
+
+### 7.3 Android Deserialization & Room Optimization
+- **`FlexibleTimestampSerializer`:** Solved `JsonDecodingException` where Supabase Edge Function sent ISO-8601 strings (`"2026-10-07T00:30:00.000Z"`) while Kotlin models expected `Long` epoch milliseconds. Supports both ISO-8601 strings (Instant / OffsetDateTime) and Long epoch ms across `IntradayHeartRatePoint`, `IntradayStressPoint`, `SleepStageRecord`, `SleepSession`, and `NapSession`.
+- **Flat Rollup Mapping:** Added `@JsonNames` across `CanonicalActivitySummary`, `CanonicalCardiovascularSummary`, `CanonicalHeartRateZones`, and `CanonicalStressSummary` to deserialize flat Supabase JSON keys seamlessly.
+- **Room SQLite Shrinking:** Implemented automatic startup maintenance (`deleteTelemetryBefore(cutoff)` + `VACUUM`), truncating historical WAL bloat.
+
+### 7.4 iOS Elimination of UI Flickering
+- **Concurrent Atomic Fetch:** Modified `DailyCore.HealthDataService` to query Supabase canonical summary and HealthKit telemetry in parallel using `async let`, applying state updates atomically to eliminate UI flickering between stale lower values and live sensor data.
+- **Step Downgrade Prevention:** Guarded `totalStepsToday` and `totalActiveCalories` with `max()` on current date to prevent transient network summaries from reducing live step counts.
+
+### 7.5 Multi-Device Delivery Verification
+- **iOS Simulator (`SimulaPhone`)**: Verified live 5-tab Health Hub without flickering.
+- **iPhone 16 Pro ("Schmitz")**: Signed with team identity `7LZ9ZT2Z5B` and deployed via `xcrun devicectl device install app`.
+- **Android Emulator (`emulator-5554`)**: Verified live Health Hub displaying canonical stress mascot and metrics.
+- **Pixel 9 Pro & Samsung Galaxy Z Fold 8**: Installed `app-debug.apk` via `adb` and verified app launch and live rendering.
+
