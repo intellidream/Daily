@@ -83,7 +83,7 @@ public struct HealthDailySummaryRecord: Codable, Identifiable, Sendable {
 
 // MARK: - Daily Health Summary Payload (summary JSONB)
 
-public struct DailyHealthSummaryPayload: Codable, Sendable {
+public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
     public let date: String
     public let engineVersion: String
     public let computedAt: Date
@@ -136,7 +136,7 @@ public struct DailyHealthSummaryPayload: Codable, Sendable {
 
 // MARK: - Canonical Sub-Payloads
 
-public struct CanonicalSleepSummary: Codable, Sendable {
+public struct CanonicalSleepSummary: Codable, Sendable, Equatable {
     public let primarySession: SleepSession?
     public let allSessions: [SleepSession]
     public let naps: [NapSession]
@@ -162,7 +162,7 @@ public struct CanonicalSleepSummary: Codable, Sendable {
     }
 }
 
-public struct CanonicalSleepGuidance: Codable, Sendable {
+public struct CanonicalSleepGuidance: Codable, Sendable, Equatable {
     public let verdict: SleepRecoveryVerdict
     public let tips: [SleepActionableTip]
     public let aiContext: SleepAIContext
@@ -184,7 +184,7 @@ public struct CanonicalSleepGuidance: Codable, Sendable {
     }
 }
 
-public struct CanonicalActivitySummary: Codable, Sendable {
+public struct CanonicalActivitySummary: Codable, Sendable, Equatable {
     public let totalSteps: Int
     public let activeCalories: Double
     public let sourceDevice: String?
@@ -210,7 +210,7 @@ public struct CanonicalActivitySummary: Codable, Sendable {
     }
 }
 
-public struct CanonicalCardiovascularSummary: Codable, Sendable {
+public struct CanonicalCardiovascularSummary: Codable, Sendable, Equatable {
     public let averageBpm: Double?
     public let restingBpm: Double?
     public let minBpm: Double?
@@ -244,7 +244,7 @@ public struct CanonicalCardiovascularSummary: Codable, Sendable {
     }
 }
 
-public struct CanonicalHeartRateZones: Codable, Sendable {
+public struct CanonicalHeartRateZones: Codable, Sendable, Equatable {
     public let resting: Int
     public let fatBurn: Int
     public let cardio: Int
@@ -265,7 +265,7 @@ public struct CanonicalHeartRateZones: Codable, Sendable {
     }
 }
 
-public struct CanonicalStressSummary: Codable, Sendable {
+public struct CanonicalStressSummary: Codable, Sendable, Equatable {
     public let currentScore: Int
     public let currentLevel: StressLevel
     public let dailyAverage: Int
@@ -351,7 +351,7 @@ public struct CanonicalStressSummary: Codable, Sendable {
     }
 }
 
-public struct CanonicalVitalSummaryItem: Codable, Sendable {
+public struct CanonicalVitalSummaryItem: Codable, Sendable, Equatable {
     public let type: String
     public let value: Double
     public let unit: String

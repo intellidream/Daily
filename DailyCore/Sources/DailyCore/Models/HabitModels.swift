@@ -691,6 +691,21 @@ public enum WaterPreset: String, CaseIterable, Identifiable, Sendable {
     public var amountMl: Double { defaultAmountMl }
     public var iconName: String { systemImage }
     public var colorHex: String { hexColor }
+    
+    /// Fuzzy matches beverage name across raw values, display names, and Android/cross-platform aliases.
+    public static func matching(_ raw: String?) -> WaterPreset? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        if let exact = WaterPreset(rawValue: raw) { return exact }
+        let lower = raw.lowercased()
+        if lower == "small" || lower == "smallwater" || lower == "small water" { return .smallWater }
+        if lower == "large" || lower == "largewater" || lower == "large water" { return .largeWater }
+        if lower == "glass" || lower == "pahar" { return .glass }
+        if lower == "bottle" || lower == "sticla" || lower == "sticlă" { return .bottle }
+        if lower.contains("coffee") || lower.contains("espresso") || lower.contains("latte") || lower.contains("cappuccino") || lower.contains("cafea") { return .coffee }
+        if lower.contains("tea") || lower.contains("matcha") || lower.contains("ceai") || lower.contains("infusion") { return .tea }
+        if lower.contains("water") || lower.contains("apa") || lower.contains("apă") { return .largeWater }
+        return nil
+    }
 }
 
 // MARK: - Smoke Presets

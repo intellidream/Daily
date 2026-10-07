@@ -135,9 +135,11 @@ public final class HealthDataService: ObservableObject {
             .dropFirst()
             .sink { [weak self] state in
                 if case .authenticated = state {
-                    Task { @MainActor [weak self] in
+                    Task { [weak self] in
                         self?.setupRealtimeSubscription()
                         await self?.loadDataForSelectedDate(forceRefresh: true)
+                    }
+                    Task.detached(priority: .utility) { [weak self] in
                         await self?.syncMissingHistoricalDataIfNeeded()
                     }
                 }
@@ -146,7 +148,7 @@ public final class HealthDataService: ObservableObject {
         
         if AuthService.shared.isAuthenticated {
             setupRealtimeSubscription()
-            Task { @MainActor [weak self] in
+            Task.detached(priority: .utility) { [weak self] in
                 await self?.syncMissingHistoricalDataIfNeeded()
             }
         }
@@ -177,20 +179,59 @@ public final class HealthDataService: ObservableObject {
                     filter: .eq("user_id", value: userId)
                 )
                 
-                do {
-                    try await channel.subscribe()
-                } catch {
-                    print("[HealthDataService] Realtime subscription error: \(error)")
-                    return
-                }
+                await channel.subscribe()
                 
+                var lastHandledTime: Date = .distantPast
                 for await _ in changes {
                     guard !Task.isCancelled else { break }
-                    Task { @MainActor [weak self] in
-                        await self?.loadDataForSelectedDate(forceRefresh: true)
-                    }
+                    let now = Date()
+                    // Throttle realtime bursts to at most once every 3 seconds
+                    guard now.timeIntervalSince(lastHandledTime) > 3.0 else { continue }
+                    lastHandledTime = now
+                    
+                    // Silently refresh remote canonical summary without re-querying HealthKit,
+                    // uploading telemetry, toggling isLoading, or triggering health-engine!
+                    await self?.fetchRemoteSummarySilentlyForSelectedDate()
                 }
             }
+        }
+    }
+    
+    /// Silently fetches the latest canonical summary for the selected date from Supabase
+    /// without triggering local telemetry collection, uploading telemetry, or re-invoking health-engine.
+    @MainActor
+    public func fetchRemoteSummarySilentlyForSelectedDate() async {
+        let targetDate = selectedDate
+        let dateKey = isoDateFormatter.string(from: targetDate)
+        
+        guard let session = try? await supabase.auth.session else { return }
+        let userId = session.user.id.uuidString.lowercased()
+        
+        do {
+            let summaryRows: [HealthDailySummaryRecord] = try await supabase
+                .from("health_daily_summary")
+                .select()
+                .eq("user_id", value: userId)
+                .eq("local_date", value: dateKey)
+                .limit(1)
+                .execute()
+                .value
+            
+            if let row = summaryRows.first, !row.summary.isEmpty {
+                let payload = row.summary
+                // Avoid redundant UI re-renders if payload is identical
+                if self.canonicalSummary != payload {
+                    self.canonicalSummary = payload
+                    if let encoded = try? summaryEncoder.encode(payload) {
+                        userDefaults.set(encoded, forKey: "health_daily_summary_\(dateKey)")
+                    }
+                    summaryCache[dateKey] = (timestamp: Date(), summary: payload)
+                    applyCanonicalSummary(payload, dateKey: dateKey)
+                    await loadHistoricalTrends()
+                }
+            }
+        } catch {
+            print("[HealthDataService] Note: Could not silently fetch health_daily_summary: \(error.localizedDescription)")
         }
     }
     
@@ -314,18 +355,30 @@ public final class HealthDataService: ObservableObject {
     }
     
     private func performLoadDataForSelectedDate(forceRefresh: Bool = false) async {
-        isLoading = true
-        defer { isLoading = false }
-        
         let targetDate = selectedDate
         let dateKey = isoDateFormatter.string(from: targetDate)
         let isToday = Calendar.current.isDateInToday(targetDate)
         let effectiveTTL: TimeInterval = isToday ? 30 : cacheTTL
         
+        let hasCachedData = (summaryCache[dateKey] != nil && !summaryCache[dateKey]!.summary.isEmpty) ||
+                            (userDefaults.data(forKey: "health_daily_summary_\(dateKey)") != nil)
+        
+        let shouldShowLoading = !hasCachedData && canonicalSummary == nil
+        if shouldShowLoading {
+            isLoading = true
+        }
+        defer {
+            if shouldShowLoading {
+                isLoading = false
+            }
+        }
+        
         // 1. Check in-memory canonical summary cache
         if !forceRefresh, let cached = summaryCache[dateKey], !cached.summary.isEmpty, Date().timeIntervalSince(cached.timestamp) < effectiveTTL {
-            self.canonicalSummary = cached.summary
-            applyCanonicalSummary(cached.summary, dateKey: dateKey)
+            if self.canonicalSummary != cached.summary {
+                self.canonicalSummary = cached.summary
+                applyCanonicalSummary(cached.summary, dateKey: dateKey)
+            }
             if !isToday {
                 ensureLocalDeviceSourcesPopulated()
                 await loadHistoricalTrends()
@@ -337,9 +390,11 @@ public final class HealthDataService: ObservableObject {
         if !forceRefresh, let summaryData = userDefaults.data(forKey: "health_daily_summary_\(dateKey)"),
            let summary = try? summaryDecoder.decode(DailyHealthSummaryPayload.self, from: summaryData) {
             if !summary.isEmpty {
-                self.canonicalSummary = summary
-                summaryCache[dateKey] = (timestamp: Date(), summary: summary)
-                applyCanonicalSummary(summary, dateKey: dateKey)
+                if self.canonicalSummary != summary {
+                    self.canonicalSummary = summary
+                    summaryCache[dateKey] = (timestamp: Date(), summary: summary)
+                    applyCanonicalSummary(summary, dateKey: dateKey)
+                }
                 if !isToday {
                     ensureLocalDeviceSourcesPopulated()
                     await loadHistoricalTrends()
@@ -392,12 +447,14 @@ public final class HealthDataService: ObservableObject {
         
         // 4. If canonical summary was found, apply and merge local sensor data atomically to eliminate UI flickering
         if let payload = remotePayload {
-            self.canonicalSummary = payload
-            if let encoded = try? summaryEncoder.encode(payload) {
-                userDefaults.set(encoded, forKey: "health_daily_summary_\(dateKey)")
+            if self.canonicalSummary != payload {
+                self.canonicalSummary = payload
+                if let encoded = try? summaryEncoder.encode(payload) {
+                    userDefaults.set(encoded, forKey: "health_daily_summary_\(dateKey)")
+                }
+                summaryCache[dateKey] = (timestamp: Date(), summary: payload)
+                applyCanonicalSummary(payload, dateKey: dateKey)
             }
-            summaryCache[dateKey] = (timestamp: Date(), summary: payload)
-            applyCanonicalSummary(payload, dateKey: dateKey)
             
             if !localTelemetry.isEmpty {
                 mergeLocalTelemetryWithSummary(telemetry: localTelemetry, isToday: isToday)
@@ -1067,52 +1124,12 @@ public final class HealthDataService: ObservableObject {
         if let encoded = try? JSONEncoder().encode(vitalsList) {
             userDefaults.set(encoded, forKey: "health_daily_vitals_\(dateKey)")
         }
-        
-        // Sync computed daily vitals to Supabase asynchronously
-        Task { [weak self] in
-            await self?.syncVitalsToSupabase(vitals: vitalsList)
-        }
     }
     
-    /// Syncs real device daily aggregate vitals to Supabase `vitals` table.
-    /// Excludes virtual engines (StressWatch, Biometric Engine, Bubbles, computed) to prevent duplicate pollution.
+    /// Deprecated in Architecture V3 (vitals table was dropped in migration 20261007095958).
+    /// Retained as a safe no-op for backward compatibility.
     public func syncVitalsToSupabase(vitals: [VitalMetricRecord]) async {
-        guard AuthService.shared.isAuthenticated,
-              let session = try? await supabase.auth.session,
-              let userId = session.user.id.uuidString.lowercased() as String?,
-              !vitals.isEmpty else { return }
-        
-        let realVitals = vitals.filter { v in
-            if v.userId == "stress-engine" || v.userId == "computed" || v.userId == "canonical" || v.userId == "habits" {
-                return false
-            }
-            if let dev = v.sourceDevice, DeviceSource.from(name: dev).isVirtualEngine {
-                return false
-            }
-            return true
-        }
-        
-        guard !realVitals.isEmpty else { return }
-        
-        do {
-            let prepared = realVitals.map { v in
-                VitalMetricRecord(
-                    id: v.id,
-                    userId: userId,
-                    type: v.type,
-                    value: v.value,
-                    unit: v.unit,
-                    date: v.date,
-                    sourceDevice: v.sourceDevice,
-                    createdAt: v.createdAt ?? Date(),
-                    updatedAt: Date(),
-                    syncedAt: Date()
-                )
-            }
-            try await supabase.from("vitals").upsert(prepared, onConflict: "user_id,date,type").execute()
-        } catch {
-            print("[HealthDataService] Warning: Failed to sync vitals to Supabase: \(error.localizedDescription)")
-        }
+        // No-op in Architecture V3: canonical aggregates are computed into health_daily_summary
     }
     
     /// Syncs local high-frequency telemetry samples to Supabase `health_telemetry` table idempotently.
@@ -1300,26 +1317,6 @@ public final class HealthDataService: ObservableObject {
             if !combined.isEmpty {
                 await syncTelemetryToSupabase(telemetry: combined)
                 
-                // Calculate and sync daily vitals for this day
-                let pastDateKey = isoDateFormatter.string(from: missingDate)
-                var vitalsList: [VitalMetricRecord] = []
-                for t in combined {
-                    guard let val = t.value, val > 0,
-                          let mType = HealthMetricType.from(rawString: t.type) else { continue }
-                    if mType == .steps || t.isSleep || t.isSleepStage { continue }
-                    vitalsList.append(VitalMetricRecord(
-                        userId: userId,
-                        type: mType.rawValue,
-                        value: val,
-                        unit: t.unit ?? mType.defaultUnit,
-                        date: pastDateKey,
-                        sourceDevice: t.sourceDevice,
-                        createdAt: t.startTime
-                    ))
-                }
-                if !vitalsList.isEmpty {
-                    await syncVitalsToSupabase(vitals: vitalsList)
-                }
                 hasUploadedAnyHistory = true
             }
         }

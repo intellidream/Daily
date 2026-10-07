@@ -530,15 +530,29 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             let activeLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
             lastLogged = activeLogs.first?.loggedAt
             for log in activeLogs {
-                let drink = (log.parsedDrink ?? "").lowercased()
-                if drink.contains("coffee") || drink.contains("espresso") || drink.contains("latte") {
+                let rawDrink = log.parsedDrink ?? ""
+                let drink = rawDrink.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                if drink.contains("coffee") || drink.contains("espresso") || drink.contains("latte") || drink.contains("cappuccino") || drink.contains("cafea") {
                     coffeeMl += log.value
-                } else if drink.contains("tea") || drink.contains("matcha") || drink.contains("infusion") {
+                } else if drink.contains("tea") || drink.contains("matcha") || drink.contains("infusion") || drink.contains("ceai") {
                     teaMl += log.value
-                } else if drink.contains("water") || drink.contains("glass") || drink.contains("bottle") || drink.isEmpty {
+                } else if drink.contains("water") || drink.contains("apa") || drink.contains("apă") ||
+                          drink.contains("glass") || drink.contains("bottle") ||
+                          drink.contains("small") || drink.contains("large") ||
+                          drink.contains("pahar") || drink.contains("sticla") || drink.contains("sticlă") ||
+                          drink.contains("sparkling") || drink.contains("still") ||
+                          drink.contains("drop") || drink.isEmpty {
                     waterMl += log.value
+                } else if let matched = WaterPreset.matching(rawDrink) {
+                    if matched == .coffee {
+                        coffeeMl += log.value
+                    } else if matched == .tea {
+                        teaMl += log.value
+                    } else {
+                        waterMl += log.value
+                    }
                 } else {
-                    let dName = log.parsedDrink ?? "Other"
+                    let dName = rawDrink.isEmpty ? "Water" : rawDrink
                     otherDrinks[dName, default: 0] += log.value
                 }
             }
@@ -551,7 +565,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         if coffeeMl > 0 { breakdown.append(("Coffee", coffeeMl, "#F59E0B")) }
         if teaMl > 0 { breakdown.append(("Tea", teaMl, "#84CC16")) }
         for (name, amt) in otherDrinks.sorted(by: { $0.value > $1.value }) {
-            breakdown.append((name, amt, "#EC4899"))
+            let matched = WaterPreset.matching(name)
+            let color = matched?.hexColor ?? "#00E5FF"
+            breakdown.append((name, amt, color))
         }
         if breakdown.isEmpty && totalMl > 0 {
             breakdown.append(("Water", totalMl, "#00E5FF"))

@@ -97,7 +97,10 @@ public final class HabitsService: ObservableObject {
         Task { await logWater(preset: preset, customAmount: nil, multiplier: multiplier) }
     }
     public func logWater(amountMl: Double, drink: String = "Water") {
-        Task { await logWater(preset: .glass, customAmount: amountMl, multiplier: 1) }
+        Task {
+            let preset = WaterPreset.matching(drink) ?? .glass
+            await logWater(preset: preset, customAmount: amountMl, multiplier: 1, customDrinkName: drink)
+        }
     }
     public func logSmoke(preset: SmokePreset) {
         Task { await logSmoke(preset: preset, customCount: nil, multiplier: 1) }
@@ -201,12 +204,13 @@ public final class HabitsService: ObservableObject {
     
     // MARK: - Logging Actions
     
-    public func logWater(preset: WaterPreset, customAmount: Double? = nil, multiplier: Int = 1) async {
+    public func logWater(preset: WaterPreset, customAmount: Double? = nil, multiplier: Int = 1, customDrinkName: String? = nil) async {
         let safeMultiplier = max(1, multiplier)
         let baseAmount = customAmount ?? preset.defaultAmountMl
         let totalAmount = baseAmount * Double(safeMultiplier)
         
-        var metaDict: [String: String] = ["drink": preset.rawValue]
+        let drinkName = customDrinkName ?? preset.rawValue
+        var metaDict: [String: String] = ["drink": drinkName]
         if safeMultiplier > 1 {
             metaDict["multiplier"] = "\(safeMultiplier)"
             metaDict["base_value"] = "\(baseAmount)"
@@ -948,7 +952,7 @@ public final class HabitsService: ObservableObject {
         }
         self.waterDrinkBreakdown = wBreakdown.map { (key, val) in
             let pct = wSum > 0 ? (val / wSum) * 100 : 0
-            let preset = WaterPreset(rawValue: key)
+            let preset = WaterPreset.matching(key)
             return HabitDrinkBreakdown(
                 drink: key,
                 amount: val,

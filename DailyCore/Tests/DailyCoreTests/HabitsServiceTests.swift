@@ -266,5 +266,34 @@ struct HabitsServiceTests {
         let parsed = HabitDateParser.parse("2026-09-01")
         #expect(parsed != nil)
     }
+    
+    @Test("Water Preset Cross-Platform Matching & Color Resolution")
+    func testWaterPresetMatching() {
+        // Exact raw values
+        #expect(WaterPreset.matching("Small Water") == .smallWater)
+        #expect(WaterPreset.matching("Large Water") == .largeWater)
+        #expect(WaterPreset.matching("Coffee") == .coffee)
+        
+        // Android and shorthand display names
+        #expect(WaterPreset.matching("Small") == .smallWater)
+        #expect(WaterPreset.matching("Large") == .largeWater)
+        #expect(WaterPreset.matching("small") == .smallWater)
+        #expect(WaterPreset.matching("large") == .largeWater)
+        #expect(WaterPreset.matching("Glass") == .glass)
+        #expect(WaterPreset.matching("Bottle") == .bottle)
+        
+        // Romanian and alias names
+        #expect(WaterPreset.matching("pahar") == .glass)
+        #expect(WaterPreset.matching("sticla") == .bottle)
+        #expect(WaterPreset.matching("apa") == .largeWater)
+        #expect(WaterPreset.matching("apă") == .largeWater)
+        #expect(WaterPreset.matching("espresso") == .coffee)
+        #expect(WaterPreset.matching("ceai") == .tea)
+        
+        // Colors should match blue/cyan tones for water
+        #expect(WaterPreset.matching("Small")?.hexColor == "#38BDF8")
+        #expect(WaterPreset.matching("Large")?.hexColor == "#00E5FF")
+        #expect(WaterPreset.matching("Coffee")?.hexColor == "#F59E0B")
+    }
 }
 

@@ -252,4 +252,60 @@ Screenshots and telemetry traces captured during verification:
   `DELETE FROM public.health_telemetry WHERE COALESCE(local_date, start_time::date) < (CURRENT_DATE - INTERVAL '1 day')::date;`
   ensuring raw telemetry beyond 48 hours is automatically pruned every day at 03:00 UTC.
 
+---
+
+## 8. Architecture V3.2: Health UI Stuttering Elimination & iOS Water Widget Progress Ring Color Fixes
+
+### 8.1 Health UI Stuttering & Jank: Root Cause & Resolution
+Following the deployment of Health Architecture V3, continuous UI stuttering and frame drops occurred on the iOS Dashboard and throughout all Health Hub subviews (Overview, Sleep Studio, Stress Studio, Vitals, Trends).
+
+#### Root Cause Analysis:
+1. **Supabase Realtime Echo Feedback Loop:**
+   - The Supabase Realtime channel listener on `public.health_daily_summary` was subscribed to Postgres changes (`postgres_changes`, filter `user_id=eq.\(userId)`).
+   - Upon receiving an `INSERT` or `UPDATE`, it invoked `loadDataForSelectedDate(forceRefresh: true)`.
+   - `loadDataForSelectedDate(forceRefresh: true)` performed a full local HealthKit query, uploaded telemetry batches to `health_telemetry`, and invoked the `health-engine` edge function.
+   - The `health-engine` edge function recomputed the canonical summary and wrote back to `public.health_daily_summary`.
+   - This database write triggered a Postgres Realtime event on the client, creating an **infinite, continuous network and recalculation cycle**.
+2. **`@Published var isLoading` View Thrashing:**
+   - Every execution of `performLoadDataForSelectedDate` unconditionally executed `isLoading = true` and `defer { isLoading = false }`.
+   - Because `HealthDataService.shared` is observed by `ModularDashboardView`, `HealthWidgetCard`, and all health hub views, toggling `isLoading` twice per cycle triggered continuous SwiftUI view invalidation and re-rendering at 120Hz/60Hz.
+3. **MainActor HealthKit Query Saturation:**
+   - `syncMissingHistoricalDataIfNeeded()` was launched synchronously on the `@MainActor` upon session initialization, querying 14 days of HealthKit samples on the UI thread.
+4. **Obsolete Table Queries:**
+   - Deprecated `syncVitalsToSupabase()` continued to attempt inserts into `public.vitals`, which had been dropped in migration `20261007095958`.
+
+#### Architectural Resolution:
+1. **Silent Canonical Summary Ingestion:**
+   - Introduced `@MainActor public func fetchRemoteSummarySilentlyForSelectedDate() async`.
+   - When a Realtime update arrives, the client now simply queries `health_daily_summary` directly and decodes `DailyHealthSummaryPayload`.
+   - It bypasses HealthKit collection, skips telemetry upload, skips invoking `health-engine`, and **does not touch `isLoading`**.
+   - Added a 3-second debounce window (`realtimeDebounceTask`) and an equality guard (`if self.canonicalSummary != payload`) to prevent redundant `@Published` emissions.
+2. **Conditional Loading Indicator:**
+   - `isLoading` now only flips to `true` when there is genuinely no cached data available on screen (`let shouldShowLoading = !hasCachedData && canonicalSummary == nil`). Background and refresh syncs occur completely silently without UI flicker.
+3. **Background Detached Historical Sync:**
+   - Offloaded historical HealthKit backfills to `Task.detached(priority: .utility)` off the MainActor.
+   - Guarded session state changes with `.dropFirst()` to prevent duplicate startup runs.
+4. **Removal of Legacy Vitals Sync:**
+   - Fully deprecated and removed obsolete `syncVitalsToSupabase()` calls.
+
+### 8.2 iOS Water Widget Progress Ring Color Bug: Root Cause & Resolution
+
+#### Root Cause Analysis:
+- In `WidgetDataCoordinator.swift` (`fetchBubblesSnapshot`), the breakdown parsing logic for the water progress ring inspected the drink string:
+  `if drink.contains("water") || drink.contains("glass") || drink.contains("bottle")`
+- Drink logs created from presets on Android (`preset.displayName` e.g., `"Small"`, `"Large"`) or iOS quick logs (`"Small"`, `"Large"`) did not contain the substring `"water"`.
+- Consequently, these legitimate water logs fell into the fallback `otherDrinks` category, which was hardcoded to assign `#EC4899` (Hot Pink).
+
+#### Architectural Resolution:
+1. **Canonical `WaterPreset.matching` Utility (`DailyCore/Sources/DailyCore/Models/HabitModels.swift`):**
+   - Implemented `WaterPreset.matching(_ raw: String?) -> WaterPreset?` with comprehensive normalization (case-insensitive, trimming).
+   - Matches English names (`"small"`, `"large"`, `"glass"`, `"bottle"`), Romanian translations (`"pahar"`, `"sticla"`, `"apa"`, `"apă"`), and custom identifiers.
+2. **Widget Data Coordinator Normalization (`DailyCore/Sources/DailyCore/Services/WidgetDataCoordinator.swift`):**
+   - Replaced substring heuristics with `WaterPreset.matching(drink)`.
+   - Updated breakdown entries so that any unrecognized beverage entry defaults to cyan (`#00E5FF`) rather than pink (`#EC4899`), reserving amber (`#F59E0B`) specifically for coffee/caffeine drinks.
+   - Updated `HabitsService.recalculateDailyAggregates()` to resolve drink names through `WaterPreset.matching`.
+3. **Unit Testing:**
+   - Added unit test suite `testWaterPresetMatching` in `DailyCoreTests/HabitsServiceTests.swift`, validating standard presets, localized Romanian names, and custom drink strings.
+
+
 

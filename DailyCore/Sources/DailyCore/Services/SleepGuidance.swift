@@ -38,7 +38,7 @@ public enum SleepRecoveryStatus: String, Codable, CaseIterable, Sendable {
 
 // MARK: - Sleep Recovery Verdict
 
-public struct SleepRecoveryVerdict: Identifiable, Codable, Sendable {
+public struct SleepRecoveryVerdict: Identifiable, Codable, Sendable, Equatable {
     public let id: String
     public let status: SleepRecoveryStatus
     public let headline: String
@@ -155,7 +155,7 @@ public struct SleepActionableTip: Identifiable, Hashable, Codable, Sendable {
 
 // MARK: - Sleep AI Context & Follow-Up Prompts
 
-public struct SleepAIContext: Codable, Sendable {
+public struct SleepAIContext: Codable, Sendable, Equatable {
     public let narrativeSynthesis: String
     public let suggestedPrompts: [String]
     
