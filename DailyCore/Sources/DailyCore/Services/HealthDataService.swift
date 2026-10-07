@@ -278,6 +278,22 @@ public final class HealthDataService: ObservableObject {
         }
     }
     
+    // MARK: - Smart Refresh
+    public var lastRefreshTimestamp: Date = .distantPast
+    
+    public func refreshIfStale() async {
+        let isToday = Calendar.current.isDateInToday(selectedDate)
+        let staleThreshold: TimeInterval = isToday ? 900 : 3600 // 15 min for today, 1 hour for past
+        
+        if Date().timeIntervalSince(lastRefreshTimestamp) > staleThreshold {
+            lastRefreshTimestamp = Date()
+            await loadDataForSelectedDate(forceRefresh: true)
+        } else {
+            // Already fresh, just reload from memory/local cache to trigger UI updates without network load
+            await loadDataForSelectedDate(forceRefresh: false)
+        }
+    }
+    
     // MARK: - Data Fetching & Processing
     
     public func loadDataForSelectedDate(forceRefresh: Bool = false) async {

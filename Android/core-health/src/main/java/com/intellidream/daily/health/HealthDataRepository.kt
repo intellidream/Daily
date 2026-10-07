@@ -280,6 +280,21 @@ class HealthDataRepository(
         }
     }
 
+    // MARK: - Smart Refresh
+    private var lastRefreshTimestamp: Long = 0L
+
+    fun refreshIfStale() {
+        val now = System.currentTimeMillis()
+        val isToday = isSameDay(_selectedDate.value, now)
+        val staleThreshold = if (isToday) 15 * 60 * 1000L else 60 * 60 * 1000L
+        if (now - lastRefreshTimestamp > staleThreshold) {
+            lastRefreshTimestamp = now
+            loadDataForSelectedDate(forceRefresh = true)
+        } else {
+            loadDataForSelectedDate(forceRefresh = false)
+        }
+    }
+
     // MARK: - Data Fetching & Processing
 
     fun loadDataForSelectedDate(forceRefresh: Boolean = false) {
@@ -931,7 +946,9 @@ class HealthDataRepository(
                 payload.activity?.totalSteps?.takeIf { it > 0 }?.let {
                     historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }[HealthMetricType.STEPS] = it.toDouble()
                 }
-                payload.sleep?.primarySession?.asleepSeconds?.takeIf { it > 0 }?.let {
+                val sleepSec = payload.sleep?.primarySession?.asleepSeconds?.takeIf { it > 0 }
+                    ?: payload.sleep?.naps?.map { it.durationSeconds }?.sum()?.toDouble()?.takeIf { it > 0 }
+                sleepSec?.let {
                     historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }[HealthMetricType.SLEEP_DURATION] = it / 60.0
                 }
                 payload.cardiovascular?.restingHeartRateBpm?.takeIf { it > 0 }?.let {

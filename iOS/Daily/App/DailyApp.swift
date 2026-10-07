@@ -28,7 +28,7 @@ struct DailyApp: App {
                     HabitsService.shared.reloadFromLocalStorage()
                     await HabitsService.shared.flushOfflineQueue()
                     await HabitsService.shared.loadDataForSelectedDate()
-                    await HealthDataService.shared.loadDataForSelectedDate(forceRefresh: true)
+                    await HealthDataService.shared.refreshIfStale()
                 }
             }
         }

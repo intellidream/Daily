@@ -48,10 +48,8 @@
                 </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
-        <DataTemplate x:Key="HealthTelemetryWidgetTemplate">
             <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="16" Tapped="Widget_Tapped">
                 <controls:GlassWidgetContainer CornerRadius="16">
-                    <controls:HealthTelemetryWidgetControl x:Name="HealthTelemetryWidget" />
                 </controls:GlassWidgetContainer>
             </Border>
         </DataTemplate>
@@ -96,7 +94,6 @@
             FinancesTemplate="{StaticResource FinancesWidgetTemplate}"
             HabitsTemplate="{StaticResource HabitsWidgetTemplate}"
             HealthTemplate="{StaticResource HealthWidgetTemplate}"
-            HealthTelemetryTemplate="{StaticResource HealthTelemetryWidgetTemplate}"
             CalendarTemplate="{StaticResource CalendarWidgetTemplate}"
             RssFeedTemplate="{StaticResource RssFeedWidgetTemplate}"
             NotesTemplate="{StaticResource NotesWidgetTemplate}"

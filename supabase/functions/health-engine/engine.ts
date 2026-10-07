@@ -1381,8 +1381,14 @@ export function computeDailyHealthSummary(input: EngineInput): HealthDailySummar
     raw_watermark: rawWatermark,
     steps: activitySummary.total_steps > 0 ? activitySummary.total_steps : null,
     active_kcal: activitySummary.active_calories > 0 ? activitySummary.active_calories : null,
-    sleep_asleep_s: sleepResult.primarySession ? sleepResult.primarySession.asleep_seconds : null,
-    sleep_score: sleepResult.primarySession ? sleepResult.primarySession.sleep_score : null,
+    sleep_asleep_s: sleepResult.primarySession
+      ? sleepResult.primarySession.asleep_seconds
+      : (sleepResult.allSessions.length > 0
+          ? sleepResult.allSessions.reduce((max, s) => Math.max(max, s.asleep_seconds), 0)
+          : (sleepResult.naps.length > 0 ? sleepResult.naps.reduce((sum, n) => sum + n.duration_seconds, 0) : null)),
+    sleep_score: sleepResult.primarySession
+      ? sleepResult.primarySession.sleep_score
+      : (sleepResult.allSessions.length > 0 ? sleepResult.allSessions[0].sleep_score : null),
     stress_avg: stressSummary ? stressSummary.daily_average : null,
     rhr: cardioSummary.resting_bpm,
     hrv_sdnn: vitalsMap['hrvsdnn']?.value ?? vitalsMap['hrv']?.value ?? null,

@@ -89,6 +89,11 @@ Deno.serve(async (req: Request) => {
         results.push(rowRes);
       }
 
+      // Apply retention policy during dirty batch processing
+      await supabase.rpc('apply_health_data_retention').catch((e: any) => {
+        console.warn('Retention RPC execution notice:', e);
+      });
+
       return new Response(JSON.stringify({ processed_count: results.length, results }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

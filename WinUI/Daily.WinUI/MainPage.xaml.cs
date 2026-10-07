@@ -280,8 +280,6 @@ public sealed partial class MainPage : Page
                     glassContainer.RefreshWithAnimation(() => rss.RefreshAsync());
                 else if (glassContainer.Content is HealthWidgetControl health)
                     glassContainer.RefreshWithAnimation(() => health.RefreshAsync());
-                else if (glassContainer.Content is HealthTelemetryWidgetControl healthTelemetry)
-                    glassContainer.RefreshWithAnimation(() => healthTelemetry.LoadDataAsync());
                 else if (glassContainer.Content is FinancesWidgetControl finances)
                     glassContainer.RefreshWithAnimation(() => finances.LoadDataAsync());
                 else if (glassContainer.Content is CalendarWidgetControl calendar)
@@ -555,8 +553,6 @@ public sealed partial class MainPage : Page
                 case "HealthWidget":
                     OpenDetailWindow(typeof(HealthDetailPage));
                     break;
-                case "HealthTelemetryWidget":
-                    OpenDetailWindow(typeof(HealthTelemetryDetailPage));
                     break;
                 case "CalendarWidget":
                     OpenDetailWindow(typeof(CalendarDetailPage));

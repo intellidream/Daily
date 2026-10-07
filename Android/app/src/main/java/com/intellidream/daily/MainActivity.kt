@@ -271,6 +271,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        healthRepository.refreshIfStale()
         lifecycleScope.launch {
             com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@MainActivity)
         }
