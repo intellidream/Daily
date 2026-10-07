@@ -1,18 +1,45 @@
 package com.intellidream.daily.model
 
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonNames
 import java.util.Locale
 import java.util.UUID
 
 // MARK: - Stress Level Categorization
 
+object StressLevelSerializer : KSerializer<StressLevel> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("StressLevel", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: StressLevel) {
+        encoder.encodeString(value.displayName)
+    }
+
+    override fun deserialize(decoder: Decoder): StressLevel {
+        val name = try {
+            decoder.decodeString()
+        } catch (_: Exception) {
+            return StressLevel.CALM
+        }
+        return StressLevel.entries.firstOrNull {
+            it.name.equals(name, ignoreCase = true) ||
+            it.displayName.equals(name, ignoreCase = true) ||
+            it.id.equals(name, ignoreCase = true)
+        } ?: StressLevel.CALM
+    }
+}
+
 /**
  * Four-tier clinical stress classification mirroring autonomic nervous system (ANS) tone.
  * 1:1 Kotlin port of iOS DailyCore's StressLevel.
  */
-@Serializable
+@Serializable(with = StressLevelSerializer::class)
 enum class StressLevel(
     val id: String,
     val displayName: String,

@@ -91,6 +91,9 @@ class HealthConnectManager(private val context: Context) {
         return client.permissionController.getGrantedPermissions()
     }
 
+    private fun deterministicId(userId: String, uniqueKey: String): String =
+        java.util.UUID.nameUUIDFromBytes("$userId:$uniqueKey".toByteArray(Charsets.UTF_8)).toString()
+
     /**
      * Reads all local health telemetry from Health Connect for a specific target date.
      * Captures steps, intraday heart rate samples, sleep stages, active calories, SpO2, and HRV.
@@ -128,8 +131,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             )
             for (record in stepsResponse.records) {
+                val extId = record.metadata.id
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId(userId, "steps_$extId"),
                         userId = userId,
                         type = "steps",
                         value = record.count.toDouble(),
@@ -137,7 +142,7 @@ class HealthConnectManager(private val context: Context) {
                         startTime = record.startTime.toEpochMilli(),
                         endTime = record.endTime.toEpochMilli(),
                         sourceDevice = record.metadata.dataOrigin.packageName,
-                        externalId = record.metadata.id,
+                        externalId = extId,
                         semantics = "interval_delta",
                         tzOffsetMin = tzOffsetMin,
                         localDate = localDateStr
@@ -176,7 +181,7 @@ class HealthConnectManager(private val context: Context) {
                 val extId = "hr_${userId}_$bucketEpoch"
                 telemetry.add(
                     HealthTelemetryRecord(
-                        id = java.util.UUID.randomUUID().toString(),
+                        id = deterministicId(userId, extId),
                         userId = userId,
                         type = "heart_rate",
                         value = avgBpm,
@@ -200,8 +205,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             )
             for (record in rhrResponse.records) {
+                val extId = record.metadata.id
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId(userId, "rhr_$extId"),
                         userId = userId,
                         type = "resting_heart_rate",
                         value = record.beatsPerMinute.toDouble(),
@@ -209,7 +216,7 @@ class HealthConnectManager(private val context: Context) {
                         startTime = record.time.toEpochMilli(),
                         endTime = record.time.toEpochMilli(),
                         sourceDevice = record.metadata.dataOrigin.packageName,
-                        externalId = record.metadata.id,
+                        externalId = extId,
                         semantics = "spot",
                         tzOffsetMin = tzOffsetMin,
                         localDate = localDateStr
@@ -240,8 +247,10 @@ class HealthConnectManager(private val context: Context) {
                         }
                         val durSec = ChronoUnit.SECONDS.between(stage.startTime, stage.endTime).toDouble()
                         val stageStartEpoch = stage.startTime.toEpochMilli()
+                        val stageExtId = "${record.metadata.id}_$stageStartEpoch"
                         telemetry.add(
                             HealthTelemetryRecord(
+                                id = deterministicId(userId, "sleep_stage_$stageExtId"),
                                 userId = userId,
                                 type = stageTypeStr,
                                 value = durSec,
@@ -249,7 +258,7 @@ class HealthConnectManager(private val context: Context) {
                                 startTime = stageStartEpoch,
                                 endTime = stage.endTime.toEpochMilli(),
                                 sourceDevice = dev,
-                                externalId = "${record.metadata.id}_$stageStartEpoch",
+                                externalId = stageExtId,
                                 semantics = "session_stage",
                                 tzOffsetMin = tzOffsetMin,
                                 localDate = localDateStr
@@ -259,8 +268,10 @@ class HealthConnectManager(private val context: Context) {
                 } else {
                     // Aggregate sleep session record
                     val durSec = ChronoUnit.SECONDS.between(record.startTime, record.endTime).toDouble()
+                    val extId = record.metadata.id
                     telemetry.add(
                         HealthTelemetryRecord(
+                            id = deterministicId(userId, "sleep_$extId"),
                             userId = userId,
                             type = "sleep_duration",
                             value = durSec,
@@ -268,7 +279,7 @@ class HealthConnectManager(private val context: Context) {
                             startTime = record.startTime.toEpochMilli(),
                             endTime = record.endTime.toEpochMilli(),
                             sourceDevice = dev,
-                            externalId = record.metadata.id,
+                            externalId = extId,
                             semantics = "session_stage",
                             tzOffsetMin = tzOffsetMin,
                             localDate = localDateStr
@@ -285,8 +296,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             )
             for (record in calResponse.records) {
+                val extId = record.metadata.id
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId(userId, "energy_$extId"),
                         userId = userId,
                         type = "active_energy",
                         value = record.energy.inKilocalories,
@@ -294,7 +307,7 @@ class HealthConnectManager(private val context: Context) {
                         startTime = record.startTime.toEpochMilli(),
                         endTime = record.endTime.toEpochMilli(),
                         sourceDevice = record.metadata.dataOrigin.packageName,
-                        externalId = record.metadata.id,
+                        externalId = extId,
                         semantics = "interval_delta",
                         tzOffsetMin = tzOffsetMin,
                         localDate = localDateStr
@@ -310,8 +323,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             )
             for (record in spo2Response.records) {
+                val extId = record.metadata.id
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId(userId, "spo2_$extId"),
                         userId = userId,
                         type = "oxygen_saturation",
                         value = record.percentage.value,
@@ -319,7 +334,7 @@ class HealthConnectManager(private val context: Context) {
                         startTime = record.time.toEpochMilli(),
                         endTime = record.time.toEpochMilli(),
                         sourceDevice = record.metadata.dataOrigin.packageName,
-                        externalId = record.metadata.id,
+                        externalId = extId,
                         semantics = "spot",
                         tzOffsetMin = tzOffsetMin,
                         localDate = localDateStr
@@ -335,8 +350,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             )
             for (record in hrvResponse.records) {
+                val extId = record.metadata.id
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId(userId, "hrv_$extId"),
                         userId = userId,
                         type = "hrv_rmssd",
                         value = record.heartRateVariabilityMillis,
@@ -344,7 +361,7 @@ class HealthConnectManager(private val context: Context) {
                         startTime = record.time.toEpochMilli(),
                         endTime = record.time.toEpochMilli(),
                         sourceDevice = record.metadata.dataOrigin.packageName,
-                        externalId = record.metadata.id,
+                        externalId = extId,
                         semantics = "spot",
                         tzOffsetMin = tzOffsetMin,
                         localDate = localDateStr
@@ -360,8 +377,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             )
             for (record in hydResponse.records) {
+                val extId = record.metadata.id
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId(userId, "hyd_$extId"),
                         userId = userId,
                         type = "hydration",
                         value = record.volume.inMilliliters,
@@ -369,7 +388,7 @@ class HealthConnectManager(private val context: Context) {
                         startTime = record.startTime.toEpochMilli(),
                         endTime = record.endTime.toEpochMilli(),
                         sourceDevice = record.metadata.dataOrigin.packageName,
-                        externalId = record.metadata.id,
+                        externalId = extId,
                         semantics = "interval_delta",
                         tzOffsetMin = tzOffsetMin,
                         localDate = localDateStr
@@ -398,46 +417,55 @@ class HealthConnectManager(private val context: Context) {
             // Steps
             val steps = client.readRecords(ReadRecordsRequest(StepsRecord::class, timeFilter))
             for (record in steps.records) {
+                val extId = record.metadata.id
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId("local_health_connect", "range_steps_$extId"),
                         userId = "local_health_connect",
                         type = "steps",
                         value = record.count.toDouble(),
                         unit = "count",
                         startTime = record.startTime.toEpochMilli(),
                         endTime = record.endTime.toEpochMilli(),
-                        sourceDevice = record.metadata.dataOrigin.packageName
+                        sourceDevice = record.metadata.dataOrigin.packageName,
+                        externalId = extId
                     )
                 )
             }
             // Sleep Sessions
             val sleep = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, timeFilter))
             for (record in sleep.records) {
+                val extId = record.metadata.id
                 val durMin = ChronoUnit.MINUTES.between(record.startTime, record.endTime).toDouble()
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId("local_health_connect", "range_sleep_$extId"),
                         userId = "local_health_connect",
                         type = "sleep",
                         value = durMin,
                         unit = "minutes",
                         startTime = record.startTime.toEpochMilli(),
                         endTime = record.endTime.toEpochMilli(),
-                        sourceDevice = record.metadata.dataOrigin.packageName
+                        sourceDevice = record.metadata.dataOrigin.packageName,
+                        externalId = extId
                     )
                 )
             }
             // Active Calories
             val cals = client.readRecords(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, timeFilter))
             for (record in cals.records) {
+                val extId = record.metadata.id
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId("local_health_connect", "range_energy_$extId"),
                         userId = "local_health_connect",
                         type = "active_energy",
                         value = record.energy.inKilocalories,
                         unit = "kcal",
                         startTime = record.startTime.toEpochMilli(),
                         endTime = record.endTime.toEpochMilli(),
-                        sourceDevice = record.metadata.dataOrigin.packageName
+                        sourceDevice = record.metadata.dataOrigin.packageName,
+                        externalId = extId
                     )
                 )
             }
@@ -463,7 +491,7 @@ class HealthConnectManager(private val context: Context) {
                 val extId = "hr_local_${primaryDevice}_$bucketEpoch"
                 telemetry.add(
                     HealthTelemetryRecord(
-                        id = java.util.UUID.randomUUID().toString(),
+                        id = deterministicId("local_health_connect", extId),
                         userId = "local_health_connect",
                         type = "heart_rate",
                         value = avgBpm,
@@ -479,15 +507,18 @@ class HealthConnectManager(private val context: Context) {
             // Hydration
             val hyd = client.readRecords(ReadRecordsRequest(HydrationRecord::class, timeFilter))
             for (record in hyd.records) {
+                val extId = record.metadata.id
                 telemetry.add(
                     HealthTelemetryRecord(
+                        id = deterministicId("local_health_connect", "range_hyd_$extId"),
                         userId = "local_health_connect",
                         type = "hydration",
                         value = record.volume.inMilliliters,
                         unit = "ml",
                         startTime = record.startTime.toEpochMilli(),
                         endTime = record.endTime.toEpochMilli(),
-                        sourceDevice = record.metadata.dataOrigin.packageName
+                        sourceDevice = record.metadata.dataOrigin.packageName,
+                        externalId = extId
                     )
                 )
             }

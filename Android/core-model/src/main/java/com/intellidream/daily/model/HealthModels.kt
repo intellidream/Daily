@@ -579,7 +579,28 @@ data class NapSession(
 
 // MARK: - Cardiovascular & Zones
 
-@Serializable
+object HeartRateZoneSerializer : KSerializer<HeartRateZone> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("HeartRateZone", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: HeartRateZone) {
+        encoder.encodeString(value.displayName)
+    }
+
+    override fun deserialize(decoder: Decoder): HeartRateZone {
+        val name = try {
+            decoder.decodeString()
+        } catch (_: Exception) {
+            return HeartRateZone.RESTING
+        }
+        return HeartRateZone.entries.firstOrNull {
+            it.name.equals(name, ignoreCase = true) ||
+            it.displayName.equals(name, ignoreCase = true) ||
+            it.name.replace("_", "").equals(name.replace(" ", ""), ignoreCase = true)
+        } ?: HeartRateZone.RESTING
+    }
+}
+
+@Serializable(with = HeartRateZoneSerializer::class)
 enum class HeartRateZone(val displayName: String, val bpmRangeText: String, val hexColor: String) {
     RESTING("Resting", "< 100 bpm", "#42A5F5"), // Blue
     FAT_BURN("Fat Burn", "100 - 119 bpm", "#66BB6A"), // Green

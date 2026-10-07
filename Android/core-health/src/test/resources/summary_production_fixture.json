@@ -1,0 +1,3954 @@
+[
+  {
+    "summary": {
+      "date": "2026-10-07",
+      "sleep": {
+        "naps": [],
+        "guidance": {
+          "tips": [
+            {
+              "id": "circadian_sunlight",
+              "title": "Morning Photonic Reset",
+              "advice": "View 10-15 minutes of direct sunlight within 60 minutes of waking.",
+              "category": "circadian",
+              "scientific_rationale": "Suppresses remaining melatonin and sets the circadian timer for nighttime sleep pressure."
+            },
+            {
+              "id": "bedroom_climate",
+              "title": "Thermoregulatory Drop",
+              "advice": "Maintain bedroom ambient temperature between 18°C and 20°C (65-68°F).",
+              "category": "environment",
+              "scientific_rationale": "Core body temperature must drop 1-2°F to initiate and sustain deep non-REM restorative sleep."
+            },
+            {
+              "id": "evening_nutrition",
+              "title": "Digestive Buffer Zone",
+              "advice": "Finish last caloric intake at least 2.5 to 3 hours before sleep.",
+              "category": "nutrition",
+              "scientific_rationale": "Late gastric motility keeps nocturnal resting heart rate elevated and suppresses growth hormone release."
+            },
+            {
+              "id": "wind_down_breath",
+              "title": "Vagal Downregulation",
+              "advice": "Practice 4-7-8 breathing or physiological sighs for 4 minutes before lights out.",
+              "category": "windDown",
+              "scientific_rationale": "Engages the parasympathetic vagus nerve, reducing autonomic arousal and sleep latency."
+            }
+          ],
+          "verdict": {
+            "status": "Fair",
+            "headline": "Moderate Sleep Quality with Rejuvenation Potential",
+            "narrative": "Adequate rest was achieved, though efficiency (88%) or restorative stage proportions have room for optimization.",
+            "readiness_score": 62,
+            "physical_repair_rating": "High",
+            "sleep_continuity_rating": "Fragmented",
+            "cognitive_restore_rating": "Adequate"
+          },
+          "ai_context": {
+            "suggested_prompts": [
+              "How can I increase my deep sleep percentage tonight?",
+              "Why did I wake up feeling sluggish despite 7 hours in bed?",
+              "What evening routine best supports higher HRV during sleep?"
+            ],
+            "narrative_synthesis": "User logged 6.0h of total asleep time with sleep score 64/100. Deep: 20%, REM: 15%, Efficiency: 88%. Physical repair is rated High, cognitive restore is Adequate."
+          }
+        },
+        "all_sessions": [
+          {
+            "id": "ce1f4ef4-8163-419b-ad95-697d81d1b1e4",
+            "is_nap": false,
+            "stages": [
+              {
+                "id": "ce1f4ef4-8163-419b-ad95-697d81d1b1e4",
+                "end_time": "2026-10-07T00:01:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-06T23:53:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 480
+              },
+              {
+                "id": "5edc37db-dab9-4f58-85eb-531d575de7ff",
+                "end_time": "2026-10-07T00:08:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:01:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 390
+              },
+              {
+                "id": "ec801f7a-cf05-4de4-985e-49178a5af788",
+                "end_time": "2026-10-07T00:08:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T00:08:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "a46df8cf-8de6-4e34-be5a-3b1591717525",
+                "end_time": "2026-10-07T00:14:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:08:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 360
+              },
+              {
+                "id": "652a0c8d-6d86-420e-8903-d0545a482cc8",
+                "end_time": "2026-10-07T00:15:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T00:14:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "3ce1d4d6-4cfd-4d8d-9862-f31e904f0e09",
+                "end_time": "2026-10-07T00:17:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:15:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 150
+              },
+              {
+                "id": "a7405d33-ea4b-44c1-bd2d-92c62b28110e",
+                "end_time": "2026-10-07T00:42:58.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T00:17:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 1500
+              },
+              {
+                "id": "3288d984-0448-45cd-848a-9e0561dd0736",
+                "end_time": "2026-10-07T00:43:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T00:42:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "abed136f-e3bf-45ba-9981-91fd72a18e59",
+                "end_time": "2026-10-07T00:44:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:43:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "afd49e41-8efa-43d3-a23f-0b16ec5d1adf",
+                "end_time": "2026-10-07T00:45:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T00:44:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "4794a9b3-3188-4a78-9296-785c0a27b72b",
+                "end_time": "2026-10-07T00:47:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:45:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 90
+              },
+              {
+                "id": "07657b22-7a3d-485e-86c2-38cffd98f21a",
+                "end_time": "2026-10-07T00:49:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T00:47:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 120
+              },
+              {
+                "id": "78ffa15d-1e9c-4a78-8118-6aedf4f31510",
+                "end_time": "2026-10-07T00:50:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:49:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "5869c646-33fa-4417-8832-f81cc93f09cf",
+                "end_time": "2026-10-07T00:51:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T00:50:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "187c4289-c891-48cc-b1fa-9f42fafee2fe",
+                "end_time": "2026-10-07T00:52:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:51:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "71a36855-32b4-4ca9-a7c2-8c0d362abebd",
+                "end_time": "2026-10-07T01:04:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T00:52:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 750
+              },
+              {
+                "id": "ca1f11c8-a089-4149-8751-d58a929f85e1",
+                "end_time": "2026-10-07T01:05:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:04:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "8318f851-b8d4-4dd2-b235-efc0ac2ab834",
+                "end_time": "2026-10-07T01:07:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T01:05:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 120
+              },
+              {
+                "id": "17b15f98-fc9e-40e2-bd7f-afad99afc6b3",
+                "end_time": "2026-10-07T01:08:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:07:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "bb8fc2bd-6096-42e7-b890-c68a9ec6094e",
+                "end_time": "2026-10-07T01:09:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T01:08:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 90
+              },
+              {
+                "id": "08050146-efff-472c-a4d9-6c4c7c40de34",
+                "end_time": "2026-10-07T01:16:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:09:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 390
+              },
+              {
+                "id": "e75ab5ff-75a4-4864-85d7-80d085598f29",
+                "end_time": "2026-10-07T01:20:28.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T01:16:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 240
+              },
+              {
+                "id": "5cc94298-631b-46dc-aa78-155db024df77",
+                "end_time": "2026-10-07T01:21:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T01:20:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "e4329083-3d1a-4835-9b92-c3426f579ac5",
+                "end_time": "2026-10-07T01:21:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:21:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "0fa522bb-0cb9-4127-968d-d8d2d65ff1d8",
+                "end_time": "2026-10-07T01:22:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T01:21:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "75139447-d2da-40d5-b646-86c489215198",
+                "end_time": "2026-10-07T01:27:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:22:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 300
+              },
+              {
+                "id": "c3af3fd1-d4df-4811-b8de-4f354cf372c3",
+                "end_time": "2026-10-07T01:28:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T01:27:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "57fa367c-7013-42f3-bad6-737d485ad8e2",
+                "end_time": "2026-10-07T01:29:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:28:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "5b216d9f-f7d4-4afa-8b71-1cf8c071f94d",
+                "end_time": "2026-10-07T01:29:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T01:29:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "06896d76-0603-4187-bbb4-e4ad119d3c28",
+                "end_time": "2026-10-07T01:38:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:29:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 540
+              },
+              {
+                "id": "fa39666d-f53a-4fc6-86ef-7e0c216631b0",
+                "end_time": "2026-10-07T01:57:28.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T01:38:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 1110
+              },
+              {
+                "id": "f69d3883-403b-4dfd-ac69-8cf88638c6b6",
+                "end_time": "2026-10-07T01:59:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:57:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 120
+              },
+              {
+                "id": "43c0f0f0-ba69-4034-a97d-16a5dcbdab83",
+                "end_time": "2026-10-07T02:17:58.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T01:59:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 1110
+              },
+              {
+                "id": "f01b29d3-5a3d-463e-8c68-ced6d5ce12c8",
+                "end_time": "2026-10-07T02:18:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T02:17:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "15ad58e3-56c7-4c7f-90bb-3f9d55a36f4c",
+                "end_time": "2026-10-07T02:21:58.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T02:18:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 210
+              },
+              {
+                "id": "4291f999-96dd-47ef-92b6-cda93f97388a",
+                "end_time": "2026-10-07T02:27:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T02:21:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 330
+              },
+              {
+                "id": "d5f9e0bd-fcf4-413c-b3c9-c878d0305112",
+                "end_time": "2026-10-07T02:28:58.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T02:27:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 90
+              },
+              {
+                "id": "44674d1c-7f9a-4ae1-9a6d-da9b2e76918c",
+                "end_time": "2026-10-07T02:43:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T02:28:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 900
+              },
+              {
+                "id": "13904124-29d0-4424-969a-5dea16d85c5a",
+                "end_time": "2026-10-07T02:44:58.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T02:43:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              },
+              {
+                "id": "dc8c8600-85d6-4c4c-85fd-7188b731d106",
+                "end_time": "2026-10-07T02:46:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T02:44:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 90
+              },
+              {
+                "id": "8c4fd857-7838-4d8d-9002-72ed40a849bd",
+                "end_time": "2026-10-07T02:47:58.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T02:46:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 90
+              },
+              {
+                "id": "d4a03718-0374-4646-bc6e-088faecc84bc",
+                "end_time": "2026-10-07T02:51:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T02:47:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 240
+              },
+              {
+                "id": "34d9272f-8296-48c4-af8d-76d03ca0e2dc",
+                "end_time": "2026-10-07T03:02:58.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T02:51:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 660
+              },
+              {
+                "id": "a6a4d3e7-e3cf-4f49-910e-79e82f2f5856",
+                "end_time": "2026-10-07T03:09:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T03:02:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 420
+              },
+              {
+                "id": "c013c87b-dc8a-4f9c-920e-980957803492",
+                "end_time": "2026-10-07T03:11:58.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T03:09:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 120
+              },
+              {
+                "id": "e5954c75-beff-4100-8780-3926e70ae1b9",
+                "end_time": "2026-10-07T03:14:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T03:11:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 150
+              },
+              {
+                "id": "07ffdb2d-2e2e-4fa6-945b-aa870fa16ed9",
+                "end_time": "2026-10-07T03:22:28.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T03:14:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 480
+              },
+              {
+                "id": "c6da2e62-8a2b-4993-9796-1aa06a2b30c7",
+                "end_time": "2026-10-07T03:25:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T03:22:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 180
+              },
+              {
+                "id": "797f90eb-ceb9-4c95-be1f-7dafe732d9c2",
+                "end_time": "2026-10-07T03:25:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T03:25:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "c57527c2-65bc-4a51-a4ce-21a9cf908b4c",
+                "end_time": "2026-10-07T03:34:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T03:25:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 540
+              },
+              {
+                "id": "d6bb127e-b299-4512-a6bf-831fb42b0a22",
+                "end_time": "2026-10-07T04:03:58.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T03:34:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 1740
+              },
+              {
+                "id": "e5f55198-4aef-4d90-92ab-bb263d2c172a",
+                "end_time": "2026-10-07T04:04:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T04:03:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "3cdedbae-92b1-4546-961c-bb8351ead82e",
+                "end_time": "2026-10-07T05:28:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T04:04:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 5040
+              },
+              {
+                "id": "2a85be4c-435b-475f-9f6a-ec0324b19b57",
+                "end_time": "2026-10-07T05:28:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T05:28:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "732b0440-d116-47f7-bc5b-b3ad7967ceea",
+                "end_time": "2026-10-07T05:37:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T05:28:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 540
+              },
+              {
+                "id": "95fb9047-e1b9-411f-b0f0-897e9d08d6c6",
+                "end_time": "2026-10-07T05:38:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T05:37:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "0878b6f9-e05a-4c73-868b-b78005845508",
+                "end_time": "2026-10-07T05:54:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T05:38:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 990
+              },
+              {
+                "id": "f91defe7-27b1-4f1a-994a-ad63e4f2863e",
+                "end_time": "2026-10-07T05:57:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T05:54:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 150
+              },
+              {
+                "id": "c3b86470-5d9b-48e5-ad7c-343c10d43dd0",
+                "end_time": "2026-10-07T05:57:58.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T05:57:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "87977c9c-d47d-4272-bcba-a85800f45564",
+                "end_time": "2026-10-07T05:58:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T05:57:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 30
+              },
+              {
+                "id": "c9fd0b40-ed08-4616-99c7-7f132c7b82ec",
+                "end_time": "2026-10-07T06:00:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T05:58:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 120
+              },
+              {
+                "id": "0e46b7eb-51a5-4a25-9e95-6bb75ebd1e24",
+                "end_time": "2026-10-07T06:01:58.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T06:00:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 90
+              },
+              {
+                "id": "d6060f90-8a2b-49c5-b155-c9a2cc70d3a5",
+                "end_time": "2026-10-07T06:36:28.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T06:01:58.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 2070
+              },
+              {
+                "id": "fc47f3ac-7c4c-49d4-8ed5-eb06bb50b589",
+                "end_time": "2026-10-07T06:37:28.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T06:36:28.000Z",
+                "source_device": "Oura Ring",
+                "duration_seconds": 60
+              }
+            ],
+            "end_time": "2026-10-07T06:37:28.000Z",
+            "start_time": "2026-10-06T23:53:58.000Z",
+            "awake_count": 24,
+            "rem_percent": 15,
+            "rem_seconds": 3150,
+            "sleep_score": 64,
+            "deep_percent": 20,
+            "deep_seconds": 4260,
+            "awake_percent": 12,
+            "awake_seconds": 2790,
+            "light_percent": 65,
+            "light_seconds": 14010,
+            "source_device": "Oura Ring",
+            "asleep_seconds": 21420,
+            "quality_rating": "Fair",
+            "duration_seconds": 24210,
+            "efficiency_percent": 88,
+            "restorative_percent": 35,
+            "has_granular_hypnogram": true
+          },
+          {
+            "id": "b82e786c-4578-41ba-b85a-02276f5dc118",
+            "is_nap": false,
+            "stages": [
+              {
+                "id": "b82e786c-4578-41ba-b85a-02276f5dc118",
+                "end_time": "2026-10-07T00:01:00.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-06T23:58:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 180
+              },
+              {
+                "id": "3955f50a-698d-450b-a63c-6b1bb912aed6",
+                "end_time": "2026-10-07T00:20:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:01:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 1140
+              },
+              {
+                "id": "3747652e-584a-4988-9b5a-25c16a6c0d6f",
+                "end_time": "2026-10-07T00:43:00.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T00:20:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 1380
+              },
+              {
+                "id": "c8efa2fa-6d9a-4e7e-a8b3-30d90e5f0aa2",
+                "end_time": "2026-10-07T01:37:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:43:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 3240
+              },
+              {
+                "id": "6a8cfb8a-a6ef-4089-9500-21f67743d3b0",
+                "end_time": "2026-10-07T01:57:00.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T01:37:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 1200
+              },
+              {
+                "id": "5103d7c7-12c0-46dd-96e4-661f369a7251",
+                "end_time": "2026-10-07T01:59:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:57:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 120
+              },
+              {
+                "id": "35af7671-4ff4-4d48-86ec-fb5eecf4ac7c",
+                "end_time": "2026-10-07T02:18:00.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T01:59:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 1140
+              },
+              {
+                "id": "07e92881-3947-4577-9df8-cfb2390f3b1b",
+                "end_time": "2026-10-07T02:20:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T02:18:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 120
+              },
+              {
+                "id": "01776aea-bd35-45f7-993d-70146e28a09f",
+                "end_time": "2026-10-07T02:26:00.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T02:20:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 360
+              },
+              {
+                "id": "235088b7-5f1c-42a2-8480-9e513aeafa98",
+                "end_time": "2026-10-07T03:07:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T02:26:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 2460
+              },
+              {
+                "id": "860b6748-737a-41f7-a490-2d1c5db5f434",
+                "end_time": "2026-10-07T03:21:00.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T03:07:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 840
+              },
+              {
+                "id": "3816cd65-66f3-4262-987e-33091d6cc686",
+                "end_time": "2026-10-07T03:34:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T03:21:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 780
+              },
+              {
+                "id": "472033dd-44c8-466f-a65a-7afff7f8c309",
+                "end_time": "2026-10-07T04:03:00.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T03:34:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 1740
+              },
+              {
+                "id": "8278c195-fd13-4c9e-9b89-9ce80a348237",
+                "end_time": "2026-10-07T04:55:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T04:03:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 3120
+              },
+              {
+                "id": "2f5a8519-6836-499d-a816-e23216456117",
+                "end_time": "2026-10-07T05:19:00.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T04:55:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 1440
+              },
+              {
+                "id": "1b11652a-f63b-43c2-8023-963cb6bcf20f",
+                "end_time": "2026-10-07T05:23:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T05:19:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 240
+              },
+              {
+                "id": "6bd935c5-8eaa-429d-856d-d6fb9201300e",
+                "end_time": "2026-10-07T05:37:00.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T05:23:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 840
+              },
+              {
+                "id": "791ddf82-7b1c-4d99-b0a1-4ac1e0730843",
+                "end_time": "2026-10-07T05:44:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T05:37:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 420
+              },
+              {
+                "id": "ea47a5ed-33a0-4e5f-a35e-6f393ee6d4c3",
+                "end_time": "2026-10-07T06:16:00.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T05:44:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 1920
+              },
+              {
+                "id": "ce8f3e10-8406-40a1-b9e3-aed0937931da",
+                "end_time": "2026-10-07T06:32:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T06:16:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 960
+              },
+              {
+                "id": "4170649f-081c-4cf2-8fd3-aa60f73a9adc",
+                "end_time": "2026-10-07T06:33:00.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T06:32:00.000Z",
+                "source_device": "Google Health",
+                "duration_seconds": 60
+              }
+            ],
+            "end_time": "2026-10-07T06:33:00.000Z",
+            "start_time": "2026-10-06T23:58:00.000Z",
+            "awake_count": 3,
+            "rem_percent": 24,
+            "rem_seconds": 5640,
+            "sleep_score": 86,
+            "deep_percent": 21,
+            "deep_seconds": 4860,
+            "awake_percent": 3,
+            "awake_seconds": 600,
+            "light_percent": 55,
+            "light_seconds": 12600,
+            "source_device": "Google Health",
+            "asleep_seconds": 23100,
+            "quality_rating": "Optimal",
+            "duration_seconds": 23700,
+            "efficiency_percent": 97,
+            "restorative_percent": 45,
+            "has_granular_hypnogram": true
+          },
+          {
+            "id": "4faa6833-8094-4299-a622-223793b2a7cd",
+            "is_nap": false,
+            "stages": [
+              {
+                "id": "4faa6833-8094-4299-a622-223793b2a7cd",
+                "end_time": "2026-10-07T00:01:00.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-06T23:58:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 180
+              },
+              {
+                "id": "4e059194-106f-4c31-9caa-37eaf4e97211",
+                "end_time": "2026-10-07T00:20:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:01:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 1140
+              },
+              {
+                "id": "9c0cf238-80aa-400a-b3fd-678f5db1d481",
+                "end_time": "2026-10-07T00:43:00.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T00:20:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 1380
+              },
+              {
+                "id": "4070d96b-6e01-4ea2-afd6-4d692249ca7d",
+                "end_time": "2026-10-07T01:37:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T00:43:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 3240
+              },
+              {
+                "id": "d8cbda36-6a83-49c6-9f42-1a3311ed956a",
+                "end_time": "2026-10-07T01:57:00.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T01:37:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 1200
+              },
+              {
+                "id": "f86ac922-1593-468a-9c17-d2f2b63e4e80",
+                "end_time": "2026-10-07T01:59:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T01:57:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 120
+              },
+              {
+                "id": "33ccbdc1-fb1c-43c1-93f2-d7427b1d4334",
+                "end_time": "2026-10-07T02:18:00.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T01:59:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 1140
+              },
+              {
+                "id": "9d1540ea-5278-4a54-8117-586dd415c52a",
+                "end_time": "2026-10-07T02:20:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T02:18:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 120
+              },
+              {
+                "id": "e093ffc8-3f43-4281-aec3-afbd343fcdf8",
+                "end_time": "2026-10-07T02:26:00.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T02:20:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 360
+              },
+              {
+                "id": "20178dc6-493d-4aa0-aac6-2566076fc791",
+                "end_time": "2026-10-07T03:07:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T02:26:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 2460
+              },
+              {
+                "id": "5b8fddac-c675-42ab-a33b-1dd37610f732",
+                "end_time": "2026-10-07T03:21:00.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T03:07:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 840
+              },
+              {
+                "id": "da628df5-2816-42ae-8a34-26209d8518ca",
+                "end_time": "2026-10-07T03:34:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T03:21:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 780
+              },
+              {
+                "id": "37cc0918-60f7-40df-b3ba-31ae09a0a62a",
+                "end_time": "2026-10-07T04:03:00.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T03:34:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 1740
+              },
+              {
+                "id": "8a98cb24-c757-4f4c-a61f-2f6034f76845",
+                "end_time": "2026-10-07T04:55:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T04:03:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 3120
+              },
+              {
+                "id": "c79a1f15-9f63-405f-8aa8-1412a69d4557",
+                "end_time": "2026-10-07T05:19:00.000Z",
+                "stage_type": "Deep",
+                "start_time": "2026-10-07T04:55:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 1440
+              },
+              {
+                "id": "65cbda46-d88f-4e3e-93a5-c02590d96090",
+                "end_time": "2026-10-07T05:23:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T05:19:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 240
+              },
+              {
+                "id": "86fd6c54-7560-447d-9b99-4a63e1971c4a",
+                "end_time": "2026-10-07T05:37:00.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T05:23:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 840
+              },
+              {
+                "id": "67297188-a55b-4f1f-b437-de82913d672e",
+                "end_time": "2026-10-07T05:44:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T05:37:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 420
+              },
+              {
+                "id": "abe76f0d-5451-4cef-b27b-1246719d0abd",
+                "end_time": "2026-10-07T06:16:00.000Z",
+                "stage_type": "REM",
+                "start_time": "2026-10-07T05:44:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 1920
+              },
+              {
+                "id": "44a2b3ed-a997-4214-ac34-1738563c109f",
+                "end_time": "2026-10-07T06:32:00.000Z",
+                "stage_type": "Light",
+                "start_time": "2026-10-07T06:16:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 960
+              },
+              {
+                "id": "53be4ee1-4f41-4534-809c-b0411c738ca7",
+                "end_time": "2026-10-07T06:33:00.000Z",
+                "stage_type": "Awake",
+                "start_time": "2026-10-07T06:32:00.000Z",
+                "source_device": "com.fitbit.FitbitMobile",
+                "duration_seconds": 60
+              }
+            ],
+            "end_time": "2026-10-07T06:33:00.000Z",
+            "start_time": "2026-10-06T23:58:00.000Z",
+            "awake_count": 3,
+            "rem_percent": 24,
+            "rem_seconds": 5640,
+            "sleep_score": 86,
+            "deep_percent": 21,
+            "deep_seconds": 4860,
+            "awake_percent": 3,
+            "awake_seconds": 600,
+            "light_percent": 55,
+            "light_seconds": 12600,
+            "source_device": "com.fitbit.FitbitMobile",
+            "asleep_seconds": 23100,
+            "quality_rating": "Optimal",
+            "duration_seconds": 23700,
+            "efficiency_percent": 97,
+            "restorative_percent": 45,
+            "has_granular_hypnogram": true
+          },
+          {
+            "id": "32e5be10-f0cf-4314-9ca8-dc8ce7da12b0",
+            "is_nap": false,
+            "stages": [],
+            "end_time": "2026-10-07T06:33:00.000Z",
+            "start_time": "2026-10-06T23:58:00.000Z",
+            "awake_count": 0,
+            "rem_percent": 0,
+            "rem_seconds": 0,
+            "sleep_score": 65,
+            "deep_percent": 0,
+            "deep_seconds": 0,
+            "awake_percent": 0,
+            "awake_seconds": 0,
+            "light_percent": 0,
+            "light_seconds": 0,
+            "source_device": "Apple Watch",
+            "asleep_seconds": 23700,
+            "quality_rating": "Fair",
+            "duration_seconds": 23700,
+            "efficiency_percent": 100,
+            "restorative_percent": 0,
+            "has_granular_hypnogram": false
+          }
+        ],
+        "primary_session": {
+          "id": "ce1f4ef4-8163-419b-ad95-697d81d1b1e4",
+          "is_nap": false,
+          "stages": [
+            {
+              "id": "ce1f4ef4-8163-419b-ad95-697d81d1b1e4",
+              "end_time": "2026-10-07T00:01:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-06T23:53:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 480
+            },
+            {
+              "id": "5edc37db-dab9-4f58-85eb-531d575de7ff",
+              "end_time": "2026-10-07T00:08:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T00:01:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 390
+            },
+            {
+              "id": "ec801f7a-cf05-4de4-985e-49178a5af788",
+              "end_time": "2026-10-07T00:08:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T00:08:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "a46df8cf-8de6-4e34-be5a-3b1591717525",
+              "end_time": "2026-10-07T00:14:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T00:08:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 360
+            },
+            {
+              "id": "652a0c8d-6d86-420e-8903-d0545a482cc8",
+              "end_time": "2026-10-07T00:15:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T00:14:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "3ce1d4d6-4cfd-4d8d-9862-f31e904f0e09",
+              "end_time": "2026-10-07T00:17:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T00:15:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 150
+            },
+            {
+              "id": "a7405d33-ea4b-44c1-bd2d-92c62b28110e",
+              "end_time": "2026-10-07T00:42:58.000Z",
+              "stage_type": "Deep",
+              "start_time": "2026-10-07T00:17:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 1500
+            },
+            {
+              "id": "3288d984-0448-45cd-848a-9e0561dd0736",
+              "end_time": "2026-10-07T00:43:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T00:42:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "abed136f-e3bf-45ba-9981-91fd72a18e59",
+              "end_time": "2026-10-07T00:44:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T00:43:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "afd49e41-8efa-43d3-a23f-0b16ec5d1adf",
+              "end_time": "2026-10-07T00:45:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T00:44:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "4794a9b3-3188-4a78-9296-785c0a27b72b",
+              "end_time": "2026-10-07T00:47:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T00:45:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 90
+            },
+            {
+              "id": "07657b22-7a3d-485e-86c2-38cffd98f21a",
+              "end_time": "2026-10-07T00:49:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T00:47:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 120
+            },
+            {
+              "id": "78ffa15d-1e9c-4a78-8118-6aedf4f31510",
+              "end_time": "2026-10-07T00:50:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T00:49:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "5869c646-33fa-4417-8832-f81cc93f09cf",
+              "end_time": "2026-10-07T00:51:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T00:50:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "187c4289-c891-48cc-b1fa-9f42fafee2fe",
+              "end_time": "2026-10-07T00:52:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T00:51:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "71a36855-32b4-4ca9-a7c2-8c0d362abebd",
+              "end_time": "2026-10-07T01:04:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T00:52:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 750
+            },
+            {
+              "id": "ca1f11c8-a089-4149-8751-d58a929f85e1",
+              "end_time": "2026-10-07T01:05:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T01:04:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "8318f851-b8d4-4dd2-b235-efc0ac2ab834",
+              "end_time": "2026-10-07T01:07:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T01:05:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 120
+            },
+            {
+              "id": "17b15f98-fc9e-40e2-bd7f-afad99afc6b3",
+              "end_time": "2026-10-07T01:08:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T01:07:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "bb8fc2bd-6096-42e7-b890-c68a9ec6094e",
+              "end_time": "2026-10-07T01:09:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T01:08:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 90
+            },
+            {
+              "id": "08050146-efff-472c-a4d9-6c4c7c40de34",
+              "end_time": "2026-10-07T01:16:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T01:09:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 390
+            },
+            {
+              "id": "e75ab5ff-75a4-4864-85d7-80d085598f29",
+              "end_time": "2026-10-07T01:20:28.000Z",
+              "stage_type": "Deep",
+              "start_time": "2026-10-07T01:16:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 240
+            },
+            {
+              "id": "5cc94298-631b-46dc-aa78-155db024df77",
+              "end_time": "2026-10-07T01:21:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T01:20:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "e4329083-3d1a-4835-9b92-c3426f579ac5",
+              "end_time": "2026-10-07T01:21:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T01:21:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "0fa522bb-0cb9-4127-968d-d8d2d65ff1d8",
+              "end_time": "2026-10-07T01:22:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T01:21:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "75139447-d2da-40d5-b646-86c489215198",
+              "end_time": "2026-10-07T01:27:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T01:22:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 300
+            },
+            {
+              "id": "c3af3fd1-d4df-4811-b8de-4f354cf372c3",
+              "end_time": "2026-10-07T01:28:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T01:27:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "57fa367c-7013-42f3-bad6-737d485ad8e2",
+              "end_time": "2026-10-07T01:29:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T01:28:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "5b216d9f-f7d4-4afa-8b71-1cf8c071f94d",
+              "end_time": "2026-10-07T01:29:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T01:29:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "06896d76-0603-4187-bbb4-e4ad119d3c28",
+              "end_time": "2026-10-07T01:38:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T01:29:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 540
+            },
+            {
+              "id": "fa39666d-f53a-4fc6-86ef-7e0c216631b0",
+              "end_time": "2026-10-07T01:57:28.000Z",
+              "stage_type": "Deep",
+              "start_time": "2026-10-07T01:38:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 1110
+            },
+            {
+              "id": "f69d3883-403b-4dfd-ac69-8cf88638c6b6",
+              "end_time": "2026-10-07T01:59:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T01:57:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 120
+            },
+            {
+              "id": "43c0f0f0-ba69-4034-a97d-16a5dcbdab83",
+              "end_time": "2026-10-07T02:17:58.000Z",
+              "stage_type": "REM",
+              "start_time": "2026-10-07T01:59:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 1110
+            },
+            {
+              "id": "f01b29d3-5a3d-463e-8c68-ced6d5ce12c8",
+              "end_time": "2026-10-07T02:18:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T02:17:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "15ad58e3-56c7-4c7f-90bb-3f9d55a36f4c",
+              "end_time": "2026-10-07T02:21:58.000Z",
+              "stage_type": "REM",
+              "start_time": "2026-10-07T02:18:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 210
+            },
+            {
+              "id": "4291f999-96dd-47ef-92b6-cda93f97388a",
+              "end_time": "2026-10-07T02:27:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T02:21:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 330
+            },
+            {
+              "id": "d5f9e0bd-fcf4-413c-b3c9-c878d0305112",
+              "end_time": "2026-10-07T02:28:58.000Z",
+              "stage_type": "REM",
+              "start_time": "2026-10-07T02:27:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 90
+            },
+            {
+              "id": "44674d1c-7f9a-4ae1-9a6d-da9b2e76918c",
+              "end_time": "2026-10-07T02:43:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T02:28:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 900
+            },
+            {
+              "id": "13904124-29d0-4424-969a-5dea16d85c5a",
+              "end_time": "2026-10-07T02:44:58.000Z",
+              "stage_type": "Deep",
+              "start_time": "2026-10-07T02:43:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            },
+            {
+              "id": "dc8c8600-85d6-4c4c-85fd-7188b731d106",
+              "end_time": "2026-10-07T02:46:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T02:44:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 90
+            },
+            {
+              "id": "8c4fd857-7838-4d8d-9002-72ed40a849bd",
+              "end_time": "2026-10-07T02:47:58.000Z",
+              "stage_type": "Deep",
+              "start_time": "2026-10-07T02:46:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 90
+            },
+            {
+              "id": "d4a03718-0374-4646-bc6e-088faecc84bc",
+              "end_time": "2026-10-07T02:51:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T02:47:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 240
+            },
+            {
+              "id": "34d9272f-8296-48c4-af8d-76d03ca0e2dc",
+              "end_time": "2026-10-07T03:02:58.000Z",
+              "stage_type": "Deep",
+              "start_time": "2026-10-07T02:51:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 660
+            },
+            {
+              "id": "a6a4d3e7-e3cf-4f49-910e-79e82f2f5856",
+              "end_time": "2026-10-07T03:09:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T03:02:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 420
+            },
+            {
+              "id": "c013c87b-dc8a-4f9c-920e-980957803492",
+              "end_time": "2026-10-07T03:11:58.000Z",
+              "stage_type": "Deep",
+              "start_time": "2026-10-07T03:09:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 120
+            },
+            {
+              "id": "e5954c75-beff-4100-8780-3926e70ae1b9",
+              "end_time": "2026-10-07T03:14:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T03:11:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 150
+            },
+            {
+              "id": "07ffdb2d-2e2e-4fa6-945b-aa870fa16ed9",
+              "end_time": "2026-10-07T03:22:28.000Z",
+              "stage_type": "Deep",
+              "start_time": "2026-10-07T03:14:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 480
+            },
+            {
+              "id": "c6da2e62-8a2b-4993-9796-1aa06a2b30c7",
+              "end_time": "2026-10-07T03:25:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T03:22:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 180
+            },
+            {
+              "id": "797f90eb-ceb9-4c95-be1f-7dafe732d9c2",
+              "end_time": "2026-10-07T03:25:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T03:25:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "c57527c2-65bc-4a51-a4ce-21a9cf908b4c",
+              "end_time": "2026-10-07T03:34:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T03:25:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 540
+            },
+            {
+              "id": "d6bb127e-b299-4512-a6bf-831fb42b0a22",
+              "end_time": "2026-10-07T04:03:58.000Z",
+              "stage_type": "REM",
+              "start_time": "2026-10-07T03:34:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 1740
+            },
+            {
+              "id": "e5f55198-4aef-4d90-92ab-bb263d2c172a",
+              "end_time": "2026-10-07T04:04:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T04:03:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "3cdedbae-92b1-4546-961c-bb8351ead82e",
+              "end_time": "2026-10-07T05:28:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T04:04:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 5040
+            },
+            {
+              "id": "2a85be4c-435b-475f-9f6a-ec0324b19b57",
+              "end_time": "2026-10-07T05:28:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T05:28:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "732b0440-d116-47f7-bc5b-b3ad7967ceea",
+              "end_time": "2026-10-07T05:37:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T05:28:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 540
+            },
+            {
+              "id": "95fb9047-e1b9-411f-b0f0-897e9d08d6c6",
+              "end_time": "2026-10-07T05:38:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T05:37:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "0878b6f9-e05a-4c73-868b-b78005845508",
+              "end_time": "2026-10-07T05:54:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T05:38:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 990
+            },
+            {
+              "id": "f91defe7-27b1-4f1a-994a-ad63e4f2863e",
+              "end_time": "2026-10-07T05:57:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T05:54:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 150
+            },
+            {
+              "id": "c3b86470-5d9b-48e5-ad7c-343c10d43dd0",
+              "end_time": "2026-10-07T05:57:58.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T05:57:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "87977c9c-d47d-4272-bcba-a85800f45564",
+              "end_time": "2026-10-07T05:58:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T05:57:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 30
+            },
+            {
+              "id": "c9fd0b40-ed08-4616-99c7-7f132c7b82ec",
+              "end_time": "2026-10-07T06:00:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T05:58:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 120
+            },
+            {
+              "id": "0e46b7eb-51a5-4a25-9e95-6bb75ebd1e24",
+              "end_time": "2026-10-07T06:01:58.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T06:00:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 90
+            },
+            {
+              "id": "d6060f90-8a2b-49c5-b155-c9a2cc70d3a5",
+              "end_time": "2026-10-07T06:36:28.000Z",
+              "stage_type": "Light",
+              "start_time": "2026-10-07T06:01:58.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 2070
+            },
+            {
+              "id": "fc47f3ac-7c4c-49d4-8ed5-eb06bb50b589",
+              "end_time": "2026-10-07T06:37:28.000Z",
+              "stage_type": "Awake",
+              "start_time": "2026-10-07T06:36:28.000Z",
+              "source_device": "Oura Ring",
+              "duration_seconds": 60
+            }
+          ],
+          "end_time": "2026-10-07T06:37:28.000Z",
+          "start_time": "2026-10-06T23:53:58.000Z",
+          "awake_count": 24,
+          "rem_percent": 15,
+          "rem_seconds": 3150,
+          "sleep_score": 64,
+          "deep_percent": 20,
+          "deep_seconds": 4260,
+          "awake_percent": 12,
+          "awake_seconds": 2790,
+          "light_percent": 65,
+          "light_seconds": 14010,
+          "source_device": "Oura Ring",
+          "asleep_seconds": 21420,
+          "quality_rating": "Fair",
+          "duration_seconds": 24210,
+          "efficiency_percent": 88,
+          "restorative_percent": 35,
+          "has_granular_hypnogram": true
+        }
+      },
+      "stress": {
+        "peak_hour": 0,
+        "peak_score": 60,
+        "lowest_hour": 7,
+        "monkey_mood": "Busy Monkey",
+        "advice_quote": "Tension is gently creeping up. Step back for 3 minutes and try Box Breathing (4s In, 4s Hold, 4s Out, 4s Hold).",
+        "lowest_score": 30,
+        "current_level": "Moderate",
+        "current_score": 54,
+        "daily_average": 45,
+        "current_hrv_ms": 46.8,
+        "baseline_hrv_ms": 45,
+        "intraday_points": [
+          {
+            "hour": 0,
+            "level": "Moderate",
+            "score": 60,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-06T21:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 110
+          },
+          {
+            "hour": 1,
+            "level": "Moderate",
+            "score": 60,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-06T22:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 99.2
+          },
+          {
+            "hour": 2,
+            "level": "Moderate",
+            "score": 60,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-06T23:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 91.1
+          },
+          {
+            "hour": 3,
+            "level": "Calm",
+            "score": 50,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T00:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 81.3
+          },
+          {
+            "hour": 4,
+            "level": "Calm",
+            "score": 43,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T01:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 75
+          },
+          {
+            "hour": 5,
+            "level": "Calm",
+            "score": 40,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T02:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 72.9
+          },
+          {
+            "hour": 6,
+            "level": "Calm",
+            "score": 31,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T03:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 65
+          },
+          {
+            "hour": 7,
+            "level": "Calm",
+            "score": 30,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T04:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 60.4
+          },
+          {
+            "hour": 8,
+            "level": "Calm",
+            "score": 30,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T05:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 60.3
+          },
+          {
+            "hour": 9,
+            "level": "Calm",
+            "score": 33,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T06:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 67
+          },
+          {
+            "hour": 10,
+            "level": "Calm",
+            "score": 47,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T07:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 78.2
+          },
+          {
+            "hour": 11,
+            "level": "Calm",
+            "score": 50,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T08:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 81.3
+          },
+          {
+            "hour": 12,
+            "level": "Moderate",
+            "score": 54,
+            "hrv_ms": 46.8,
+            "timestamp": "2026-10-07T09:00:00.000Z",
+            "is_sedentary": true,
+            "heart_rate_bpm": 83.9
+          }
+        ],
+        "hrv_delta_percent": 4,
+        "sympathetic_percent": 54,
+        "current_sedentary_bpm": 85,
+        "recommended_breathing": "Box Breathing (4-4-4-4)",
+        "resting_heart_rate_bpm": 64,
+        "parasympathetic_percent": 46,
+        "heart_rate_elevation_bpm": 20.6
+      },
+      "vitals": {
+        "sleep": {
+          "type": "sleep",
+          "unit": "minutes",
+          "value": 395,
+          "timestamp": "2026-10-06T23:58:00+00:00",
+          "source_device": "Apple Watch"
+        },
+        "hrvrmssd": {
+          "type": "hrv_rmssd",
+          "unit": "ms",
+          "value": 46.8,
+          "timestamp": "2026-10-07T06:25:00+00:00",
+          "source_device": "com.fitbit.FitbitMobile"
+        },
+        "heartrate": {
+          "type": "heart_rate",
+          "unit": "bpm",
+          "value": 84.6,
+          "timestamp": "2026-10-07T09:25:00+00:00",
+          "source_device": "com.fitbit.FitbitMobile"
+        },
+        "activeenergy": {
+          "type": "active_energy",
+          "unit": "kcal",
+          "value": 27.33,
+          "timestamp": "2026-10-07T09:00:00+00:00",
+          "source_device": "Apple Health"
+        },
+        "respiratoryrate": {
+          "type": "respiratory_rate",
+          "unit": "br/min",
+          "value": 12.75,
+          "timestamp": "2026-10-07T03:16:43+00:00",
+          "source_device": "Oura Ring"
+        },
+        "oxygensaturation": {
+          "type": "oxygen_saturation",
+          "unit": "%",
+          "value": 96.5,
+          "timestamp": "2026-10-06T21:00:01+00:00",
+          "source_device": "Google Health"
+        },
+        "restingheartrate": {
+          "type": "resting_heart_rate",
+          "unit": "bpm",
+          "value": 64,
+          "timestamp": "2026-10-07T06:33:00+00:00",
+          "source_device": "com.fitbit.FitbitMobile"
+        }
+      },
+      "activity": {
+        "total_steps": 938,
+        "hourly_steps": [
+          {
+            "hour": 0,
+            "steps": 43
+          },
+          {
+            "hour": 1,
+            "steps": 279
+          },
+          {
+            "hour": 2,
+            "steps": 182
+          },
+          {
+            "hour": 3,
+            "steps": 0
+          },
+          {
+            "hour": 4,
+            "steps": 0
+          },
+          {
+            "hour": 5,
+            "steps": 0
+          },
+          {
+            "hour": 6,
+            "steps": 0
+          },
+          {
+            "hour": 7,
+            "steps": 10
+          },
+          {
+            "hour": 8,
+            "steps": 0
+          },
+          {
+            "hour": 9,
+            "steps": 91
+          },
+          {
+            "hour": 10,
+            "steps": 14
+          },
+          {
+            "hour": 11,
+            "steps": 140
+          },
+          {
+            "hour": 12,
+            "steps": 179
+          },
+          {
+            "hour": 13,
+            "steps": 0
+          },
+          {
+            "hour": 14,
+            "steps": 0
+          },
+          {
+            "hour": 15,
+            "steps": 0
+          },
+          {
+            "hour": 16,
+            "steps": 0
+          },
+          {
+            "hour": 17,
+            "steps": 0
+          },
+          {
+            "hour": 18,
+            "steps": 0
+          },
+          {
+            "hour": 19,
+            "steps": 0
+          },
+          {
+            "hour": 20,
+            "steps": 0
+          },
+          {
+            "hour": 21,
+            "steps": 0
+          },
+          {
+            "hour": 22,
+            "steps": 0
+          },
+          {
+            "hour": 23,
+            "steps": 0
+          }
+        ],
+        "source_device": "Apple Health",
+        "active_calories": 78.9
+      },
+      "computed_at": "2026-10-07T18:13:32.833Z",
+      "cardiovascular": {
+        "zones": {
+          "peak": 0,
+          "cardio": 7,
+          "resting": 467,
+          "fat_burn": 12
+        },
+        "max_bpm": 124,
+        "min_bpm": 56,
+        "average_bpm": 75.2,
+        "resting_bpm": 64,
+        "intraday_points": [
+          {
+            "bpm": 108,
+            "zone": "Fat Burn",
+            "timestamp": "2026-10-06T21:00:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 114,
+            "zone": "Fat Burn",
+            "timestamp": "2026-10-06T21:00:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 107.9,
+            "zone": "Fat Burn",
+            "timestamp": "2026-10-06T21:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 124.3,
+            "zone": "Cardio",
+            "timestamp": "2026-10-06T22:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 121,
+            "zone": "Cardio",
+            "timestamp": "2026-10-06T22:15:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 121.4,
+            "zone": "Cardio",
+            "timestamp": "2026-10-06T22:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 119.5,
+            "zone": "Fat Burn",
+            "timestamp": "2026-10-06T22:20:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 120.6,
+            "zone": "Cardio",
+            "timestamp": "2026-10-06T22:20:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 120.3,
+            "zone": "Cardio",
+            "timestamp": "2026-10-06T22:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 100,
+            "zone": "Fat Burn",
+            "timestamp": "2026-10-06T22:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 108.5,
+            "zone": "Fat Burn",
+            "timestamp": "2026-10-06T22:25:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 107.7,
+            "zone": "Fat Burn",
+            "timestamp": "2026-10-06T22:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 91.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:30:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 94.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:30:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 93.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 92.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:35:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 93.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:35:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 92.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 89.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:40:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 89.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:40:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 89.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 88.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 89.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:45:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 89.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 88,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:50:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 88.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:50:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 88.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 88.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:55:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 88.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T22:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 101.5,
+            "zone": "Fat Burn",
+            "timestamp": "2026-10-06T23:00:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 101.4,
+            "zone": "Fat Burn",
+            "timestamp": "2026-10-06T23:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 85.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:05:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 85,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:05:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 85.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 87.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:10:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 86.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 88.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:15:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 87.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 87.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:20:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 85.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:20:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 87.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 89.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 89.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:25:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 89.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 90.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:30:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 91,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:30:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 90.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 95.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:35:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 97.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:35:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 96.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 92,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:40:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 92.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:40:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 92.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 90,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 95.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:45:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 95.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 89.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:50:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 96.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:50:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 96.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 89.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:55:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 88,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:55:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 89.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-06T23:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 87.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:00:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 87.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 85,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:05:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 86.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:05:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 85.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 82,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:10:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 84.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:10:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 83.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 81,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 81.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:15:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 81,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:20:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 80.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:20:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 80.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:25:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 80,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 79.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:30:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 80,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:30:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 80.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 78.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:35:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 79,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:35:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 78.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:40:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 81.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:40:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 80,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 82.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:45:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 78,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 80.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 83,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:50:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 78,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:50:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 81.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:55:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 78,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:55:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 79.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T00:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 74,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:00:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 77.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:00:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 76.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:05:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 77,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:05:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 78.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:10:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 76,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:10:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 77.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:15:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 76,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 78.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 77.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:20:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 74,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:20:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 76.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 77.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:25:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 75,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 76.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 73,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:30:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 75.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:30:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 74.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 72,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:35:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 73.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:35:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 73,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 72,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:40:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 71.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:40:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 72.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 71.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:45:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 72,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 71.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 72,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:50:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 72,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:50:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 71.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 73.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:55:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 78,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:55:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 73.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T01:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 84,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:00:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 82.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:00:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 82.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 82,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:05:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 82.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:05:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 82.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 75,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:10:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 78,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:10:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 77.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 77,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 76.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:15:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 76.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:20:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 79.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 69,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 71.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:25:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 70.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 68.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:30:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 68,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:30:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 68.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 69.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:35:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 69,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:35:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 69,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 70.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:40:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 70,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:40:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 69.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 67,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 69.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:45:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 68.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 66.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:50:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 66,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:50:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 66.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 65,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:55:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 65.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:55:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 65,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T02:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 64,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:00:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 64.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:00:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 64.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 62.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:05:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 63,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:05:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 62.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 62.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:10:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 62,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:10:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 62.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 61.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:15:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 62,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 61.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 61,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:20:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 65.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:20:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 64.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 63.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:25:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 61,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 62,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 64.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:30:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 66,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:30:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 64.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 66.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:35:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 66,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:35:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 66.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 71,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:40:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 69.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:40:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 69.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 69.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:45:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 68,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 68.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 66,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:50:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 66.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:50:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 66.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 68,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:55:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 67.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:55:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 67.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T03:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 70.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:00:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 66,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:00:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 69.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 62,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:05:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 66.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:05:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 64.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 60,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:10:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 63,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:10:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 61.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 58,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 62.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:15:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 61,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 58,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:20:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 62.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:20:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 60.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 57,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 61.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:25:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 59.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 56,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:30:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 62,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:30:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 59.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 60.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:35:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 56,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:35:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 58.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 58.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:40:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 58,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:40:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 58.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 57,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 58.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:45:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 57.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 57.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:50:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 59,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:50:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 58.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 58.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:55:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 58,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:55:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 58.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T04:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 58.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:00:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 58,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:00:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 58.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 59,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:05:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 58.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:05:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 58.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 59,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:10:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 59.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:10:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 59.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 62,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 59.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:15:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 59.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 64,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:20:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 64.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:20:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 64.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 60,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 65.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:25:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 64,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 57,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:30:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 63.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:30:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 61,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 60.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:35:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 57,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:35:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 59.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 60,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:40:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 60,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:40:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 59.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 61.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:45:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 60,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 61.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 59.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:50:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 60,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:50:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 59.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 60.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:55:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 59,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:55:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 60.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T05:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 60,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:00:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 60.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:00:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 60.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 60.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:05:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 59,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:05:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 60.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 59,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:10:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 59.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:10:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 59.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 59.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:15:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 58,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 59.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 59.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:20:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 58,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:20:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 58.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 61,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:25:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 58,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 59.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 61.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:30:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 58,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:30:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 60.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 78.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:35:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 78.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 87.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:40:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 87.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 75.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 89.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:45:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 88.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 76.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:50:00.000Z",
+            "source_device": "Google Health"
+          },
+          {
+            "bpm": 71,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:50:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 75,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 77,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:55:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 76.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T06:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:00:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 77.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:05:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 78.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 75,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:10:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 75.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 73.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 76.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 75.9,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 78.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 78.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 77.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:40:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 78.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 78.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 81.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:55:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 83.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T07:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 81.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:10:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 80.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79.7,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:15:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 81.4,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 82,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 82,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:25:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 83.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 81.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:30:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 79,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:35:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80.2,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:40:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 77,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:45:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 79.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:45:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 85.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:50:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 87.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T08:55:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 78.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T09:00:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80.5,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T09:05:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 89.3,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T09:10:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 91.1,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T09:15:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 80,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T09:20:00.000Z",
+            "source_device": "Oura Ring"
+          },
+          {
+            "bpm": 82.8,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T09:20:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          },
+          {
+            "bpm": 84.6,
+            "zone": "Resting",
+            "timestamp": "2026-10-07T09:25:00.000Z",
+            "source_device": "com.fitbit.FitbitMobile"
+          }
+        ]
+      },
+      "engine_version": "v1.0"
+    }
+  }
+]

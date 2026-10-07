@@ -100,4 +100,22 @@ class GoldenFixturesTest {
             assertEquals("[${fixture.name}] nap_count mismatch", fixture.expected.napCount, actualNaps)
         }
     }
+
+    @Test
+    fun testProductionSummaryPayloadDeserialization() {
+        val stream = javaClass.classLoader?.getResourceAsStream("summary_production_fixture.json")
+        val raw = stream?.bufferedReader()?.use { it.readText() }
+            ?: File("src/test/resources/summary_production_fixture.json").takeIf { it.exists() }?.readText()
+            ?: File("/tmp/summary_20261007.json").takeIf { it.exists() }?.readText()
+        assertNotNull("Production summary fixture must exist", raw)
+        val jsonArray = json.parseToJsonElement(raw!!) as kotlinx.serialization.json.JsonArray
+        val summaryJson = jsonArray[0].let { (it as kotlinx.serialization.json.JsonObject)["summary"].toString() }
+        val payload = json.decodeFromString<com.intellidream.daily.model.DailyHealthSummaryPayload>(summaryJson)
+        assertNotNull(payload)
+        assertEquals("2026-10-07", payload.date)
+        assertNotNull(payload.cardiovascular)
+        assertNotNull(payload.activity)
+        assertNotNull(payload.sleep)
+        assertTrue(payload.vitals.isNotEmpty())
+    }
 }

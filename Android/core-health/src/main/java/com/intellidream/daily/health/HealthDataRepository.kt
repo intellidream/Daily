@@ -34,6 +34,7 @@ import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -215,7 +216,12 @@ class HealthDataRepository(
             try {
                 val cutoff = System.currentTimeMillis() - 2 * 24 * 3600 * 1000L // 48h retention
                 telemetryDao.deleteTelemetryBefore(cutoff)
-                DailyDatabase.getDatabase(context).openHelper.writableDatabase.execSQL("VACUUM")
+                val hrCutoff = System.currentTimeMillis() - 24 * 3600 * 1000L
+                val db = DailyDatabase.getDatabase(context).openHelper.writableDatabase
+                db.execSQL("DELETE FROM health_telemetry WHERE type = 'heart_rate' AND start_time < $hrCutoff")
+                val cacheCutoff = System.currentTimeMillis() - 14 * 24 * 3600 * 1000L
+                summaryDao.deleteOldCache(cacheCutoff)
+                db.execSQL("VACUUM")
                 android.util.Log.d("HealthDataRepository", "Database maintenance completed (48h retention + VACUUM)")
             } catch (e: Exception) {
                 android.util.Log.w("HealthDataRepository", "Database maintenance warning", e)
@@ -223,19 +229,77 @@ class HealthDataRepository(
         }
     }
 
+    private var realtimeJob: kotlinx.coroutines.Job? = null
+    private var lastRealtimeSummaryFetchMs: Long = 0L
+
     private fun setupRealtimeSubscription() {
         if (currentUserId == "local_user") return
-        scope.launch(Dispatchers.IO) {
+        realtimeJob?.cancel()
+        realtimeJob = scope.launch(Dispatchers.IO) {
             try {
-                val channel = SupabaseClientManager.client.channel("health_daily_summary_sub")
+                val channel = SupabaseClientManager.client.channel("health_daily_summary_sub_${currentUserId}")
                 channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "health_daily_summary"
                 }.collect {
-                    android.util.Log.d("HealthDataRepository", "Realtime update received for health_daily_summary")
-                    loadDataForSelectedDate(forceRefresh = true)
+                    val now = System.currentTimeMillis()
+                    // Throttle realtime bursts to at most once every 3 seconds (1:1 parity with iOS)
+                    if (now - lastRealtimeSummaryFetchMs < 3000L) {
+                        return@collect
+                    }
+                    lastRealtimeSummaryFetchMs = now
+                    android.util.Log.d("HealthDataRepository", "Realtime update received for health_daily_summary: silently refreshing")
+                    // Silently refresh remote canonical summary without re-querying Health Connect,
+                    // uploading telemetry, toggling isLoading, or triggering health-engine!
+                    fetchRemoteSummarySilentlyForSelectedDate()
                 }
             } catch (e: Exception) {
                 android.util.Log.w("HealthDataRepository", "Realtime subscription exception", e)
+            }
+        }
+    }
+
+    /**
+     * Silently fetches the latest canonical summary for the selected date from Supabase
+     * without triggering local telemetry collection, uploading telemetry, toggling isLoading,
+     * or re-invoking health-engine (1:1 parity with iOS fetchRemoteSummarySilentlyForSelectedDate).
+     */
+    fun fetchRemoteSummarySilentlyForSelectedDate() {
+        if (currentUserId == "local_user") return
+        scope.launch(Dispatchers.IO) {
+            val targetEpochMs = _selectedDate.value
+            val targetDate = Date(targetEpochMs)
+            val dateKey = isoDateFormatter.format(targetDate)
+            val isToday = isSameDay(targetEpochMs, System.currentTimeMillis())
+
+            try {
+                val remoteSummary = remoteService.fetchDailySummary(currentUserId, dateKey)
+                if (remoteSummary != null && !remoteSummary.isEmpty()) {
+                    // Avoid redundant UI re-renders if payload is identical
+                    if (_canonicalSummary.value != remoteSummary) {
+                        val entity = HealthDailySummaryEntity(
+                            id = "summary_${currentUserId}_$dateKey",
+                            userId = currentUserId,
+                            dateKey = dateKey,
+                            summaryVersion = 1,
+                            payloadJson = jsonSerializer.encodeToString(remoteSummary),
+                            computedAt = System.currentTimeMillis(),
+                            sourceDevicePrimary = remoteSummary.sources.firstOrNull()
+                        )
+                        summaryDao.upsertSummary(entity)
+                        withContext(Dispatchers.Main) {
+                            applyCanonicalSummary(remoteSummary, dateKey)
+                        }
+                    }
+                    if (isToday && cachedTelemetry.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            mergeLocalTelemetryWithSummary(cachedTelemetry, isToday = true)
+                        }
+                    }
+                    ensureLocalDeviceSourcesPopulated()
+                    loadHistoricalTrends(targetDate)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("HealthDataRepository", "Could not silently fetch health_daily_summary: ${e.message}")
             }
         }
     }
@@ -312,47 +376,119 @@ class HealthDataRepository(
     // MARK: - Data Fetching & Processing
 
     fun loadDataForSelectedDate(forceRefresh: Boolean = false) {
+        if (!forceRefresh && activeLoadJob?.isActive == true) {
+            return
+        }
         activeLoadJob?.cancel()
         activeLoadJob = scope.launch {
-            _isLoading.value = true
-            try {
-                val targetEpochMs = _selectedDate.value
-                val targetDate = Date(targetEpochMs)
-                val dateKey = isoDateFormatter.format(targetDate)
-                val isToday = isSameDay(targetEpochMs, System.currentTimeMillis())
+            val targetEpochMs = _selectedDate.value
+            val targetDate = Date(targetEpochMs)
+            val dateKey = isoDateFormatter.format(targetDate)
+            val isToday = isSameDay(targetEpochMs, System.currentTimeMillis())
 
-                // 0. Check in-memory summary
-                if (!forceRefresh && _canonicalSummary.value?.date == dateKey && _canonicalSummary.value?.isEmpty() == false) {
-                    if (!isToday) {
-                        _isLoading.value = false
-                        return@launch
-                    }
+            // 0. Check in-memory summary
+            if (!forceRefresh && _canonicalSummary.value?.date == dateKey && _canonicalSummary.value?.isEmpty() == false) {
+                if (!isToday) {
+                    ensureLocalDeviceSourcesPopulated()
+                    loadHistoricalTrends(targetDate)
+                    return@launch
                 }
+            }
 
-                // 1. Check Room local database cache for canonical summary (<10ms)
-                var hasValidCachedSummary = false
-                val cachedSummaryEntity = withContext(Dispatchers.IO) {
-                    summaryDao.getSummary(currentUserId, dateKey)
-                }
-                if (cachedSummaryEntity != null && cachedSummaryEntity.summaryVersion == 1) {
-                    try {
-                        val payload = jsonSerializer.decodeFromString<DailyHealthSummaryPayload>(cachedSummaryEntity.payloadJson)
-                        if (!payload.isEmpty()) {
+            // 1. Check Room local database cache for canonical summary (<10ms)
+            var hasValidCachedSummary = false
+            val cachedSummaryEntity = withContext(Dispatchers.IO) {
+                summaryDao.getSummary(currentUserId, dateKey)
+            }
+            if (!forceRefresh && cachedSummaryEntity != null && cachedSummaryEntity.summaryVersion == 1) {
+                try {
+                    val payload = jsonSerializer.decodeFromString<DailyHealthSummaryPayload>(cachedSummaryEntity.payloadJson)
+                    if (!payload.isEmpty()) {
+                        hasValidCachedSummary = true
+                        if (_canonicalSummary.value != payload) {
                             applyCanonicalSummary(payload, dateKey)
-                            hasValidCachedSummary = true
-                            if (!isToday && !forceRefresh) {
-                                loadHistoricalTrends(targetDate)
-                                _isLoading.value = false
-                                return@launch
-                            }
                         }
-                    } catch (e: Exception) {
-                        android.util.Log.w("HealthDataRepository", "Failed to deserialize cached summary", e)
+                        if (!isToday) {
+                            ensureLocalDeviceSourcesPopulated()
+                            loadHistoricalTrends(targetDate)
+                            return@launch
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("HealthDataRepository", "Failed to deserialize cached summary", e)
+                }
+            }
+
+            val shouldShowLoading = !hasValidCachedSummary && _canonicalSummary.value == null
+            if (shouldShowLoading) {
+                _isLoading.value = true
+            }
+
+            try {
+                // 2. Concurrently fetch Supabase canonical summary and local Health Connect
+                val localTelemetryDeferred = async(Dispatchers.IO) {
+                    if (healthConnectManager.isAvailable && healthConnectManager.hasAnyPermissions()) {
+                        healthConnectManager.fetchTelemetryForDate(targetDate, currentUserId)
+                    } else {
+                        emptyList()
                     }
                 }
 
-                // 2. Instant Local Fallback (<10ms): If no valid canonical summary in Room, load raw Room samples immediately!
-                // Window: D-1 18:00 to D 24:00
+                val remoteSummaryDeferred = async(Dispatchers.IO) {
+                    if (currentUserId != "local_user") {
+                        withTimeoutOrNull(5000L) {
+                            remoteService.fetchDailySummary(currentUserId, dateKey)
+                        }
+                    } else {
+                        null
+                    }
+                }
+
+                val localTelemetry = localTelemetryDeferred.await()
+                val remoteSummary = remoteSummaryDeferred.await()
+
+                if (localTelemetry.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        telemetryDao.insertRecords(localTelemetry.map { HealthTelemetryEntity.fromRecord(it) })
+                    }
+                    if (currentUserId != "local_user") {
+                        scope.launch(Dispatchers.IO) {
+                            syncTelemetryToSupabase(localTelemetry)
+                        }
+                    }
+                }
+
+                // 3. If canonical summary was found, apply and merge local sensor data
+                if (remoteSummary != null && !remoteSummary.isEmpty()) {
+                    if (_canonicalSummary.value != remoteSummary) {
+                        withContext(Dispatchers.IO) {
+                            val entity = HealthDailySummaryEntity(
+                                id = "summary_${currentUserId}_$dateKey",
+                                userId = currentUserId,
+                                dateKey = dateKey,
+                                summaryVersion = 1,
+                                payloadJson = jsonSerializer.encodeToString(remoteSummary),
+                                computedAt = System.currentTimeMillis(),
+                                sourceDevicePrimary = remoteSummary.sources.firstOrNull()
+                            )
+                            summaryDao.upsertSummary(entity)
+                        }
+                        applyCanonicalSummary(remoteSummary, dateKey)
+                    }
+
+                    if (localTelemetry.isNotEmpty()) {
+                        mergeLocalTelemetryWithSummary(localTelemetry, isToday = isToday)
+                    }
+                    ensureLocalDeviceSourcesPopulated()
+                    loadHistoricalTrends(targetDate)
+                    return@launch
+                } else if (remoteSummary != null && remoteSummary.isEmpty()) {
+                    if (currentUserId != "local_user") {
+                        triggerCanonicalEngineIfNeeded(dateKey)
+                    }
+                }
+
+                // 4. Fallback to on-device provisional calculation if remote canonical summary is absent or offline
                 val cal = Calendar.getInstance().apply {
                     timeInMillis = targetEpochMs
                     add(Calendar.HOUR_OF_DAY, -6)
@@ -361,108 +497,35 @@ class HealthDataRepository(
                 val windowEnd = targetEpochMs + (24 * 3600 * 1000L)
 
                 val telemetry = mutableListOf<HealthTelemetryRecord>()
-                val vitals = mutableListOf<VitalMetricRecord>()
+                telemetry.addAll(localTelemetry)
 
                 val localEntities = withContext(Dispatchers.IO) {
                     telemetryDao.getTelemetryBetweenSync(currentUserId, windowStart, windowEnd)
                 }
-                val localVitalsEntities = withContext(Dispatchers.IO) {
-                    vitalsDao.getVitalsForDateSync(currentUserId, dateKey)
-                }
                 telemetry.addAll(localEntities.map { it.toRecord() })
-                vitals.addAll(localVitalsEntities.map { it.toRecord() })
 
-                if (!hasValidCachedSummary && (telemetry.isNotEmpty() || vitals.isNotEmpty())) {
-                    cachedTelemetry = deduplicateTelemetry(telemetry)
-                    cachedVitals = vitals
+                val localVitals = withContext(Dispatchers.IO) {
+                    vitalsDao.getVitalsForDateSync(currentUserId, dateKey).map { it.toRecord() }
+                }
+
+                val deduped = deduplicateTelemetry(telemetry)
+                if (deduped.isNotEmpty() || localVitals.isNotEmpty()) {
+                    cachedTelemetry = deduped
+                    cachedVitals = localVitals
                     updateDevicesAndSources()
                     processDataForCurrentDate()
                     loadHistoricalTrends(targetDate)
                 }
 
-                // 3. Concurrently fetch Health Connect (on-device)
-                if (healthConnectManager.isAvailable && healthConnectManager.hasAnyPermissions()) {
-                    val hcTelemetry = healthConnectManager.fetchTelemetryForDate(targetDate, currentUserId)
-                    if (hcTelemetry.isNotEmpty()) {
-                        telemetry.addAll(hcTelemetry)
-                        withContext(Dispatchers.IO) {
-                            telemetryDao.insertRecords(hcTelemetry.map { HealthTelemetryEntity.fromRecord(it) })
-                        }
-                        if (currentUserId != "local_user") {
-                            scope.launch(Dispatchers.IO) {
-                                syncTelemetryToSupabase(hcTelemetry)
-                            }
-                        }
-                    }
-                }
-
-                // 4. Fetch Supabase Remote canonical summary
-                val remoteSummary = withTimeoutOrNull(2000L) {
-                    if (currentUserId != "local_user") {
-                        remoteService.fetchDailySummary(currentUserId, dateKey)
-                    } else null
-                }
-                if (remoteSummary != null && !remoteSummary.isEmpty()) {
-                    withContext(Dispatchers.IO) {
-                        val entity = HealthDailySummaryEntity(
-                            id = UUID.randomUUID().toString(),
-                            userId = currentUserId,
-                            dateKey = dateKey,
-                            summaryVersion = 1,
-                            payloadJson = jsonSerializer.encodeToString(remoteSummary),
-                            computedAt = System.currentTimeMillis(),
-                            sourceDevicePrimary = remoteSummary.sources.firstOrNull()
-                        )
-                        summaryDao.upsertSummary(entity)
-                    }
-                    applyCanonicalSummary(remoteSummary, dateKey)
-                    if (isToday && telemetry.isNotEmpty()) {
-                        mergeLocalTelemetryWithSummary(telemetry, isToday = true)
-                    }
-                    ensureLocalDeviceSourcesPopulated()
-                    loadHistoricalTrends(targetDate)
-                    _isLoading.value = false
-                    return@launch
-                } else if (remoteSummary != null && remoteSummary.isEmpty()) {
-                    if (currentUserId != "local_user") {
-                        triggerCanonicalEngineIfNeeded(dateKey)
-                    }
-                }
-
-                // 5. Fallback to on-device provisional calculation (offline resilience or pending canonical summary)
-                if (currentUserId != "local_user") {
-                    val remoteTelemetry = withTimeoutOrNull(1500L) {
-                        remoteService.fetchTelemetryBetween(currentUserId, windowStart, windowEnd)
-                    } ?: emptyList()
-                    val remoteVitals = withTimeoutOrNull(1500L) {
-                        remoteService.fetchVitalsForDate(currentUserId, dateKey)
-                    } ?: emptyList()
-
-                    if (remoteTelemetry.isNotEmpty()) {
-                        telemetry.addAll(remoteTelemetry)
-                        withContext(Dispatchers.IO) {
-                            telemetryDao.insertRecords(remoteTelemetry.map { HealthTelemetryEntity.fromRecord(it) })
-                        }
-                    }
-                    if (remoteVitals.isNotEmpty()) {
-                        vitals.addAll(remoteVitals)
-                        withContext(Dispatchers.IO) {
-                            vitalsDao.insertVitals(remoteVitals.map { VitalMetricEntity.fromRecord(it) })
-                        }
-                    }
-                }
-
-                if (telemetry.isNotEmpty() || vitals.isNotEmpty()) {
-                    cachedTelemetry = deduplicateTelemetry(telemetry)
-                    cachedVitals = vitals
-                    updateDevicesAndSources()
-                    processDataForCurrentDate()
-                    loadHistoricalTrends(targetDate)
+                if (currentUserId != "local_user" && deduped.isNotEmpty()) {
+                    triggerCanonicalEngineIfNeeded(dateKey)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("HealthDataRepository", "Error loading health data", e)
             } finally {
-                _isLoading.value = false
+                if (shouldShowLoading) {
+                    _isLoading.value = false
+                }
             }
         }
     }
