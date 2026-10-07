@@ -62,6 +62,7 @@ fun HealthDashboardCard(
     val totalSteps by repository.totalStepsToday.collectAsState()
     val totalActiveCalories by repository.totalActiveCalories.collectAsState()
     val averageBpm by repository.averageBpm.collectAsState()
+    val latestBpm by repository.latestBpm.collectAsState()
     val restingBpm by repository.restingBpm.collectAsState()
     val primarySleep by repository.primarySleepSession.collectAsState()
     val currentVitals by repository.currentVitals.collectAsState()
@@ -97,6 +98,7 @@ fun HealthDashboardCard(
                 totalSteps = totalSteps,
                 totalActiveCalories = totalActiveCalories,
                 averageBpm = averageBpm,
+                latestBpm = latestBpm,
                 restingBpm = restingBpm,
                 primarySleep = primarySleep,
                 stressScore = currentStressScore,
@@ -107,6 +109,7 @@ fun HealthDashboardCard(
                 totalSteps = totalSteps,
                 totalActiveCalories = totalActiveCalories,
                 averageBpm = averageBpm,
+                latestBpm = latestBpm,
                 restingBpm = restingBpm,
                 primarySleep = primarySleep
             )
@@ -114,6 +117,7 @@ fun HealthDashboardCard(
                 totalSteps = totalSteps,
                 totalActiveCalories = totalActiveCalories,
                 averageBpm = averageBpm,
+                latestBpm = latestBpm,
                 restingBpm = restingBpm,
                 primarySleep = primarySleep,
                 currentVitals = currentVitals
@@ -310,6 +314,7 @@ private fun WideHealthContent(
     totalSteps: Int,
     totalActiveCalories: Double,
     averageBpm: Double,
+    latestBpm: Double? = null,
     restingBpm: Double,
     primarySleep: com.intellidream.daily.model.SleepSession?,
     stressScore: Int,
@@ -426,6 +431,7 @@ private fun WideHealthContent(
             )
 
             // Heart Rate Column
+            val displayBpm = latestBpm ?: if (averageBpm > 0) averageBpm else null
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -448,7 +454,7 @@ private fun WideHealthContent(
                     )
                 }
                 Text(
-                    text = if (averageBpm > 0) "${averageBpm.roundToInt()} bpm" else "--",
+                    text = if (displayBpm != null && displayBpm > 0) "${displayBpm.roundToInt()} bpm" else "--",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = ThemeColors.accentPink
@@ -601,6 +607,7 @@ private fun TallHealthContent(
     totalSteps: Int,
     totalActiveCalories: Double,
     averageBpm: Double,
+    latestBpm: Double? = null,
     restingBpm: Double,
     primarySleep: com.intellidream.daily.model.SleepSession?
 ) {
@@ -698,6 +705,7 @@ private fun TallHealthContent(
         HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
 
         // Heart Rate Section
+        val displayBpm = latestBpm ?: if (averageBpm > 0) averageBpm else null
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -705,7 +713,7 @@ private fun TallHealthContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "HEART RATE",
+                    text = if (latestBpm != null) "HEART RATE" else "AVG HEART RATE",
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     color = ThemeColors.fgMutedDark
@@ -720,7 +728,7 @@ private fun TallHealthContent(
                 }
             }
             Text(
-                text = if (averageBpm > 0) "${averageBpm.roundToInt()} bpm" else "--",
+                text = if (displayBpm != null && displayBpm > 0) "${displayBpm.roundToInt()} bpm" else "--",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = ThemeColors.accentPink
@@ -776,6 +784,7 @@ private fun LargeHealthContent(
     totalSteps: Int,
     totalActiveCalories: Double,
     averageBpm: Double,
+    latestBpm: Double? = null,
     restingBpm: Double,
     primarySleep: com.intellidream.daily.model.SleepSession?,
     currentVitals: Map<HealthMetricType, com.intellidream.daily.model.VitalMetricRecord>
@@ -842,10 +851,11 @@ private fun LargeHealthContent(
                 }
             }
 
-            // Avg BPM
+            // BPM
+            val displayBpm = latestBpm ?: if (averageBpm > 0) averageBpm else null
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("AVG BPM", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ThemeColors.fgMutedDark)
-                Text(if (averageBpm > 0) "${averageBpm.roundToInt()} bpm" else "--", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ThemeColors.accentPink)
+                Text(if (latestBpm != null) "HEART" else "AVG BPM", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ThemeColors.fgMutedDark)
+                Text(if (displayBpm != null && displayBpm > 0) "${displayBpm.roundToInt()} bpm" else "--", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ThemeColors.accentPink)
                 if (restingBpm > 0) {
                     Text("Rest ${restingBpm.roundToInt()}", fontSize = 9.5.sp, fontWeight = FontWeight.Medium, color = ThemeColors.fgMutedDark)
                 }

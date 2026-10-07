@@ -6,9 +6,14 @@ import Supabase
 /// to inject on-device biometric telemetry and sleep stages into HealthDataService.
 @MainActor
 public protocol LocalHealthDataProvider: AnyObject {
+    var hostPhoneName: String { get }
     func requestAuthorization() async -> Bool
     func fetchLocalTelemetry(for date: Date) async -> [HealthTelemetryRecord]
     func fetchLocalSleepStages(for date: Date) async -> [HealthTelemetryRecord]
+}
+
+extension LocalHealthDataProvider {
+    public var hostPhoneName: String { "iPhone" }
 }
 
 /// Central multiplatform service managing health telemetry, vitals, sleep analysis, and historical trends.
@@ -49,6 +54,7 @@ public final class HealthDataService: ObservableObject {
     @Published public var hourlySteps: [HourlyStepBucket] = []
     @Published public var totalStepsToday: Int = 0
     @Published public var totalActiveCalories: Double = 0
+    @Published public var stepsSourceDevice: String? = nil
     
     // Vitals Grid & Trends
     @Published public var currentVitals: [HealthMetricType: VitalMetricRecord] = [:]
@@ -79,6 +85,7 @@ public final class HealthDataService: ObservableObject {
     private var isSyncingHistory: Bool = false
     private var lastPushedTelemetryEpochMs: TimeInterval = 0
     private var periodicActiveSyncTask: Task<Void, Never>?
+    private var lastSuccessfulLoadTime: [String: Date] = [:]
     
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -383,6 +390,11 @@ public final class HealthDataService: ObservableObject {
         let isToday = Calendar.current.isDateInToday(targetDate)
         let effectiveTTL: TimeInterval = isToday ? 30 : cacheTTL
         
+        // Fast throttle check: if data for targetDate was refreshed less than 15s ago and not forced, return immediately
+        if !forceRefresh, let last = lastSuccessfulLoadTime[dateKey], Date().timeIntervalSince(last) < 15.0 {
+            return
+        }
+        
         let hasCachedData = (summaryCache[dateKey] != nil && !summaryCache[dateKey]!.summary.isEmpty) ||
                             (userDefaults.data(forKey: "health_daily_summary_\(dateKey)") != nil)
         
@@ -402,11 +414,9 @@ public final class HealthDataService: ObservableObject {
                 self.canonicalSummary = cached.summary
                 applyCanonicalSummary(cached.summary, dateKey: dateKey)
             }
-            if !isToday {
-                ensureLocalDeviceSourcesPopulated()
-                await loadHistoricalTrends()
-                return
-            }
+            ensureLocalDeviceSourcesPopulated()
+            lastSuccessfulLoadTime[dateKey] = Date()
+            return
         }
         
         // 2. Check persistent on-device App Group local storage for instantaneous (<300ms) startup
@@ -607,10 +617,13 @@ public final class HealthDataService: ObservableObject {
         let isToday = Calendar.current.isDateInToday(selectedDate)
         if selectedDeviceSource == nil && selectedDeviceFilter == nil, let allSteps = summary.allDevicesView?["steps"], let v = allSteps.value {
             self.totalStepsToday = Int(v)
+            self.stepsSourceDevice = allSteps.sourceKey ?? summary.activity.sourceDevice
         } else if isToday {
             self.totalStepsToday = max(self.totalStepsToday, summary.activity.totalSteps)
+            self.stepsSourceDevice = summary.activity.sourceDevice
         } else {
             self.totalStepsToday = summary.activity.totalSteps
+            self.stepsSourceDevice = summary.activity.sourceDevice
         }
         
         if selectedDeviceSource == nil && selectedDeviceFilter == nil, let allCal = summary.allDevicesView?["active_energy"], let v = allCal.value {
@@ -762,16 +775,28 @@ public final class HealthDataService: ObservableObject {
     
     private func ensureLocalDeviceSourcesPopulated() {
         var devicesSet = Set(availableDevices)
-        var sourcesSet = Set(availableSources)
         
-        if localDataProvider != nil {
-            if !devicesSet.contains(where: { $0.localizedCaseInsensitiveContains("watch") }) {
-                devicesSet.insert("Apple Watch")
-                sourcesSet.insert(.appleWatch)
+        // Eliminate bare un-prefixed duplicates if compound keys are already present
+        // e.g. remove "Apple Health" or "Apple Watch" if "Schmitz - Apple Health" or "Schmitz - Apple Watch" is present
+        devicesSet = devicesSet.filter { dev in
+            if !dev.contains(" - ") {
+                let lower = dev.lowercased()
+                return !devicesSet.contains { other in
+                    other.contains(" - ") && other.lowercased().hasSuffix(lower)
+                }
             }
-            if !sourcesSet.contains(.healthKit) {
-                devicesSet.insert("Apple Health")
-                sourcesSet.insert(.healthKit)
+            return true
+        }
+        
+        var sourcesSet = Set(devicesSet.map { DeviceSource.from(name: $0) })
+        
+        if let provider = localDataProvider {
+            let host = provider.hostPhoneName
+            let defaultKey = "\(host) - Apple Health"
+            let hasHostOrHealth = devicesSet.contains { $0.localizedCaseInsensitiveContains("apple health") || $0.localizedCaseInsensitiveContains("healthkit") }
+            if !hasHostOrHealth {
+                devicesSet.insert(defaultKey)
+                sourcesSet.insert(DeviceSource.from(name: defaultKey))
             }
         }
         
@@ -813,14 +838,19 @@ public final class HealthDataService: ObservableObject {
             if stepCalc.totalSteps > self.totalStepsToday {
                 self.totalStepsToday = stepCalc.totalSteps
                 self.hourlySteps = stepCalc.hourlyBuckets
+                self.stepsSourceDevice = stepCalc.sourceDeviceUsed
             } else if self.hourlySteps.isEmpty && stepCalc.totalSteps > 0 {
                 self.hourlySteps = stepCalc.hourlyBuckets
+                if self.stepsSourceDevice == nil {
+                    self.stepsSourceDevice = stepCalc.sourceDeviceUsed
+                }
             }
         } else {
             if isToday || stepCalc.totalSteps > self.totalStepsToday {
                 if stepCalc.totalSteps > 0 {
                     self.totalStepsToday = stepCalc.totalSteps
                     self.hourlySteps = stepCalc.hourlyBuckets
+                    self.stepsSourceDevice = stepCalc.sourceDeviceUsed
                 }
             }
         }
@@ -1085,6 +1115,7 @@ public final class HealthDataService: ObservableObject {
         self.hourlySteps = stepsResult.hourlyBuckets
         self.totalStepsToday = stepsResult.totalSteps
         self.totalActiveCalories = stepsResult.activeCalories
+        self.stepsSourceDevice = stepsResult.sourceDeviceUsed
         
         // Ensure restingHeartRate in vitalsMap if computed
         if vitalsMap[.restingHeartRate] == nil && self.restingBpm > 0 {

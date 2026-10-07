@@ -34,10 +34,7 @@ public struct VitalMetricTile: View {
                             .lineLimit(1)
                         
                         if let device = record?.sourceDevice, !device.isEmpty {
-                            Text(DeviceSource.from(name: device).displayName)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(ThemeColors.fgMutedDark)
-                                .lineLimit(1)
+                            DeviceOriginBadge(device: device, compact: true)
                         }
                     }
                     

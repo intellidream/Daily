@@ -167,6 +167,9 @@ class HealthDataRepository(
     private val _totalStepsToday = MutableStateFlow(0)
     val totalStepsToday: StateFlow<Int> = _totalStepsToday.asStateFlow()
 
+    private val _stepsSourceDevice = MutableStateFlow<String?>(null)
+    val stepsSourceDevice: StateFlow<String?> = _stepsSourceDevice.asStateFlow()
+
     private val _totalActiveCalories = MutableStateFlow(0.0)
     val totalActiveCalories: StateFlow<Double> = _totalActiveCalories.asStateFlow()
 
@@ -569,10 +572,13 @@ class HealthDataRepository(
         val isAllDevices = _selectedDeviceSource.value == null && _selectedDeviceFilter.value.isNullOrEmpty()
         if (isAllDevices && payload.allDevicesView?.containsKey("steps") == true) {
             _totalStepsToday.value = (payload.allDevicesView["steps"]?.value ?: 0.0).toInt()
+            _stepsSourceDevice.value = payload.allDevicesView["steps"]?.sourceKey ?: payload.activity?.sourceDevice
         } else if (isToday) {
             _totalStepsToday.value = maxOf(_totalStepsToday.value, payload.activity?.totalSteps ?: 0)
+            _stepsSourceDevice.value = payload.activity?.sourceDevice
         } else {
             _totalStepsToday.value = payload.activity?.totalSteps ?: 0
+            _stepsSourceDevice.value = payload.activity?.sourceDevice
         }
 
         if (isAllDevices && payload.allDevicesView?.containsKey("active_energy") == true) {
@@ -647,17 +653,31 @@ class HealthDataRepository(
 
     private fun ensureLocalDeviceSourcesPopulated() {
         val devSet = _availableDevices.value.toMutableSet()
-        val srcSet = _availableSources.value.toMutableSet()
+
+        // Filter out bare entries if compound versions exist (e.g. drop bare "Health Connect" if "TRAPPER - Health Connect" is present)
+        val filteredDevs = devSet.filter { dev ->
+            if (!dev.contains(" - ")) {
+                val lower = dev.lowercase()
+                devSet.none { other -> other.contains(" - ") && other.lowercase().endsWith(lower) }
+            } else {
+                true
+            }
+        }.toMutableSet()
 
         if (healthConnectManager.isAvailable) {
-            if (devSet.none { it.contains("Health Connect", ignoreCase = true) || it.contains("Google", ignoreCase = true) }) {
-                devSet.add("Health Connect")
-                srcSet.add(DeviceSource.HealthConnect)
+            val hostName = healthConnectManager.getHostPhoneName()
+            val defaultKey = "$hostName - Health Connect"
+            val hasHostOrHealth = filteredDevs.any {
+                it.contains("Health Connect", ignoreCase = true) || it.contains("HealthConnect", ignoreCase = true)
+            }
+            if (!hasHostOrHealth) {
+                filteredDevs.add(defaultKey)
             }
         }
 
-        _availableDevices.value = devSet.toList().sorted()
-        _availableSources.value = srcSet.toList().sortedBy { it.displayName }
+        val srcList = filteredDevs.map { DeviceSource.from(it) }.sortedBy { it.displayName }
+        _availableDevices.value = filteredDevs.toList().sorted()
+        _availableSources.value = srcList
     }
 
     private fun mergeLocalTelemetryWithSummary(telemetry: List<HealthTelemetryRecord>, isToday: Boolean) {
@@ -696,14 +716,19 @@ class HealthDataRepository(
             if (stepsResult.totalSteps > _totalStepsToday.value) {
                 _totalStepsToday.value = stepsResult.totalSteps
                 _hourlySteps.value = stepsResult.hourlyBuckets
+                _stepsSourceDevice.value = stepsResult.sourceDeviceUsed
             } else if (_hourlySteps.value.isEmpty() && stepsResult.totalSteps > 0) {
                 _hourlySteps.value = stepsResult.hourlyBuckets
+                if (_stepsSourceDevice.value == null) {
+                    _stepsSourceDevice.value = stepsResult.sourceDeviceUsed
+                }
             }
         } else {
             if (isToday || stepsResult.totalSteps > _totalStepsToday.value) {
                 if (stepsResult.totalSteps > 0) {
                     _totalStepsToday.value = stepsResult.totalSteps
                     _hourlySteps.value = stepsResult.hourlyBuckets
+                    _stepsSourceDevice.value = stepsResult.sourceDeviceUsed
                 }
             }
         }
@@ -985,6 +1010,7 @@ class HealthDataRepository(
         _hourlySteps.value = stepsResult.hourlyBuckets
         _totalStepsToday.value = stepsResult.totalSteps
         _totalActiveCalories.value = stepsResult.activeCalories
+        _stepsSourceDevice.value = stepsResult.sourceDeviceUsed
 
         // Fill computed resting HR in currentVitals
         if (vitalsMap[HealthMetricType.RESTING_HEART_RATE] == null && _restingBpm.value > 0) {

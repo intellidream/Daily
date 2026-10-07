@@ -2,7 +2,7 @@
 
 ## 1. Overview & Core Philosophy
 
-The Daily platform provides an autonomous, device-agnostic health synchronization pipeline uniting multiple host smartphones (**iOS**, **Android**) and arbitrary peripheral sensor wearables (**Apple Watch**, **Oura Ring**, **Pixel Watch / WearOS / Fitbit**, **Amazfit Balance**, etc.) into a single, cohesive timeline.
+The Daily platform provides an autonomous, device-agnostic health synchronization pipeline uniting multiple host smartphones (**iOS**, **Android**) and arbitrary peripheral sensor wearables (**Apple Watch**, **Oura Ring**, **Pixel Watch / WearOS / Fitbit**, **Amazfit Balance**, **Samsung Health**, **Garmin**, **Whoop**, **Polar**, **Withings**, etc.) into a single, cohesive timeline.
 
 ### 1.1 Non-Negotiable Tenets
 1. **Generic & Device-Agnostic**: Zero hardcoding of device models, hostnames, or hardware platforms. Any phone running Daily automatically binds its own native host name (`UIDevice.current.name` on iOS, `BluetoothAdapter.getDefaultAdapter()?.name` / `Settings.Global.DEVICE_NAME` on Android).
@@ -12,12 +12,28 @@ The Daily platform provides an autonomous, device-agnostic health synchronizatio
    - `Schmitz - Apple Health`
    - `Schmitz - Oura Ring`
    - `TRAPPER - Health Connect`
-   - `TRAPPER - Pixel Watch 5 (Fitbit)`
-   - `Radar - Health Connect`
-3. **Deterministic Color Encoding**: Every compound source receives an auto-assigned color from a deterministic 9-color high-contrast palette based on an FNV-1a hash of the key.
-4. **Lean Active Telemetry Retention**: The raw `health_telemetry` table in Supabase retains strictly today's intraday telemetry. Past days are summarized and permanently archived into `health_daily_summary` (Single Source of Truth).
-5. **No Pedometer Downgrades**: Local phone pedometers sitting on desks cannot downgrade higher step counts reported by wearables in "All Devices" aggregation mode.
-6. **Local Cache First**: On app launch and tab switching, SQLite/Room on Android and UserDefaults/AppGroup on iOS serve cached canonical snapshots in under 50ms, eliminating any UI freeze or spinner stutter.
+   - `TRAPPER - Fitbit`
+   - `RADAR - Health Connect`
+3. **Compound Key & Sensor Normalization**:
+   - Stripping reverse-domain package names (`com.fitbit.FitbitMobile` $\rightarrow$ `Fitbit`, `com.google.android.apps.fitness` $\rightarrow$ `Google Fit`).
+   - Resolving compound strings: `TRAPPER - com.fitbit.FitbitMobile` dynamically normalizes to `TRAPPER - Fitbit`.
+   - Bare prefixless filtering: when compound sources (e.g. `TRAPPER - Health Connect` or `Schmitz - Apple Health`) are present, bare un-prefixed duplicates (e.g. `Health Connect`, `Apple Health`) are automatically suppressed from the device selector menu to eliminate duplicate clutter.
+4. **Deterministic Cross-Platform Color Encoding**:
+   - Both Swift (`DeviceColorPalette`) and Kotlin (`DeviceColorPalette`) use an identical 31-multiplier polynomial UTF-8 hash:
+     $$\text{hash} = \sum_{i=0}^{n-1} s[i] \cdot 31^{n-1-i}$$
+   - Any device name (`Schmitz - Oura Ring`, `TRAPPER - Fitbit`, etc.) resolves to the exact same color on both platforms across 9 high-contrast neon tints.
+5. **Unified Hardware Glyphs**:
+   - **Smartwatch** (Apple Watch, Pixel Watch, Galaxy Watch, Fitbit, Garmin, Whoop, Polar, Withings): `applewatch` (iOS), `Icons.Rounded.Watch` (Android).
+   - **Smart Ring** (Oura Ring): `circle.circle` (iOS), `Icons.Rounded.Adjust` (Android).
+   - **Health Platform** (Apple Health, Health Connect): `heart.text.square.fill` (iOS), `Icons.Rounded.Favorite` (Android).
+   - **Handset / Phone** (Phone Pedometer): `iphone` (iOS), `Icons.Rounded.Smartphone` (Android).
+   - **Sensor / Generic**: `sensor.fill` (iOS), `Icons.Rounded.Sensors` (Android).
+6. **Live Real-Time Heart Rate Priority**:
+   - The dashboard card and Health Hub prioritize live `latestBpm` read directly from HealthKit (iOS) and Health Connect (Android), falling back gracefully to the daily average BPM.
+7. **120Hz Liquid Glass Navigation Fluidity**:
+   - 15-second debounce throttle and warm-cache return in `performLoadDataForSelectedDate` on iOS, eliminating main-thread hitching and stutter when returning from Health Hub to the Dashboard.
+8. **Lean Active Telemetry Retention**: The raw `health_telemetry` table in Supabase retains strictly today's intraday telemetry. Past days are summarized and permanently archived into `health_daily_summary` (Single Source of Truth).
+9. **Local Cache First**: On app launch and tab switching, SQLite/Room on Android and UserDefaults/AppGroup on iOS serve cached canonical snapshots in under 50ms, eliminating any UI freeze or spinner stutter.
 
 ---
 
@@ -41,12 +57,21 @@ Both iOS (`DeviceColorPalette`) and Android (`DeviceColorPalette`) share an iden
 ### 2.2 Device Selector (`DeviceSelectorMenu`)
 Located at the top-right of both the iOS and Android Health Hubs:
 - **"All Devices"**: Unified composite view displaying the freshest, most accurate biometric across all reporting devices. Badged with an active device tint.
-- **Per-Device Chips**: Every available compound source (`● [Host] - [Wearable]`) is presented with its distinct colored dot chip.
+- **Per-Device Chips**: Every available compound source (`● [Host] - [Wearable]`) is presented with its distinct colored dot chip and hardware icon.
+- **Custom Liquid Glass Dropdown**: On iOS, replaced UIKit `Menu` with an ultra-fluid custom Liquid Glass overlay (`deviceDropdownOverlay`) preserving exact color tints, SF Symbols, and glowing dot shadows in Dark Mode.
 - **Filtered Drill-Down**: Selecting a specific compound device isolates the activity rings, step cadence hourly histograms, sleep staging hypnogram, and vitals strictly to that hardware source.
 
-### 2.3 Vital Metric Origin Badging
-Each metric card (Resting HR, HRV, SpO2, Respiratory Rate, Active Calories) displays a compact pill badge with the color dot and name of the device that reported the value, e.g.:
-$$\text{● } \text{Schmitz - Oura Ring} \quad \text{or} \quad \text{● } \text{TRAPPER - Pixel Watch 5}$$
+### 2.3 Vital Metric Origin Badging (`DeviceOriginBadge`)
+Reusable component deployed across both platforms:
+- **iOS**: `DeviceOriginBadge.swift`
+- **Android**: `DeviceOriginBadge.kt`
+
+Rendered consistently in:
+- Activity Hero card (`ActivityHeroCard`)
+- Step Cadence hourly histogram (`HourlyStepsHistogramView`)
+- Sleep Overview card (`SleepOverviewPreviewCard`)
+- Stress Overview card (`StressOverviewPreviewCard`)
+- All Vital Metric tiles (`VitalMetricTile`: Resting HR, HRV, SpO2, Respiratory Rate, Blood Pressure, etc.)
 
 ---
 
@@ -72,7 +97,8 @@ To prevent uploading duplicate rows:
 |:---|:---|:---|:---:|
 | **DailyCore Swift Tests** | macOS Darwin ARM64 | 8 test suites, 55 unit tests (`swift test`) | **PASSED (55/55)** |
 | **Android Health Tests** | JVM Debug | Unit tests (`:core-health:testDebugUnitTest`) | **PASSED** |
-| **Android APK Build** | Gradle 9.6 | Debug APK assemble (`:app:assembleDebug`) | **PASSED (11s)** |
+| **Android APK Build** | Gradle 9.6 | Debug APK assemble (`:app:assembleDebug`) | **PASSED** |
 | **Android Emulator** | `Medium_Phone_API_36.1` | Installed, launched, tested Device Selector & colored dots | **VERIFIED (Visual)** |
 | **iOS Simulator** | `SimulaPhone` (iOS 26.2) | Installed, launched via `-startTabHealth`, Health Hub verified | **VERIFIED (Visual)** |
-| **Physical iPhone** | `Schmitz` (iPhone 16 Pro) | Built, codesigned with Apple Dev profile, deployed via `devicectl` | **DEPLOYED & INSTALLED** |
+| **Physical iPhone** | `Schmitz` (iPhone 16 Pro) | Built, codesigned with Apple Dev profile, deployed via `devicectl` | **DEPLOYED & VERIFIED** |
+| **Physical Android** | `TRAPPER` / `RADAR` | Tested on live telemetry from Supabase & Health Connect | **READY FOR ATTACH** |

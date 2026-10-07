@@ -13,9 +13,13 @@ public struct HourlyStepsHistogramView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("STEP CADENCE")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundColor(ThemeColors.accentCyan)
+                        HStack(spacing: 8) {
+                            Text("STEP CADENCE")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundColor(ThemeColors.accentCyan)
+                            
+                            DeviceOriginBadge(device: healthService.stepsSourceDevice, compact: true)
+                        }
                         
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text("\(healthService.totalStepsToday)")

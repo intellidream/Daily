@@ -693,6 +693,24 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
     val colorHex: String
         get() = DeviceColorPalette.getColorForSource(displayName)
 
+    val iconType: DeviceIconType
+        get() = when (this) {
+            is AppleWatch, is Amazfit, is OnePlus, is Huawei, is Fitbit, is SamsungHealth, is PixelWatch, is Garmin, is Whoop, is Polar, is Withings -> DeviceIconType.WATCH
+            is Oura -> DeviceIconType.RING
+            is HealthKit, is HealthConnect -> DeviceIconType.HEALTH
+            is Manual -> DeviceIconType.MANUAL
+            is Other -> {
+                val lower = name.lowercase()
+                when {
+                    lower.contains("oura") || lower.contains("ring") -> DeviceIconType.RING
+                    lower.contains("watch") || lower.contains("fitbit") || lower.contains("band") -> DeviceIconType.WATCH
+                    lower.contains("health") || lower.contains("healthkit") || lower.contains("health connect") -> DeviceIconType.HEALTH
+                    lower.contains("phone") || lower.contains("pixel") || lower.contains("samsung") || lower.contains("iphone") -> DeviceIconType.PHONE
+                    else -> DeviceIconType.SENSOR
+                }
+            }
+        }
+
     val isVirtualEngine: Boolean
         get() = when (this) {
             is Other -> {
@@ -712,8 +730,15 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
         fun from(name: String?): DeviceSource {
             val clean = name?.trim() ?: return Other("Unknown")
             if (clean.isEmpty()) return Other("Unknown")
-            // Preserve full compound key if already qualified with host device (e.g. "Schmitz - Oura Ring", "TRAPPER - Pixel Watch 5")
+            // Normalize compound key if already qualified with host device (e.g. "Schmitz - Oura Ring", "TRAPPER - com.fitbit.FitbitMobile")
             if (clean.contains(" - ")) {
+                val parts = clean.split(" - ")
+                if (parts.size == 2) {
+                    val host = parts[0].trim()
+                    val sensor = parts[1].trim()
+                    val resolvedSensor = from(sensor).displayName
+                    return Other("$host - $resolvedSensor")
+                }
                 return Other(clean)
             }
             val lower = clean.lowercase()
@@ -742,6 +767,15 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
             }
         }
     }
+}
+
+enum class DeviceIconType {
+    WATCH,
+    RING,
+    HEALTH,
+    PHONE,
+    MANUAL,
+    SENSOR
 }
 
 // MARK: - Sleep Recovery Status & Guidance
@@ -800,8 +834,12 @@ object DeviceColorPalette {
 
     fun getColorForSource(sourceKey: String): String {
         if (sourceKey.isEmpty()) return "#3897F0"
-        val hash = sourceKey.hashCode().let { if (it < 0) -it else it }
-        return PALETTE[hash % PALETTE.size]
+        var hash = 0
+        for (byte in sourceKey.toByteArray(Charsets.UTF_8)) {
+            hash = 31 * hash + byte.toInt()
+        }
+        val positiveHash = kotlin.math.abs(hash.toLong())
+        return PALETTE[(positiveHash % PALETTE.size).toInt()]
     }
 }
 

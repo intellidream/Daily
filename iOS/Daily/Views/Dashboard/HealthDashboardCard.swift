@@ -191,7 +191,8 @@ public struct HealthDashboardCard: View {
                             .font(.system(size: 9.5, weight: .bold))
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
-                    Text(healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm)) bpm" : "--")
+                    let currentBpm = healthService.latestBpm ?? (healthService.averageBpm > 0 ? healthService.averageBpm : nil)
+                    Text(currentBpm != nil ? "\(Int(currentBpm!)) bpm" : "--")
                         .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentPink)
                     if healthService.restingBpm > 0 {
@@ -359,7 +360,8 @@ public struct HealthDashboardCard: View {
                         }
                     }
                 }
-                Text(healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm)) bpm" : "--")
+                let currentBpm = healthService.latestBpm ?? (healthService.averageBpm > 0 ? healthService.averageBpm : nil)
+                Text(currentBpm != nil ? "\(Int(currentBpm!)) bpm" : "--")
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .foregroundColor(ThemeColors.accentPink)
             }

@@ -111,6 +111,10 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
     nonisolated public static var hostPhoneName: String {
         return _cachedHostPhoneName
     }
+    
+    public var hostPhoneName: String {
+        Self.hostPhoneName
+    }
 
     nonisolated public static func resolveCompoundSource(device: HKDevice?, source: HKSource) -> (host: String, sensor: String, compoundKey: String, color: String) {
         let host = hostPhoneName

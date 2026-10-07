@@ -37,6 +37,7 @@ import kotlin.math.max
 fun HourlyStepsHistogramView(
     totalSteps: Int,
     hourlySteps: List<HourlyStepBucket>,
+    sourceDevice: String? = null,
     modifier: Modifier = Modifier
 ) {
     GlassCard(
@@ -55,12 +56,20 @@ fun HourlyStepsHistogramView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "STEP CADENCE",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ThemeColors.accentCyan
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "STEP CADENCE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ThemeColors.accentCyan
+                        )
+                        if (!sourceDevice.isNullOrEmpty()) {
+                            DeviceOriginBadge(device = sourceDevice, compact = true)
+                        }
+                    }
 
                     Row(
                         verticalAlignment = Alignment.Bottom,

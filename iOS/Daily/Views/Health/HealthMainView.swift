@@ -7,6 +7,7 @@ public struct HealthMainView: View {
     @State private var dragStartSubTab: HealthSubTab? = nil
     @State private var hasSwitchedSubTabInDrag: Bool = false
     @State private var showingDatePicker = false
+    @State private var showDeviceMenu = false
     public var onNavigateBack: (() -> Void)? = nil
     
     private func triggerHaptic() {
@@ -30,16 +31,20 @@ public struct HealthMainView: View {
         if args.contains("-healthPrevDay") {
             healthService.prevDay()
         }
+        if args.contains("-showDeviceMenu") {
+            _showDeviceMenu = State(initialValue: true)
+        }
     }
     
     public var body: some View {
         LiquidGlassBackground {
-            VStack(spacing: 0) {
-                // Top Header Bar: Back Button, Centered Date Navigator & Device Selector Menu
-                headerBar
-                    .padding(.horizontal, 20)
-                    .padding(.top, 14)
-                    .padding(.bottom, 12)
+            ZStack(alignment: .topTrailing) {
+                VStack(spacing: 0) {
+                    // Top Header Bar: Back Button, Centered Date Navigator & Device Selector Menu
+                    headerBar
+                        .padding(.horizontal, 20)
+                        .padding(.top, 14)
+                        .padding(.bottom, 12)
                 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 16) {
@@ -135,8 +140,11 @@ public struct HealthMainView: View {
                     .presentationDetents([.medium])
                 }
             }
+            
+            deviceDropdownOverlay
         }
     }
+}
     
     // MARK: - Header Bar
     
@@ -169,38 +177,13 @@ public struct HealthMainView: View {
         }
     }
     
-    // MARK: - Device Selector Menu
+    // MARK: - Device Selector Menu & Dropdown
     
     private var deviceSelectorMenu: some View {
-        Menu {
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                    healthService.setDeviceFilter(nil as DeviceSource?)
-                }
-            } label: {
-                HStack {
-                    Text("All Devices")
-                    if healthService.selectedDeviceSource == nil {
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-            
-            Divider()
-            
-            ForEach(healthService.availableSources) { source in
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        healthService.setDeviceFilter(source)
-                    }
-                } label: {
-                    HStack {
-                        Text("● \(source.displayName)")
-                        if healthService.selectedDeviceSource == source {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
+        Button {
+            triggerHaptic()
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                showDeviceMenu.toggle()
             }
         } label: {
             let isFiltered = healthService.selectedDeviceSource != nil
@@ -217,6 +200,119 @@ public struct HealthMainView: View {
                 .shadow(color: isFiltered ? activeColor.opacity(0.3) : .clear, radius: 4)
         }
         .buttonStyle(.plain)
+    }
+    
+    @ViewBuilder
+    private var deviceDropdownOverlay: some View {
+        if showDeviceMenu {
+            ZStack(alignment: .topTrailing) {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showDeviceMenu = false
+                        }
+                    }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    // All Devices Option
+                    Button {
+                        triggerHaptic()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                            healthService.setDeviceFilter(nil as DeviceSource?)
+                            showDeviceMenu = false
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "square.grid.2x2.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(ThemeColors.accentCyan)
+                                .frame(width: 20)
+                            
+                            Text("All Devices")
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            Spacer()
+                            
+                            if healthService.selectedDeviceSource == nil {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(ThemeColors.accentCyan)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Divider()
+                        .background(Color.white.opacity(0.12))
+                        .padding(.horizontal, 8)
+                    
+                    ForEach(healthService.availableSources) { source in
+                        let sColor = Color(hex: source.colorHex)
+                        Button {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                healthService.setDeviceFilter(source)
+                                showDeviceMenu = false
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                // 1. Solid color circle
+                                Circle()
+                                    .fill(sColor)
+                                    .frame(width: 8, height: 8)
+                                    .shadow(color: sColor.opacity(0.8), radius: 3)
+                                
+                                // 2. Hardware icon in color
+                                Image(systemName: source.systemImage)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(sColor)
+                                    .frame(width: 18)
+                                
+                                // 3. Name in color
+                                Text(source.displayName)
+                                    .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                                    .foregroundColor(sColor)
+                                    .lineLimit(1)
+                                
+                                Spacer(minLength: 8)
+                                
+                                if healthService.selectedDeviceSource == source {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(sColor)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 8)
+                .frame(width: 260)
+                .background(
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color(hex: "#0F1A2E").opacity(0.96))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.6), radius: 24, y: 10)
+                .padding(.top, 54)
+                .padding(.trailing, 20)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: .topTrailing)),
+                    removal: .opacity.combined(with: .scale(scale: 0.95, anchor: .topTrailing))
+                ))
+            }
+        }
     }
     
     // MARK: - Day Navigator Bar
@@ -412,7 +508,7 @@ public struct HealthMainView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text("\(healthService.totalStepsToday)")
                                 .font(.system(size: 26, weight: .bold, design: .rounded))
@@ -420,6 +516,10 @@ public struct HealthMainView: View {
                             Text("/ 10,000 steps")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                        
+                        if let dev = healthService.stepsSourceDevice {
+                            DeviceOriginBadge(device: dev, compact: true)
                         }
                     }
                     
@@ -467,9 +567,13 @@ public struct HealthMainView: View {
                     }
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("LAST NIGHT'S SLEEP")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundColor(ThemeColors.accentPurple)
+                        HStack(spacing: 8) {
+                            Text("LAST NIGHT'S SLEEP")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundColor(ThemeColors.accentPurple)
+                            
+                            DeviceOriginBadge(device: session.sourceDevice, compact: true)
+                        }
                         Text(session.totalAsleepFormatted)
                             .font(.system(size: 20, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
@@ -514,14 +618,8 @@ public struct HealthMainView: View {
                                 .font(.system(size: 10, weight: .bold, design: .rounded))
                                 .foregroundColor(hasData ? levelColor : ThemeColors.fgMutedDark)
                             
-                            Circle()
-                                .fill(hasData ? levelColor : ThemeColors.fgMutedDark)
-                                .frame(width: 6, height: 6)
-                            
                             if let source = sourceName, !source.isEmpty {
-                                Text("• \(source)")
-                                    .font(.system(size: 9.5, weight: .medium))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
+                                DeviceOriginBadge(device: source, compact: true)
                             }
                         }
                         

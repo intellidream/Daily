@@ -91,6 +91,8 @@ class HealthConnectManager(private val context: Context) {
         return client.permissionController.getGrantedPermissions()
     }
 
+    fun getHostPhoneName(): String = getHostPhoneName(context)
+
     companion object {
         fun getHostPhoneName(context: Context): String {
             try {

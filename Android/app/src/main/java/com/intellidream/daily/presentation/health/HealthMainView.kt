@@ -131,6 +131,7 @@ fun HealthMainView(
     val currentStressLevel by repository.currentStressLevel.collectAsState()
     val stressAnalysis by repository.stressAnalysis.collectAsState()
     val intradayStress by repository.intradayStress.collectAsState()
+    val stepsSourceDevice by repository.stepsSourceDevice.collectAsState()
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -294,6 +295,7 @@ fun HealthMainView(
                                 totalActiveCalories = totalActiveCalories,
                                 averageBpm = averageBpm,
                                 latestBpm = latestBpm,
+                                stepsSourceDevice = stepsSourceDevice,
                                 hourlySteps = hourlySteps,
                                 primarySleep = primarySleep,
                                 stressAnalysis = stressAnalysis,
@@ -576,7 +578,7 @@ private fun DeviceSelectorMenu(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Rounded.Watch,
+                imageVector = if (selectedSource != null) getDeviceIcon(selectedSource.iconType) else Icons.Rounded.Devices,
                 contentDescription = "Device Selector",
                 tint = if (isFiltered) activeColor else Color.White.copy(alpha = 0.85f),
                 modifier = Modifier.size(16.dp)
@@ -589,7 +591,7 @@ private fun DeviceSelectorMenu(
             modifier = Modifier.background(Color(0xFF0F1B30))
         ) {
             DropdownMenuItem(
-                text = { Text("All Devices", color = Color.White) },
+                text = { Text("All Devices", color = Color.White, fontWeight = FontWeight.SemiBold) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Rounded.Devices,
@@ -617,7 +619,7 @@ private fun DeviceSelectorMenu(
                     text = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Box(
                                 modifier = Modifier
@@ -625,17 +627,12 @@ private fun DeviceSelectorMenu(
                                     .clip(CircleShape)
                                     .background(sourceColor)
                             )
-                            Text(source.displayName, color = Color.White)
+                            Text(source.displayName, color = Color.White, fontWeight = FontWeight.Medium)
                         }
                     },
                     leadingIcon = {
-                        val icon = when (source) {
-                            is DeviceSource.HealthConnect -> Icons.Rounded.Favorite
-                            is DeviceSource.Manual -> Icons.Rounded.Edit
-                            else -> Icons.Rounded.Watch
-                        }
                         Icon(
-                            imageVector = icon,
+                            imageVector = getDeviceIcon(source.iconType),
                             contentDescription = null,
                             tint = sourceColor,
                             modifier = Modifier.size(18.dp)
@@ -702,6 +699,7 @@ private fun OverviewSection(
     totalActiveCalories: Double,
     averageBpm: Double,
     latestBpm: Double? = null,
+    stepsSourceDevice: String? = null,
     hourlySteps: List<com.intellidream.daily.model.HourlyStepBucket>,
     primarySleep: SleepSession?,
     stressAnalysis: StressAnalysisResult?,
@@ -717,13 +715,15 @@ private fun OverviewSection(
             totalSteps = totalSteps,
             totalActiveCalories = totalActiveCalories,
             averageBpm = averageBpm,
-            latestBpm = latestBpm
+            latestBpm = latestBpm,
+            stepsSourceDevice = stepsSourceDevice
         )
 
         // Hourly Step Cadence
         HourlyStepsHistogramView(
             totalSteps = totalSteps,
-            hourlySteps = hourlySteps
+            hourlySteps = hourlySteps,
+            sourceDevice = stepsSourceDevice
         )
 
         // Sleep Preview Card (Tap opens Sleep Studio)
@@ -753,7 +753,8 @@ private fun ActivityHeroCard(
     totalSteps: Int,
     totalActiveCalories: Double,
     averageBpm: Double,
-    latestBpm: Double? = null
+    latestBpm: Double? = null,
+    stepsSourceDevice: String? = null
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -813,23 +814,29 @@ private fun ActivityHeroCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "$totalSteps",
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "/ 10,000 steps",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ThemeColors.fgMutedDark,
-                        modifier = Modifier.padding(bottom = 3.dp)
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "$totalSteps",
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "/ 10,000 steps",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ThemeColors.fgMutedDark,
+                            modifier = Modifier.padding(bottom = 3.dp)
+                        )
+                    }
+
+                    if (!stepsSourceDevice.isNullOrEmpty()) {
+                        DeviceOriginBadge(device = stepsSourceDevice, compact = true)
+                    }
                 }
 
                 Row(
@@ -908,12 +915,20 @@ private fun SleepOverviewPreviewCard(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "LAST NIGHT'S SLEEP",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ThemeColors.accentPurple
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "LAST NIGHT'S SLEEP",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ThemeColors.accentPurple
+                        )
+                        if (!session.sourceDevice.isNullOrEmpty()) {
+                            DeviceOriginBadge(device = session.sourceDevice, compact = true)
+                        }
+                    }
                     Text(
                         text = session.totalAsleepFormatted,
                         fontSize = 20.sp,
@@ -993,19 +1008,8 @@ private fun StressOverviewPreviewCard(
                             fontWeight = FontWeight.Bold,
                             color = if (hasData) levelColor else ThemeColors.fgMutedDark
                         )
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(if (hasData) levelColor else ThemeColors.fgMutedDark)
-                        )
                         if (!sourceName.isNullOrEmpty()) {
-                            Text(
-                                text = "• $sourceName",
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = ThemeColors.fgMutedDark
-                            )
+                            DeviceOriginBadge(device = sourceName, compact = true)
                         }
                     }
 
